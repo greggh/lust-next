@@ -112,6 +112,57 @@ expect(value).to_not.be.nil()
 - `expect(x).to.match(p)` - Matches string against pattern
 - `expect(x).to_not.*` - Negates any assertion
 
+#### Enhanced Assertions
+
+##### Table Assertions
+```lua
+-- Check for specific keys
+expect(table).to.contain.key("id")
+expect(table).to.contain.keys({"id", "name", "email"})
+
+-- Check for values
+expect(table).to.contain.value("example")
+expect(table).to.contain.values({"one", "two"})
+
+-- Check for subset/superset relationships
+expect(small_table).to.contain.subset(big_table)
+
+-- Check for exact key set
+expect(table).to.contain.exactly({"only", "these", "keys"})
+```
+
+##### String Assertions
+```lua
+-- Check string prefix/suffix
+expect(str).to.start_with("hello")
+expect(str).to.end_with("world")
+```
+
+##### Type Assertions
+```lua
+-- Advanced type checking
+expect(fn).to.be_type("callable")  -- Function or callable table
+expect(num).to.be_type("comparable")  -- Can use < operator
+expect(table).to.be_type("iterable")  -- Can iterate with pairs()
+```
+
+##### Numeric Assertions
+```lua
+-- Numeric comparisons
+expect(value).to.be_greater_than(minimum)
+expect(value).to.be_less_than(maximum)
+expect(value).to.be_between(min, max)  -- Inclusive
+expect(value).to.be_approximately(target, delta)
+```
+
+##### Error Assertions
+```lua
+-- Enhanced error checking
+expect(function_that_throws).to.throw.error()  
+expect(function_that_throws).to.throw.error_matching("pattern")
+expect(function_that_throws).to.throw.error_type("string")
+```
+
 ### Spies
 
 Spies track function calls and their arguments:

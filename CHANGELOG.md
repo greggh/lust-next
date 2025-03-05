@@ -39,9 +39,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification of mock expectations
   - Advanced call tracking with argument matching
   - Detailed examples in examples/mocking_example.lua
+- Enhanced assertions:
+  - Table assertions:
+    - Key and value containment checking
+    - Subset validation
+    - Exact key checking
+  - String assertions:
+    - Prefix and suffix validation
+  - Type assertions:
+    - Callable, comparable, and iterable checking
+  - Numeric assertions:
+    - Greater/less than comparisons
+    - Range checking with `be_between`
+    - Approximate equality for floating point
+  - Error assertions:
+    - Enhanced error pattern matching
+    - Error type verification
+  - Complete validation examples for complex data structures
 
 ### Planned
-- Additional assertion types and utilities
+- Enhanced documentation with organized API reference
 
 ## [0.2.0] - Original lust
 
