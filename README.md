@@ -1,10 +1,10 @@
-# Lust - Enhanced Lua Testing Framework
+# Lust-Next - Enhanced Lua Testing Framework
 
-[![CI](https://github.com/greggh/lust/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust/actions/workflows/ci.yml)
-[![Documentation](https://github.com/greggh/lust/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust/actions/workflows/docs.yml)
+[![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
+[![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Lust is a lightweight, powerful testing library for Lua projects. This enhanced fork adds significant new functionality while maintaining the simplicity and elegance of the original.
+Lust-Next is a lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original.
 
 ## Features
 

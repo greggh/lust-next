@@ -1,13 +1,14 @@
--- Basic test for lust
-local lust = require("../lust")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+-- Basic test for lust-next
+package.path = "../?.lua;" .. package.path
+local lust_next = require("lust-next")
+local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
 
-describe("lust", function()
+describe("lust-next", function()
   it("has required functions", function()
-    expect(lust.describe).to.be.a("function")
-    expect(lust.it).to.be.a("function")
-    expect(lust.expect).to.be.a("function")
-    expect(lust.spy).to.be.a("function")
+    expect(lust_next.describe).to.be.a("function")
+    expect(lust_next.it).to.be.a("function")
+    expect(lust_next.expect).to.be.a("function")
+    expect(lust_next.spy).to.be.a("function")
   end)
   
   it("passes simple tests", function()
@@ -18,7 +19,7 @@ describe("lust", function()
   
   it("has spy functionality", function()
     local function add(a, b) return a + b end
-    local spy = lust.spy(add)
+    local spy = lust_next.spy(add)
     spy(1, 2)
     expect(#spy).to.equal(1)
     expect(spy[1][1]).to.equal(1)
