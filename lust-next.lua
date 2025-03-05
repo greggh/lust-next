@@ -1,4 +1,4 @@
--- lust-next v0.3.0 - Enhanced Lua test framework
+-- lust-next v0.5.0 - Enhanced Lua test framework
 -- https://github.com/greggh/lust-next
 -- MIT LICENSE
 -- Based on lust by Bjorn Swenson (https://github.com/bjornbytes/lust)
@@ -9,7 +9,7 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.3.0"
+lust_next.version = "0.5.0"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
