@@ -1,0 +1,238 @@
+# Async Testing API
+
+This document describes the asynchronous testing capabilities provided by Lust-Next.
+
+## Overview
+
+Lust-Next provides a set of functions for testing asynchronous code. These functions use Lua's coroutines to manage asynchronous operations within tests.
+
+## Async Test Functions
+
+### lust.async(fn, [timeout])
+
+Creates an asynchronous test function wrapper.
+
+**Parameters:**
+- `fn` (function): The function to make asynchronous
+- `timeout` (number, optional): Maximum time in milliseconds to wait before failing (default: 5000)
+
+**Returns:**
+- A wrapped function that when called returns an asynchronous test function
+
+**Example:**
+```lua
+it("performs async operation", lust.async(function()
+  -- Async test code here
+  lust.await(100) -- Wait 100ms
+  expect(result).to.exist()
+end))
+```
+
+### lust.it_async(name, fn, [timeout])
+
+Convenient shorthand for creating an asynchronous test.
+
+**Parameters:**
+- `name` (string): The name of the test
+- `fn` (function): The asynchronous test function
+- `timeout` (number, optional): Maximum time in milliseconds before failing (default: 5000)
+
+**Returns:** None
+
+**Example:**
+```lua
+lust.it_async("performs async operation", function()
+  -- Async test code here
+  lust.await(100) -- Wait 100ms
+  expect(result).to.exist()
+end)
+```
+
+## Async Utilities
+
+### lust.await(milliseconds)
+
+Pauses execution for the specified number of milliseconds.
+
+**Parameters:**
+- `milliseconds` (number): Number of milliseconds to wait
+
+**Returns:** None
+
+**Notes:**
+- Can only be called within an async test function
+- Uses coroutine.yield internally to pause execution
+
+**Example:**
+```lua
+lust.it_async("waits before checking result", function()
+  local result = nil
+  
+  -- Start async operation
+  setTimeout(function() result = "done" end, 50)
+  
+  -- Wait for operation to complete
+  lust.await(100)
+  
+  -- Check result
+  expect(result).to.equal("done")
+end)
+```
+
+### lust.wait_until(condition_fn, [timeout], [check_interval])
+
+Waits until the condition function returns true or until the timeout is reached.
+
+**Parameters:**
+- `condition_fn` (function): Function that returns true when the condition is met
+- `timeout` (number, optional): Maximum wait time in milliseconds (default: 5000)
+- `check_interval` (number, optional): Interval in milliseconds between condition checks (default: 10)
+
+**Returns:** None
+
+**Notes:**
+- Can only be called within an async test function
+- Throws an error if the timeout is reached before the condition is met
+
+**Example:**
+```lua
+lust.it_async("waits for condition", function()
+  local value = nil
+  
+  -- Start async operation
+  setTimeout(function() value = "done" end, 50)
+  
+  -- Wait until value is set
+  lust.wait_until(function() return value ~= nil end, 1000, 10)
+  
+  -- Check result
+  expect(value).to.equal("done")
+end)
+```
+
+### lust.set_timeout(milliseconds)
+
+Sets the default timeout for all async tests.
+
+**Parameters:**
+- `milliseconds` (number): Default timeout in milliseconds
+
+**Returns:**
+- The lust object (for chaining)
+
+**Example:**
+```lua
+-- Set a longer default timeout for all async tests
+lust.set_timeout(10000)
+
+lust.it_async("long running test", function()
+  -- This test has up to 10 seconds to complete
+end)
+```
+
+## Working with Asynchronous Code
+
+### Testing Callbacks
+
+```lua
+lust.it_async("tests callback-based async code", function()
+  local result = nil
+  
+  -- Function with callback
+  local function fetchData(callback)
+    -- Simulate async operation
+    setTimeout(function() 
+      callback({success = true, data = "result"})
+    end, 50)
+  end
+  
+  -- Call async function with callback
+  fetchData(function(data)
+    result = data
+  end)
+  
+  -- Wait for callback to be called
+  lust.wait_until(function() return result ~= nil end)
+  
+  -- Verify result
+  expect(result.success).to.be.truthy()
+  expect(result.data).to.equal("result")
+end)
+```
+
+### Testing Promises
+
+```lua
+lust.it_async("tests promise-like async code", function()
+  local result = nil
+  
+  -- Function returning promise-like object
+  local function fetchData()
+    local promise = {
+      state = "pending",
+      then = function(self, callback)
+        setTimeout(function()
+          callback({success = true, data = "result"})
+        end, 50)
+        return self
+      end
+    }
+    return promise
+  end
+  
+  -- Call async function
+  fetchData():then(function(data)
+    result = data
+  end)
+  
+  -- Wait for promise to resolve
+  lust.wait_until(function() return result ~= nil end)
+  
+  -- Verify result
+  expect(result.success).to.be.truthy()
+  expect(result.data).to.equal("result")
+end)
+```
+
+### Handling Timeouts
+
+```lua
+lust.it_async("handles timeouts gracefully", function()
+  local result = nil
+  
+  -- This function takes too long
+  local function slowOperation(callback)
+    setTimeout(function() 
+      callback("done")
+    end, 500)
+  end
+  
+  -- Start slow operation
+  slowOperation(function(data)
+    result = data
+  end)
+  
+  -- This will fail due to timeout (only waits 100ms)
+  local success = pcall(function()
+    lust.wait_until(function() return result ~= nil end, 100)
+  end)
+  
+  -- Verify timeout occurred
+  expect(success).to.equal(false)
+  expect(result).to.equal(nil)
+end)
+```
+
+## Best Practices
+
+1. **Keep timeouts reasonable**: Set timeouts that give your async operations enough time to complete, but not so long that tests hang when errors occur.
+
+2. **Always check for completion**: Use `wait_until` to confirm operations completed before making assertions.
+
+3. **Clean up after async operations**: Use Lust's `after` hooks to clean up any resources from async operations.
+
+4. **Isolate tests**: Each async test should be self-contained and not depend on the state of other tests.
+
+5. **Handle errors**: Use pcall to capture and test for expected errors in async code.
+
+6. **Test edge cases**: Test timeout conditions, error conditions, and race conditions in your async code.
