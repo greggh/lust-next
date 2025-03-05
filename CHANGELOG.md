@@ -31,9 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `lust.it_async()` for simplified async test declaration
   - Configurable timeouts and error handling
   - Comprehensive examples in examples/async_example.lua
+- Comprehensive mocking system:
+  - Enhanced spy functionality with call tracking
+  - Stub system for replacing functions
+  - Mock objects for complete dependency isolation
+  - Automatic cleanup through `with_mocks` context
+  - Verification of mock expectations
+  - Advanced call tracking with argument matching
+  - Detailed examples in examples/mocking_example.lua
 
 ### Planned
-- Mocking system for dependencies
 - Additional assertion types and utilities
 
 ## [0.2.0] - Original lust

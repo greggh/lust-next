@@ -257,16 +257,65 @@ Key async features:
 
 #### Mocking
 
-Create and manage mocks:
+Create and manage mocks with a comprehensive mocking system:
 
 ```lua
+-- Basic spy usage - track function calls while preserving behavior
+local my_fn = function(a, b) return a + b end
+local spy_fn = lust.spy(my_fn)
+
+spy_fn(5, 10)  -- Call the function
+
+expect(spy_fn.called).to.be.truthy()
+expect(spy_fn.call_count).to.equal(1)
+expect(spy_fn:called_with(5, 10)).to.be.truthy()
+
+-- Spy on an object method
+local calculator = { add = function(a, b) return a + b end }
+local add_spy = lust.spy(calculator, "add")
+
+calculator.add(2, 3)  -- Call the method
+expect(add_spy.called).to.be.truthy()
+add_spy:restore()  -- Restore original method
+
+-- Create a simple stub that returns a value
+local config_stub = lust.stub({debug = true, version = "1.0"})
+local config = config_stub()  -- Returns the stubbed value
+
+-- Create complete mocks of objects
+local db_mock = lust.mock(database)
+
+-- Stub methods with implementation functions
+db_mock:stub("query", function(query_string)
+  expect(query_string).to.match("SELECT")
+  return {rows = {{id = 1, name = "Test"}}}
+end)
+
+-- Or stub with simple values
+db_mock:stub("connect", true)
+
+-- Use with context manager for automatic cleanup
 lust.with_mocks(function(mock)
-  local db = mock(database, "query", function() return {rows = {}} end)
-  local result = myFunction()
-  expect(db:called()).to.be.truthy()
-  expect(db:called_with("SELECT * FROM users")).to.be.truthy()
+  local api_mock = mock(api)
+  api_mock:stub("get_data", {success = true, items = {}})
+  
+  -- Test code that uses api.get_data()
+  
+  -- Verify expectations
+  expect(api_mock._stubs.get_data.called).to.be.truthy()
+  api_mock:verify()  -- Validates all expected calls were made
+  
+  -- No need to restore - happens automatically
 end)
 ```
+
+The mocking system includes:
+
+- **Spies**: Track function calls without changing behavior
+- **Stubs**: Replace functions with test implementations
+- **Mocks**: Create complete test doubles with verification
+- **Call tracking**: Verify arguments, call counts, and sequences
+- **Automatic cleanup**: Restore original functionality after tests
 
 ## Installation
 

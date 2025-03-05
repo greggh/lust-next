@@ -344,28 +344,237 @@ function lust_next.expect(v)
   return assertion
 end
 
+-- Mocking and Spy system
+-- Global registry to track mocks for cleanup
+local _mocks = {}
+
+-- Helper function to check if a table is a mock
+local function is_mock(obj)
+  return type(obj) == "table" and obj._is_lust_mock == true
+end
+
+-- Helper function to register a mock for cleanup
+local function register_mock(mock)
+  table.insert(_mocks, mock)
+  return mock
+end
+
+-- Helper function to restore all mocks
+local function restore_all_mocks()
+  for _, mock in ipairs(_mocks) do
+    mock:restore()
+  end
+  _mocks = {}
+end
+
+-- Spy function with enhanced features
 function lust_next.spy(target, name, run)
-  local spy = {}
+  local spy = {
+    calls = {},
+    called = false,
+    call_count = 0,
+    original = nil,
+    target = nil,
+    name = nil
+  }
+  
   local subject
 
   local function capture(...)
-    table.insert(spy, {...})
+    spy.called = true
+    spy.call_count = spy.call_count + 1
+    local args = {...}
+    table.insert(spy.calls, args)
     return subject(...)
   end
 
   if type(target) == 'table' then
-    subject = target[name]
+    spy.target = target
+    spy.name = name
+    spy.original = target[name]
+    subject = spy.original
     target[name] = capture
   else
     run = name
     subject = target or function() end
   end
 
-  setmetatable(spy, {__call = function(_, ...) return capture(...) end})
+  -- Add spy methods
+  function spy:restore()
+    if self.target and self.name then
+      self.target[self.name] = self.original
+    end
+  end
+  
+  function spy:called_with(...)
+    local expected_args = {...}
+    for _, call_args in ipairs(self.calls) do
+      local match = true
+      for i, arg in ipairs(expected_args) do
+        if call_args[i] ~= arg then
+          match = false
+          break
+        end
+      end
+      if match then return true end
+    end
+    return false
+  end
+  
+  function spy:called_times(n)
+    return self.call_count == n
+  end
+  
+  function spy:not_called()
+    return self.call_count == 0
+  end
+  
+  function spy:called_once()
+    return self.call_count == 1
+  end
+  
+  function spy:last_call()
+    if #self.calls > 0 then
+      return self.calls[#self.calls]
+    end
+    return nil
+  end
+
+  -- Set up call method
+  setmetatable(spy, {
+    __call = function(_, ...)
+      return capture(...)
+    end
+  })
 
   if run then run() end
 
   return spy
+end
+
+-- Create a mock object with verifiable behavior
+function lust_next.mock(target, options)
+  options = options or {}
+  
+  local mock = {
+    _is_lust_mock = true,
+    _target = target,
+    _stubs = {},
+    _originals = {},
+    _verify_all_expectations_called = options.verify_all_expectations_called ~= false
+  }
+  
+  -- Method to stub a function with a return value or implementation
+  function mock:stub(name, implementation_or_value)
+    self._originals[name] = self._target[name]
+    
+    local implementation
+    if type(implementation_or_value) == "function" then
+      implementation = implementation_or_value
+    else
+      implementation = function() return implementation_or_value end
+    end
+    
+    local spy = lust_next.spy(implementation)
+    self._stubs[name] = spy
+    self._target[name] = spy
+    
+    return spy
+  end
+  
+  -- Restore a specific stub
+  function mock:restore_stub(name)
+    if self._originals[name] then
+      self._target[name] = self._originals[name]
+      self._originals[name] = nil
+      self._stubs[name] = nil
+    end
+  end
+  
+  -- Restore all stubs for this mock
+  function mock:restore()
+    for name, _ in pairs(self._originals) do
+      self._target[name] = self._originals[name]
+    end
+    self._stubs = {}
+    self._originals = {}
+  end
+  
+  -- Verify all expected stubs were called
+  function mock:verify()
+    local failures = {}
+    
+    if self._verify_all_expectations_called then
+      for name, stub in pairs(self._stubs) do
+        if not stub.called then
+          table.insert(failures, "Expected " .. name .. " to be called, but it was not")
+        end
+      end
+    end
+    
+    if #failures > 0 then
+      error("Mock verification failed:\n  " .. table.concat(failures, "\n  "), 2)
+    end
+    
+    return true
+  end
+  
+  -- Register for auto-cleanup
+  register_mock(mock)
+  
+  return mock
+end
+
+-- Create a standalone stub function
+function lust_next.stub(return_value_or_implementation)
+  if type(return_value_or_implementation) == "function" then
+    return lust_next.spy(return_value_or_implementation)
+  else
+    return lust_next.spy(function() return return_value_or_implementation end)
+  end
+end
+
+-- Context manager for mocks that auto-restores
+function lust_next.with_mocks(fn)
+  local prev_mocks = _mocks
+  _mocks = {}
+  
+  local ok, result = pcall(fn, lust_next.mock)
+  
+  -- Always restore mocks, even on failure
+  for _, mock in ipairs(_mocks) do
+    mock:restore()
+  end
+  
+  _mocks = prev_mocks
+  
+  if not ok then
+    error(result, 2)
+  end
+  
+  return result
+end
+
+-- Register hook to clean up mocks after tests
+local original_it = lust_next.it
+function lust_next.it(name, fn)
+  local wrapped_fn = function()
+    local prev_mocks = _mocks
+    _mocks = {}
+    
+    local result = fn()
+    
+    -- Restore any mocks created during the test
+    for _, mock in ipairs(_mocks) do
+      mock:restore()
+    end
+    
+    _mocks = prev_mocks
+    
+    return result
+  end
+  
+  return original_it(name, wrapped_fn)
 end
 
 -- Test Discovery System
