@@ -1,0 +1,69 @@
+# EditorConfig helps maintain consistent coding styles across different editors
+# https://editorconfig.org/
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false
+
+# Python files
+[*.py]
+indent_size = 4
+
+# Java/C/C++ files
+[*.{java,c,cpp,h,hpp}]
+indent_size = 4
+
+# JavaScript/TypeScript files
+[*.{js,jsx,ts,tsx}]
+indent_size = 2
+
+# Go files
+[*.go]
+indent_style = tab
+indent_size = 4
+
+# YAML files
+[*.{yml,yaml}]
+indent_size = 2
+
+# Shell scripts
+[*.sh]
+indent_size = 2
+
+# HTML/CSS files
+[*.{html,css,scss,sass}]
+indent_size = 2
+
+# Lua files
+[*.lua]
+indent_size = 2
+
+# Ruby files
+[*.rb]
+indent_size = 2
+
+# PHP files
+[*.php]
+indent_size = 4
+
+# Rust files
+[*.rs]
+indent_size = 4
+
+# Make files
+[Makefile]
+indent_style = tab
+
+# Batch files
+[*.bat]
+end_of_line = crlf

@@ -1,0 +1,290 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Validate Repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Validate directory structure
+        run: |
+          # Check for required directories
+          for dir in .github docs scripts examples; do
+            if [ ! -d "$dir" ]; then
+              echo "::error::Required directory $dir is missing"
+              exit 1
+            fi
+          done
+          echo "✅ All required directories present"
+      
+      - name: Validate community health files
+        run: |
+          # Check for required community health files
+          for file in CODE_OF_CONDUCT.md CONTRIBUTING.md LICENSE CHANGELOG.md; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Required file $file is missing"
+              exit 1
+            fi
+          done
+          echo "✅ All required community health files present"
+      
+      - name: Validate GitHub templates
+        run: |
+          # Check for issue and PR templates
+          if [ ! -d ".github/ISSUE_TEMPLATE" ]; then
+            echo "::error::Issue template directory missing"
+            exit 1
+          fi
+          
+          if [ ! -f ".github/PULL_REQUEST_TEMPLATE.md" ]; then
+            echo "::error::Pull request template missing"
+            exit 1
+          fi
+          echo "✅ GitHub templates validated"
+          
+  test:
+    name: Test Lua
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      matrix:
+        lua-version: ['5.1', '5.2', '5.3', '5.4', 'luajit']
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Lua
+        uses: leafo/gh-actions-lua@v9
+        with:
+          luaVersion: ${{ matrix.lua-version }}
+          
+      - name: Install luarocks
+        uses: leafo/gh-actions-luarocks@v4
+        
+      - name: Install libraries for testing
+        run: |
+          luarocks install busted
+          
+      - name: Run tests
+        run: |
+          # Create a basic test file for lust itself
+          mkdir -p tests
+          cat > tests/lust_test.lua << 'EOF'
+          -- Test lust with itself
+          local lust = require("lust")
+          local describe, it, expect = lust.describe, lust.it, lust.expect
+          
+          describe("lust", function()
+            it("has required functions", function()
+              expect(lust.describe).to.be.a("function")
+              expect(lust.it).to.be.a("function")
+              expect(lust.expect).to.be.a("function")
+              expect(lust.spy).to.be.a("function")
+            end)
+            
+            it("passes simple tests", function()
+              expect(1).to.be(1)
+              expect("hello").to.equal("hello")
+              expect({1, 2}).to.equal({1, 2})
+            end)
+            
+            it("has spy functionality", function()
+              local function add(a, b) return a + b end
+              local spy = lust.spy(add)
+              spy(1, 2)
+              expect(#spy).to.equal(1)
+              expect(spy[1][1]).to.equal(1)
+              expect(spy[1][2]).to.equal(2)
+            end)
+          end)
+          EOF
+          
+          # Run basic test
+          lua tests/lust_test.lua
+
+  markdown-lint:
+    name: Lint Markdown Files
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+      
+      - name: Create markdownlint config
+        run: |
+          cat > .markdownlint.json << 'EOF'
+          {
+            "default": true,
+            "line-length": {
+              "line_length": 100,
+              "code_blocks": false,
+              "tables": false
+            }
+          }
+          EOF
+      
+      - name: Check for markdown issues
+        id: check_markdown
+        run: |
+          # Run markdownlint and save output
+          markdownlint "**/*.md" --ignore node_modules --config .markdownlint.json > markdown_issues.txt || echo "Issues found"
+          
+          # Count issues
+          issue_count=$(wc -l < markdown_issues.txt)
+          echo "issue_count=$issue_count" >> $GITHUB_OUTPUT
+          
+          if [ "$issue_count" -gt 0 ]; then
+            cat markdown_issues.txt
+            echo ""
+            echo "::warning::$issue_count markdown issues found"
+          else
+            echo "No markdown issues found!"
+          fi
+      
+      - name: Create Fix Script
+        if: steps.check_markdown.outputs.issue_count > 0 && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          cat > fix-markdown.sh << 'EOF'
+          #!/bin/bash
+          
+          # Fix markdown formatting issues in all markdown files
+          
+          # Function to ensure blank lines around headings
+          fix_headings() {
+            file="$1"
+            # Create a temporary file
+            tmp_file=$(mktemp)
+            
+            # Process the file line by line
+            awk '
+              # Print blank line before heading if not already blank
+              /^#/ && prev !~ /^$/ { print ""; }
+              # Print the current line
+              { print; prev = $0; }
+              # Print blank line after heading if next line is not blank
+              /^#/ && (getline next_line) > 0 {
+                if (next_line !~ /^$/) print "";
+                print next_line;
+              }
+            ' "$file" > "$tmp_file"
+            
+            # Replace original file with the fixed one
+            mv "$tmp_file" "$file"
+          }
+          
+          # Function to ensure blank lines around lists
+          fix_lists() {
+            file="$1"
+            # Create a temporary file
+            tmp_file=$(mktemp)
+            
+            # Process the file line by line
+            awk '
+              # Print blank line before list item if not already blank and previous line is not a list item
+              /^[*-]|\d+\./ && prev !~ /^$/ && prev !~ /^[*-]|\d+\./ { print ""; }
+              # Print the current line
+              { print; prev = $0; }
+              # Print blank line after list if next line is not blank and not a list item
+              /^[*-]|\d+\./ && (getline next_line) > 0 {
+                if (next_line !~ /^$/ && next_line !~ /^[*-]|\d+\./) print "";
+                print next_line;
+              }
+            ' "$file" > "$tmp_file"
+            
+            # Replace original file with the fixed one
+            mv "$tmp_file" "$file"
+          }
+          
+          # Function to ensure blank lines around code blocks
+          fix_code_blocks() {
+            file="$1"
+            # Create a temporary file
+            tmp_file=$(mktemp)
+            
+            # Process the file line by line
+            awk '
+              # Print blank line before code block if not already blank
+              /^```/ && prev !~ /^$/ { print ""; }
+              # Print the current line
+              { print; prev = $0; }
+              # Print blank line after code block if next line is not blank
+              /^```/ && (getline next_line) > 0 {
+                if (next_line !~ /^$/) print "";
+                print next_line;
+              }
+            ' "$file" > "$tmp_file"
+            
+            # Replace original file with the fixed one
+            mv "$tmp_file" "$file"
+          }
+          
+          # Function to ensure files end with a single newline
+          fix_newlines() {
+            file="$1"
+            # Ensure the file ends with exactly one newline
+            sed -i -e '$s/\n*$/\n/' "$file"
+          }
+          
+          # Function to fix empty links
+          fix_empty_links() {
+            file="$1"
+            # Replace empty links with placeholder text
+            sed -i 's/\[\([^]]*\)\](#)/[\1](https:\/\/example.com)/' "$file"
+          }
+          
+          # Function to add language to code blocks
+          fix_code_language() {
+            file="$1"
+            # Replace code blocks without language with bash
+            sed -i 's/^```$/```bash/' "$file"
+          }
+          
+          # Main processing
+          echo "Fixing markdown files..."
+          
+          find . -name "*.md" | while read -r file; do
+            echo "Processing $file"
+            
+            # Apply fixes
+            fix_headings "$file"
+            fix_lists "$file"
+            fix_code_blocks "$file"
+            fix_newlines "$file"
+            fix_empty_links "$file"
+            fix_code_language "$file"
+          done
+          
+          echo "Done! Some issues may still need to be manually fixed."
+          EOF
+          
+          chmod +x fix-markdown.sh
+      
+      - name: Fix markdown issues
+        if: steps.check_markdown.outputs.issue_count > 0 && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          ./fix-markdown.sh
+      
+      - name: Commit fixes
+        if: steps.check_markdown.outputs.issue_count > 0 && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
+          git add -A
+          git commit -m "Fix: Automatically fix markdown linting issues" || echo "No changes to commit"
+          git push

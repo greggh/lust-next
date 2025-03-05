@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Extract release notes
+        id: extract_release_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION_NO_V=${VERSION#v}
+          
+          # Try to extract section from CHANGELOG.md
+          NOTES=$(awk -v ver="$VERSION_NO_V" '/^## \[?'$VERSION_NO_V'\]?/ {flag=1;next} /^## \[?[0-9]+\.[0-9]+\.[0-9]+\]?/ {flag=0} flag' CHANGELOG.md)
+          
+          if [ -z "$NOTES" ]; then
+            NOTES="Release $VERSION"
+          fi
+          
+          # Properly format the notes for GitHub Actions
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          
+          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+          
+      - name: Create Release Archive
+        run: |
+          # Create a ZIP archive of the template
+          zip -r template-archive.zip . -x "*.git*" -x "node_modules/*"
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: ${{ steps.extract_release_notes.outputs.notes }}
+          files: |
+            template-archive.zip
+            LICENSE
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
