@@ -15,12 +15,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test directory with initial test suite
 - Examples directory with sample usage
 - Enhanced README with new feature descriptions
+- Automatic test discovery for finding and running test files
+- Test filtering and tagging system:
+  - Tag tests with `lust.tags()` function
+  - Filter by tag with `lust.only_tags()`
+  - Filter by name pattern with `lust.filter()`
+  - Command-line filtering with `--tags` and `--filter` flags
+  - Skip tracking for filtered tests
+- Enhanced reporting with clearer test summaries
+- Improved CLI with more flexible options
+- Async testing support:
+  - `lust.async()` for wrapping async test functions
+  - `lust.await()` for waiting in tests
+  - `lust.wait_until()` for condition-based waiting
+  - `lust.it_async()` for simplified async test declaration
+  - Configurable timeouts and error handling
+  - Comprehensive examples in examples/async_example.lua
 
 ### Planned
-- Automatic test discovery for finding and running test files
-- Test filtering and tagging for selective test runs
-- Enhanced reporting with clearer test summaries
-- Async testing support for asynchronous code
 - Mocking system for dependencies
 - Additional assertion types and utilities
 

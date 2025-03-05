@@ -157,13 +157,48 @@ lust.run_discovered(".")
 Tag tests and run only specific tags:
 
 ```lua
+-- Add tags to a test
 lust.tags("unit", "math")
 it("adds numbers correctly", function()
   expect(1 + 1).to.equal(2)
 end)
 
--- In your test runner:
-lust.only_tags("unit")()
+-- Add tags to a group of tests
+describe("Math operations", function()
+  lust.tags("unit", "math")
+  
+  it("test1", function() end)
+  it("test2", function() end)
+  -- Both tests inherit the "unit" and "math" tags
+end)
+
+-- Filter by tag programmatically
+lust.only_tags("unit")
+lust.run_discovered("./tests")
+
+-- Filter by test name pattern
+lust.filter("math")
+lust.run_discovered("./tests")
+
+-- Reset all filters
+lust.reset_filters()
+
+-- Command line filtering (when running directly)
+-- lua lust-next.lua --tags unit,math
+-- lua lust-next.lua --filter "addition"
+```
+
+You can use the filtering system to run specific subsets of your tests:
+
+```lua
+-- Run tests with options
+lust.run_discovered("./tests", "*_test.lua", {
+  tags = {"unit", "fast"},
+  filter = "calculation"
+})
+
+-- Run filtered tests from CLI
+-- lua lust-next.lua --dir ./tests --tags unit,fast --filter calculation
 ```
 
 #### Async Testing
@@ -171,12 +206,54 @@ lust.only_tags("unit")()
 Test asynchronous code with await/async:
 
 ```lua
-it("tests async code", lust.async(function()
-  local result = callAsyncFunction()
+-- Basic usage with it_async shorthand
+it_async("tests async code", function()
+  local result = nil
+  
+  -- Start async operation
+  startAsyncOperation(function(data) 
+    result = data
+  end)
+  
+  -- Wait for a specific amount of time
   lust.await(100) -- Wait 100ms
+  
+  -- Make assertions after the wait
   expect(result).to.equal("expected result")
-end))
+end)
+
+-- Use wait_until for condition-based waiting
+it_async("waits for a condition", function()
+  local value = false
+  
+  -- Start async operation that will set value to true
+  setTimeout(function() value = true end, 50)
+  
+  -- Wait until value becomes true or timeout after 200ms
+  lust.wait_until(function() return value end, 200)
+  
+  -- Assert after condition is met
+  expect(value).to.be.truthy()
+end)
+
+-- Custom timeouts per test
+it("tests with custom timeout", lust.async(function()
+  -- Test code here
+  lust.await(500)
+  expect(true).to.be.truthy()
+end, 1000)) -- 1 second timeout
+
+-- Set global default timeout
+lust.set_timeout(5000) -- 5 seconds for all async tests
 ```
+
+Key async features:
+
+- `lust.async(fn, timeout)` - Wraps a function to be executed asynchronously
+- `lust.it_async(name, fn, timeout)` - Shorthand for async tests
+- `lust.await(ms)` - Waits for the specified time in milliseconds
+- `lust.wait_until(condition_fn, timeout, check_interval)` - Waits until a condition function returns true
+- `lust.set_timeout(ms)` - Sets the default timeout for async tests
 
 #### Mocking
 
