@@ -51,6 +51,24 @@ describe('my project', function()
 end)
 ```
 
+## Integration with hooks-util
+
+Lust-Next is integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework, providing a standardized testing experience for Lua-based Neovim projects:
+
+```lua
+-- From hooks-util, set up a project with lust-next testing
+local lust_next = require("hooks-util.lust-next")
+lust_next.setup_project("/path/to/your/project")
+```
+
+This integration provides:
+- Automatic test discovery and setup
+- Standard test directory structure
+- CI workflow generation for GitHub/GitLab/Azure
+- Pre-commit hook integration
+
+See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using lust-next with hooks-util.
+
 ## Documentation
 
 ### Core Functions

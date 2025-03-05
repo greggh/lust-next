@@ -1,5 +1,21 @@
 # Lust-Next Development Guide
 
+## Hooks-Util Integration
+
+Lust-Next is now integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework as the primary testing framework. This integration allows hooks-util users to:
+
+- Set up standard test directories with `lust_next.setup_project()`
+- Generate CI workflows with `lust_next.generate_workflow()`
+- Run tests with proper filtering with `lust_next.run_tests()`
+- Add lust-next as a dependency with `lust_next.add_as_dependency()`
+
+The integration is implemented in `/home/gregg/Projects/hooks-util/lua/hooks-util/lust-next.lua` and provides helpers to create standardized test environments across different project types.
+
+When making changes to lust-next, consider the impact on the hooks-util integration, especially regarding:
+- Path handling and module discovery
+- Cross-platform compatibility
+- Feature addition that might be useful in the hooks-util context
+
 ## Useful Commands
 
 ### Build and Test
