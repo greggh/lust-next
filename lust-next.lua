@@ -234,8 +234,8 @@ end
 
 local paths = {
   [''] = { 'to', 'to_not' },
-  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match' },
-  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', chain = function(a) a.negate = not a.negate end },
+  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw' },
+  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', chain = function(a) a.negate = not a.negate end },
   a = { test = isa },
   an = { test = isa },
   be = { 'a', 'an', 'truthy',
@@ -307,6 +307,381 @@ local paths = {
       return result ~= nil,
         'expected ' .. v .. ' to match pattern [[' .. p .. ']]',
         'expected ' .. v .. ' to not match pattern [[' .. p .. ']]'
+    end
+  },
+  
+  -- New table assertions
+  contain = { 'keys', 'values', 'key', 'value', 'subset', 'exactly',
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      -- Default behavior is to check if the value is in the table (similar to have)
+      return has(v, x),
+        'expected ' .. tostring(v) .. ' to contain ' .. tostring(x),
+        'expected ' .. tostring(v) .. ' to not contain ' .. tostring(x)
+    end
+  },
+  
+  -- Check if a table contains all specified keys
+  keys = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      if type(x) ~= 'table' then
+        error('expected ' .. tostring(x) .. ' to be a table containing keys to check for')
+      end
+      
+      for _, key in ipairs(x) do
+        if v[key] == nil then
+          return false, 
+            'expected ' .. stringify(v) .. ' to contain key ' .. tostring(key),
+            'expected ' .. stringify(v) .. ' to not contain key ' .. tostring(key)
+        end
+      end
+      
+      return true,
+        'expected ' .. stringify(v) .. ' to contain keys ' .. stringify(x),
+        'expected ' .. stringify(v) .. ' to not contain keys ' .. stringify(x)
+    end
+  },
+  
+  -- Check if a table contains a specific key
+  key = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      return v[x] ~= nil,
+        'expected ' .. stringify(v) .. ' to contain key ' .. tostring(x),
+        'expected ' .. stringify(v) .. ' to not contain key ' .. tostring(x)
+    end
+  },
+  
+  -- Check if a table contains all specified values
+  values = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      if type(x) ~= 'table' then
+        error('expected ' .. tostring(x) .. ' to be a table containing values to check for')
+      end
+      
+      local found = {}
+      for _, val in ipairs(x) do
+        found[val] = false
+        for _, v_val in pairs(v) do
+          if eq(val, v_val) then
+            found[val] = true
+            break
+          end
+        end
+        
+        if not found[val] then
+          return false,
+            'expected ' .. stringify(v) .. ' to contain value ' .. tostring(val),
+            'expected ' .. stringify(v) .. ' to not contain value ' .. tostring(val)
+        end
+      end
+      
+      return true,
+        'expected ' .. stringify(v) .. ' to contain values ' .. stringify(x),
+        'expected ' .. stringify(v) .. ' to not contain values ' .. stringify(x)
+    end
+  },
+  
+  -- Check if a table contains a specific value
+  value = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      for _, val in pairs(v) do
+        if eq(val, x) then
+          return true,
+            'expected ' .. stringify(v) .. ' to contain value ' .. tostring(x),
+            'expected ' .. stringify(v) .. ' to not contain value ' .. tostring(x)
+        end
+      end
+      
+      return false,
+        'expected ' .. stringify(v) .. ' to contain value ' .. tostring(x),
+        'expected ' .. stringify(v) .. ' to not contain value ' .. tostring(x)
+    end
+  },
+  
+  -- Check if a table is a subset of another table
+  subset = {
+    test = function(v, x)
+      if type(v) ~= 'table' or type(x) ~= 'table' then
+        error('both arguments must be tables')
+      end
+      
+      for k, val in pairs(v) do
+        if not eq(x[k], val) then
+          return false,
+            'expected ' .. stringify(v) .. ' to be a subset of ' .. stringify(x),
+            'expected ' .. stringify(v) .. ' to not be a subset of ' .. stringify(x)
+        end
+      end
+      
+      return true,
+        'expected ' .. stringify(v) .. ' to be a subset of ' .. stringify(x),
+        'expected ' .. stringify(v) .. ' to not be a subset of ' .. stringify(x)
+    end
+  },
+  
+  -- Check if a table contains exactly the specified keys
+  exactly = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      if type(x) ~= 'table' then
+        error('expected ' .. tostring(x) .. ' to be a table containing expected keys')
+      end
+      
+      -- Check if all keys in x are in v
+      for _, key in ipairs(x) do
+        if v[key] == nil then
+          return false,
+            'expected ' .. stringify(v) .. ' to contain exactly keys ' .. stringify(x) .. ' (missing ' .. tostring(key) .. ')',
+            'expected ' .. stringify(v) .. ' to not contain exactly keys ' .. stringify(x)
+        end
+      end
+      
+      -- Check if all keys in v are in x
+      local x_set = {}
+      for _, key in ipairs(x) do
+        x_set[key] = true
+      end
+      
+      for k, _ in pairs(v) do
+        if not x_set[k] then
+          return false,
+            'expected ' .. stringify(v) .. ' to contain exactly keys ' .. stringify(x) .. ' (unexpected ' .. tostring(k) .. ')',
+            'expected ' .. stringify(v) .. ' to not contain exactly keys ' .. stringify(x)
+        end
+      end
+      
+      return true,
+        'expected ' .. stringify(v) .. ' to contain exactly keys ' .. stringify(x),
+        'expected ' .. stringify(v) .. ' to not contain exactly keys ' .. stringify(x)
+    end
+  },
+  
+  -- String assertions
+  start_with = {
+    test = function(v, x)
+      if type(v) ~= 'string' then
+        error('expected ' .. tostring(v) .. ' to be a string')
+      end
+      
+      if type(x) ~= 'string' then
+        error('expected ' .. tostring(x) .. ' to be a string')
+      end
+      
+      return v:sub(1, #x) == x,
+        'expected "' .. v .. '" to start with "' .. x .. '"',
+        'expected "' .. v .. '" to not start with "' .. x .. '"'
+    end
+  },
+  
+  end_with = {
+    test = function(v, x)
+      if type(v) ~= 'string' then
+        error('expected ' .. tostring(v) .. ' to be a string')
+      end
+      
+      if type(x) ~= 'string' then
+        error('expected ' .. tostring(x) .. ' to be a string')
+      end
+      
+      return v:sub(-#x) == x,
+        'expected "' .. v .. '" to end with "' .. x .. '"',
+        'expected "' .. v .. '" to not end with "' .. x .. '"'
+    end
+  },
+  
+  -- Type checking assertions beyond the basic types
+  be_type = { 'callable', 'comparable', 'iterable',
+    test = function(v, expected_type)
+      if expected_type == 'callable' then
+        local is_callable = type(v) == 'function' or 
+                           (type(v) == 'table' and getmetatable(v) and getmetatable(v).__call)
+        return is_callable,
+          'expected ' .. tostring(v) .. ' to be callable',
+          'expected ' .. tostring(v) .. ' to not be callable'
+      elseif expected_type == 'comparable' then
+        local success = pcall(function() return v < v end)
+        return success,
+          'expected ' .. tostring(v) .. ' to be comparable',
+          'expected ' .. tostring(v) .. ' to not be comparable'
+      elseif expected_type == 'iterable' then
+        local success = pcall(function() 
+          for _ in pairs(v) do break end
+        end)
+        return success,
+          'expected ' .. tostring(v) .. ' to be iterable',
+          'expected ' .. tostring(v) .. ' to not be iterable'
+      else
+        error('unknown type check: ' .. tostring(expected_type))
+      end
+    end
+  },
+  
+  -- Numeric comparison assertions
+  be_greater_than = {
+    test = function(v, x)
+      if type(v) ~= 'number' then
+        error('expected ' .. tostring(v) .. ' to be a number')
+      end
+      
+      if type(x) ~= 'number' then
+        error('expected ' .. tostring(x) .. ' to be a number')
+      end
+      
+      return v > x,
+        'expected ' .. tostring(v) .. ' to be greater than ' .. tostring(x),
+        'expected ' .. tostring(v) .. ' to not be greater than ' .. tostring(x)
+    end
+  },
+  
+  be_less_than = {
+    test = function(v, x)
+      if type(v) ~= 'number' then
+        error('expected ' .. tostring(v) .. ' to be a number')
+      end
+      
+      if type(x) ~= 'number' then
+        error('expected ' .. tostring(x) .. ' to be a number')
+      end
+      
+      return v < x,
+        'expected ' .. tostring(v) .. ' to be less than ' .. tostring(x),
+        'expected ' .. tostring(v) .. ' to not be less than ' .. tostring(x)
+    end
+  },
+  
+  be_between = {
+    test = function(v, min, max)
+      if type(v) ~= 'number' then
+        error('expected ' .. tostring(v) .. ' to be a number')
+      end
+      
+      if type(min) ~= 'number' or type(max) ~= 'number' then
+        error('expected min and max to be numbers')
+      end
+      
+      return v >= min and v <= max,
+        'expected ' .. tostring(v) .. ' to be between ' .. tostring(min) .. ' and ' .. tostring(max),
+        'expected ' .. tostring(v) .. ' to not be between ' .. tostring(min) .. ' and ' .. tostring(max)
+    end
+  },
+  
+  be_approximately = {
+    test = function(v, x, delta)
+      if type(v) ~= 'number' then
+        error('expected ' .. tostring(v) .. ' to be a number')
+      end
+      
+      if type(x) ~= 'number' then
+        error('expected ' .. tostring(x) .. ' to be a number')
+      end
+      
+      delta = delta or 0.0001
+      
+      return math.abs(v - x) <= delta,
+        'expected ' .. tostring(v) .. ' to be approximately ' .. tostring(x) .. ' (±' .. tostring(delta) .. ')',
+        'expected ' .. tostring(v) .. ' to not be approximately ' .. tostring(x) .. ' (±' .. tostring(delta) .. ')'
+    end
+  },
+  
+  -- Enhanced error assertions
+  throw = { 'error', 'error_matching', 'error_type',
+    test = function(v)
+      if type(v) ~= 'function' then
+        error('expected ' .. tostring(v) .. ' to be a function')
+      end
+      
+      local ok, err = pcall(v)
+      return not ok, 
+        'expected function to throw an error',
+        'expected function to not throw an error'
+    end
+  },
+  
+  error = {
+    test = function(v)
+      if type(v) ~= 'function' then
+        error('expected ' .. tostring(v) .. ' to be a function')
+      end
+      
+      local ok, err = pcall(v)
+      return not ok, 
+        'expected function to throw an error',
+        'expected function to not throw an error'
+    end
+  },
+  
+  error_matching = {
+    test = function(v, pattern)
+      if type(v) ~= 'function' then
+        error('expected ' .. tostring(v) .. ' to be a function')
+      end
+      
+      if type(pattern) ~= 'string' then
+        error('expected pattern to be a string')
+      end
+      
+      local ok, err = pcall(v)
+      if ok then
+        return false, 
+          'expected function to throw an error matching pattern "' .. pattern .. '"',
+          'expected function to not throw an error matching pattern "' .. pattern .. '"'
+      end
+      
+      err = tostring(err)
+      return err:match(pattern) ~= nil,
+        'expected error "' .. err .. '" to match pattern "' .. pattern .. '"',
+        'expected error "' .. err .. '" to not match pattern "' .. pattern .. '"'
+    end
+  },
+  
+  error_type = {
+    test = function(v, expected_type)
+      if type(v) ~= 'function' then
+        error('expected ' .. tostring(v) .. ' to be a function')
+      end
+      
+      local ok, err = pcall(v)
+      if ok then
+        return false,
+          'expected function to throw an error of type ' .. tostring(expected_type),
+          'expected function to not throw an error of type ' .. tostring(expected_type)
+      end
+      
+      -- Try to determine the error type
+      local error_type
+      if type(err) == 'string' then
+        error_type = 'string'
+      elseif type(err) == 'table' then
+        error_type = err.__name or 'table'
+      else
+        error_type = type(err)
+      end
+      
+      return error_type == expected_type,
+        'expected error of type ' .. error_type .. ' to be of type ' .. expected_type,
+        'expected error of type ' .. error_type .. ' to not be of type ' .. expected_type
     end
   }
 }
