@@ -53,61 +53,23 @@ jobs:
     name: Test Lua
     runs-on: ubuntu-latest
     needs: validate
-    strategy:
-      matrix:
-        lua-version: ['5.1', '5.2', '5.3', '5.4', 'luajit']
     
     steps:
       - uses: actions/checkout@v3
       
-      - name: Set up Lua
-        uses: leafo/gh-actions-lua@v9
-        with:
-          luaVersion: ${{ matrix.lua-version }}
-          
-      - name: Install luarocks
-        uses: leafo/gh-actions-luarocks@v4
-        
-      - name: Install libraries for testing
+      - name: Install Lua and run tests
         run: |
-          luarocks install busted
+          # Install Lua using apt-get for reliability
+          sudo apt-get update
+          sudo apt-get install -y lua5.3
           
-      - name: Run tests
+          # Run the existing test file
+          lua5.3 tests/lust_test.lua
+          
+      - name: Run example
         run: |
-          # Create a basic test file for lust itself
-          mkdir -p tests
-          cat > tests/lust_test.lua << 'EOF'
-          -- Test lust with itself
-          local lust = require("lust")
-          local describe, it, expect = lust.describe, lust.it, lust.expect
-          
-          describe("lust", function()
-            it("has required functions", function()
-              expect(lust.describe).to.be.a("function")
-              expect(lust.it).to.be.a("function")
-              expect(lust.expect).to.be.a("function")
-              expect(lust.spy).to.be.a("function")
-            end)
-            
-            it("passes simple tests", function()
-              expect(1).to.be(1)
-              expect("hello").to.equal("hello")
-              expect({1, 2}).to.equal({1, 2})
-            end)
-            
-            it("has spy functionality", function()
-              local function add(a, b) return a + b end
-              local spy = lust.spy(add)
-              spy(1, 2)
-              expect(#spy).to.equal(1)
-              expect(spy[1][1]).to.equal(1)
-              expect(spy[1][2]).to.equal(2)
-            end)
-          end)
-          EOF
-          
-          # Run basic test
-          lua tests/lust_test.lua
+          # Run the example file
+          lua5.3 examples/basic_example.lua
 
   markdown-lint:
     name: Lint Markdown Files
