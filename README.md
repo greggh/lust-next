@@ -10,12 +10,15 @@ Lust-Next is a lightweight, powerful testing library for Lua projects. This enha
 
 - **Minimal Dependencies**: Single file with no external requirements
 - **Familiar Syntax**: BDD-style `describe`/`it` blocks for intuitive test organization  
-- **Rich Assertions**: Extensive expect-style assertion library
+- **Rich Assertions**: Extensive expect-style assertion library with detailed diffs
 - **Function Spies**: Track function calls and arguments
 - **Before/After Hooks**: For setup and teardown
 - **Automatic Test Discovery**: Find and run tests without manual configuration
 - **Filtering & Tagging**: Run specific test groups or tagged tests
+- **Focused Tests**: Run only specific tests with `fdescribe`/`fit`
+- **Excluded Tests**: Skip specific tests with `xdescribe`/`xit`
 - **Enhanced Reporting**: Clear, colorful summaries of test results
+- **Output Formatting**: Multiple output styles including dot notation and compact mode
 - **Async Support**: Test asynchronous code with ease
 - **Mocking System**: Create and manage mocks for dependencies
 - **Cross-Platform**: Works in console and non-console environments
@@ -50,23 +53,42 @@ end)
 
 ### Core Functions
 
-#### `lust.describe(name, func)`
+#### `lust.describe(name, func)`, `lust.fdescribe(name, func)`, `lust.xdescribe(name, func)`
 
 Used to declare a group of tests. Groups created using `describe` can be nested.
 
 ```lua
 describe("math operations", function()
-  -- Tests go here
+  -- Regular test group - runs normally
+end)
+
+fdescribe("focused group", function()
+  -- Focused test group - these tests ALWAYS run even when others are focused
+end)
+
+xdescribe("excluded group", function()
+  -- Excluded test group - these tests NEVER run
 end)
 ```
 
-#### `lust.it(name, func)`
+#### `lust.it(name, func)`, `lust.fit(name, func)`, `lust.xit(name, func)`
 
 Used to declare a test, which consists of a set of assertions.
 
 ```lua
 it("adds two numbers correctly", function()
+  -- Regular test - runs normally
   expect(2 + 2).to.equal(4)
+end)
+
+fit("important test", function()
+  -- Focused test - this test ALWAYS runs even when others are focused
+  expect(true).to.be.truthy()
+end)
+
+xit("work in progress", function()
+  -- Excluded test - this test NEVER runs
+  expect(false).to.be.truthy() -- Won't fail since it's excluded
 end)
 ```
 
@@ -193,6 +215,74 @@ expect({}).to.be.empty()
 ```
 
 ### New Features
+
+#### Output Formatting
+
+Configure the test output format to your preference:
+
+```lua
+-- Configure output format programmatically
+lust.format({
+  use_color = true,          -- Whether to use color codes in output
+  indent_char = '  ',        -- Character to use for indentation (tab or spaces)
+  indent_size = 2,           -- How many indent_chars to use per level
+  show_trace = false,        -- Show stack traces for errors
+  show_success_detail = true, -- Show details for successful tests
+  compact = false,           -- Use compact output format (less verbose)
+  dot_mode = false,          -- Use dot mode (. for pass, F for fail)
+  summary_only = false       -- Show only summary, not individual tests
+})
+
+-- Or disable colors
+lust.nocolor()
+```
+
+Available command-line options when running tests:
+
+```bash
+# Use different output formats
+lua lust-next.lua --format dot       # Minimal output with dots (. for pass, F for fail)
+lua lust-next.lua --format compact   # Compact output with minimal details
+lua lust-next.lua --format summary   # Show only the final summary
+lua lust-next.lua --format detailed  # Show full details including stack traces
+
+# Control indentation
+lua lust-next.lua --indent space     # Use spaces for indentation
+lua lust-next.lua --indent tab       # Use tabs for indentation
+lua lust-next.lua --indent 4         # Use 4 spaces for indentation
+
+# Disable colors
+lua lust-next.lua --no-color
+```
+
+#### Focused and Excluded Tests
+
+Run only specific tests using focus and exclude features:
+
+```lua
+-- Run only focused tests
+fdescribe("important module", function()
+  it("does something", function()
+    -- This test runs because parent is focused
+  end)
+  
+  xit("isn't ready", function()
+    -- This test is excluded even though parent is focused
+  end)
+end)
+
+describe("other module", function()
+  it("normal test", function()
+    -- This won't run when focus mode is active
+  end)
+  
+  fit("critical feature", function()
+    -- This test runs because it's focused
+  end)
+})
+```
+
+When any `fdescribe` or `fit` is present, lust-next enters "focus mode" where only focused tests run. This is useful for working on a specific feature or debugging a failure.
 
 #### Automatic Test Discovery
 
@@ -345,6 +435,26 @@ end)
 -- Or stub with simple values
 db_mock:stub("connect", true)
 
+-- Use argument matchers for flexible verification
+local api_mock = lust.mock(api)
+api_mock:stub("get_users", {users = {{id = 1, name = "Test"}}})
+
+api.get_users({filter = "active", limit = 10})
+
+-- Verify with powerful argument matchers
+expect(api_mock._stubs.get_users:called_with(
+  lust.arg_matcher.table_containing({filter = "active"})
+)).to.be.truthy()
+
+-- Set expectations with fluent API before calls
+api_mock:expect("get_users").with(lust.arg_matcher.any()).to.be.called.times(1)
+api_mock:expect("get_user").with(lust.arg_matcher.number()).to.not_be.called()
+
+-- Verify call sequence
+expect(api_mock:verify_sequence({
+  {method = "get_users", args = {lust.arg_matcher.table()}}
+})).to.be.truthy()
+
 -- Use with context manager for automatic cleanup
 lust.with_mocks(function(mock)
   local api_mock = mock(api)
@@ -352,21 +462,23 @@ lust.with_mocks(function(mock)
   
   -- Test code that uses api.get_data()
   
-  -- Verify expectations
-  expect(api_mock._stubs.get_data.called).to.be.truthy()
-  api_mock:verify()  -- Validates all expected calls were made
+  -- Verify all expectations
+  api_mock:verify_expectations()
   
   -- No need to restore - happens automatically
 end)
 ```
 
-The mocking system includes:
+The enhanced mocking system includes:
 
 - **Spies**: Track function calls without changing behavior
 - **Stubs**: Replace functions with test implementations
 - **Mocks**: Create complete test doubles with verification
-- **Call tracking**: Verify arguments, call counts, and sequences
-- **Automatic cleanup**: Restore original functionality after tests
+- **Argument Matchers**: Flexible argument matching (`string()`, `number()`, `table_containing()`, etc.)
+- **Call Sequence Verification**: Check specific order of method calls
+- **Expectation API**: Fluent interface for setting up expectations
+- **Call Tracking**: Verify arguments, call counts, and call order
+- **Automatic Cleanup**: Restore original functionality after tests
 
 ## Installation
 
@@ -395,3 +507,12 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 ## License
 
 MIT, see [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+Lust-Next builds on the original [lust](https://github.com/bjornbytes/lust) testing framework and takes inspiration from several excellent Lua testing libraries:
+
+- [lunarmodules/busted](https://github.com/lunarmodules/busted) - A powerful, flexible testing framework with rich features
+- [lunarmodules/luassert](https://github.com/lunarmodules/luassert) - An extensible assertion library with advanced matching capabilities
+
+We're grateful to these projects for advancing the state of Lua testing and providing inspiration for Lust-Next's enhanced features.

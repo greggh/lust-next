@@ -9,6 +9,9 @@ Lust-Next provides a comprehensive mocking system for replacing dependencies and
 - **Spies**: Track function calls without changing behavior
 - **Stubs**: Replace functions with custom implementations
 - **Mocks**: Create complete mock objects with verification
+- **Argument Matchers**: Flexible argument matching (`string()`, `number()`, `table_containing()`, etc.)
+- **Call Sequence Verification**: Check specific order of method calls
+- **Expectation API**: Fluent interface for setting up expectations
 - **Context Management**: Automatically restore original functionality
 
 ## Spy Functions
@@ -155,6 +158,79 @@ spy_fn()
 expect(spy_fn:called_once()).to.be.truthy()
 spy_fn()
 expect(spy_fn:called_once()).to.equal(false)
+```
+
+### spy:called_before(other_spy, [call_index])
+
+Checks whether any call to this spy happened before a specific call to another spy.
+
+**Parameters:**
+- `other_spy` (spy): Another spy to compare with
+- `call_index` (number, optional): The index of the call to check on the other spy (default: 1)
+
+**Returns:**
+- `true` if any call to this spy happened before the specified call to the other spy, `false` otherwise
+
+**Example:**
+```lua
+local fn1 = function() end
+local fn2 = function() end
+local spy1 = lust.spy(fn1)
+local spy2 = lust.spy(fn2)
+
+spy1() -- Called first
+spy2() -- Called second
+
+expect(spy1:called_before(spy2)).to.be.truthy()
+expect(spy2:called_before(spy1)).to.equal(false)
+```
+
+### spy:called_after(other_spy, [call_index])
+
+Checks whether any call to this spy happened after a specific call to another spy.
+
+**Parameters:**
+- `other_spy` (spy): Another spy to compare with
+- `call_index` (number, optional): The index of the call to check on the other spy (default: last call)
+
+**Returns:**
+- `true` if any call to this spy happened after the specified call to the other spy, `false` otherwise
+
+**Example:**
+```lua
+local fn1 = function() end
+local fn2 = function() end
+local spy1 = lust.spy(fn1)
+local spy2 = lust.spy(fn2)
+
+spy1() -- Called first
+spy2() -- Called second
+
+expect(spy2:called_after(spy1)).to.be.truthy()
+expect(spy1:called_after(spy2)).to.equal(false)
+```
+
+### spy:has_calls_with(...)
+
+Checks whether the spy has any calls that match the specified pattern of arguments.
+
+**Parameters:**
+- `...`: The argument pattern to check for (can include matchers)
+
+**Returns:**
+- `true` if any call matches the pattern, `false` otherwise
+
+**Example:**
+```lua
+local fn = function() end
+local spy_fn = lust.spy(fn)
+
+spy_fn("test", 123)
+spy_fn(456, "example")
+
+expect(spy_fn:has_calls_with("test")).to.be.truthy()
+expect(spy_fn:has_calls_with(456)).to.be.truthy()
+expect(spy_fn:has_calls_with("missing")).to.equal(false)
 ```
 
 ### spy:last_call()
@@ -328,6 +404,107 @@ obj.method() -- Call the stubbed method
 mock_obj:verify() -- Passes because method was called
 ```
 
+### mock:verify_sequence(expected_sequence)
+
+Verifies that methods were called in a specific sequence.
+
+**Parameters:**
+- `expected_sequence` (table): Array of method call descriptors with format: `{method = "name", args = {arg1, arg2, ...}}`
+
+**Returns:**
+- `true` if the methods were called in the expected sequence
+
+**Throws:**
+- Error with details about the mismatch if the actual sequence differs from the expected sequence
+
+**Example:**
+```lua
+local api = { 
+  connect = function() end,
+  send = function() end,
+  disconnect = function() end
+}
+local mock_api = lust.mock(api)
+
+-- Stub methods
+mock_api:stub("connect", true)
+mock_api:stub("send", true)
+mock_api:stub("disconnect", true)
+
+-- Make calls
+api.connect()
+api.send("data")
+api.disconnect()
+
+-- Verify sequence
+mock_api:verify_sequence({
+  {method = "connect"},
+  {method = "send", args = {"data"}},
+  {method = "disconnect"}
+}) -- Passes because calls were made in this order
+```
+
+### mock:expect(method_name)
+
+Sets up expectations for how a method should be called. This returns a fluent interface for defining expectations.
+
+**Parameters:**
+- `method_name` (string): Name of the method to set expectations for
+
+**Returns:**
+- A fluent interface for defining expectations
+
+**Example:**
+```lua
+local api = { get_user = function() end }
+local mock_api = lust.mock(api)
+
+-- Set up expectations
+mock_api:expect("get_user")
+  .with(123)
+  .to.be.called.once()
+
+-- Stub implementation
+mock_api:stub("get_user", {name = "Test User"})
+
+-- Call method
+api.get_user(123)
+
+-- Verify expectations
+mock_api:verify_expectations()
+```
+
+### mock:verify_expectations()
+
+Verifies that all expectations set with `expect()` were met.
+
+**Returns:**
+- `true` if all expectations were met
+
+**Throws:**
+- Error with details if any expectation was not met
+
+**Example:**
+```lua
+local api = { get_user = function() end }
+local mock_api = lust.mock(api)
+
+-- Set up expectations
+mock_api:expect("get_user").to.be.called.times(2)
+
+-- Stub implementation 
+mock_api:stub("get_user", {name = "Test User"})
+
+-- Call method only once (should fail verification)
+api.get_user(123)
+
+-- This will throw an error because get_user was called only once
+local success, err = pcall(function()
+  mock_api:verify_expectations()
+end)
+expect(success).to.equal(false)
+```
+
 ### mock._stubs
 
 A table containing all the stubs created on the mock.
@@ -342,6 +519,108 @@ obj.method()
 
 expect(mock_obj._stubs.method.called).to.be.truthy()
 expect(mock_obj._stubs.method.call_count).to.equal(1)
+```
+
+## Argument Matchers
+
+Argument matchers provide flexible ways to match arguments in function calls.
+
+### lust.arg_matcher.any()
+
+Matches any value.
+
+**Returns:**
+- A matcher that accepts any argument value
+
+**Example:**
+```lua
+local spy_fn = lust.spy(function() end)
+spy_fn("test")
+expect(spy_fn:called_with(lust.arg_matcher.any())).to.be.truthy()
+```
+
+### lust.arg_matcher.string()
+
+Matches any string value.
+
+**Returns:**
+- A matcher that accepts any string argument
+
+**Example:**
+```lua
+local spy_fn = lust.spy(function() end)
+spy_fn("test")
+spy_fn(123)
+expect(spy_fn:called_with(lust.arg_matcher.string())).to.be.truthy()
+expect(spy_fn:called_with(lust.arg_matcher.number())).to.be.truthy()
+```
+
+### lust.arg_matcher.number()
+
+Matches any number value.
+
+### lust.arg_matcher.boolean()
+
+Matches any boolean value.
+
+### lust.arg_matcher.table()
+
+Matches any table value.
+
+### lust.arg_matcher.func()
+
+Matches any function value.
+
+### lust.arg_matcher.table_containing(partial)
+
+Matches a table that contains at least the specified keys and values.
+
+**Parameters:**
+- `partial` (table): Table with keys and values that must be present in the matched table
+
+**Returns:**
+- A matcher that checks if a table contains the specified keys and values
+
+**Example:**
+```lua
+local spy_fn = lust.spy(function() end)
+spy_fn({id = 123, name = "test", extra = "value"})
+
+-- Matches because the argument contains the specified keys/values
+expect(spy_fn:called_with(
+  lust.arg_matcher.table_containing({id = 123, name = "test"})
+)).to.be.truthy()
+
+-- Doesn't match because the value for 'name' is different
+expect(spy_fn:called_with(
+  lust.arg_matcher.table_containing({id = 123, name = "different"})
+)).to.equal(false)
+```
+
+### lust.arg_matcher.custom(fn, description)
+
+Creates a custom matcher using the provided function.
+
+**Parameters:**
+- `fn` (function): Function that takes a value and returns true if it matches, false otherwise
+- `description` (string, optional): Description of the matcher for error messages
+
+**Returns:**
+- A custom matcher that uses the provided function
+
+**Example:**
+```lua
+-- Create a matcher for positive numbers
+local positive_matcher = lust.arg_matcher.custom(
+  function(val) return type(val) == "number" and val > 0 end,
+  "positive number"
+)
+
+local spy_fn = lust.spy(function() end)
+spy_fn(42)
+spy_fn(-10)
+
+expect(spy_fn:called_with(positive_matcher)).to.be.truthy()
 ```
 
 ## Context Management
@@ -505,3 +784,61 @@ end)
    - Use spies when you want to verify calls without changing behavior
    - Use stubs when you need to replace functionality
    - Use mocks when you need both replacement and verification
+
+## Advanced Example: Using Expectations API and Call Sequence Verification
+
+```lua
+describe("Order processing system", function()
+  it("processes orders in the correct sequence", function()
+    local order_system = {
+      validate_order = function() end,
+      process_payment = function() end,
+      update_inventory = function() end,
+      send_confirmation = function() end
+    }
+    
+    -- Create a mock of the order system
+    lust.with_mocks(function(mock)
+      local system_mock = mock(order_system)
+      
+      -- Set up expectations with the fluent API
+      system_mock:expect("validate_order")
+        .with(lust.arg_matcher.table_containing({id = 123}))
+        .to.be.called.once()
+      
+      system_mock:expect("process_payment")
+        .with(lust.arg_matcher.number())
+        .to.be.called.once()
+        .and_return(true)
+      
+      system_mock:expect("update_inventory")
+        .to.be.called.once()
+      
+      system_mock:expect("send_confirmation")
+        .to.be.called.once()
+        .after("update_inventory")
+      
+      -- Stub implementations
+      system_mock:stub("validate_order", true)
+      system_mock:stub("process_payment", true)
+      system_mock:stub("update_inventory", true)
+      system_mock:stub("send_confirmation", true)
+      
+      -- Run the function under test
+      local order = {id = 123, items = {{id = 1, quantity = 2}}}
+      process_order(order_system, order, 99.99)
+      
+      -- Verify the expected sequence of calls
+      system_mock:verify_sequence({
+        {method = "validate_order", args = {order}},
+        {method = "process_payment", args = {99.99}},
+        {method = "update_inventory", args = {order.items}},
+        {method = "send_confirmation", args = {order.id}}
+      })
+      
+      -- Verify all expectations were met
+      system_mock:verify_expectations()
+    end)
+  end)
+end)
+```

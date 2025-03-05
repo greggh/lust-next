@@ -1,4 +1,4 @@
--- lust-next v0.5.0 - Enhanced Lua test framework
+-- lust-next v0.7.0 - Enhanced Lua test framework
 -- https://github.com/greggh/lust-next
 -- MIT LICENSE
 -- Based on lust by Bjorn Swenson (https://github.com/bjornbytes/lust)
@@ -9,34 +9,118 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.5.0"
+lust_next.version = "0.7.0"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
 lust_next.running_async = false
 lust_next.async_timeout = 5000 -- Default timeout in ms
+lust_next.focus_mode = false -- Tracks if any focused tests are present
 
+-- Output formatting options
+lust_next.format_options = {
+  use_color = true,          -- Whether to use color codes in output
+  indent_char = '\t',        -- Character to use for indentation (tab or spaces)
+  indent_size = 1,           -- How many indent_chars to use per level
+  show_trace = false,        -- Show stack traces for errors
+  show_success_detail = true, -- Show details for successful tests
+  compact = false,           -- Use compact output format (less verbose)
+  dot_mode = false,          -- Use dot mode (. for pass, F for fail)
+  summary_only = false       -- Show only summary, not individual tests
+}
+
+-- Set up colors based on format options
 local red = string.char(27) .. '[31m'
 local green = string.char(27) .. '[32m'
+local yellow = string.char(27) .. '[33m'
+local blue = string.char(27) .. '[34m'
+local magenta = string.char(27) .. '[35m'
+local cyan = string.char(27) .. '[36m'
 local normal = string.char(27) .. '[0m'
-local function indent(level) return string.rep('\t', level or lust_next.level) end
 
+-- Helper function for indentation with configurable char and size
+local function indent(level) 
+  level = level or lust_next.level
+  local indent_char = lust_next.format_options.indent_char
+  local indent_size = lust_next.format_options.indent_size
+  return string.rep(indent_char, level * indent_size) 
+end
+
+-- Disable colors (for non-terminal output or color-blind users)
 function lust_next.nocolor()
-  red, green, normal = '', '', ''
+  lust_next.format_options.use_color = false
+  red, green, yellow, blue, magenta, cyan, normal = '', '', '', '', '', '', ''
   return lust_next
 end
 
-function lust_next.describe(name, fn)
-  print(indent() .. name)
+-- Configure output formatting options
+function lust_next.format(options)
+  for k, v in pairs(options) do
+    if lust_next.format_options[k] ~= nil then
+      lust_next.format_options[k] = v
+    else
+      error("Unknown format option: " .. k)
+    end
+  end
+  
+  -- Update colors if needed
+  if not lust_next.format_options.use_color then
+    lust_next.nocolor()
+  else
+    red = string.char(27) .. '[31m'
+    green = string.char(27) .. '[32m'
+    yellow = string.char(27) .. '[33m'
+    blue = string.char(27) .. '[34m'
+    magenta = string.char(27) .. '[35m'
+    cyan = string.char(27) .. '[36m'
+    normal = string.char(27) .. '[0m'
+  end
+  
+  return lust_next
+end
+
+-- The main describe function with support for focus and exclusion
+function lust_next.describe(name, fn, options)
+  options = options or {}
+  local focused = options.focused or false
+  local excluded = options.excluded or false
+  
+  -- If this is a focused describe block, mark that we're in focus mode
+  if focused then
+    lust_next.focus_mode = true
+  end
+  
+  -- Only print in non-summary mode and non-dot mode
+  if not lust_next.format_options.summary_only and not lust_next.format_options.dot_mode then
+    -- Print description with appropriate formatting
+    if excluded then
+      print(indent() .. yellow .. "SKIP" .. normal .. " " .. name)
+    else
+      local prefix = focused and cyan .. "FOCUS " .. normal or ""
+      print(indent() .. prefix .. name)
+    end
+  end
+  
+  -- If excluded, don't execute the function
+  if excluded then
+    return
+  end
+  
   lust_next.level = lust_next.level + 1
   
-  -- Save current tags to restore them after the describe block
+  -- Save current tags and focus state to restore them after the describe block
   local prev_tags = {}
   for i, tag in ipairs(lust_next.current_tags) do
     prev_tags[i] = tag
   end
   
-  fn()
+  -- Store the current focus state at this level
+  local prev_focused = options._parent_focused or focused
+  
+  -- Run the function with updated context
+  local success, err = pcall(function()
+    fn()
+  end)
   
   -- Reset current tags to what they were before the describe block
   lust_next.current_tags = prev_tags
@@ -44,6 +128,38 @@ function lust_next.describe(name, fn)
   lust_next.befores[lust_next.level] = {}
   lust_next.afters[lust_next.level] = {}
   lust_next.level = lust_next.level - 1
+  
+  -- If there was an error in the describe block, report it
+  if not success then
+    lust_next.errors = lust_next.errors + 1
+    
+    if not lust_next.format_options.summary_only then
+      print(indent() .. red .. "ERROR" .. normal .. " in describe '" .. name .. "'")
+      
+      if lust_next.format_options.show_trace then
+        -- Show the full stack trace
+        print(indent(lust_next.level + 1) .. red .. debug.traceback(err, 2) .. normal)
+      else
+        -- Show just the error message
+        print(indent(lust_next.level + 1) .. red .. tostring(err) .. normal)
+      end
+    elseif lust_next.format_options.dot_mode then
+      -- In dot mode, print an 'E' for error
+      io.write(red .. "E" .. normal)
+    end
+  end
+end
+
+-- Focused version of describe
+function lust_next.fdescribe(name, fn)
+  return lust_next.describe(name, fn, {focused = true})
+end
+
+-- Excluded version of describe
+function lust_next.xdescribe(name, fn)
+  -- Use an empty function to ensure none of the tests within it ever run
+  -- This is more robust than just marking it excluded
+  return lust_next.describe(name, function() end, {excluded = true})
 end
 
 -- Set tags for the current describe block or test
@@ -105,21 +221,51 @@ local function should_run_test(name, tags)
   return true
 end
 
-function lust_next.it(name, fn)
+function lust_next.it(name, fn, options)
+  options = options or {}
+  local focused = options.focused or false
+  local excluded = options.excluded or false
+  
+  -- If this is a focused test, mark that we're in focus mode
+  if focused then
+    lust_next.focus_mode = true
+  end
+  
   -- Save current tags for this test
   local test_tags = {}
   for _, tag in ipairs(lust_next.current_tags) do
     table.insert(test_tags, tag)
   end
   
-  -- Check if this test should be run
-  if not should_run_test(name, test_tags) then
+  -- Determine if this test should be run
+  -- Skip if:
+  -- 1. It's explicitly excluded, or
+  -- 2. Focus mode is active but this test is not focused, or
+  -- 3. It doesn't match the filter pattern or tags
+  local should_skip = excluded or
+                     (lust_next.focus_mode and not focused) or
+                     (not should_run_test(name, test_tags))
+  
+  if should_skip then
     -- Skip test but still print it as skipped
-    print(indent() .. 'SKIP ' .. name)
     lust_next.skipped = lust_next.skipped + 1
+    
+    if not lust_next.format_options.summary_only and not lust_next.format_options.dot_mode then
+      local skip_reason = ""
+      if excluded then
+        skip_reason = " (excluded)"
+      elseif lust_next.focus_mode and not focused then
+        skip_reason = " (not focused)"
+      end
+      print(indent() .. yellow .. 'SKIP' .. normal .. ' ' .. name .. skip_reason)
+    elseif lust_next.format_options.dot_mode then
+      -- In dot mode, print an 'S' for skipped
+      io.write(yellow .. "S" .. normal)
+    end
     return
   end
   
+  -- Run before hooks
   for level = 1, lust_next.level do
     if lust_next.befores[level] then
       for i = 1, #lust_next.befores[level] do
@@ -137,15 +283,48 @@ function lust_next.it(name, fn)
     success, err = true, fn
   end
   
-  if success then lust_next.passes = lust_next.passes + 1
-  else lust_next.errors = lust_next.errors + 1 end
-  local color = success and green or red
-  local label = success and 'PASS' or 'FAIL'
-  print(indent() .. color .. label .. normal .. ' ' .. name)
-  if err and not success then
-    print(indent(lust_next.level + 1) .. red .. tostring(err) .. normal)
+  if success then 
+    lust_next.passes = lust_next.passes + 1 
+  else 
+    lust_next.errors = lust_next.errors + 1 
   end
-
+  
+  -- Output based on format options
+  if lust_next.format_options.dot_mode then
+    -- In dot mode, just print a dot for pass, F for fail
+    if success then
+      io.write(green .. "." .. normal)
+    else
+      io.write(red .. "F" .. normal)
+    end
+  elseif not lust_next.format_options.summary_only then 
+    -- Full output mode
+    local color = success and green or red
+    local label = success and 'PASS' or 'FAIL'
+    local prefix = focused and cyan .. "FOCUS " .. normal or ""
+    
+    -- Only show successful tests details if configured to do so
+    if success and not lust_next.format_options.show_success_detail then
+      if not lust_next.format_options.compact then
+        print(indent() .. color .. "." .. normal)
+      end
+    else
+      print(indent() .. color .. label .. normal .. ' ' .. prefix .. name)
+    end
+    
+    -- Show error details
+    if err and not success then
+      if lust_next.format_options.show_trace then
+        -- Show the full stack trace
+        print(indent(lust_next.level + 1) .. red .. debug.traceback(err, 2) .. normal)
+      else
+        -- Show just the error message
+        print(indent(lust_next.level + 1) .. red .. tostring(err) .. normal)
+      end
+    end
+  end
+  
+  -- Run after hooks
   for level = 1, lust_next.level do
     if lust_next.afters[level] then
       for i = 1, #lust_next.afters[level] do
@@ -156,6 +335,18 @@ function lust_next.it(name, fn)
   
   -- Clear current tags after test
   lust_next.current_tags = {}
+end
+
+-- Focused version of it
+function lust_next.fit(name, fn)
+  return lust_next.it(name, fn, {focused = true})
+end
+
+-- Excluded version of it
+function lust_next.xit(name, fn)
+  -- Important: Replace the function with a dummy that never runs
+  -- This ensures the test is completely skipped, not just filtered
+  return lust_next.it(name, function() end, {excluded = true})
 end
 
 function lust_next.before(fn)
@@ -217,19 +408,98 @@ local function eq(t1, t2, eps)
   return true
 end
 
-local function stringify(t)
-  if type(t) == 'string' then return "'" .. tostring(t) .. "'" end
-  if type(t) ~= 'table' or getmetatable(t) and getmetatable(t).__tostring then return tostring(t) end
-  local strings = {}
-  for i, v in ipairs(t) do
-    strings[#strings + 1] = stringify(v)
+-- Enhanced stringify function with better formatting for different types
+local function stringify(t, depth)
+  depth = depth or 0
+  local indent_str = string.rep("  ", depth)
+  
+  -- Handle basic types directly
+  if type(t) == 'string' then 
+    return "'" .. tostring(t) .. "'" 
+  elseif type(t) == 'number' or type(t) == 'boolean' or type(t) == 'nil' then
+    return tostring(t)
+  elseif type(t) ~= 'table' or (getmetatable(t) and getmetatable(t).__tostring) then 
+    return tostring(t) 
   end
-  for k, v in pairs(t) do
-    if type(k) ~= 'number' or k > #t or k < 1 then
-      strings[#strings + 1] = ('[%s] = %s'):format(stringify(k), stringify(v))
+  
+  -- Handle empty tables
+  if next(t) == nil then
+    return "{}"
+  end
+  
+  -- Handle tables with careful formatting
+  local strings = {}
+  local multiline = false
+  
+  -- Format array part first
+  for i, v in ipairs(t) do
+    if type(v) == 'table' and next(v) ~= nil and depth < 2 then
+      multiline = true
+      strings[#strings + 1] = indent_str .. "  " .. stringify(v, depth + 1)
+    else
+      strings[#strings + 1] = stringify(v, depth + 1)
     end
   end
-  return '{ ' .. table.concat(strings, ', ') .. ' }'
+  
+  -- Format hash part next
+  local hash_entries = {}
+  for k, v in pairs(t) do
+    if type(k) ~= 'number' or k > #t or k < 1 then
+      local key_str = type(k) == 'string' and k or '[' .. stringify(k, depth + 1) .. ']'
+      
+      if type(v) == 'table' and next(v) ~= nil and depth < 2 then
+        multiline = true
+        hash_entries[#hash_entries + 1] = indent_str .. "  " .. key_str .. " = " .. stringify(v, depth + 1)
+      else
+        hash_entries[#hash_entries + 1] = key_str .. " = " .. stringify(v, depth + 1)
+      end
+    end
+  end
+  
+  -- Combine array and hash parts
+  for _, entry in ipairs(hash_entries) do
+    strings[#strings + 1] = entry
+  end
+  
+  -- Format based on content complexity
+  if multiline and depth == 0 then
+    return "{\n  " .. table.concat(strings, ",\n  ") .. "\n" .. indent_str .. "}"
+  elseif #strings > 5 or multiline then
+    return "{ " .. table.concat(strings, ", ") .. " }"
+  else
+    return "{ " .. table.concat(strings, ", ") .. " }"
+  end
+end
+
+-- Generate a simple diff between two values
+local function diff_values(v1, v2)
+  if type(v1) ~= 'table' or type(v2) ~= 'table' then
+    return "Expected: " .. stringify(v2) .. "\nGot:      " .. stringify(v1)
+  end
+  
+  local differences = {}
+  
+  -- Check for missing keys in v1
+  for k, v in pairs(v2) do
+    if v1[k] == nil then
+      table.insert(differences, "Missing key: " .. stringify(k) .. " (expected " .. stringify(v) .. ")")
+    elseif not eq(v1[k], v, 0) then
+      table.insert(differences, "Different value for key " .. stringify(k) .. ":\n  Expected: " .. stringify(v) .. "\n  Got:      " .. stringify(v1[k]))
+    end
+  end
+  
+  -- Check for extra keys in v1
+  for k, v in pairs(v1) do
+    if v2[k] == nil then
+      table.insert(differences, "Extra key: " .. stringify(k) .. " = " .. stringify(v))
+    end
+  end
+  
+  if #differences == 0 then
+    return "Values appear equal but are not identical (may be due to metatable differences)"
+  end
+  
+  return "Differences:\n  " .. table.concat(differences, "\n  ")
 end
 
 local paths = {
@@ -261,28 +531,40 @@ local paths = {
   },
   equal = {
     test = function(v, x, eps)
-      local comparison = ''
       local equal = eq(v, x, eps)
-
-      if not equal and (type(v) == 'table' or type(x) == 'table') then
-        comparison = comparison .. '\n' .. indent(lust_next.level + 1) .. 'LHS: ' .. stringify(v)
-        comparison = comparison .. '\n' .. indent(lust_next.level + 1) .. 'RHS: ' .. stringify(x)
+      local comparison = ''
+      
+      if not equal then
+        if type(v) == 'table' or type(x) == 'table' then
+          -- For tables, generate a detailed diff
+          comparison = '\n' .. indent(lust_next.level + 1) .. diff_values(v, x)
+        else
+          -- For primitive types, show a simple comparison
+          comparison = '\n' .. indent(lust_next.level + 1) .. 'Expected: ' .. stringify(x) 
+                     .. '\n' .. indent(lust_next.level + 1) .. 'Got:      ' .. stringify(v)
+        end
       end
 
       return equal,
-        'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to be equal' .. comparison,
-        'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to not be equal'
+        'Values are not equal: ' .. comparison,
+        'expected ' .. stringify(v) .. ' and ' .. stringify(x) .. ' to not be equal'
     end
   },
   have = {
     test = function(v, x)
       if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
+        error('expected ' .. stringify(v) .. ' to be a table')
       end
 
+      -- Create a formatted table representation for better error messages
+      local table_str = stringify(v)
+      local content_preview = #table_str > 70 
+          and table_str:sub(1, 67) .. "..." 
+          or table_str
+
       return has(v, x),
-        'expected ' .. tostring(v) .. ' to contain ' .. tostring(x),
-        'expected ' .. tostring(v) .. ' to not contain ' .. tostring(x)
+        'expected table to contain ' .. stringify(x) .. '\nTable contents: ' .. content_preview,
+        'expected table not to contain ' .. stringify(x) .. ' but it was found\nTable contents: ' .. content_preview
     end
   },
   fail = { 'with',
@@ -742,6 +1024,161 @@ local function restore_all_mocks()
   _mocks = {}
 end
 
+-- Deep comparison of tables for equality
+local function tables_equal(t1, t2)
+  if type(t1) ~= "table" or type(t2) ~= "table" then
+    return t1 == t2
+  end
+  
+  -- Check each key-value pair in t1
+  for k, v in pairs(t1) do
+    if not tables_equal(v, t2[k]) then
+      return false
+    end
+  end
+  
+  -- Check for any extra keys in t2
+  for k, _ in pairs(t2) do
+    if t1[k] == nil then
+      return false
+    end
+  end
+  
+  return true
+end
+
+-- Convert value to string representation for error messages
+local function value_to_string(value, max_depth)
+  max_depth = max_depth or 3
+  if max_depth < 0 then return "..." end
+  
+  if type(value) == "string" then
+    return '"' .. value .. '"'
+  elseif type(value) == "table" then
+    if max_depth == 0 then return "{...}" end
+    
+    local parts = {}
+    for k, v in pairs(value) do
+      local key_str = type(k) == "string" and k or "[" .. tostring(k) .. "]"
+      table.insert(parts, key_str .. " = " .. value_to_string(v, max_depth - 1))
+    end
+    return "{ " .. table.concat(parts, ", ") .. " }"
+  elseif type(value) == "function" then
+    return "function(...)"
+  else
+    return tostring(value)
+  end
+end
+
+-- Argument matcher system
+lust_next.arg_matcher = {}
+
+-- Base matcher class
+local function create_matcher(match_fn, description)
+  return {
+    _is_matcher = true,
+    match = match_fn,
+    description = description,
+    __matcher_value = true
+  }
+end
+
+-- Match any value
+function lust_next.arg_matcher.any()
+  return create_matcher(function() return true end, "any value")
+end
+
+-- Type-based matchers
+function lust_next.arg_matcher.string()
+  return create_matcher(function(val) return type(val) == "string" end, "string value")
+end
+
+function lust_next.arg_matcher.number()
+  return create_matcher(function(val) return type(val) == "number" end, "number value")
+end
+
+function lust_next.arg_matcher.boolean()
+  return create_matcher(function(val) return type(val) == "boolean" end, "boolean value")
+end
+
+function lust_next.arg_matcher.table()
+  return create_matcher(function(val) return type(val) == "table" end, "table value")
+end
+
+function lust_next.arg_matcher.func()
+  return create_matcher(function(val) return type(val) == "function" end, "function value")
+end
+
+-- Table containing specific keys/values
+function lust_next.arg_matcher.table_containing(partial)
+  return create_matcher(function(val)
+    if type(val) ~= "table" then return false end
+    
+    for k, v in pairs(partial) do
+      if val[k] == nil then return false end
+      
+      -- If v is a matcher, use its match function
+      if type(v) == "table" and v._is_matcher then
+        if not v.match(val[k]) then return false end
+      -- Otherwise do a direct comparison
+      elseif val[k] ~= v then
+        return false
+      end
+    end
+    
+    return true
+  end, "table containing " .. value_to_string(partial))
+end
+
+-- Custom matcher with user-provided function
+function lust_next.arg_matcher.custom(fn, description)
+  return create_matcher(fn, description or "custom matcher")
+end
+
+-- Helper to check if value matches the matcher
+local function matches_arg(expected, actual)
+  -- If expected is a matcher, use its match function
+  if type(expected) == "table" and expected._is_matcher then
+    return expected.match(actual)
+  end
+  
+  -- If both are tables, do deep comparison
+  if type(expected) == "table" and type(actual) == "table" then
+    return tables_equal(expected, actual)
+  end
+  
+  -- Otherwise do direct comparison
+  return expected == actual
+end
+
+-- Check if args match a set of expected args (with potential matchers)
+local function args_match(expected_args, actual_args)
+  if #expected_args ~= #actual_args then
+    return false
+  end
+  
+  for i, expected in ipairs(expected_args) do
+    if not matches_arg(expected, actual_args[i]) then
+      return false
+    end
+  end
+  
+  return true
+end
+
+-- Format args for error messages
+local function format_args(args)
+  local parts = {}
+  for i, arg in ipairs(args) do
+    if type(arg) == "table" and arg._is_matcher then
+      table.insert(parts, arg.description)
+    else
+      table.insert(parts, value_to_string(arg))
+    end
+  end
+  return table.concat(parts, ", ")
+end
+
 -- Spy function with enhanced features
 function lust_next.spy(target, name, run)
   local spy = {
@@ -750,17 +1187,42 @@ function lust_next.spy(target, name, run)
     call_count = 0,
     original = nil,
     target = nil,
-    name = nil
+    name = nil,
+    call_sequence = {}, -- Track call sequence numbers for order verification
+    call_timestamps = {} -- Kept for backward compatibility
   }
   
   local subject
 
   local function capture(...)
+    -- Update call tracking state
     spy.called = true
     spy.call_count = spy.call_count + 1
+    
+    -- Record arguments
     local args = {...}
     table.insert(spy.calls, args)
-    return subject(...)
+    
+    -- Instead of relying purely on clock time, we'll use a global sequence counter
+-- that increases for every call across all spies, guaranteeing a strict ordering
+if not _G._lust_next_sequence_counter then
+    _G._lust_next_sequence_counter = 0
+end
+_G._lust_next_sequence_counter = _G._lust_next_sequence_counter + 1
+
+-- Store a sequence number that ensures strict ordering
+-- This ensures exact ordering regardless of system clock precision
+local sequence_number = _G._lust_next_sequence_counter
+    table.insert(spy.call_sequence, sequence_number)
+    
+    -- Also store in timestamps for backward compatibility
+    table.insert(spy.call_timestamps, sequence_number)
+    
+    -- Call the original or stubbed function
+    if subject then
+      return subject(...)
+    end
+    return nil
   end
 
   if type(target) == 'table' then
@@ -783,17 +1245,64 @@ function lust_next.spy(target, name, run)
   
   function spy:called_with(...)
     local expected_args = {...}
-    for _, call_args in ipairs(self.calls) do
-      local match = true
-      for i, arg in ipairs(expected_args) do
-        if call_args[i] ~= arg then
-          match = false
-          break
-        end
+    local found = false
+    local matching_call_index = nil
+    
+    for i, call_args in ipairs(self.calls) do
+      if args_match(expected_args, call_args) then
+        found = true
+        matching_call_index = i
+        break
       end
-      if match then return true end
     end
-    return false
+    
+    -- If no matching call was found, return false
+    if not found then
+      return false
+    end
+    
+    -- Return an object with chainable methods
+    local result = {
+      result = true,
+      call_index = matching_call_index,
+      
+      -- Check if this call came before another spy's call
+      called_before = function(other_spy)
+        if type(other_spy) == "table" and other_spy.call_timestamps then
+          -- Make sure other spy has been called
+          if #other_spy.call_timestamps == 0 then
+            return false
+          end
+          
+          -- Compare timestamps
+          return spy.call_timestamps[matching_call_index] < other_spy.call_timestamps[1]
+        end
+        return false
+      end,
+      
+      -- Check if this call came after another spy's call
+      called_after = function(other_spy)
+        if type(other_spy) == "table" and other_spy.call_timestamps then
+          -- Make sure other spy has been called
+          if #other_spy.call_timestamps == 0 then
+            return false
+          end
+          
+          -- Compare timestamps
+          local other_timestamp = other_spy.call_timestamps[#other_spy.call_timestamps]
+          return spy.call_timestamps[matching_call_index] > other_timestamp
+        end
+        return false
+      end
+    }
+    
+    -- Make it work in boolean contexts
+    setmetatable(result, {
+      __call = function() return true end,
+      __tostring = function() return "true" end
+    })
+    
+    return result
   end
   
   function spy:called_times(n)
@@ -814,6 +1323,119 @@ function lust_next.spy(target, name, run)
     end
     return nil
   end
+  
+  -- Check if a call happened before another spy's call
+  function spy:called_before(other_spy, call_index)
+    call_index = call_index or 1
+    
+    -- Safety checks
+    if not other_spy or type(other_spy) ~= "table" then
+      error("called_before requires a spy object as argument")
+    end
+    
+    if not other_spy.call_sequence then
+      error("called_before requires a spy object with call_sequence")
+    end
+    
+    -- Make sure both spies have been called
+    if self.call_count == 0 or other_spy.call_count == 0 then
+      return false
+    end
+    
+    -- Make sure other_spy has been called enough times
+    if other_spy.call_count < call_index then
+      return false
+    end
+    
+    -- Get sequence number of the other spy's call
+    local other_sequence = other_spy.call_sequence[call_index]
+    if not other_sequence then
+      return false
+    end
+    
+    -- Check if any of this spy's calls happened before that
+    for _, sequence in ipairs(self.call_sequence) do
+      if sequence < other_sequence then
+        return true
+      end
+    end
+    
+    return false
+  end
+  
+  -- Check if a call happened after another spy's call
+  function spy:called_after(other_spy, call_index)
+    call_index = call_index or 1
+    
+    -- Safety checks
+    if not other_spy or type(other_spy) ~= "table" then
+      error("called_after requires a spy object as argument")
+    end
+    
+    if not other_spy.call_sequence then
+      error("called_after requires a spy object with call_sequence")
+    end
+    
+    -- Make sure both spies have been called
+    if self.call_count == 0 or other_spy.call_count == 0 then
+      return false
+    end
+    
+    -- Make sure other_spy has been called enough times
+    if other_spy.call_count < call_index then
+      return false
+    end
+    
+    -- Get sequence of the other spy's call
+    local other_sequence = other_spy.call_sequence[call_index]
+    if not other_sequence then
+      return false
+    end
+    
+    -- Check if any of this spy's calls happened after that
+    local last_self_sequence = self.call_sequence[self.call_count]
+    if last_self_sequence > other_sequence then
+      return true
+    end
+    
+    return false
+  end
+  
+  -- NEW: Find call index for a specific set of arguments
+  function spy:find_call_index(...)
+    local expected_args = {...}
+    
+    for i, call_args in ipairs(self.calls) do
+      if args_match(expected_args, call_args) then
+        return i
+      end
+    end
+    
+    return nil
+  end
+  
+  -- NEW: Check if any calls match a specific pattern of arguments
+  function spy:has_calls_with(...)
+    local expected_pattern = {...}
+    
+    for _, call_args in ipairs(self.calls) do
+      if #call_args >= #expected_pattern then
+        local match = true
+        for i, pattern_arg in ipairs(expected_pattern) do
+          if not matches_arg(pattern_arg, call_args[i]) then
+            match = false
+            break
+          end
+        end
+        
+        if match then
+          return true
+        end
+      end
+    end
+    
+    return false
+  end
 
   -- Set up call method
   setmetatable(spy, {
@@ -827,21 +1449,118 @@ function lust_next.spy(target, name, run)
   return spy
 end
 
+-- Create an expectation object for mock expectations
+local function create_expectation(mock, method_name)
+  local expectation = {
+    method = method_name,
+    min_calls = nil,
+    max_calls = nil,
+    exact_calls = nil,
+    args = nil,
+    return_value = nil,
+    required_before = nil,
+    required_after = nil
+  }
+  
+  -- Add expectation to mock's list
+  if not mock._expectations then
+    mock._expectations = {}
+  end
+  table.insert(mock._expectations, expectation)
+  
+  -- Create fluent interface for setting expectations
+  local fluent = {}
+  
+  -- Base 'to' connector for fluent API
+  fluent.to = {
+    be = {
+      called = {
+        -- Set exact number of times
+        times = function(n)
+          expectation.exact_calls = n
+          return fluent
+        end,
+        
+        -- Must be called exactly once
+        once = function()
+          expectation.exact_calls = 1
+          return fluent
+        end,
+        
+        -- Called at least n times
+        at_least = function(n)
+          expectation.min_calls = n
+          return fluent
+        end,
+        
+        -- Called at most n times
+        at_most = function(n)
+          expectation.max_calls = n
+          return fluent
+        end,
+        
+        -- With specific arguments
+        with = function(...)
+          expectation.args = {...}
+          return fluent
+        end,
+        
+        -- Should be called after another method
+        after = function(other_method)
+          expectation.required_after = other_method
+          return fluent
+        end
+      }
+    }
+  }
+  
+  -- Short form for setting arguments
+  fluent.with = function(...)
+    expectation.args = {...}
+    return fluent
+  end
+  
+  -- Shorthand for called once
+  fluent.once = function()
+    expectation.exact_calls = 1
+    return fluent
+  end
+  
+  -- Set return value
+  fluent.and_return = function(value)
+    expectation.return_value = value
+    -- Also stub the method to return this value
+    mock:stub(method_name, value)
+    return fluent
+  end
+  
+  -- Negative expectations
+  fluent.to.not_be = {
+    called = function()
+      expectation.exact_calls = 0
+      return fluent
+    end
+  }
+  
+  return fluent
+end
+
 -- Create a mock object with verifiable behavior
 function lust_next.mock(target, options)
   options = options or {}
   
   local mock = {
     _is_lust_mock = true,
-    _target = target,
+    target = target,
     _stubs = {},
     _originals = {},
+    _expectations = {},
     _verify_all_expectations_called = options.verify_all_expectations_called ~= false
   }
   
   -- Method to stub a function with a return value or implementation
   function mock:stub(name, implementation_or_value)
-    self._originals[name] = self._target[name]
+    self._originals[name] = self.target[name]
     
     local implementation
     if type(implementation_or_value) == "function" then
@@ -852,15 +1571,15 @@ function lust_next.mock(target, options)
     
     local spy = lust_next.spy(implementation)
     self._stubs[name] = spy
-    self._target[name] = spy
+    self.target[name] = spy
     
-    return spy
+    return self
   end
   
   -- Restore a specific stub
   function mock:restore_stub(name)
     if self._originals[name] then
-      self._target[name] = self._originals[name]
+      self.target[name] = self._originals[name]
       self._originals[name] = nil
       self._stubs[name] = nil
     end
@@ -869,7 +1588,7 @@ function lust_next.mock(target, options)
   -- Restore all stubs for this mock
   function mock:restore()
     for name, _ in pairs(self._originals) do
-      self._target[name] = self._originals[name]
+      self.target[name] = self._originals[name]
     end
     self._stubs = {}
     self._originals = {}
@@ -889,6 +1608,211 @@ function lust_next.mock(target, options)
     
     if #failures > 0 then
       error("Mock verification failed:\n  " .. table.concat(failures, "\n  "), 2)
+    end
+    
+    return true
+  end
+  
+  -- NEW: Set expectation for a method
+  function mock:expect(method_name)
+    return create_expectation(self, method_name)
+  end
+  
+  -- NEW: Verify that all expectations were met
+  function mock:verify_expectations()
+    if not self._expectations then
+      return true
+    end
+    
+    for _, expectation in ipairs(self._expectations) do
+      local stub = self._stubs[expectation.method]
+      
+      -- If stub doesn't exist, create one that tracks calls to original method
+      if not stub then
+        self:stub(expectation.method, self.target[expectation.method])
+        stub = self._stubs[expectation.method]
+      end
+      
+      -- Check call count expectations
+      if expectation.exact_calls ~= nil then
+        if stub.call_count ~= expectation.exact_calls then
+          error("Expectation failed: Method '" .. expectation.method .. 
+                "' expected to be called exactly " .. expectation.exact_calls .. 
+                " times but was called " .. stub.call_count .. " times")
+        end
+      end
+      
+      if expectation.min_calls ~= nil and stub.call_count < expectation.min_calls then
+        error("Expectation failed: Method '" .. expectation.method .. 
+              "' expected to be called at least " .. expectation.min_calls .. 
+              " times but was called only " .. stub.call_count .. " times")
+      end
+      
+      if expectation.max_calls ~= nil and stub.call_count > expectation.max_calls then
+        error("Expectation failed: Method '" .. expectation.method .. 
+              "' expected to be called at most " .. expectation.max_calls .. 
+              " times but was called " .. stub.call_count .. " times")
+      end
+      
+      -- Check argument expectations
+      if expectation.args and stub.called then
+        local arg_match_found = false
+        for _, call_args in ipairs(stub.calls) do
+          if args_match(expectation.args, call_args) then
+            arg_match_found = true
+            break
+          end
+        end
+        
+        if not arg_match_found then
+          local expected_str = format_args(expectation.args)
+          local actual_calls = {}
+          for _, call_args in ipairs(stub.calls) do
+            table.insert(actual_calls, "(" .. format_args(call_args) .. ")")
+          end
+          
+          error("Expectation failed: Method '" .. expectation.method .. 
+                "' expected to be called with (" .. expected_str .. 
+                ") but was called with " .. table.concat(actual_calls, ", "))
+        end
+      end
+      
+      -- Check sequence expectations
+      if expectation.required_after then
+        local other_stub = self._stubs[expectation.required_after]
+        if not other_stub then
+          error("Expectation failed: Method '" .. expectation.method .. 
+                "' expected to be called after '" .. expectation.required_after .. 
+                "' but '" .. expectation.required_after .. "' was never stubbed")
+        end
+        
+        -- Make sure both stubs have been called
+        if not stub.called or not other_stub.called then
+          if not stub.called then
+            error("Expectation failed: Method '" .. expectation.method .. 
+                  "' expected to be called after '" .. expectation.required_after .. 
+                  "' but was never called")
+          else
+            error("Expectation failed: Method '" .. expectation.method .. 
+                  "' expected to be called after '" .. expectation.required_after .. 
+                  "' but '" .. expectation.required_after .. "' was never called")
+          end
+        end
+        
+        -- Check if the sequence numbers indicate the correct order
+        local last_stub_sequence = stub.call_sequence[stub.call_count]
+        local first_other_sequence = other_stub.call_sequence[1]
+        
+        if last_stub_sequence < first_other_sequence then
+          local stub_sequences = {}
+          for _, seq in ipairs(stub.call_sequence) do
+            table.insert(stub_sequences, tostring(seq))
+          end
+          
+          local other_sequences = {}
+          for _, seq in ipairs(other_stub.call_sequence) do
+            table.insert(other_sequences, tostring(seq))
+          end
+          
+          error("Expectation failed: Method '" .. expectation.method .. 
+                "' expected to be called after '" .. expectation.required_after .. 
+                "' but was called before it.\n" ..
+                "Method '" .. expectation.method .. "' called at sequences: " .. table.concat(stub_sequences, ", ") .. 
+                "\nMethod '" .. expectation.required_after .. "' called at sequences: " .. table.concat(other_sequences, ", "))
+        end
+      end
+    end
+    
+    return true
+  end
+  
+  -- Verify a specific sequence of method calls
+  function mock:verify_sequence(expected_sequence)
+    local actual_calls = {}
+    
+    -- First, make sure all the expected methods have stubs
+    for _, expected in ipairs(expected_sequence) do
+      if not self._stubs[expected.method] then
+        error("Method '" .. expected.method .. "' is expected in sequence but was never stubbed")
+      end
+    end
+    
+    -- Build a flattened list of all calls across methods
+    for name, stub in pairs(self._stubs) do
+      for i, call_args in ipairs(stub.calls) do
+        if stub.call_sequence and stub.call_sequence[i] then
+          table.insert(actual_calls, {
+            method = name,
+            args = call_args,
+            sequence = stub.call_sequence[i],
+            timestamp = stub.call_timestamps and stub.call_timestamps[i] -- For backward compatibility
+          })
+        end
+      end
+    end
+    
+    -- Sort by sequence number to get the actual sequence
+    table.sort(actual_calls, function(a, b)
+      return a.sequence < b.sequence
+    end)
+    
+    -- Debug info for troubleshooting
+    local debug_sequence = {}
+    for _, actual in ipairs(actual_calls) do
+      table.insert(debug_sequence, actual.method .. " (sequence #" .. tostring(actual.sequence) .. ")")
+    end
+    
+    -- If no calls happened but sequence expects some, fail
+    if #actual_calls == 0 and #expected_sequence > 0 then
+      local expected_methods = {}
+      for _, expected in ipairs(expected_sequence) do
+        table.insert(expected_methods, expected.method)
+      end
+      error("Expected methods to be called in sequence: " .. 
+            table.concat(expected_methods, ", ") .. 
+            " but no methods were called")
+    end
+    
+    -- If fewer calls happened than expected, fail
+    if #actual_calls < #expected_sequence then
+      local expected_methods = {}
+      for _, expected in ipairs(expected_sequence) do
+        table.insert(expected_methods, expected.method)
+      end
+      local actual_methods = {}
+      for _, actual in ipairs(actual_calls) do
+        table.insert(actual_methods, actual.method)
+      end
+      error("Expected sequence of " .. #expected_sequence .. 
+            " method calls: " .. table.concat(expected_methods, ", ") .. 
+            " but only " .. #actual_calls .. " happened: " .. 
+            table.concat(actual_methods, ", "))
+    end
+    
+    -- Check each call in the expected sequence
+    for i, expected in ipairs(expected_sequence) do
+      local actual = actual_calls[i]
+      
+      -- Check method name first
+      if actual.method ~= expected.method then
+        error("Call sequence mismatch at position " .. i .. 
+              ": Expected method '" .. expected.method .. 
+              "' but got '" .. actual.method .. "'" ..
+              "\nActual sequence was: " .. table.concat(debug_sequence, ", "))
+      end
+      
+      -- Check arguments if specified
+      if expected.args then
+        if not args_match(expected.args, actual.args) then
+          local expected_str = format_args(expected.args)
+          local actual_str = format_args(actual.args)
+          
+          error("Call sequence argument mismatch at position " .. i .. 
+                " for method '" .. expected.method .. 
+                "': Expected (" .. expected_str .. 
+                ") but got (" .. actual_str .. ")")
+        end
+      end
     end
     
     return true
@@ -1110,6 +2034,13 @@ end
 function lust_next.run_discovered(root_dir, pattern, options)
   options = options or {}
   
+  -- Reset all state before running tests
+  lust_next.focus_mode = false
+  lust_next.skipped = 0
+  lust_next.current_tags = {}
+  lust_next.active_tags = {}
+  lust_next.filter_pattern = nil
+  
   -- Apply filters if specified in options
   if options.tags then
     if type(options.tags) == "string" then
@@ -1214,9 +2145,11 @@ lust_next.skipped = 0
 function lust_next.run_file(file_path)
   local prev_passes = lust_next.passes
   local prev_errors = lust_next.errors
+  local prev_skipped = lust_next.skipped
   
-  -- Reset skip counter
+  -- Important: Reset state before running the file
   lust_next.skipped = 0
+  lust_next.focus_mode = false
   
   print("\nRunning file: " .. file_path)
   local success, err = pcall(function()
@@ -1231,7 +2164,8 @@ function lust_next.run_file(file_path)
     error = err,
     passes = lust_next.passes - prev_passes,
     errors = lust_next.errors - prev_errors,
-    skipped = lust_next.skipped
+    skipped = lust_next.skipped,
+    focus_mode = lust_next.focus_mode
   }
   
   if not success then
@@ -1244,8 +2178,19 @@ function lust_next.run_file(file_path)
       summary = summary .. " (" .. lust_next.skipped .. " skipped)"
     end
     
+    if lust_next.focus_mode then
+      summary = summary .. " [FOCUS MODE ACTIVE]"
+    end
+    
     print(summary)
   end
+  
+  -- Reset state after the run
+  lust_next.focus_mode = false
+  -- Important: Also reset all other state that might affect future runs
+  lust_next.current_tags = {}
+  lust_next.active_tags = {}
+  lust_next.filter_pattern = nil
   
   return results
 end
@@ -1254,6 +2199,13 @@ end
 function lust_next.cli_run(dir, options)
   dir = dir or "./tests"
   options = options or {}
+  
+  -- Reset state before running any tests
+  lust_next.focus_mode = false
+  lust_next.skipped = 0
+  lust_next.current_tags = {}
+  lust_next.active_tags = {}
+  lust_next.filter_pattern = nil
   
   -- Apply filters if specified in options
   if options.tags then
@@ -1288,6 +2240,7 @@ function lust_next.cli_run(dir, options)
   local skipped = 0
   
   for _, file in ipairs(files) do
+    -- Each file runs with clean state
     local results = lust_next.run_file(file)
     if results.success and results.errors == 0 then
       passed = passed + 1
@@ -1299,23 +2252,42 @@ function lust_next.cli_run(dir, options)
     end
   end
   
-  print("\n" .. string.rep("-", 60))
-  print("Test Summary: " .. green .. passed .. " passed" .. normal .. ", " .. 
-        (failed > 0 and red or green) .. failed .. " failed" .. normal)
-  
-  if skipped > 0 then
-    print("Skipped: " .. skipped .. " tests due to filtering")
+  -- Add a line break after dot mode output
+  if lust_next.format_options.dot_mode then
+    print("\n")
   end
   
-  print(string.rep("-", 60))
+  print("\n" .. string.rep("-", 70))
+  print("TEST SUMMARY")
+  print(string.rep("-", 70))
+  
+  print("Results:  " .. green .. passed .. " passed" .. normal .. ", " .. 
+        (failed > 0 and red or green) .. failed .. " failed" .. normal .. 
+        (skipped > 0 and ", " .. yellow .. skipped .. " skipped" .. normal or ""))
+  
+  -- Calculate percentage
+  local total = passed + failed
+  local percentage = total > 0 and math.floor((passed / total) * 100) or 100
+  local percent_color = percentage >= 90 and green or (percentage >= 75 and yellow or red)
+  
+  print("Success:  " .. percent_color .. percentage .. "%" .. normal)
+  print("Duration: " .. string.format("%.2f", os.clock()) .. "s")
+  
+  if lust_next.focus_mode then
+    print(cyan .. "FOCUS MODE: Only focused tests were run" .. normal)
+  end
+  
+  print(string.rep("-", 70))
   
   if failed > 0 then
-    print(red .. "✖ Some tests failed" .. normal)
+    print(red .. "✖ FAILED " .. normal .. "(" .. failed .. " of " .. total .. " tests failed)")
     lust_next.reset_filters()
+    lust_next.focus_mode = false
     return false
   else
-    print(green .. "✓ All tests passed" .. normal)
+    print(green .. "✓ SUCCESS " .. normal .. "(" .. passed .. " of " .. total .. " tests passed)")
     lust_next.reset_filters()
+    lust_next.focus_mode = false
     return true
   end
 end
@@ -1473,18 +2445,68 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
     elseif arg[i] == "--filter" and arg[i+1] then
       options.filter = arg[i+1]
       i = i + 2
+    elseif arg[i] == "--format" and arg[i+1] then
+      local format_name = arg[i+1]
+      if format_name == "dot" then
+        lust_next.format({ dot_mode = true })
+      elseif format_name == "compact" then
+        lust_next.format({ compact = true, show_success_detail = false })
+      elseif format_name == "summary" then
+        lust_next.format({ summary_only = true })
+      elseif format_name == "detailed" then
+        lust_next.format({ show_success_detail = true, show_trace = true })
+      elseif format_name == "plain" then
+        lust_next.format({ use_color = false })
+      else
+        print("Unknown format: " .. format_name)
+        os.exit(1)
+      end
+      i = i + 2
+    elseif arg[i] == "--indent" and arg[i+1] then
+      if arg[i+1] == "space" or arg[i+1] == "spaces" then
+        lust_next.format({ indent_char = ' ', indent_size = 2 })
+      elseif arg[i+1] == "tab" or arg[i+1] == "tabs" then
+        lust_next.format({ indent_char = '\t', indent_size = 1 })
+      else
+        local num = tonumber(arg[i+1])
+        if num then
+          lust_next.format({ indent_char = ' ', indent_size = num })
+        else
+          print("Invalid indent: " .. arg[i+1])
+          os.exit(1)
+        end
+      end
+      i = i + 2
+    elseif arg[i] == "--no-color" then
+      lust_next.nocolor()
+      i = i + 1
     elseif arg[i]:match("%.lua$") then
       specific_file = arg[i]
       i = i + 1
     elseif arg[i] == "--help" or arg[i] == "-h" then
-      print("lust-next test runner")
+      print("lust-next test runner v" .. lust_next.version)
       print("Usage:")
       print("  lua lust-next.lua [options] [file.lua]")
-      print("Options:")
+      
+      print("\nTest Selection Options:")
       print("  --dir DIR        Directory to search for tests (default: ./tests)")
       print("  --tags TAG1,TAG2 Only run tests with matching tags")
       print("  --filter PATTERN Only run tests with names matching pattern")
-      print("  --help, -h       Show this help message")
+      
+      print("\nOutput Format Options:")
+      print("  --format FORMAT  Output format (dot, compact, summary, detailed, plain)")
+      print("  --indent TYPE    Indentation style (space, tab, or number of spaces)")
+      print("  --no-color       Disable colored output")
+      
+      print("\nSpecial Test Functions:")
+      print("  describe/it      Regular test functions")
+      print("  fdescribe/fit    Focused tests (only these will run)")
+      print("  xdescribe/xit    Excluded tests (these will be skipped)")
+      
+      print("\nExamples:")
+      print("  lua lust-next.lua --dir tests --format dot")
+      print("  lua lust-next.lua --tags unit,api --format compact")
+      print("  lua lust-next.lua tests/specific_test.lua --format detailed")
       os.exit(0)
     else
       i = i + 1

@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-03-05
+
+### Added
+- Enhanced mocking system with advanced verification options:
+  - Argument matchers for flexible verification:
+    - Type-based matchers (`string()`, `number()`, `table()`, etc.)
+    - Content-based matchers (`table_containing()` for partial table matching)
+    - Custom matchers for domain-specific validation
+    - `any()` matcher for ignoring specific arguments
+  - Call sequence verification:
+    - `verify_sequence()` to check exact order of method calls
+    - `called_before()` and `called_after()` for relative ordering
+    - Argument matching within sequence verification
+    - Detailed error messages for sequence failures
+  - Expectation API for clearer test setup:
+    - `expect(method).to.be.called.times(n)` for count expectations
+    - `expect(method).to.be.called.with(args)` for argument expectations
+    - `expect(method).to.be.called.after(other)` for ordering
+    - `expect(method).to.not_be.called()` for negative expectations
+    - Chainable fluent interface for readable tests
+  - Enhanced error reporting for verification failures
+  - New example file demonstrating all new mocking features
+
+### Changed
+- Replaced timestamp-based call ordering with sequence-based tracking:
+  - More deterministic verification of call order
+  - No longer dependent on system clock precision
+  - Consistent behavior across different systems and speeds
+  - Backward compatible with existing tests
+
+### Fixed
+- Improved argument comparison for table values in mocking system
+- Better error messages for expectation failures with detailed diffs
+- Enhanced mock cleanup to prevent test cross-contamination
+
+## [0.6.1] - 2025-03-05
+
+### Fixed
+- Bug in excluded tests where test functions in `xit` were still being executed
+- Proper state reset between test files in CLI runner
+- Focus mode state management for consistent behavior when running multiple files
+- Excluded test handling for both direct execution and CLI runner
+- More robust implementation for `xdescribe` to ensure excluded tests never run
+
+## [0.6.0] - 2025-03-05
+
+### Added
+- Focused and excluded test support:
+  - `fdescribe` and `fit` for focused test blocks and tests
+  - `xdescribe` and `xit` for excluded test blocks and tests
+  - Focus mode automatically activates when focused tests are present
+  - Skip tracking for excluded tests with reasons
+- Enhanced error messages:
+  - Detailed diffs for table comparisons showing missing/extra keys
+  - Better formatting for error messages across all assertion types
+  - Improved string representation for complex data structures
+  - Context-aware error messages with more details
+- Improved output formatting options:
+  - Configurable output styles with `lust_next.format()`
+  - Multiple output formats: normal, dot, compact, summary, detailed
+  - Customizable indentation (tabs or spaces)
+  - Colorized output with intelligent context
+  - New dot mode for compact test progress display
+  - Stack trace option for detailed error information
+  - Summary-only mode for CI environments
+- Enhanced CLI options:
+  - Format selection with `--format` argument
+  - Indentation control with `--indent` argument
+  - Color control with `--no-color` flag
+  - Improved help documentation and examples
+  - Better visual separation for test runs
+
+### Fixed
+- Improved error handling in describe blocks
+- Enhanced context display in test summaries
+- Better skipped test reporting with reasons
+
 ### Added
 - Fork from bjornbytes/lust to enhance functionality
 - GitHub Actions CI workflow for testing on multiple Lua versions
