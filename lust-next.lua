@@ -3013,7 +3013,7 @@ lust_next.mock = function(obj, methods)
   end
   
   return mock_obj
-}
+end
 
 -- Expect functionality for verification
 lust_next.expect = function(fn_or_obj)
