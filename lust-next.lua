@@ -50,7 +50,7 @@ lust_next.coverage_options = {
   exclude = {"test_", "_spec%.lua$", "_test%.lua$"}, -- Files to exclude
   threshold = 80,             -- Coverage threshold percentage
   format = "summary",         -- Report format (summary, json, html, lcov)
-  output = nil,               -- Output file path (nil for console)
+  output = nil,               -- Custom output file path (if nil, html/lcov auto-saved to ./coverage-reports/)
 }
 
 -- Quality options
@@ -2410,6 +2410,24 @@ function lust_next.cli_run(dir, options)
         print("Error saving coverage report: " .. (err or "unknown error"))
       end
     else
+      -- For HTML and LCOV reports, auto-save to a default location if not specified
+      if report_format == "html" or report_format == "lcov" then
+        -- Create default output filename
+        local output_dir = "./coverage-reports"
+        -- Ensure directory exists
+        local mkdir_cmd = io.popen("mkdir -p " .. output_dir)
+        mkdir_cmd:close()
+        
+        local default_output = output_dir .. "/coverage-report." .. report_format
+        local success, err = coverage.save_report(default_output, report_format)
+        
+        if success then
+          print("Coverage report automatically saved to: " .. default_output)
+        else
+          print("Error saving coverage report: " .. (err or "unknown error"))
+        end
+      end
+      
       -- Print to console (only for summary and small reports)
       if report_format == "summary" then
         local report = coverage.summary_report()
@@ -2443,7 +2461,6 @@ function lust_next.cli_run(dir, options)
         print(string.rep("-", 70))
       elseif report_format == "html" then
         print("HTML Report generated")
-        print("Use --coverage-output to save the report to a file")
         print(string.rep("-", 70))
       end
     end
