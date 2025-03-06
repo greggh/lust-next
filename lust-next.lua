@@ -2922,13 +2922,17 @@ lust_next.spy = {
 
 -- Stub functionality - creates a function that can be controlled
 lust_next.stub = function(return_value)
-  local stub_fn = {
+  -- First declare stub_fn so it's accessible in closures
+  local stub_fn
+  
+  stub_fn = {
     _is_stub = true,
     calls = 0,
     call_history = {},
     
     -- Default implementation
     fn = function(...)
+      if not stub_fn then return nil end -- Safety check
       stub_fn.calls = stub_fn.calls + 1
       local args = {...}
       table.insert(stub_fn.call_history, args)
@@ -2942,7 +2946,9 @@ lust_next.stub = function(return_value)
     
     -- Configure the stub to throw an error
     throws = function(error_message)
+      if not stub_fn then return nil end -- Safety check
       stub_fn.fn = function(...)
+        if not stub_fn then return nil end -- Safety check
         stub_fn.calls = stub_fn.calls + 1
         local args = {...}
         table.insert(stub_fn.call_history, args)
@@ -2953,7 +2959,9 @@ lust_next.stub = function(return_value)
     
     -- Configure the stub to return a specific value
     returns = function(value)
+      if not stub_fn then return nil end -- Safety check
       stub_fn.fn = function(...)
+        if not stub_fn then return nil end -- Safety check
         stub_fn.calls = stub_fn.calls + 1
         local args = {...}
         table.insert(stub_fn.call_history, args)
