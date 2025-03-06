@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2025-03-18
+
+### Added
+- Module management utilities:
+  - `reset_module(module_name)` to reload modules and ensure a clean state
+  - `with_fresh_module(module_name, test_fn)` to run tests with freshly loaded modules
+  - Global `reset_module` and `with_fresh_module` functions when using `expose_globals()`
+- Enhanced async testing capabilities:
+  - `parallel_async()` for running multiple async operations in parallel
+  - Return value from `wait_until()` for consistent API design
+  - Better error handling in timeout scenarios
+
+### Fixed
+- `wait_until()` error handling to properly throw errors on timeout
+- Reduced boilerplate in tests with proper module reset utilities
+- Improved async testing ergonomics with parallel execution support
+
 ## [0.7.0] - 2025-03-05
 
 ### Added

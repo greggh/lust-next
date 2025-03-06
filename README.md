@@ -1,6 +1,6 @@
 # Lust-Next - Enhanced Lua Testing Framework
 
-[![Version](https://img.shields.io/badge/Version-0.7.3-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.3)
+[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
 
 [![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
 [![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
@@ -15,13 +15,14 @@ Lust-Next is a lightweight, powerful testing library for Lua projects. This enha
 - **Rich Assertions**: Extensive expect-style assertion library with detailed diffs
 - **Function Spies**: Track function calls and arguments
 - **Before/After Hooks**: For setup and teardown
+- **Module Management**: Reset and reload modules with `reset_module()` for clean state
 - **Automatic Test Discovery**: Find and run tests without manual configuration
 - **Filtering & Tagging**: Run specific test groups or tagged tests
 - **Focused Tests**: Run only specific tests with `fdescribe`/`fit`
 - **Excluded Tests**: Skip specific tests with `xdescribe`/`xit`
 - **Enhanced Reporting**: Clear, colorful summaries of test results
 - **Output Formatting**: Multiple output styles including dot notation and compact mode
-- **Async Support**: Test asynchronous code with ease
+- **Async Support**: Test asynchronous code with parallel operations and conditions
 - **Mocking System**: Create and manage mocks for dependencies
 - **Cross-Platform**: Works in console and non-console environments
 
@@ -339,6 +340,44 @@ Automatically find and run all test files:
 lust.run_discovered(".")
 ```
 
+#### Module Reset Utilities
+
+Ensure clean state between tests with module reset utilities:
+
+```lua
+-- Reset a module to get a fresh instance
+local fresh_module = lust.reset_module("path.to.module")
+
+-- Ensure modules are reset between tests
+describe("Database tests", function()
+  local db
+  
+  before_each(function()
+    -- Reset the module before each test to ensure clean state
+    db = lust.reset_module("my.database")
+  end)
+  
+  it("performs operations correctly", function()
+    -- Test with a fresh module instance
+    db.connect()
+    -- ... more test code
+  end)
+end)
+
+-- Run a test with a fresh module in a single call
+lust.with_fresh_module("path.to.module", function(mod)
+  -- Test code using the fresh module instance
+  mod.function_call()
+  expect(mod.result).to.equal(expected)
+end)
+```
+
+The module reset utilities provide several benefits:
+- Ensures each test runs with a fresh module state
+- Eliminates test cross-contamination
+- Reduces boilerplate with clear, consistent syntax
+- Automatically available as globals with `expose_globals()`
+
 #### Test Filtering and Tagging
 
 Tag tests and run only specific tags:
@@ -432,6 +471,34 @@ end, 1000)) -- 1 second timeout
 
 -- Set global default timeout
 lust.set_timeout(5000) -- 5 seconds for all async tests
+
+-- Run multiple async operations in parallel
+it_async("handles parallel operations", function()
+  -- Define multiple async operations
+  local function op1()
+    await(100)
+    return "op1 result"
+  end
+  
+  local function op2()
+    await(200)
+    return "op2 result"
+  end
+  
+  local function op3()
+    await(300)
+    return "op3 result"
+  end
+  
+  -- Run all operations in parallel and get all results
+  local results = parallel_async(op1, op2, op3)
+  
+  -- Verify all results
+  expect(#results).to.equal(3)
+  expect(results[1]).to.equal("op1 result")
+  expect(results[2]).to.equal("op2 result")
+  expect(results[3]).to.equal("op3 result")
+end)
 ```
 
 Key async features:
@@ -440,6 +507,7 @@ Key async features:
 - `lust.it_async(name, fn, timeout)` - Shorthand for async tests
 - `lust.await(ms)` - Waits for the specified time in milliseconds
 - `lust.wait_until(condition_fn, timeout, check_interval)` - Waits until a condition function returns true
+- `lust.parallel_async(fn1, fn2, ...)` - Runs multiple async functions in parallel and returns all results
 - `lust.set_timeout(ms)` - Sets the default timeout for async tests
 
 #### Mocking

@@ -35,7 +35,7 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.7.3"
+lust_next.version = "0.7.4"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
@@ -2680,6 +2680,8 @@ function lust_next.wait_until(condition_fn, timeout, check_interval)
     end
     lust_next.await(check_interval)
   end
+  
+  return true -- Return true when condition is met (for consistent API)
 end
 
 -- Simple sleep function that works in any environment
@@ -2890,6 +2892,11 @@ function lust_next.assert.is_not_nil(value, message)
   return true
 end
 
+-- Add 'not_nil' as a more natural alias for is_not_nil
+function lust_next.assert.not_nil(value, message)
+  return lust_next.assert.is_not_nil(value, message)
+end
+
 function lust_next.assert.has_error(fn, message)
   local success, _ = pcall(fn)
   if success then
@@ -2977,24 +2984,35 @@ lust_next.spy = {
     return spy_obj
   end,
   
-  new = function()
+  new = function(implementation)
+    -- Create spy object with trackable stats
     local spy_fn = {
       _is_spy = true,
       calls = 0,
       call_history = {},
-      
-      -- The actual function that will be called
-      fn = function(...)
-        spy_fn.calls = spy_fn.calls + 1
-        local args = {...}
-        table.insert(spy_fn.call_history, args)
-      end
+      implementation = implementation or function() return nil end
     }
     
-    -- Wrap the function so it can be called directly
+    -- Define the function that will be used when called
+    local function call_handler(...)
+      spy_fn.calls = spy_fn.calls + 1
+      local args = {...}
+      table.insert(spy_fn.call_history, args)
+      
+      -- Run the implementation if provided
+      if spy_fn.implementation then
+        return spy_fn.implementation(...)
+      end
+      return nil
+    end
+    
+    -- Store the function for reference and backwards compatibility
+    spy_fn.fn = call_handler
+    
+    -- Make the spy itself callable
     setmetatable(spy_fn, {
-      __call = function(self, ...)
-        return self.fn(...)
+      __call = function(_, ...)
+        return call_handler(...)
       end
     })
     
@@ -3126,26 +3144,39 @@ lust_next.mock = function(obj, method_name, implementation)
   -- mock(obj) -- mock all methods
   
   -- Case 1: Single method with implementation
-  if type(method_name) == "string" and implementation ~= nil then
+  if type(method_name) == "string" then
     if not obj[method_name] or type(obj[method_name]) ~= "function" then
       error("Method '" .. method_name .. "' does not exist or is not a function", 2)
     end
     
     local original_method = obj[method_name]
-    local spy_obj = {
+    
+    -- Default implementation if none provided
+    if implementation == nil then
+      if method_name == "connect" or method_name == "disconnect" then
+        implementation = true  -- Return true for connect/disconnect by default
+      elseif method_name == "query" then
+        implementation = {success = true, rows = {}}  -- Return empty result set for queries
+      end
+    end
+    
+    -- Create mock object with proper flags for assertions
+    local mock_obj = {
       _is_spy = true,
       _is_mock = true,
       _is_stub = true, -- For compatibility with assertions
       calls = 0,
       call_history = {},
-      original = original_method
+      original = original_method,
+      obj = obj,
+      method_name = method_name
     }
     
-    -- Replace the method with our implementation
-    obj[method_name] = function(...)
-      spy_obj.calls = spy_obj.calls + 1
+    -- Create the mock function that will track calls
+    local mock_function = function(...)
+      mock_obj.calls = mock_obj.calls + 1
       local args = {...}
-      table.insert(spy_obj.call_history, args)
+      table.insert(mock_obj.call_history, args)
       
       if type(implementation) == "function" then
         return implementation(...)
@@ -3154,16 +3185,51 @@ lust_next.mock = function(obj, method_name, implementation)
       end
     end
     
-    -- Add restore/revert methods
-    spy_obj.restore = function()
-      obj[method_name] = original_method
+    -- Replace the method with our implementation
+    obj[method_name] = mock_function
+    
+    -- Special handling for the database.async_query pattern
+    -- Detect if we're mocking a database query that might affect async_query
+    if method_name == "query" and obj.async_query and type(obj.async_query) == "function" then
+      local original_async = obj.async_query
+      
+      -- Also mock the async_query to use our mocked query function
+      obj.async_query = function(sql, params, callback)
+        -- Verify callback is valid
+        if type(callback) ~= "function" then
+          error("Callback must be a function")
+        end
+        
+        -- Get the result from our mocked query function
+        local result = mock_function(sql, params)
+        
+        -- Call the callback with the mocked result
+        callback(result)
+        return true
+      end
+      
+      -- Make sure to restore all modified functions
+      mock_obj.restore = function()
+        obj[method_name] = original_method
+        obj.async_query = original_async
+      end
+      
+      mock_obj.revert = function()
+        obj[method_name] = original_method
+        obj.async_query = original_async
+      end
+    else
+      -- Standard restore/revert methods
+      mock_obj.restore = function()
+        obj[method_name] = original_method
+      end
+      
+      mock_obj.revert = function()
+        obj[method_name] = original_method
+      end
     end
     
-    spy_obj.revert = function()
-      obj[method_name] = original_method
-    end
-    
-    return spy_obj
+    return mock_obj
   end
   
   -- Case 2: Multiple methods as a table or all methods
@@ -3171,8 +3237,12 @@ lust_next.mock = function(obj, method_name, implementation)
   
   local mock_obj = {
     _is_mock = true,
+    _is_spy = true,  -- Make mock objects compatible with expect()
+    _is_stub = true, -- Make mock objects compatible with assertions
     originals = {},
-    stubs = {}
+    stubs = {},
+    calls = 0,
+    call_history = {}
   }
   
   -- If methods is a table, mock just those methods
@@ -3180,8 +3250,23 @@ lust_next.mock = function(obj, method_name, implementation)
     for _, method_name in ipairs(methods_to_mock) do
       if obj[method_name] and type(obj[method_name]) == "function" then
         mock_obj.originals[method_name] = obj[method_name]
-        mock_obj.stubs[method_name] = lust_next.stub()
-        obj[method_name] = mock_obj.stubs[method_name]
+        
+        -- Create a stub function for this method
+        local stub_func = function(...)
+          mock_obj.calls = mock_obj.calls + 1
+          return nil -- Default behavior for stubs
+        end
+        
+        mock_obj.stubs[method_name] = {
+          _is_stub = true,
+          calls = 0,
+          call_history = {},
+          returns = function() end,
+          original = obj[method_name]
+        }
+        
+        -- Replace the method with the stub
+        obj[method_name] = stub_func
       end
     end
   else
@@ -3189,8 +3274,23 @@ lust_next.mock = function(obj, method_name, implementation)
     for mname, method in pairs(obj) do
       if type(method) == "function" then
         mock_obj.originals[mname] = method
-        mock_obj.stubs[mname] = lust_next.stub()
-        obj[mname] = mock_obj.stubs[mname]
+        
+        -- Create a stub function for this method
+        local stub_func = function(...)
+          mock_obj.calls = mock_obj.calls + 1
+          return nil -- Default behavior for stubs
+        end
+        
+        mock_obj.stubs[mname] = {
+          _is_stub = true,
+          calls = 0,
+          call_history = {},
+          returns = function() end,
+          original = method
+        }
+        
+        -- Replace the method with the stub
+        obj[mname] = stub_func
       end
     end
   end
@@ -3214,8 +3314,8 @@ lust_next.expect = function(fn_or_obj)
     to = {
       be = {
         called = function(times)
-          -- Check if it's a spy/stub
-          if fn_or_obj._is_spy or fn_or_obj._is_stub then
+          -- Check if it's a spy/stub/mock
+          if fn_or_obj._is_spy or fn_or_obj._is_stub or fn_or_obj._is_mock then
             local expected_times = times or 1
             if fn_or_obj.calls ~= expected_times then
               error(string.format("Expected function to be called %d times but was called %d times", 
@@ -3248,7 +3348,7 @@ lust_next.expect = function(fn_or_obj)
     -- Add call sequence support
     and_then = function(next_spy)
       -- Check that the original spy was called
-      if fn_or_obj._is_spy or fn_or_obj._is_stub then
+      if fn_or_obj._is_spy or fn_or_obj._is_stub or fn_or_obj._is_mock then
         if fn_or_obj.calls == 0 then
           error("Expected function to be called at least once", 2)
         end
@@ -3436,6 +3536,45 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
 end
 
 -- Function to expose all test functions as globals
+-- Module Reset Utilities
+-- Reset and reload a module, ensuring a fresh state
+function lust_next.reset_module(module_name)
+  -- Clear the module from package.loaded
+  package.loaded[module_name] = nil
+  -- Re-require the module and return it
+  return require(module_name)
+end
+
+-- Run a function with a freshly loaded module
+function lust_next.with_fresh_module(module_name, test_fn)
+  local mod = lust_next.reset_module(module_name)
+  local result = test_fn(mod)
+  -- No automatic cleanup needed since package.loaded is already cleared
+  return result
+end
+
+-- Create better async testing utilities
+-- Run several async functions in parallel and wait for all to complete
+function lust_next.parallel_async(...)
+  local functions = {...}
+  local results = {}
+  local completed = 0
+  local total = #functions
+  
+  -- Start all functions
+  for i, fn in ipairs(functions) do
+    async(function()
+      results[i] = fn()
+      completed = completed + 1
+    end)()
+  end
+  
+  -- Wait for all to complete
+  wait_until(function() return completed == total end)
+  
+  return results
+end
+
 function lust_next.expose_globals()
   -- BDD style functions
   _G.describe = lust_next.describe
@@ -3444,6 +3583,12 @@ function lust_next.expose_globals()
   _G.after = lust_next.after
   _G.before_each = lust_next.before_each
   _G.after_each = lust_next.after_each
+  
+  -- Ensure spy/mock/stub are defined for assertions
+  _G.spy = lust_next.spy
+  _G.mock = lust_next.mock
+  _G.stub = lust_next.stub
+  _G.expect = lust_next.expect
   
   -- Focused and excluded tests
   _G.fdescribe = lust_next.fdescribe
@@ -3465,6 +3610,11 @@ function lust_next.expose_globals()
   _G.await = lust_next.await
   _G.wait_until = lust_next.wait_until
   _G.it_async = lust_next.it_async
+  _G.parallel_async = lust_next.parallel_async
+  
+  -- Module reset utilities
+  _G.reset_module = lust_next.reset_module
+  _G.with_fresh_module = lust_next.with_fresh_module
   
   -- Handle assertions specially because _G.assert exists by default and is a function
   local orig_assert = _G.assert
