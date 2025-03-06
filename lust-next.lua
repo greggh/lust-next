@@ -1,4 +1,4 @@
--- lust-next v0.7.0 - Enhanced Lua test framework
+-- lust-next v0.7.1 - Enhanced Lua test framework
 -- https://github.com/greggh/lust-next
 -- MIT LICENSE
 -- Based on lust by Bjorn Swenson (https://github.com/bjornbytes/lust)
@@ -35,7 +35,7 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.7.0"
+lust_next.version = "0.7.1"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
@@ -399,9 +399,19 @@ function lust_next.before(fn)
   table.insert(lust_next.befores[lust_next.level], fn)
 end
 
+-- Alias for before
+function lust_next.before_each(fn)
+  return lust_next.before(fn)
+end
+
 function lust_next.after(fn)
   lust_next.afters[lust_next.level] = lust_next.afters[lust_next.level] or {}
   table.insert(lust_next.afters[lust_next.level], fn)
+end
+
+-- Alias for after
+function lust_next.after_each(fn)
+  return lust_next.after(fn)
 end
 
 -- Assertions
@@ -2665,6 +2675,107 @@ function lust_next.it_async(name, fn, timeout)
   return lust_next.it(name, lust_next.async(fn, timeout)())
 end
 
+-- Assertion library
+lust_next.assert = {}
+
+-- Standard assertion helpers
+function lust_next.assert.equal(expected, actual, message)
+  if expected ~= actual then
+    local msg = message or string.format("Expected %s but got %s", 
+      tostring(expected), tostring(actual))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.not_equal(expected, actual, message)
+  if expected == actual then
+    local msg = message or string.format("Expected %s to not equal %s", 
+      tostring(expected), tostring(actual))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.is_true(value, message)
+  if value ~= true then
+    local msg = message or string.format("Expected value to be true but got %s", 
+      tostring(value))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.is_false(value, message)
+  if value ~= false then
+    local msg = message or string.format("Expected value to be false but got %s", 
+      tostring(value))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.is_nil(value, message)
+  if value ~= nil then
+    local msg = message or string.format("Expected value to be nil but got %s", 
+      tostring(value))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.is_not_nil(value, message)
+  if value == nil then
+    local msg = message or "Expected value to not be nil"
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.has_error(fn, message)
+  local success, _ = pcall(fn)
+  if success then
+    local msg = message or "Expected function to throw an error but it didn't"
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.has_no_error(fn, message)
+  local success, err = pcall(fn)
+  if not success then
+    local msg = message or string.format("Expected function to not throw an error but got: %s", 
+      tostring(err))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.type_of(value, expected_type, message)
+  if type(value) ~= expected_type then
+    local msg = message or string.format("Expected value to be of type %s but got %s", 
+      expected_type, type(value))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.contains(table_value, expected_item, message)
+  if type(table_value) ~= "table" then
+    error("assert.contains expects a table as its first argument", 2)
+  end
+  
+  for _, v in pairs(table_value) do
+    if v == expected_item then
+      return true
+    end
+  end
+  
+  local msg = message or string.format("Expected table to contain %s but it wasn't found", 
+    tostring(expected_item))
+  error(msg, 2)
+end
+
 -- Aliases and exports
 lust_next.test = lust_next.it
 lust_next.test_async = lust_next.it_async
@@ -2833,6 +2944,53 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
   end
 end
 
+-- Function to expose all test functions as globals
+function lust_next.expose_globals()
+  -- BDD style functions
+  _G.describe = lust_next.describe
+  _G.it = lust_next.it
+  _G.before = lust_next.before
+  _G.after = lust_next.after
+  _G.before_each = lust_next.before_each
+  _G.after_each = lust_next.after_each
+  
+  -- Focused and excluded tests
+  _G.fdescribe = lust_next.fdescribe
+  _G.fit = lust_next.fit
+  _G.xdescribe = lust_next.xdescribe
+  _G.xit = lust_next.xit
+  
+  -- Tags and filtering
+  _G.tags = lust_next.tags
+  
+  -- Mocking functions
+  _G.spy = lust_next.spy
+  _G.mock = lust_next.mock
+  _G.stub = lust_next.stub
+  _G.expect = lust_next.expect
+  
+  -- Async functions
+  _G.async = lust_next.async
+  _G.await = lust_next.await
+  _G.wait_until = lust_next.wait_until
+  _G.it_async = lust_next.it_async
+  
+  -- Assertions
+  _G.assert = _G.assert or {}
+  
+  -- Add assertion functions
+  for name, func in pairs(lust_next.assert) do
+    _G.assert[name] = func
+  end
+  
+  return lust_next
+end
+
+-- Auto expose globals if LUST_NEXT_AUTO_EXPOSE is set
+if os.getenv("LUST_NEXT_AUTO_EXPOSE") then
+  lust_next.expose_globals()
+end
+
 -- Backward compatibility for users upgrading from lust
 local lust = setmetatable({}, {
   __index = function(_, key)
@@ -2841,4 +2999,14 @@ local lust = setmetatable({}, {
   end
 })
 
-return lust_next
+-- Make module loading easier by offering multiple options
+local module = setmetatable({}, {
+  __call = function(_, ...)
+    -- If called as a function, expose globals and return the module
+    lust_next.expose_globals()
+    return lust_next
+  end,
+  __index = lust_next
+})
+
+return module

@@ -1,6 +1,6 @@
 # Lust-Next - Enhanced Lua Testing Framework
 
-[![Version](https://img.shields.io/badge/Version-0.7.0-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.0)
+[![Version](https://img.shields.io/badge/Version-0.7.1-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.1)
 
 [![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
 [![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
@@ -27,10 +27,36 @@ Lust-Next is a lightweight, powerful testing library for Lua projects. This enha
 
 ## Quick Start
 
-Copy the `lust.lua` file to your project and require it:
+Copy the `lust-next.lua` file to your project and require it:
+
+### Option 1: Expose all functions globally (new in v0.7.1)
 
 ```lua
-local lust = require 'lust'
+local lust_next = require('lust-next')
+lust_next.expose_globals() -- Makes all test functions available globally
+
+describe('my project', function()
+  before_each(function()
+    -- This gets run before every test.
+  end)
+
+  describe('module1', function() -- Can be nested
+    it('feature1', function()
+      assert.equal('expected value', 'expected value') -- New assertion helper
+      assert.is_true(true) -- Another assertion helper
+    end)
+
+    it('feature2', function()
+      expect(nil).to.exist() -- The standard expect API still works
+    end)
+  end)
+end)
+```
+
+### Option 2: Import specific functions (traditional approach)
+
+```lua
+local lust = require 'lust-next'
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
 describe('my project', function()
