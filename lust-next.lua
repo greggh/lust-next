@@ -2412,32 +2412,34 @@ function lust_next.cli_run(dir, options)
     else
       -- For HTML and LCOV reports, auto-save to a default location if not specified
       if report_format == "html" or report_format == "lcov" then
-        -- Create default output filename
-        local output_dir = "./coverage-reports"
-        -- Ensure directory exists
-        local mkdir_cmd = io.popen("mkdir -p " .. output_dir)
-        mkdir_cmd:close()
+        -- Create default output filename - use absolute path for reliability
+        local output_dir = os.getenv("PWD") .. "/coverage-reports"
+        print("Using output directory: " .. output_dir)
         
+        -- Create directory if it doesn't exist
+        os.execute("mkdir -p " .. output_dir)
+
+        -- Create absolute path for output file
         local default_output = output_dir .. "/coverage-report." .. report_format
-        
-        -- Write the file directly (bypass coverage.save_report to troubleshoot)
-        print("Attempting to save report to: " .. default_output)
+        print("Saving report to: " .. default_output)
         print("Report format: " .. report_format)
         print("Report content length: " .. #report_content)
         
-        local status, err = pcall(function()
-          local file = io.open(default_output, "w")
-          if file then
+        -- Manual file writing with absolute path
+        local file, open_err = io.open(default_output, "w")
+        if not file then
+          print("Error opening file: " .. tostring(open_err))
+        else
+          local write_ok, write_err = pcall(function() 
             file:write(report_content)
             file:close()
+          end)
+          
+          if write_ok then
             print("Coverage report successfully saved to: " .. default_output)
           else
-            print("Error opening file: " .. default_output)
+            print("Error writing to file: " .. tostring(write_err))
           end
-        end)
-        
-        if not status then
-          print("Error during file save: " .. tostring(err))
         end
       end
       
