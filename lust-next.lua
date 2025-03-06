@@ -2699,7 +2699,7 @@ end
 -- Enhanced assertion and spy/mock helpers
 lust_next.assert = {}
 
--- Add spy assertion helpers
+-- Add spy/stub assertion helpers
 lust_next.assert.spy = function(spy_obj)
   if not spy_obj or type(spy_obj) ~= "table" or not spy_obj._is_spy then
     error("assert.spy expects a spy object created with spy.on()", 2)
@@ -2984,29 +2984,37 @@ lust_next.spy = {
   end
 }
 
+-- Add stub assertion helpers (alias for spy assertions)
+lust_next.assert.stub = lust_next.assert.spy
+
 -- Stub functionality - creates a function that can be controlled
-lust_next.stub = function(return_value)
-  -- First declare stub_fn so it's accessible in closures
-  local stub_fn
-  
-  stub_fn = {
-    _is_stub = true,
-    calls = 0,
-    call_history = {},
+lust_next.stub = function(obj, method_name, implementation)
+  -- Check if this is the simple version just creating a standalone stub
+  if method_name == nil and implementation == nil then
+    local return_value = obj -- In this case, obj is the return value
     
-    -- Default implementation
-    fn = function(...)
-      if not stub_fn then return nil end -- Safety check
-      stub_fn.calls = stub_fn.calls + 1
-      local args = {...}
-      table.insert(stub_fn.call_history, args)
+    -- First declare stub_fn so it's accessible in closures
+    local stub_fn
+    
+    stub_fn = {
+      _is_stub = true,
+      _is_spy = true, -- For compatibility with spy assertions
+      calls = 0,
+      call_history = {},
       
-      if type(return_value) == "function" then
-        return return_value(...)
-      else
-        return return_value
-      end
-    end,
+      -- Default implementation
+      fn = function(...)
+        if not stub_fn then return nil end -- Safety check
+        stub_fn.calls = stub_fn.calls + 1
+        local args = {...}
+        table.insert(stub_fn.call_history, args)
+        
+        if type(return_value) == "function" then
+          return return_value(...)
+        else
+          return return_value
+        end
+      end,
     
     -- Configure the stub to throw an error
     throws = function(error_message)
@@ -3043,6 +3051,49 @@ lust_next.stub = function(return_value)
   })
   
   return stub_fn
+  
+  -- If this is the object method stubbing version
+  elseif type(obj) == "table" and type(method_name) == "string" then
+    -- Similar to mock, but simpler
+    if not obj[method_name] or type(obj[method_name]) ~= "function" then
+      error("Method '" .. method_name .. "' does not exist or is not a function", 2)
+    end
+    
+    local original_method = obj[method_name]
+    local spy_obj = {
+      _is_spy = true,
+      _is_stub = true,
+      calls = 0,
+      call_history = {},
+      original = original_method
+    }
+    
+    -- Replace the method with our implementation
+    obj[method_name] = function(...)
+      spy_obj.calls = spy_obj.calls + 1
+      local args = {...}
+      table.insert(spy_obj.call_history, args)
+      
+      if type(implementation) == "function" then
+        return implementation(...)
+      else
+        return implementation
+      end
+    end
+    
+    -- Add restore/revert methods
+    spy_obj.restore = function()
+      obj[method_name] = original_method
+    end
+    
+    spy_obj.revert = function()
+      obj[method_name] = original_method
+    end
+    
+    return spy_obj
+  end
+  
+  error("Invalid arguments to stub(). Use stub(return_value) or stub(obj, method_name, implementation)", 2)
 end
 
 -- Mock functionality - replaces an object's methods with stubs or implementation
