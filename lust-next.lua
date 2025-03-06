@@ -3239,7 +3239,7 @@ lust_next.expect = function(fn_or_obj)
       
       -- Return a new expect object for the next spy
       return lust_next.expect(next_spy)
-    }
+    end
   }
   
   -- Also add the to_be alias for compatibility
