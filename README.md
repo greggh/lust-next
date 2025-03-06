@@ -1,6 +1,6 @@
 # Lust-Next - Enhanced Lua Testing Framework
 
-[![Version](https://img.shields.io/badge/Version-0.7.1-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.1)
+[![Version](https://img.shields.io/badge/Version-0.7.2-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.2)
 
 [![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
 [![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)

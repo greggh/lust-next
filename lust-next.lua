@@ -35,7 +35,7 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.7.1"
+lust_next.version = "0.7.2"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
@@ -209,9 +209,30 @@ end
 
 -- Set tags for the current describe block or test
 function lust_next.tags(...)
-  local tags = {...}
-  lust_next.current_tags = tags
-  return lust_next
+  local tags_list = {...}
+  
+  -- Allow both tags("one", "two") and tags("one")("two") syntax
+  if #tags_list == 1 and type(tags_list[1]) == "string" then
+    -- Handle tags("tag1", "tag2", ...) syntax
+    lust_next.current_tags = tags_list
+    
+    -- Return a function that can be called again to allow tags("tag1")("tag2")(fn) syntax
+    return function(fn_or_tag)
+      if type(fn_or_tag) == "function" then
+        -- If it's a function, it's the test/describe function
+        return fn_or_tag
+      else
+        -- If it's another tag, add it
+        table.insert(lust_next.current_tags, fn_or_tag)
+        -- Return itself again to allow chaining
+        return lust_next.tags()
+      end
+    end
+  else
+    -- Store the tags
+    lust_next.current_tags = tags_list
+    return lust_next
+  end
 end
 
 -- Filter tests to only run those matching specific tags

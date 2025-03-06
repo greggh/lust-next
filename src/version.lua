@@ -12,7 +12,7 @@ local M = {}
 -- Individual version components
 M.major = 0
 M.minor = 7
-M.patch = 1
+M.patch = 2
 
 -- Combined semantic version
 M.string = string.format("%d.%d.%d", M.major, M.minor, M.patch)
