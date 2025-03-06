@@ -68,6 +68,19 @@ When making changes to lust-next, consider the impact on the hooks-util integrat
   - Argument matchers for verification
   - Call sequence verification
 
+### Planned Features - Test Quality Validation
+- Test coverage analysis (Phase 1):
+  - Line, function, and branch coverage tracking
+  - Multiple report formats (console, JSON, HTML)
+  - Coverage thresholds configuration
+  - Filtering for included/excluded files
+
+- Test quality validation (Phase 2):
+  - Five-level quality system (Basic to Complete)
+  - Assertion analysis and recommendations
+  - Test structure and organization validation
+  - Quality reports with improvement suggestions
+
 ### CLI Options
 - `--format [dot|compact|summary|detailed]` - Output format
 - `--indent [space|tab|NUMBER]` - Indentation style
