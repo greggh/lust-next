@@ -2794,6 +2794,40 @@ function lust_next.assert.equal(expected, actual, message)
   return true
 end
 
+-- Deep equality comparison for tables
+function lust_next.assert.same(expected, actual, message)
+  -- Simple deep comparison for tables
+  local function is_equal(val1, val2)
+    if type(val1) ~= type(val2) then
+      return false
+    end
+    
+    if type(val1) == "table" then
+      -- Check if all keys in val1 are in val2 with same values
+      for k, v in pairs(val1) do
+        if not is_equal(v, val2[k]) then
+          return false
+        end
+      end
+      -- Check if all keys in val2 are in val1
+      for k, _ in pairs(val2) do
+        if val1[k] == nil then
+          return false
+        end
+      end
+      return true
+    else
+      return val1 == val2
+    end
+  end
+  
+  if not is_equal(expected, actual) then
+    local msg = message or "Tables are not the same"
+    error(msg, 2)
+  end
+  return true
+end
+
 function lust_next.assert.not_equal(expected, actual, message)
   if expected == actual then
     local msg = message or string.format("Expected %s to not equal %s", 
@@ -3011,11 +3045,59 @@ lust_next.stub = function(return_value)
   return stub_fn
 end
 
--- Mock functionality - replaces an object's methods with stubs
-lust_next.mock = function(obj, methods)
+-- Mock functionality - replaces an object's methods with stubs or implementation
+lust_next.mock = function(obj, method_name, implementation)
   if not obj or type(obj) ~= "table" then
     error("mock requires a table as the first argument", 2)
   end
+  
+  -- Handle different calling patterns:
+  -- mock(obj, "method", implementation)
+  -- mock(obj, methods_table)
+  -- mock(obj) -- mock all methods
+  
+  -- Case 1: Single method with implementation
+  if type(method_name) == "string" and implementation ~= nil then
+    if not obj[method_name] or type(obj[method_name]) ~= "function" then
+      error("Method '" .. method_name .. "' does not exist or is not a function", 2)
+    end
+    
+    local original_method = obj[method_name]
+    local spy_obj = {
+      _is_spy = true,
+      _is_mock = true,
+      calls = 0,
+      call_history = {},
+      original = original_method
+    }
+    
+    -- Replace the method with our implementation
+    obj[method_name] = function(...)
+      spy_obj.calls = spy_obj.calls + 1
+      local args = {...}
+      table.insert(spy_obj.call_history, args)
+      
+      if type(implementation) == "function" then
+        return implementation(...)
+      else
+        return implementation
+      end
+    end
+    
+    -- Add restore/revert methods
+    spy_obj.restore = function()
+      obj[method_name] = original_method
+    end
+    
+    spy_obj.revert = function()
+      obj[method_name] = original_method
+    end
+    
+    return spy_obj
+  end
+  
+  -- Case 2: Multiple methods as a table or all methods
+  local methods_to_mock = method_name
   
   local mock_obj = {
     _is_mock = true,
@@ -3024,8 +3106,8 @@ lust_next.mock = function(obj, methods)
   }
   
   -- If methods is a table, mock just those methods
-  if methods and type(methods) == "table" then
-    for _, method_name in ipairs(methods) do
+  if methods_to_mock and type(methods_to_mock) == "table" then
+    for _, method_name in ipairs(methods_to_mock) do
       if obj[method_name] and type(obj[method_name]) == "function" then
         mock_obj.originals[method_name] = obj[method_name]
         mock_obj.stubs[method_name] = lust_next.stub()
@@ -3034,21 +3116,24 @@ lust_next.mock = function(obj, methods)
     end
   else
     -- Mock all methods
-    for method_name, method in pairs(obj) do
+    for mname, method in pairs(obj) do
       if type(method) == "function" then
-        mock_obj.originals[method_name] = method
-        mock_obj.stubs[method_name] = lust_next.stub()
-        obj[method_name] = mock_obj.stubs[method_name]
+        mock_obj.originals[mname] = method
+        mock_obj.stubs[mname] = lust_next.stub()
+        obj[mname] = mock_obj.stubs[mname]
       end
     end
   end
   
   -- Add a restore method to the mock
   mock_obj.restore = function()
-    for method_name, original in pairs(mock_obj.originals) do
-      obj[method_name] = original
+    for mname, original in pairs(mock_obj.originals) do
+      obj[mname] = original
     end
   end
+  
+  -- Add revert alias for compatibility
+  mock_obj.revert = mock_obj.restore
   
   return mock_obj
 end
