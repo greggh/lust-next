@@ -2389,7 +2389,11 @@ function lust_next.cli_run(dir, options)
   
   -- Stop coverage collection if enabled
   if lust_next.coverage_options.enabled and coverage then
+    print("\nDEBUG [lust-next] Stopping coverage collection and generating reports...")
     coverage.stop()
+    
+    -- Calculate stats explicitly to ensure they're up to date
+    coverage.calculate_stats()
     
     -- Try to use the new reporting module for report generation and saving
     local reporting_module
@@ -2398,18 +2402,39 @@ function lust_next.cli_run(dir, options)
       for _, path in ipairs({
         "src.reporting",
         "deps.lust-next.src.reporting",
-        "./deps/lust-next/src/reporting"
+        "./deps/lust-next/src/reporting",
+        "./src/reporting"
       }) do
         local success, mod = pcall(require, path)
         if success then
+          print("DEBUG [lust-next] Successfully loaded reporting module from: " .. path)
           return mod
         end
       end
+      
+      -- If we couldn't load the module with require, try loading it directly
+      local file_paths = {
+        "./src/reporting.lua",
+        "./deps/lust-next/src/reporting.lua",
+        "/home/gregg/Projects/lust-next/src/reporting.lua"
+      }
+      
+      for _, file_path in ipairs(file_paths) do
+        local success, mod = pcall(function() return dofile(file_path) end)
+        if success then
+          print("DEBUG [lust-next] Successfully loaded reporting module with dofile from: " .. file_path)
+          return mod
+        end
+      end
+      
       error("Could not find reporting module")
     end)
     
     if pcall_result then
       reporting_module = result
+      print("DEBUG [lust-next] Successfully obtained reporting module")
+    else
+      print("DEBUG [lust-next] Failed to load reporting module: " .. tostring(result))
     end
     
     -- Generate and display coverage report
@@ -2419,13 +2444,17 @@ function lust_next.cli_run(dir, options)
     
     -- Get structured coverage data if possible, otherwise fall back to standard report
     if coverage.get_report_data then
+      print("DEBUG [lust-next] Getting coverage data from coverage.get_report_data()")
       coverage_data = coverage.get_report_data()
       if reporting_module then
+        print("DEBUG [lust-next] Using reporting module to format coverage data")
         report_content = reporting_module.format_coverage(coverage_data, report_format)
       else
+        print("DEBUG [lust-next] Using coverage module to format coverage data")
         report_content = coverage.report(report_format)
       end
     else
+      print("DEBUG [lust-next] No get_report_data method, using coverage.report() directly")
       report_content = coverage.report(report_format)
     end
     
@@ -2438,6 +2467,7 @@ function lust_next.cli_run(dir, options)
     if lust_next.coverage_options.output then
       -- Save to file using the reporting module if available
       if reporting_module and coverage_data then
+        print("DEBUG [lust-next] Saving coverage report to specified output file: " .. lust_next.coverage_options.output)
         local success, err = reporting_module.save_coverage_report(
           lust_next.coverage_options.output, 
           coverage_data, 
@@ -2450,6 +2480,7 @@ function lust_next.cli_run(dir, options)
         end
       else
         -- Fall back to using the coverage module directly
+        print("DEBUG [lust-next] Using coverage module to save report to: " .. lust_next.coverage_options.output)
         local success, err = coverage.save_report(lust_next.coverage_options.output, report_format)
         if success then
           print("Coverage report saved to: " .. lust_next.coverage_options.output)
@@ -2464,61 +2495,71 @@ function lust_next.cli_run(dir, options)
         local output_dir = "./coverage-reports"
         local output_path = output_dir .. "/coverage-report." .. report_format
         
-        -- If we have the reporting module and coverage data, use it
+        -- Create the directory if it doesn't exist
+        print("DEBUG [lust-next] Creating directory: " .. output_dir)
+        os.execute("mkdir -p \"" .. output_dir .. "\"")
+        
+        -- If we have the reporting module and coverage data, use it for auto-saving
         if reporting_module and coverage_data then
-          -- Use reporting module to handle file operations
-          print("Using reporting module to save reports to: " .. output_dir)
+          print("DEBUG [lust-next] Using reporting module to auto-save all report formats")
           
-          -- Save the report using the reporting module
-          local save_result
-          if report_format == "html" then
-            save_result = reporting_module.save_coverage_report(
-              output_path, 
-              coverage_data, 
-              "html"
-            )
-          elseif report_format == "lcov" then
-            save_result = reporting_module.save_coverage_report(
-              output_path, 
-              coverage_data, 
-              "lcov"
-            )
-          elseif report_format == "json" then
-            save_result = reporting_module.save_coverage_report(
-              output_path, 
-              coverage_data, 
-              "json"
-            )
-          end
-          
-          if save_result then
-            print("Successfully saved " .. report_format .. " report to: " .. output_path)
-          else
-            print("Error saving report to: " .. output_path)
-          end
-          
-          -- Also save other useful formats automatically
-          if report_format ~= "html" then
-            local html_path = output_dir .. "/coverage-report.html"
-            local html_result = reporting_module.save_coverage_report(
-              html_path, 
-              coverage_data, 
-              "html"
-            )
-            if html_result then
-              print("Also saved HTML report to: " .. html_path)
+          -- Try the auto_save_reports method if available
+          if reporting_module.auto_save_reports then
+            print("DEBUG [lust-next] Using reporting.auto_save_reports for batch report generation")
+            local results = reporting_module.auto_save_reports(coverage_data, nil, output_dir)
+            
+            -- Log the results
+            for format, result in pairs(results) do
+              if result.success then
+                print("Successfully saved " .. format .. " report to: " .. result.path)
+              else
+                print("Failed to save " .. format .. " report: " .. tostring(result.error))
+              end
             end
-          end
-          
-          if report_format ~= "lcov" then
-            local lcov_path = output_dir .. "/coverage-report.lcov"
-            local lcov_result = reporting_module.save_coverage_report(
-              lcov_path, 
+          else
+            -- If auto_save_reports is not available, save formats individually
+            print("DEBUG [lust-next] Using reporting module to save individual report formats")
+            
+            -- Save primary format
+            local save_result
+            print("DEBUG [lust-next] Saving " .. report_format .. " report to: " .. output_path)
+            save_result = reporting_module.save_coverage_report(
+              output_path, 
               coverage_data, 
-              "lcov"
+              report_format
             )
-            if lcov_result then
-              print("Also saved LCOV report to: " .. lcov_path)
+            
+            if save_result then
+              print("Successfully saved " .. report_format .. " report to: " .. output_path)
+            else
+              print("Error saving report to: " .. output_path)
+            end
+            
+            -- Also save other useful formats automatically
+            if report_format ~= "html" then
+              local html_path = output_dir .. "/coverage-report.html"
+              print("DEBUG [lust-next] Saving HTML report to: " .. html_path)
+              local html_result = reporting_module.save_coverage_report(
+                html_path, 
+                coverage_data, 
+                "html"
+              )
+              if html_result then
+                print("Also saved HTML report to: " .. html_path)
+              end
+            end
+            
+            if report_format ~= "lcov" then
+              local lcov_path = output_dir .. "/coverage-report.lcov"
+              print("DEBUG [lust-next] Saving LCOV report to: " .. lcov_path)
+              local lcov_result = reporting_module.save_coverage_report(
+                lcov_path, 
+                coverage_data, 
+                "lcov"
+              )
+              if lcov_result then
+                print("Also saved LCOV report to: " .. lcov_path)
+              end
             end
           end
         else
@@ -2628,14 +2669,34 @@ function lust_next.cli_run(dir, options)
   
   -- Process test quality validation if enabled
   if lust_next.quality_options.enabled and quality then
+    print("\nDEBUG [lust-next] Running quality validation on test files...")
+    
     -- Process test files for quality analysis
     for _, file in ipairs(files) do
+      print("DEBUG [lust-next] Analyzing file for quality: " .. file)
       quality.analyze_file(file)
     end
     
     -- Generate and display quality report
     local report_format = lust_next.quality_options.format or "summary"
-    local report_content = quality.report(report_format)
+    print("DEBUG [lust-next] Generating quality report with format: " .. report_format)
+    
+    -- Get quality data for reporting
+    local quality_data
+    if quality.get_report_data then
+      print("DEBUG [lust-next] Getting quality data with quality.get_report_data()")
+      quality_data = quality.get_report_data()
+    end
+    
+    -- Get report content
+    local report_content
+    if reporting_module and quality_data then
+      print("DEBUG [lust-next] Using reporting module to format quality data")
+      report_content = reporting_module.format_quality(quality_data, report_format)
+    else
+      print("DEBUG [lust-next] Using quality.report() to get formatted report")
+      report_content = quality.report(report_format)
+    end
     
     -- Print quality header
     print("\n" .. string.rep("-", 70))
@@ -2645,8 +2706,8 @@ function lust_next.cli_run(dir, options)
     -- Handle report output
     if lust_next.quality_options.output then
       -- Try to save the report using the reporting module if available
-      if reporting_module and quality.get_report_data then
-        local quality_data = quality.get_report_data()
+      if reporting_module and quality_data then
+        print("DEBUG [lust-next] Saving quality report to specified output file: " .. lust_next.quality_options.output)
         local success, err = reporting_module.save_quality_report(
           lust_next.quality_options.output, 
           quality_data, 
@@ -2657,8 +2718,9 @@ function lust_next.cli_run(dir, options)
         else
           print("Error saving quality report: " .. (err or "unknown error"))
         end
-      else if quality.save_report then
+      elseif quality.save_report then
         -- Use quality module's save_report if available
+        print("DEBUG [lust-next] Using quality.save_report to save to: " .. lust_next.quality_options.output)
         local success, err = quality.save_report(lust_next.quality_options.output, report_format)
         if success then
           print("Quality report saved to: " .. lust_next.quality_options.output)
@@ -2667,6 +2729,15 @@ function lust_next.cli_run(dir, options)
         end
       else
         -- Fallback to direct file writing
+        print("DEBUG [lust-next] Using direct file I/O to save quality report")
+        
+        -- Create the directory if needed
+        local dir_path = lust_next.quality_options.output:match("^(.*)[\\/][^\\/]*$")
+        if dir_path then
+          print("DEBUG [lust-next] Creating directory: " .. dir_path)
+          os.execute("mkdir -p \"" .. dir_path .. "\"")
+        end
+        
         local output_file = io.open(lust_next.quality_options.output, "w")
         if output_file then
           output_file:write(report_content)
@@ -2676,23 +2747,82 @@ function lust_next.cli_run(dir, options)
           print("Error saving quality report to: " .. lust_next.quality_options.output)
         end
       end
-      end
     else
-      -- Try to auto-save quality report to default path if it's HTML format
-      if report_format == "html" and reporting_module and quality.get_report_data then
-        local quality_data = quality.get_report_data()
-        local output_dir = "./coverage-reports"
-        local output_path = output_dir .. "/quality-report.html"
-        
-        local success = reporting_module.save_quality_report(
-          output_path,
-          quality_data,
-          "html"
-        )
-        
-        if success then
-          print("Quality report automatically saved to: " .. output_path)
+      -- Auto-save quality reports
+      local output_dir = "./coverage-reports"
+      
+      -- Create the directory if it doesn't exist
+      print("DEBUG [lust-next] Creating directory for quality reports: " .. output_dir)
+      os.execute("mkdir -p \"" .. output_dir .. "\"")
+      
+      if reporting_module and quality_data then
+        -- Try to use auto_save_reports if it's available
+        if reporting_module.auto_save_reports then
+          print("DEBUG [lust-next] Using reporting.auto_save_reports to save quality reports")
+          -- Note: Pass coverage_data as nil since we're only saving quality reports
+          local results = reporting_module.auto_save_reports(nil, quality_data, output_dir)
+          
+          -- Log the results
+          local any_success = false
+          for format, result in pairs(results) do
+            if string.match(format, "quality") and result.success then
+              print("Successfully saved " .. format .. " report to: " .. result.path)
+              any_success = true
+            elseif string.match(format, "quality") then
+              print("Failed to save " .. format .. " report: " .. tostring(result.error))
+            end
+          end
+          
+          if not any_success then
+            print("WARNING: No quality reports were successfully saved")
+          end
+        else
+          -- Save reports individually
+          print("DEBUG [lust-next] Saving quality reports individually")
+          
+          -- Save HTML report
+          local html_path = output_dir .. "/quality-report.html"
+          print("DEBUG [lust-next] Saving quality HTML report to: " .. html_path)
+          local html_result = reporting_module.save_quality_report(html_path, quality_data, "html")
+          if html_result then
+            print("Successfully saved quality HTML report to: " .. html_path)
+          else
+            print("Failed to save quality HTML report to: " .. html_path)
+          end
+          
+          -- Save JSON report
+          local json_path = output_dir .. "/quality-report.json"
+          print("DEBUG [lust-next] Saving quality JSON report to: " .. json_path)
+          local json_result = reporting_module.save_quality_report(json_path, quality_data, "json")
+          if json_result then
+            print("Successfully saved quality JSON report to: " .. json_path)
+          else
+            print("Failed to save quality JSON report to: " .. json_path)
+          end
         end
+      elseif quality.save_report then
+        -- Use the quality module's save_report method
+        print("DEBUG [lust-next] Using quality.save_report for quality reports")
+        
+        -- Save HTML report
+        local html_path = output_dir .. "/quality-report.html"
+        local html_result = quality.save_report(html_path, "html")
+        if html_result then
+          print("Successfully saved quality HTML report to: " .. html_path)
+        else
+          print("Failed to save quality HTML report")
+        end
+        
+        -- Save JSON report
+        local json_path = output_dir .. "/quality-report.json"
+        local json_result = quality.save_report(json_path, "json")
+        if json_result then
+          print("Successfully saved quality JSON report to: " .. json_path)
+        else
+          print("Failed to save quality JSON report")
+        end
+      else
+        print("WARNING: Could not save quality reports - no compatible module available")
       end
       -- Print to console (only for summary format)
       if report_format == "summary" then

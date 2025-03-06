@@ -915,6 +915,13 @@ function M.get_report_data()
     }
   }
   
+  -- Debug output for troubleshooting
+  print("DEBUG [Quality] get_report_data returning data with:")
+  print("  Quality level: " .. structured_data.level .. " (" .. structured_data.level_name .. ")")
+  print("  Tests analyzed: " .. structured_data.summary.tests_analyzed)
+  print("  Tests passing quality: " .. structured_data.summary.tests_passing_quality)
+  print("  Quality percent: " .. string.format("%.2f%%", structured_data.summary.quality_percent))
+  
   return structured_data
 end
 

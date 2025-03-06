@@ -87,24 +87,62 @@ local coverage_formatters = {}
 
 -- Generate a summary coverage report from coverage data
 coverage_formatters.summary = function(coverage_data)
+  -- Validate the input data to prevent runtime errors
+  if not coverage_data then
+    print("ERROR [Reporting] Missing coverage data")
+    return {
+      files = {},
+      total_files = 0,
+      covered_files = 0,
+      files_pct = 0,
+      total_lines = 0,
+      covered_lines = 0,
+      lines_pct = 0,
+      total_functions = 0,
+      covered_functions = 0,
+      functions_pct = 0,
+      overall_pct = 0
+    }
+  end
+  
+  -- Make sure we have summary data
+  local summary = coverage_data.summary or {
+    total_files = 0,
+    covered_files = 0,
+    total_lines = 0,
+    covered_lines = 0,
+    total_functions = 0,
+    covered_functions = 0,
+    line_coverage_percent = 0,
+    function_coverage_percent = 0,
+    overall_percent = 0
+  }
+  
+  -- Debug output for troubleshooting
+  print("DEBUG [Reporting] Formatting coverage data with:")
+  print("  Total files: " .. (summary.total_files or 0))
+  print("  Covered files: " .. (summary.covered_files or 0))
+  print("  Total lines: " .. (summary.total_lines or 0))
+  print("  Covered lines: " .. (summary.covered_lines or 0))
+  
   local report = {
-    files = coverage_data.files,
-    total_files = coverage_data.summary.total_files,
-    covered_files = coverage_data.summary.covered_files,
-    files_pct = coverage_data.summary.total_files > 0 and 
-                (coverage_data.summary.covered_files / coverage_data.summary.total_files * 100) or 0,
+    files = coverage_data.files or {},
+    total_files = summary.total_files or 0,
+    covered_files = summary.covered_files or 0,
+    files_pct = summary.total_files > 0 and 
+                ((summary.covered_files or 0) / summary.total_files * 100) or 0,
     
-    total_lines = coverage_data.summary.total_lines,
-    covered_lines = coverage_data.summary.covered_lines,
-    lines_pct = coverage_data.summary.total_lines > 0 and 
-               (coverage_data.summary.covered_lines / coverage_data.summary.total_lines * 100) or 0,
+    total_lines = summary.total_lines or 0,
+    covered_lines = summary.covered_lines or 0,
+    lines_pct = summary.total_lines > 0 and 
+               ((summary.covered_lines or 0) / summary.total_lines * 100) or 0,
     
-    total_functions = coverage_data.summary.total_functions,
-    covered_functions = coverage_data.summary.covered_functions,
-    functions_pct = coverage_data.summary.total_functions > 0 and 
-                   (coverage_data.summary.covered_functions / coverage_data.summary.total_functions * 100) or 0,
+    total_functions = summary.total_functions or 0,
+    covered_functions = summary.covered_functions or 0,
+    functions_pct = summary.total_functions > 0 and 
+                   ((summary.covered_functions or 0) / summary.total_functions * 100) or 0,
     
-    overall_pct = coverage_data.summary.overall_percent,
+    overall_pct = summary.overall_percent or 0,
   }
   
   return report
@@ -415,47 +453,97 @@ end
 -- Utility function to create directory if it doesn't exist
 local function ensure_directory(dir_path)
   -- Extract directory part (trying different approaches for reliability)
-  if type(dir_path) ~= "string" then return false, "Invalid directory path" end
+  if type(dir_path) ~= "string" then 
+    print("ERROR [Reporting] Invalid directory path: " .. tostring(dir_path))
+    return false, "Invalid directory path" 
+  end
   
   -- Skip if it's just a filename with no directory component
-  if not dir_path:match("[/\\]") then return true end
+  if not dir_path:match("[/\\]") then 
+    print("DEBUG [Reporting] No directory component in path: " .. dir_path)
+    return true 
+  end
   
   local last_separator = dir_path:match("^(.*)[\\/][^\\/]*$")
-  if not last_separator then return true end -- No directory part
+  if not last_separator then 
+    print("DEBUG [Reporting] No directory part found in: " .. dir_path)
+    return true 
+  end
+  
+  print("DEBUG [Reporting] Extracted directory part: " .. last_separator)
+  
+  -- Check if directory already exists
+  local test_cmd = package.config:sub(1,1) == "\\" and
+    "if exist \"" .. last_separator .. "\\*\" (exit 0) else (exit 1)" or
+    "test -d \"" .. last_separator .. "\""
+  
+  local dir_exists = os.execute(test_cmd)
+  if dir_exists == true or dir_exists == 0 then
+    print("DEBUG [Reporting] Directory already exists: " .. last_separator)
+    return true
+  end
+  
+  -- Create the directory
+  print("DEBUG [Reporting] Creating directory: " .. last_separator)
   
   -- Use platform appropriate command
   local command = package.config:sub(1,1) == "\\" and
-    "if not exist \"" .. last_separator .. "\" mkdir \"" .. last_separator .. "\"" or
+    "mkdir \"" .. last_separator .. "\"" or
     "mkdir -p \"" .. last_separator .. "\""
   
+  print("DEBUG [Reporting] Running mkdir command: " .. command)
   local result = os.execute(command)
-  return result == true or result == 0 or result == 1, "Failed to create directory: " .. last_separator
+  
+  -- Check result
+  local success = (result == true or result == 0 or result == 1)
+  if success then
+    print("DEBUG [Reporting] Successfully created directory: " .. last_separator)
+  else
+    print("ERROR [Reporting] Failed to create directory: " .. last_separator .. " (result: " .. tostring(result) .. ")")
+  end
+  
+  return success, success and nil or "Failed to create directory: " .. last_separator
 end
 
 -- Write content to a file
 function M.write_file(file_path, content)
+  print("DEBUG [Reporting] Writing file: " .. file_path)
+  print("DEBUG [Reporting] Content length: " .. (content and #content or 0) .. " bytes")
+  
   -- Create directory if needed
+  print("DEBUG [Reporting] Ensuring directory exists...")
   local dir_ok, dir_err = ensure_directory(file_path)
   if not dir_ok then
-    return false, dir_err
+    print("ERROR [Reporting] Failed to create directory: " .. tostring(dir_err))
+    -- Try direct mkdir as fallback
+    local dir_path = file_path:match("^(.*)[\\/][^\\/]*$")
+    if dir_path then
+      print("DEBUG [Reporting] Attempting direct mkdir -p: " .. dir_path)
+      os.execute("mkdir -p \"" .. dir_path .. "\"")
+    end
   end
   
   -- Open the file for writing
+  print("DEBUG [Reporting] Opening file for writing...")
   local file, err = io.open(file_path, "w")
   if not file then
+    print("ERROR [Reporting] Could not open file for writing: " .. tostring(err))
     return false, "Could not open file for writing: " .. tostring(err)
   end
   
   -- Write content and close
+  print("DEBUG [Reporting] Writing content...")
   local write_ok, write_err = pcall(function()
     file:write(content)
     file:close()
   end)
   
   if not write_ok then
+    print("ERROR [Reporting] Error writing to file: " .. tostring(write_err))
     return false, "Error writing to file: " .. tostring(write_err)
   end
   
+  print("DEBUG [Reporting] Successfully wrote file: " .. file_path)
   return true
 end
 
@@ -486,57 +574,120 @@ function M.auto_save_reports(coverage_data, quality_data, base_dir)
   base_dir = base_dir or "./coverage-reports"
   local results = {}
   
-  -- Ensure the base directory exists
-  ensure_directory(base_dir)
+  -- Debug output for troubleshooting
+  print("DEBUG [Reporting] auto_save_reports called with:")
+  print("  base_dir: " .. base_dir)
+  print("  coverage_data: " .. (coverage_data and "present" or "nil"))
+  if coverage_data then
+    print("    total_files: " .. (coverage_data.summary and coverage_data.summary.total_files or "unknown"))
+    print("    total_lines: " .. (coverage_data.summary and coverage_data.summary.total_lines or "unknown"))
+    
+    -- Print file count to help diagnose data flow issues
+    local file_count = 0
+    if coverage_data.files then
+      for file, _ in pairs(coverage_data.files) do
+        file_count = file_count + 1
+        if file_count <= 5 then -- Just print first 5 files for brevity
+          print("    - File: " .. file)
+        end
+      end
+      print("    Total files tracked: " .. file_count)
+    else
+      print("    No files tracked in coverage data")
+    end
+  end
+  print("  quality_data: " .. (quality_data and "present" or "nil"))
+  if quality_data then
+    print("    tests_analyzed: " .. (quality_data.summary and quality_data.summary.tests_analyzed or "unknown"))
+  end
+  
+  -- Try different directory creation methods to ensure success
+  print("DEBUG [Reporting] Ensuring directory exists using multiple methods...")
+  
+  -- First, try the standard ensure_directory function
+  local dir_ok, dir_err = ensure_directory(base_dir)
+  if not dir_ok then
+    print("WARNING [Reporting] Standard directory creation failed: " .. tostring(dir_err))
+    
+    -- Try direct mkdir command as fallback
+    print("DEBUG [Reporting] Trying direct mkdir -p command...")
+    os.execute('mkdir -p "' .. base_dir .. '"')
+    
+    -- Verify directory exists after fallback
+    local test_cmd = package.config:sub(1,1) == "\\" and
+      'if exist "' .. base_dir .. '\\*" (exit 0) else (exit 1)' or
+      'test -d "' .. base_dir .. '"'
+    
+    local exists = os.execute(test_cmd)
+    if exists == true or exists == 0 then
+      print("DEBUG [Reporting] Directory created successfully with fallback method")
+      dir_ok = true
+    else
+      print("ERROR [Reporting] Failed to create directory with all methods")
+      dir_ok = false
+    end
+  else
+    print("DEBUG [Reporting] Directory exists or was created: " .. base_dir)
+  end
   
   -- Always save both HTML and LCOV reports if coverage data is provided
   if coverage_data then
     -- Save HTML report
     local html_path = base_dir .. "/coverage-report.html"
+    print("DEBUG [Reporting] Saving HTML report to: " .. html_path)
     local html_ok, html_err = M.save_coverage_report(html_path, coverage_data, "html")
     results.html = {
       success = html_ok,
       error = html_err,
       path = html_path
     }
+    print("DEBUG [Reporting] HTML save result: " .. (html_ok and "success" or "failed: " .. tostring(html_err)))
     
     -- Save LCOV report
     local lcov_path = base_dir .. "/coverage-report.lcov"
+    print("DEBUG [Reporting] Saving LCOV report to: " .. lcov_path)
     local lcov_ok, lcov_err = M.save_coverage_report(lcov_path, coverage_data, "lcov")
     results.lcov = {
       success = lcov_ok,
       error = lcov_err,
       path = lcov_path
     }
+    print("DEBUG [Reporting] LCOV save result: " .. (lcov_ok and "success" or "failed: " .. tostring(lcov_err)))
     
     -- Also save JSON for machine readable format
     local json_path = base_dir .. "/coverage-report.json"
+    print("DEBUG [Reporting] Saving JSON report to: " .. json_path)
     local json_ok, json_err = M.save_coverage_report(json_path, coverage_data, "json")
     results.json = {
       success = json_ok,
       error = json_err,
       path = json_path
     }
+    print("DEBUG [Reporting] JSON save result: " .. (json_ok and "success" or "failed: " .. tostring(json_err)))
   end
   
   -- Save HTML quality report if quality data is provided
   if quality_data then
     local quality_path = base_dir .. "/quality-report.html"
+    print("DEBUG [Reporting] Saving quality HTML report to: " .. quality_path)
     local quality_ok, quality_err = M.save_quality_report(quality_path, quality_data, "html")
     results.quality_html = {
       success = quality_ok,
       error = quality_err,
       path = quality_path
     }
+    print("DEBUG [Reporting] Quality HTML save result: " .. (quality_ok and "success" or "failed: " .. tostring(quality_err)))
     
     -- Also save JSON quality report
     local quality_json_path = base_dir .. "/quality-report.json"
+    print("DEBUG [Reporting] Saving quality JSON report to: " .. quality_json_path)
     local quality_json_ok, quality_json_err = M.save_quality_report(quality_json_path, quality_data, "json")
     results.quality_json = {
       success = quality_json_ok,
       error = quality_json_err,
       path = quality_json_path
     }
+    print("DEBUG [Reporting] Quality JSON save result: " .. (quality_json_ok and "success" or "failed: " .. tostring(quality_json_err)))
   end
   
   return results
