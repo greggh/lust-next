@@ -1,33 +1,46 @@
-# Lust-Next - Enhanced Lua Testing Framework
+<div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
+# Lust-Next
 
 [![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
 [![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![GitHub License](https://img.shields.io/github/license/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/stargazers)
+[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
+[![Discussions](https://img.shields.io/github/discussions/greggh/lust-next?style=flat-square&logo=github)](https://github.com/greggh/lust-next/discussions)
 
-Lust-Next is a lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original.
+*A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original.*
+
+[Features](#features) • 
+[Installation](#installation) • 
+[Quick Start](#quick-start) • 
+[Documentation](#documentation) • 
+[Contributing](#contributing) • 
+[License](#license) • 
+[Discussions](https://github.com/greggh/lust-next/discussions)
+
+</div>
 
 ## Features
 
-- **Minimal Dependencies**: Single file with no external requirements
-- **Familiar Syntax**: BDD-style `describe`/`it` blocks for intuitive test organization  
-- **Rich Assertions**: Extensive expect-style assertion library with detailed diffs
-- **Function Spies**: Track function calls and arguments
-- **Before/After Hooks**: For setup and teardown
-- **Module Management**: Reset and reload modules with `reset_module()` for clean state
-- **Automatic Test Discovery**: Find and run tests without manual configuration
-- **Filtering & Tagging**: Run specific test groups or tagged tests
-- **Focused Tests**: Run only specific tests with `fdescribe`/`fit`
-- **Excluded Tests**: Skip specific tests with `xdescribe`/`xit`
-- **Enhanced Reporting**: Clear, colorful summaries of test results
-- **Output Formatting**: Multiple output styles including dot notation and compact mode
-- **Async Support**: Test asynchronous code with parallel operations and conditions
-- **Mocking System**: Create and manage mocks for dependencies
-- **Cross-Platform**: Works in console and non-console environments
-- **Code Coverage**: Track and report code coverage with multiple output formats
-- **Quality Validation**: Validate test quality with customizable levels
-- **Modular Reporting**: Centralized reporting system with robust fallbacks
+- 📦 **Minimal Dependencies** - Single file with no external requirements
+- 🧪 **Familiar Syntax** - BDD-style `describe`/`it` blocks for intuitive test organization
+- ✅ **Rich Assertions** - Extensive expect-style assertion library with detailed diffs
+- 🕵️ **Function Spies** - Track function calls and arguments
+- 🔄 **Before/After Hooks** - For setup and teardown
+- 🧩 **Module Management** - Reset and reload modules with `reset_module()` for clean state
+- 🔍 **Automatic Test Discovery** - Find and run tests without manual configuration
+- 🏷️ **Filtering & Tagging** - Run specific test groups or tagged tests
+- 🎯 **Focused Tests** - Run only specific tests with `fdescribe`/`fit`
+- ⏸️ **Excluded Tests** - Skip specific tests with `xdescribe`/`xit`
+- 📊 **Enhanced Reporting** - Clear, colorful summaries of test results
+- 🎨 **Output Formatting** - Multiple output styles including dot notation and compact mode
+- ⏱️ **Async Support** - Test asynchronous code with parallel operations and conditions
+- 🤖 **Mocking System** - Create and manage mocks for dependencies
+- 💻 **Cross-Platform** - Works in console and non-console environments
+- 📈 **Code Coverage** - Track and report code coverage with multiple output formats
+- 🔬 **Quality Validation** - Validate test quality with customizable levels
+- 📋 **Modular Reporting** - Centralized reporting system with robust fallbacks
 
 ## Quick Start
 
@@ -650,14 +663,53 @@ The enhanced mocking system includes:
 
 ## Installation
 
-### Method 1: Copy the file
+### Method 1: Direct File
 
-Just copy `lust.lua` into your project and require it.
+Simply copy `lust-next.lua` into your project directory:
+
+```bash
+# Download the file
+curl -O https://raw.githubusercontent.com/greggh/lust-next/main/lust-next.lua
+
+# Or clone and copy
+git clone https://github.com/greggh/lust-next.git
+cp lust-next/lust-next.lua your-project/
+```
 
 ### Method 2: LuaRocks
 
 ```bash
-luarocks install lust
+luarocks install lust-next
+```
+
+### Method 3: As a Git Submodule
+
+```bash
+# Add as submodule
+git submodule add https://github.com/greggh/lust-next.git deps/lust-next
+
+# Update your package path in your main Lua file
+package.path = package.path .. ";./deps/lust-next/?.lua"
+```
+
+### Method 4: With [packer.nvim](https://github.com/wbthomason/packer.nvim)
+
+```lua
+use {
+  'greggh/lust-next',
+  ft = 'lua',
+  cmd = { 'LustRun' }
+}
+```
+
+### Method 5: With [lazy.nvim](https://github.com/folke/lazy.nvim)
+
+```lua
+{
+  'greggh/lust-next',
+  ft = 'lua',
+  cmd = { 'LustRun' },
+}
 ```
 
 ## Usage with Non-Console Environments
@@ -684,3 +736,9 @@ Lust-Next builds on the original [lust](https://github.com/bjornbytes/lust) test
 - [lunarmodules/luassert](https://github.com/lunarmodules/luassert) - An extensible assertion library with advanced matching capabilities
 
 We're grateful to these projects for advancing the state of Lua testing and providing inspiration for Lust-Next's enhanced features.
+
+---
+
+<div align="center">
+  <p>Made with ❤️ by <a href="https://github.com/greggh">greggh</a></p>
+</div>
