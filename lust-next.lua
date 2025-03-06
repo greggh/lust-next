@@ -35,7 +35,7 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.7.2"
+lust_next.version = "0.7.3"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
@@ -2696,8 +2696,68 @@ function lust_next.it_async(name, fn, timeout)
   return lust_next.it(name, lust_next.async(fn, timeout)())
 end
 
--- Assertion library
+-- Enhanced assertion and spy/mock helpers
 lust_next.assert = {}
+
+-- Add spy assertion helpers
+lust_next.assert.spy = function(spy_obj)
+  if not spy_obj or type(spy_obj) ~= "table" or not spy_obj._is_spy then
+    error("assert.spy expects a spy object created with spy.on()", 2)
+  end
+  
+  local spy_assert = {
+    was = {
+      called = function(times)
+        if times then
+          if spy_obj.calls ~= times then
+            error(string.format("Expected spy to be called %d times but was called %d times", 
+              times, spy_obj.calls), 2)
+          end
+        else
+          if spy_obj.calls == 0 then
+            error("Expected spy to be called at least once", 2)
+          end
+        end
+        return true
+      end,
+      
+      called_with = function(...)
+        local expected_args = {...}
+        local matched = false
+        
+        for _, call_args in ipairs(spy_obj.call_history) do
+          if #call_args == #expected_args then
+            local all_match = true
+            for i, arg in ipairs(expected_args) do
+              if arg ~= call_args[i] then
+                all_match = false
+                break
+              end
+            end
+            if all_match then
+              matched = true
+              break
+            end
+          end
+        end
+        
+        if not matched then
+          error("Expected spy to be called with matching arguments", 2)
+        end
+        return true
+      end,
+      
+      not_called = function()
+        if spy_obj.calls > 0 then
+          error("Expected spy to not be called", 2)
+        end
+        return true
+      end
+    }
+  }
+  
+  return spy_assert
+end
 
 -- Standard assertion helpers
 function lust_next.assert.equal(expected, actual, message)
@@ -2796,6 +2856,187 @@ function lust_next.assert.contains(table_value, expected_item, message)
     tostring(expected_item))
   error(msg, 2)
 end
+
+-- Enhanced spy, mock, and stub functionality
+lust_next.spy = {
+  on = function(obj, method_name)
+    if not obj or type(obj) ~= "table" then
+      error("spy.on requires a table as the first argument", 2)
+    end
+    
+    if not method_name or type(method_name) ~= "string" then
+      error("spy.on requires a method name as the second argument", 2)
+    end
+    
+    if not obj[method_name] or type(obj[method_name]) ~= "function" then
+      error("Method '" .. method_name .. "' does not exist or is not a function", 2)
+    end
+    
+    local original_method = obj[method_name]
+    local spy_obj = {
+      _is_spy = true,
+      calls = 0,
+      call_history = {},
+      original = original_method
+    }
+    
+    obj[method_name] = function(...)
+      spy_obj.calls = spy_obj.calls + 1
+      local args = {...}
+      table.insert(spy_obj.call_history, args)
+      return original_method(...)
+    end
+    
+    -- Add the restore method
+    spy_obj.restore = function()
+      obj[method_name] = original_method
+    end
+    
+    return spy_obj
+  end,
+  
+  new = function()
+    local spy_fn = {
+      _is_spy = true,
+      calls = 0,
+      call_history = {},
+      
+      -- The actual function that will be called
+      fn = function(...)
+        spy_fn.calls = spy_fn.calls + 1
+        local args = {...}
+        table.insert(spy_fn.call_history, args)
+      end
+    }
+    
+    -- Wrap the function so it can be called directly
+    setmetatable(spy_fn, {
+      __call = function(self, ...)
+        return self.fn(...)
+      end
+    })
+    
+    return spy_fn
+  end
+}
+
+-- Stub functionality - creates a function that can be controlled
+lust_next.stub = function(return_value)
+  local stub_fn = {
+    _is_stub = true,
+    calls = 0,
+    call_history = {},
+    
+    -- Default implementation
+    fn = function(...)
+      stub_fn.calls = stub_fn.calls + 1
+      local args = {...}
+      table.insert(stub_fn.call_history, args)
+      
+      if type(return_value) == "function" then
+        return return_value(...)
+      else
+        return return_value
+      end
+    end,
+    
+    -- Configure the stub to throw an error
+    throws = function(error_message)
+      stub_fn.fn = function(...)
+        stub_fn.calls = stub_fn.calls + 1
+        local args = {...}
+        table.insert(stub_fn.call_history, args)
+        error(error_message, 2)
+      end
+      return stub_fn
+    end,
+    
+    -- Configure the stub to return a specific value
+    returns = function(value)
+      stub_fn.fn = function(...)
+        stub_fn.calls = stub_fn.calls + 1
+        local args = {...}
+        table.insert(stub_fn.call_history, args)
+        return value
+      end
+      return stub_fn
+    end
+  }
+  
+  -- Wrap the function so it can be called directly
+  setmetatable(stub_fn, {
+    __call = function(self, ...)
+      return self.fn(...)
+    end
+  })
+  
+  return stub_fn
+end
+
+-- Mock functionality - replaces an object's methods with stubs
+lust_next.mock = function(obj, methods)
+  if not obj or type(obj) ~= "table" then
+    error("mock requires a table as the first argument", 2)
+  end
+  
+  local mock_obj = {
+    _is_mock = true,
+    originals = {},
+    stubs = {}
+  }
+  
+  -- If methods is a table, mock just those methods
+  if methods and type(methods) == "table" then
+    for _, method_name in ipairs(methods) do
+      if obj[method_name] and type(obj[method_name]) == "function" then
+        mock_obj.originals[method_name] = obj[method_name]
+        mock_obj.stubs[method_name] = lust_next.stub()
+        obj[method_name] = mock_obj.stubs[method_name]
+      end
+    end
+  else
+    -- Mock all methods
+    for method_name, method in pairs(obj) do
+      if type(method) == "function" then
+        mock_obj.originals[method_name] = method
+        mock_obj.stubs[method_name] = lust_next.stub()
+        obj[method_name] = mock_obj.stubs[method_name]
+      end
+    end
+  end
+  
+  -- Add a restore method to the mock
+  mock_obj.restore = function()
+    for method_name, original in pairs(mock_obj.originals) do
+      obj[method_name] = original
+    end
+  end
+  
+  return mock_obj
+}
+
+-- Expect functionality for verification
+lust_next.expect = function(fn_or_obj)
+  local expect_obj = {
+    to_be = {
+      called = function(times)
+        -- Check if it's a spy/stub
+        if fn_or_obj._is_spy or fn_or_obj._is_stub then
+          local expected_times = times or 1
+          if fn_or_obj.calls ~= expected_times then
+            error(string.format("Expected function to be called %d times but was called %d times", 
+              expected_times, fn_or_obj.calls), 2)
+          end
+        else
+          error("expect().to_be.called() requires a spy or stub", 2)
+        end
+        return expect_obj
+      end
+    }
+  }
+  
+  return expect_obj
+}
 
 -- Aliases and exports
 lust_next.test = lust_next.it
