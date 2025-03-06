@@ -2975,13 +2975,25 @@ function lust_next.expose_globals()
   _G.wait_until = lust_next.wait_until
   _G.it_async = lust_next.it_async
   
-  -- Assertions
-  _G.assert = _G.assert or {}
+  -- Handle assertions specially because _G.assert exists by default and is a function
+  local orig_assert = _G.assert
   
-  -- Add assertion functions
+  -- Create a new assert table with metatable to handle both function calls
+  -- and assertion methods
+  local assert_table = {}
   for name, func in pairs(lust_next.assert) do
-    _G.assert[name] = func
+    assert_table[name] = func
   end
+  
+  -- Set up metatable to handle function calls to assert
+  setmetatable(assert_table, {
+    __call = function(_, ...)
+      return orig_assert(...)
+    end
+  })
+  
+  -- Replace the global assert
+  _G.assert = assert_table
   
   return lust_next
 end
