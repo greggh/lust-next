@@ -2887,8 +2887,13 @@ lust_next.spy = {
       return original_method(...)
     end
     
-    -- Add the restore method
+    -- Add the restore/revert methods (both names for compatibility)
     spy_obj.restore = function()
+      obj[method_name] = original_method
+    end
+    
+    -- Also provide revert alias for compatibility with common test frameworks
+    spy_obj.revert = function()
       obj[method_name] = original_method
     end
     
@@ -3026,22 +3031,43 @@ end
 -- Expect functionality for verification
 lust_next.expect = function(fn_or_obj)
   local expect_obj = {
-    to_be = {
-      called = function(times)
-        -- Check if it's a spy/stub
-        if fn_or_obj._is_spy or fn_or_obj._is_stub then
-          local expected_times = times or 1
-          if fn_or_obj.calls ~= expected_times then
-            error(string.format("Expected function to be called %d times but was called %d times", 
-              expected_times, fn_or_obj.calls), 2)
+    to = {
+      be = {
+        called = function(times)
+          -- Check if it's a spy/stub
+          if fn_or_obj._is_spy or fn_or_obj._is_stub then
+            local expected_times = times or 1
+            if fn_or_obj.calls ~= expected_times then
+              error(string.format("Expected function to be called %d times but was called %d times", 
+                expected_times, fn_or_obj.calls), 2)
+            end
+          else
+            error("expect().to.be.called() requires a spy or stub", 2)
           end
-        else
-          error("expect().to_be.called() requires a spy or stub", 2)
+          return expect_obj
+        end,
+        
+        -- Alias for compatibility
+        same = function(value)
+          if fn_or_obj ~= value then
+            error(string.format("Expected %s to be the same as %s", 
+              tostring(fn_or_obj), tostring(value)), 2)
+          end
+          return expect_obj
         end
-        return expect_obj
-      end
+      },
+      
+      -- Shorthand for called
+      been = {
+        called = function(times)
+          return expect_obj.to.be.called(times)
+        end
+      }
     }
   }
+  
+  -- Also add the to_be alias for compatibility
+  expect_obj.to_be = expect_obj.to.be
   
   return expect_obj
 end
