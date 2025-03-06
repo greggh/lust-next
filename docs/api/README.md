@@ -8,6 +8,7 @@ This section contains detailed API documentation for all Lust-Next functionality
 - [Assertions](assertions.md) - Assertion functions for test verification
 - [Async Testing](async.md) - APIs for testing asynchronous code
 - [Mocking](mocking.md) - Mocking, spying, and stubbing capabilities
+- [Module Reset](module_reset.md) - Module management utilities for clean test state
 - [Test Filtering](filtering.md) - Test filtering and tagging support
 - [CLI](cli.md) - Command-line interface and options
 - [Test Discovery](discovery.md) - Automatic test discovery capabilities
@@ -56,6 +57,24 @@ lust.it_async("Async test", function()
   local result = nil
   lust.await(100) -- Wait 100ms
   expect(result).to.exist()
+end)
+
+-- Run async operations in parallel
+local results = lust.parallel_async(
+  function() lust.await(100); return "first" end,
+  function() lust.await(200); return "second" end
+)
+```
+
+### Module Reset
+
+```lua
+-- Reset and reload a module
+local fresh_module = lust.reset_module("app.module")
+
+-- Run test with a fresh module
+lust.with_fresh_module("app.module", function(mod)
+  -- Test using the fresh module
 end)
 ```
 

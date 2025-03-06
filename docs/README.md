@@ -1,42 +1,72 @@
-# Extended Documentation
+# Lust-Next Documentation
 
-This directory contains extended documentation for the project. Add detailed guides, API documentation, tutorials, and other resources here.
+[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
 
-## What to Include Here
+Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful testing library for Lua projects, offering a rich set of features while maintaining simplicity and ease of use.
 
-- **API References**: Detailed API documentation
-- **Tutorials**: Step-by-step guides for common tasks
-- **Advanced Concepts**: Explanation of complex concepts
-- **Architecture**: System design and architecture docs
-- **FAQs**: Frequently asked questions
-- **Troubleshooting**: Common issues and solutions
+## Latest Updates (v0.7.4)
 
-## Documentation Best Practices
+- **Module Reset Utilities**: New functions for ensuring clean test state:
+  - `reset_module()`: Reset and reload modules between tests
+  - `with_fresh_module()`: Run tests with a freshly loaded module instance
 
-1. **Keep docs up-to-date with code changes**
-2. **Use clear, concise language**
-3. **Include examples when explaining concepts**
-4. **Use diagrams where appropriate**
-5. **Organize content in a logical structure**
-6. **Include a table of contents for longer documents**
+- **Enhanced Async Testing**:
+  - New `parallel_async()` function for running multiple operations concurrently
+  - Improved error handling in `wait_until()` for timeout scenarios
+  - Better performance when running multiple async tests
 
 ## Documentation Structure
 
-```
-docs/
-├── api/              # API reference docs
-├── guides/           # How-to guides
-├── tutorials/        # Tutorials for new users
-├── concepts/         # Explanations of key concepts
-└── reference/        # Technical reference material
+- [**API Reference**](api/README.md): Detailed documentation of all available functions and options
+  - [Core Functions](api/core.md): Test organization with describe/it blocks
+  - [Assertions](api/assertions.md): Rich assertion library
+  - [Async Testing](api/async.md): Testing asynchronous code
+  - [Mocking](api/mocking.md): Mock and spy functionality
+  - [Module Reset](api/module_reset.md): Module management utilities
+  - [Test Filtering](api/filtering.md): Running specific test subsets
+  - [CLI](api/cli.md): Command-line interface usage
+  - [Test Discovery](api/discovery.md): Finding and running tests
+
+- [**Guides**](guides/README.md): How-to guides for common tasks
+  - [Getting Started](guides/getting-started.md): Your first tests with Lust-Next
+  - [Migrating from Other Frameworks](guides/migrating.md): Transitioning from other test frameworks
+  - [CI Integration](guides/ci_integration.md): Setup for continuous integration
+
+## Quick Links
+
+- [GitHub Repository](https://github.com/greggh/lust-next)
+- [Issue Tracker](https://github.com/greggh/lust-next/issues)
+- [Changelog](https://github.com/greggh/lust-next/blob/main/CHANGELOG.md)
+
+## Installation
+
+```bash
+# Option 1: Copy the single file to your project
+curl -o lust-next.lua https://raw.githubusercontent.com/greggh/lust-next/master/lust-next.lua
+
+# Option 2: Use as Git submodule
+git submodule add https://github.com/greggh/lust-next.git deps/lust-next
 ```
 
-## Writing Style Tips
+## Basic Usage
 
-- Use active voice
-- Be concise but complete
-- Use consistent terminology
-- Include code examples
-- Link to related documentation
-- Address the reader directly ("you")
-- Include screenshots or diagrams for visual clarity
+```lua
+-- Import and expose globals for convenience
+local lust_next = require('lust-next')
+lust_next.expose_globals()
+
+-- Write your tests
+describe("Calculator", function()
+  it("adds numbers correctly", function()
+    assert.equal(5, 2 + 3)
+  end)
+  
+  it("subtracts numbers correctly", function()
+    assert.equal(5, 8 - 3)
+  end)
+end)
+```
+
+## Contributing
+
+Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/lust-next/blob/main/CONTRIBUTING.md) for details on how to get involved.

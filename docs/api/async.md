@@ -88,11 +88,13 @@ Waits until the condition function returns true or until the timeout is reached.
 - `timeout` (number, optional): Maximum wait time in milliseconds (default: 5000)
 - `check_interval` (number, optional): Interval in milliseconds between condition checks (default: 10)
 
-**Returns:** None
+**Returns:** 
+- `true` if the condition was met
+- Throws an error if the timeout is reached before the condition is met
 
 **Notes:**
 - Can only be called within an async test function
-- Throws an error if the timeout is reached before the condition is met
+- Throws an error with a timeout message if the condition isn't met within the timeout period
 
 **Example:**
 ```lua
@@ -107,6 +109,54 @@ lust.it_async("waits for condition", function()
   
   -- Check result
   expect(value).to.equal("done")
+end)
+```
+
+### lust.parallel_async(fn1, fn2, ...)
+
+Runs multiple async functions in parallel and waits for all to complete.
+
+**Parameters:**
+- `fn1, fn2, ...` (functions): Async functions to run in parallel
+
+**Returns:**
+- Array of results from all async functions in the same order they were provided
+
+**Notes:**
+- Can only be called within an async test function
+- All functions run concurrently and the result is only returned when all have completed
+- Significantly faster than running async functions sequentially
+
+**Example:**
+```lua
+lust.it_async("runs operations in parallel", function()
+  -- Define multiple async operations
+  local function fetch_users()
+    lust.await(100)  -- Simulate network delay
+    return { {id = 1, name = "User 1"}, {id = 2, name = "User 2"} }
+  end
+  
+  local function fetch_posts()
+    lust.await(150)  -- Different operation with different timing
+    return { {id = 1, title = "Post 1"}, {id = 2, title = "Post 2"} }
+  end
+  
+  local function fetch_comments()
+    lust.await(80)  -- Yet another async operation
+    return { {id = 1, text = "Comment 1"}, {id = 2, text = "Comment 2"} }
+  end
+  
+  -- Run all operations in parallel (completes in ~150ms instead of ~330ms)
+  local results = lust.parallel_async(fetch_users, fetch_posts, fetch_comments)
+  
+  -- Verify all results
+  expect(#results).to.equal(3)
+  expect(#results[1]).to.equal(2)  -- Two users
+  expect(#results[2]).to.equal(2)  -- Two posts
+  expect(#results[3]).to.equal(2)  -- Two comments
+  expect(results[1][1].name).to.equal("User 1")
+  expect(results[2][1].title).to.equal("Post 1")
+  expect(results[3][1].text).to.equal("Comment 1")
 end)
 ```
 
