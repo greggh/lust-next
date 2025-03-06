@@ -3224,6 +3224,21 @@ lust_next.expect = function(fn_or_obj)
           return expect_obj.to.be.called(times)
         end
       }
+    },
+    
+    -- Add call sequence support
+    and_then = function(next_spy)
+      -- Check that the original spy was called
+      if fn_or_obj._is_spy or fn_or_obj._is_stub then
+        if fn_or_obj.calls == 0 then
+          error("Expected function to be called at least once", 2)
+        end
+      else
+        error("expect().and_then() requires a spy or stub", 2)
+      end
+      
+      -- Return a new expect object for the next spy
+      return lust_next.expect(next_spy)
     }
   }
   
