@@ -2,6 +2,32 @@
 -- https://github.com/greggh/lust-next
 -- MIT LICENSE
 -- Based on lust by Bjorn Swenson (https://github.com/bjornbytes/lust)
+--
+-- Features:
+-- * BDD-style nested test blocks (describe/it)
+-- * Assertions with detailed error messages
+-- * Setup and teardown with before/after hooks
+-- * Advanced mocking and spying system
+-- * Tag-based filtering for selective test execution
+-- * Focus mode for running only specific tests (fdescribe/fit)
+-- * Skip mode for excluding tests (xdescribe/xit)
+-- * Asynchronous testing support
+-- * Code coverage analysis and reporting
+
+-- Try to require optional modules
+local function try_require(name)
+  local ok, mod = pcall(require, name)
+  if ok then
+    return mod
+  else
+    return nil
+  end
+end
+
+-- Optional coverage module
+local coverage = try_require("src.coverage")
+-- Also try to load the JSON module needed for coverage reporting
+local json = try_require("src.json")
 
 local lust_next = {}
 lust_next.level = 0
@@ -16,6 +42,16 @@ lust_next.filter_pattern = nil
 lust_next.running_async = false
 lust_next.async_timeout = 5000 -- Default timeout in ms
 lust_next.focus_mode = false -- Tracks if any focused tests are present
+
+-- Coverage options
+lust_next.coverage_options = {
+  enabled = false,            -- Whether coverage is enabled
+  include = {".*%.lua$"},     -- Files to include in coverage
+  exclude = {"test_", "_spec%.lua$", "_test%.lua$"}, -- Files to exclude
+  threshold = 80,             -- Coverage threshold percentage
+  format = "summary",         -- Report format (summary, json, html, lcov)
+  output = nil,               -- Output file path (nil for console)
+}
 
 -- Output formatting options
 lust_next.format_options = {
@@ -2207,6 +2243,13 @@ function lust_next.cli_run(dir, options)
   lust_next.active_tags = {}
   lust_next.filter_pattern = nil
   
+  -- Initialize coverage if enabled
+  if lust_next.coverage_options.enabled and coverage then
+    coverage.init(lust_next.coverage_options)
+    coverage.reset()
+    coverage.start()
+  end
+  
   -- Apply filters if specified in options
   if options.tags then
     if type(options.tags) == "string" then
@@ -2278,6 +2321,83 @@ function lust_next.cli_run(dir, options)
   end
   
   print(string.rep("-", 70))
+  
+  -- Stop coverage collection if enabled
+  if lust_next.coverage_options.enabled and coverage then
+    coverage.stop()
+    
+    -- Generate and display coverage report
+    local report_format = lust_next.coverage_options.format or "summary"
+    local report_content = coverage.report(report_format)
+    
+    -- Print coverage header
+    print("\n" .. string.rep("-", 70))
+    print("COVERAGE REPORT")
+    print(string.rep("-", 70))
+    
+    -- Handle report output
+    if lust_next.coverage_options.output then
+      -- Save to file
+      local success, err = coverage.save_report(lust_next.coverage_options.output, report_format)
+      if success then
+        print("Coverage report saved to: " .. lust_next.coverage_options.output)
+      else
+        print("Error saving coverage report: " .. (err or "unknown error"))
+      end
+    else
+      -- Print to console (only for summary and small reports)
+      if report_format == "summary" then
+        local report = coverage.summary_report()
+        local threshold = lust_next.coverage_options.threshold or 80
+        local overall_color = report.overall_pct >= threshold and green or red
+        
+        print("Overall:   " .. overall_color .. string.format("%.2f%%", report.overall_pct) .. normal)
+        print("Lines:     " .. string.format("%d/%d (%.2f%%)", 
+          report.covered_lines, report.total_lines, report.lines_pct))
+        print("Functions: " .. string.format("%d/%d (%.2f%%)", 
+          report.covered_functions, report.total_functions, report.functions_pct))
+        print("Files:     " .. string.format("%d/%d (%.2f%%)", 
+          report.covered_files, report.total_files, report.files_pct))
+        
+        -- Check threshold
+        if report.overall_pct < threshold then
+          print(red .. "✖ COVERAGE BELOW THRESHOLD " .. normal .. 
+                "(" .. string.format("%.2f%% < %.2f%%", report.overall_pct, threshold) .. ")")
+          print(string.rep("-", 70))
+        else
+          print(green .. "✓ COVERAGE MEETS THRESHOLD " .. normal ..
+                "(" .. string.format("%.2f%% >= %.2f%%", report.overall_pct, threshold) .. ")")
+          print(string.rep("-", 70))
+        end
+      elseif report_format == "json" then
+        print("JSON Report:")
+        print(report_content)
+        print(string.rep("-", 70))
+      elseif report_format == "lcov" then
+        print("LCOV Report generated")
+        print(string.rep("-", 70))
+      elseif report_format == "html" then
+        print("HTML Report generated")
+        print("Use --coverage-output to save the report to a file")
+        print(string.rep("-", 70))
+      end
+    end
+    
+    -- Check if coverage meets threshold
+    local threshold = lust_next.coverage_options.threshold or 80
+    local meets_threshold = coverage.meets_threshold(threshold)
+    
+    -- Return negative result if coverage doesn't meet threshold, regardless of test results
+    if not meets_threshold then
+      if failed == 0 then
+        -- Tests passed but coverage failed
+        print(yellow .. "⚠ TESTS PASSED BUT COVERAGE FAILED" .. normal)
+      end
+      lust_next.reset_filters()
+      lust_next.focus_mode = false
+      return false
+    end
+  end
   
   if failed > 0 then
     print(red .. "✖ FAILED " .. normal .. "(" .. failed .. " of " .. total .. " tests failed)")
@@ -2483,6 +2603,30 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
     elseif arg[i]:match("%.lua$") then
       specific_file = arg[i]
       i = i + 1
+    elseif arg[i] == "--coverage" then
+      lust_next.coverage_options.enabled = true
+      i = i + 1
+    elseif arg[i] == "--coverage-include" and arg[i+1] then
+      lust_next.coverage_options.include = {}
+      for pattern in arg[i+1]:gmatch("[^,]+") do
+        table.insert(lust_next.coverage_options.include, pattern:match("^%s*(.-)%s*$")) -- Trim whitespace
+      end
+      i = i + 2
+    elseif arg[i] == "--coverage-exclude" and arg[i+1] then
+      lust_next.coverage_options.exclude = {}
+      for pattern in arg[i+1]:gmatch("[^,]+") do
+        table.insert(lust_next.coverage_options.exclude, pattern:match("^%s*(.-)%s*$")) -- Trim whitespace
+      end
+      i = i + 2
+    elseif arg[i] == "--coverage-threshold" and arg[i+1] then
+      lust_next.coverage_options.threshold = tonumber(arg[i+1]) or 80
+      i = i + 2
+    elseif arg[i] == "--coverage-format" and arg[i+1] then
+      lust_next.coverage_options.format = arg[i+1]
+      i = i + 2
+    elseif arg[i] == "--coverage-output" and arg[i+1] then
+      lust_next.coverage_options.output = arg[i+1]
+      i = i + 2
     elseif arg[i] == "--help" or arg[i] == "-h" then
       print("lust-next test runner v" .. lust_next.version)
       print("Usage:")
@@ -2497,6 +2641,14 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
       print("  --format FORMAT  Output format (dot, compact, summary, detailed, plain)")
       print("  --indent TYPE    Indentation style (space, tab, or number of spaces)")
       print("  --no-color       Disable colored output")
+      
+      print("\nCoverage Options:")
+      print("  --coverage                   Enable code coverage tracking")
+      print("  --coverage-include PATTERNS  Comma-separated file patterns to include (default: *.lua)")
+      print("  --coverage-exclude PATTERNS  Comma-separated file patterns to exclude (default: test_*,*_spec.lua,*_test.lua)")
+      print("  --coverage-threshold N       Minimum coverage percentage required (default: 80)")
+      print("  --coverage-format FORMAT     Coverage report format (summary, json, html, lcov) (default: summary)")
+      print("  --coverage-output FILE       Output file for coverage report (default: console output)")
       
       print("\nSpecial Test Functions:")
       print("  describe/it      Regular test functions")
