@@ -2391,9 +2391,43 @@ function lust_next.cli_run(dir, options)
   if lust_next.coverage_options.enabled and coverage then
     coverage.stop()
     
+    -- Try to use the new reporting module for report generation and saving
+    local reporting_module
+    local pcall_result, result = pcall(function()
+      -- Try to load the reporting module from various possible paths
+      for _, path in ipairs({
+        "src.reporting",
+        "deps.lust-next.src.reporting",
+        "./deps/lust-next/src/reporting"
+      }) do
+        local success, mod = pcall(require, path)
+        if success then
+          return mod
+        end
+      end
+      error("Could not find reporting module")
+    end)
+    
+    if pcall_result then
+      reporting_module = result
+    end
+    
     -- Generate and display coverage report
     local report_format = lust_next.coverage_options.format or "summary"
-    local report_content = coverage.report(report_format)
+    local report_content
+    local coverage_data
+    
+    -- Get structured coverage data if possible, otherwise fall back to standard report
+    if coverage.get_report_data then
+      coverage_data = coverage.get_report_data()
+      if reporting_module then
+        report_content = reporting_module.format_coverage(coverage_data, report_format)
+      else
+        report_content = coverage.report(report_format)
+      end
+    else
+      report_content = coverage.report(report_format)
+    end
     
     -- Print coverage header
     print("\n" .. string.rep("-", 70))
@@ -2402,43 +2436,139 @@ function lust_next.cli_run(dir, options)
     
     -- Handle report output
     if lust_next.coverage_options.output then
-      -- Save to file
-      local success, err = coverage.save_report(lust_next.coverage_options.output, report_format)
-      if success then
-        print("Coverage report saved to: " .. lust_next.coverage_options.output)
+      -- Save to file using the reporting module if available
+      if reporting_module and coverage_data then
+        local success, err = reporting_module.save_coverage_report(
+          lust_next.coverage_options.output, 
+          coverage_data, 
+          report_format
+        )
+        if success then
+          print("Coverage report saved to: " .. lust_next.coverage_options.output)
+        else
+          print("Error saving coverage report: " .. (err or "unknown error"))
+        end
       else
-        print("Error saving coverage report: " .. (err or "unknown error"))
+        -- Fall back to using the coverage module directly
+        local success, err = coverage.save_report(lust_next.coverage_options.output, report_format)
+        if success then
+          print("Coverage report saved to: " .. lust_next.coverage_options.output)
+        else
+          print("Error saving coverage report: " .. (err or "unknown error"))
+        end
       end
     else
-      -- For HTML and LCOV reports, auto-save to a default location if not specified
-      if report_format == "html" or report_format == "lcov" then
-        -- Create default output filename - use absolute path for reliability
-        local output_dir = os.getenv("PWD") .. "/coverage-reports"
-        print("Using output directory: " .. output_dir)
+      -- Always save the report to a file for non-summary formats
+      if report_format ~= "summary" then
+        -- Determine output path
+        local output_dir = "./coverage-reports"
+        local output_path = output_dir .. "/coverage-report." .. report_format
         
-        -- Create directory if it doesn't exist
-        os.execute("mkdir -p " .. output_dir)
-
-        -- Create absolute path for output file
-        local default_output = output_dir .. "/coverage-report." .. report_format
-        print("Saving report to: " .. default_output)
-        print("Report format: " .. report_format)
-        print("Report content length: " .. #report_content)
-        
-        -- Manual file writing with absolute path
-        local file, open_err = io.open(default_output, "w")
-        if not file then
-          print("Error opening file: " .. tostring(open_err))
-        else
-          local write_ok, write_err = pcall(function() 
-            file:write(report_content)
-            file:close()
-          end)
+        -- If we have the reporting module and coverage data, use it
+        if reporting_module and coverage_data then
+          -- Use reporting module to handle file operations
+          print("Using reporting module to save reports to: " .. output_dir)
           
-          if write_ok then
-            print("Coverage report successfully saved to: " .. default_output)
+          -- Save the report using the reporting module
+          local save_result
+          if report_format == "html" then
+            save_result = reporting_module.save_coverage_report(
+              output_path, 
+              coverage_data, 
+              "html"
+            )
+          elseif report_format == "lcov" then
+            save_result = reporting_module.save_coverage_report(
+              output_path, 
+              coverage_data, 
+              "lcov"
+            )
+          elseif report_format == "json" then
+            save_result = reporting_module.save_coverage_report(
+              output_path, 
+              coverage_data, 
+              "json"
+            )
+          end
+          
+          if save_result then
+            print("Successfully saved " .. report_format .. " report to: " .. output_path)
           else
-            print("Error writing to file: " .. tostring(write_err))
+            print("Error saving report to: " .. output_path)
+          end
+          
+          -- Also save other useful formats automatically
+          if report_format ~= "html" then
+            local html_path = output_dir .. "/coverage-report.html"
+            local html_result = reporting_module.save_coverage_report(
+              html_path, 
+              coverage_data, 
+              "html"
+            )
+            if html_result then
+              print("Also saved HTML report to: " .. html_path)
+            end
+          end
+          
+          if report_format ~= "lcov" then
+            local lcov_path = output_dir .. "/coverage-report.lcov"
+            local lcov_result = reporting_module.save_coverage_report(
+              lcov_path, 
+              coverage_data, 
+              "lcov"
+            )
+            if lcov_result then
+              print("Also saved LCOV report to: " .. lcov_path)
+            end
+          end
+        else
+          -- Fall back to manual file saving
+          print("Using default output path: " .. output_path)
+          
+          -- Debug output
+          print("DEBUG: Writing coverage report")
+          print("DEBUG: Format: " .. report_format)
+          print("DEBUG: Output path: " .. output_path)
+          print("DEBUG: Report length: " .. #report_content .. " bytes") 
+          
+          -- Handle directory creation
+          -- Extract directory part from path using a reliable method
+          local last_separator = output_path:match("^(.*)[\\/][^\\/]*$")
+          local dir_path = last_separator or "./"
+          
+          -- Create directory if needed
+          if dir_path ~= "./" then
+            print("Creating directory: " .. dir_path)
+            
+            -- Try different approaches to ensure the directory exists
+            -- First, try standard os.execute
+            os.execute("mkdir -p \"" .. dir_path .. "\"")
+            
+            -- Fallback to io.popen to get any error message
+            local mkdir_result = io.popen("mkdir -p \"" .. dir_path .. "\" 2>&1"):read("*a")
+            if mkdir_result and mkdir_result ~= "" then
+              print("Note: " .. mkdir_result)
+            end
+          end
+          
+          -- Write the report to file with error handling
+          print("Writing report to: " .. output_path)
+          
+          -- Try to write the file
+          local file, open_err = io.open(output_path, "w")
+          if not file then
+            print("Error opening file: " .. tostring(open_err))
+          else
+            local write_ok, write_err = pcall(function() 
+              file:write(report_content)
+              file:close()
+            end)
+            
+            if write_ok then
+              print("Successfully saved " .. report_format .. " report to: " .. output_path)
+            else
+              print("Error writing to file: " .. tostring(write_err))
+            end
           end
         end
       end
@@ -2514,16 +2644,56 @@ function lust_next.cli_run(dir, options)
     
     -- Handle report output
     if lust_next.quality_options.output then
-      -- Try to save the report to a file
-      local output_file = io.open(lust_next.quality_options.output, "w")
-      if output_file then
-        output_file:write(report_content)
-        output_file:close()
-        print("Quality report saved to: " .. lust_next.quality_options.output)
+      -- Try to save the report using the reporting module if available
+      if reporting_module and quality.get_report_data then
+        local quality_data = quality.get_report_data()
+        local success, err = reporting_module.save_quality_report(
+          lust_next.quality_options.output, 
+          quality_data, 
+          report_format
+        )
+        if success then
+          print("Quality report saved to: " .. lust_next.quality_options.output)
+        else
+          print("Error saving quality report: " .. (err or "unknown error"))
+        end
+      else if quality.save_report then
+        -- Use quality module's save_report if available
+        local success, err = quality.save_report(lust_next.quality_options.output, report_format)
+        if success then
+          print("Quality report saved to: " .. lust_next.quality_options.output)
+        else
+          print("Error saving quality report: " .. (err or "unknown error"))
+        end
       else
-        print("Error saving quality report to: " .. lust_next.quality_options.output)
+        -- Fallback to direct file writing
+        local output_file = io.open(lust_next.quality_options.output, "w")
+        if output_file then
+          output_file:write(report_content)
+          output_file:close()
+          print("Quality report saved to: " .. lust_next.quality_options.output)
+        else
+          print("Error saving quality report to: " .. lust_next.quality_options.output)
+        end
+      end
       end
     else
+      -- Try to auto-save quality report to default path if it's HTML format
+      if report_format == "html" and reporting_module and quality.get_report_data then
+        local quality_data = quality.get_report_data()
+        local output_dir = "./coverage-reports"
+        local output_path = output_dir .. "/quality-report.html"
+        
+        local success = reporting_module.save_quality_report(
+          output_path,
+          quality_data,
+          "html"
+        )
+        
+        if success then
+          print("Quality report automatically saved to: " .. output_path)
+        end
+      end
       -- Print to console (only for summary format)
       if report_format == "summary" then
         local report = quality.summary_report()

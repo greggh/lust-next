@@ -879,10 +879,8 @@ function M.analyze_file(file_path)
   return results
 end
 
--- Get quality report
-function M.report(format)
-  format = format or "summary" -- summary, json, html
-  
+-- Get structured data for quality report
+function M.get_report_data()
   -- Calculate final statistics
   local total_tests = M.stats.tests_analyzed
   if total_tests > 0 then
@@ -899,57 +897,117 @@ function M.report(format)
     M.stats.quality_level_achieved = 0
   end
   
-  -- Generate report in requested format
-  if format == "summary" then
-    return M.summary_report()
-  elseif format == "json" then
-    return M.json_report()
-  elseif format == "html" then
-    return M.html_report()
-  else
-    return M.summary_report()
-  end
-end
-
--- Generate a summary report
-function M.summary_report()
-  -- Build the report
-  local report = {
+  -- Build structured data
+  local structured_data = {
     level = M.stats.quality_level_achieved,
     level_name = M.get_level_name(M.stats.quality_level_achieved),
-    tests_analyzed = M.stats.tests_analyzed,
-    tests_passing_quality = M.stats.tests_passing_quality,
-    quality_pct = M.stats.tests_analyzed > 0 
-      and (M.stats.tests_passing_quality / M.stats.tests_analyzed * 100) 
-      or 0,
-    assertions_total = M.stats.assertions_total,
-    assertions_per_test_avg = M.stats.assertions_per_test_avg,
-    assertion_types_found = M.stats.assertion_types_found,
-    issues = M.stats.issues,
-    tests = test_data
+    tests = test_data,
+    summary = {
+      tests_analyzed = M.stats.tests_analyzed,
+      tests_passing_quality = M.stats.tests_passing_quality,
+      quality_percent = M.stats.tests_analyzed > 0 
+        and (M.stats.tests_passing_quality / M.stats.tests_analyzed * 100) 
+        or 0,
+      assertions_total = M.stats.assertions_total,
+      assertions_per_test_avg = M.stats.assertions_per_test_avg,
+      assertion_types_found = M.stats.assertion_types_found,
+      issues = M.stats.issues
+    }
   }
   
-  return report
+  return structured_data
 end
 
--- Generate a JSON report
-function M.json_report()
-  -- Try to load JSON module
-  local json_module = package.loaded["src.json"] or require("src.json")
-  -- Fallback if JSON module isn't available
-  if not json_module then
-    json_module = { encode = function(t) return "{}" end }
+-- Get quality report
+function M.report(format)
+  format = format or "summary" -- summary, json, html
+  
+  local data = M.get_report_data()
+  
+  -- Try to load the reporting module
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  if reporting_module then
+    return reporting_module.format_quality(data, format)
+  else
+    -- Fallback to legacy report generation if reporting module isn't available
+    -- Generate report in requested format
+    if format == "summary" then
+      return M.summary_report()
+    elseif format == "json" then
+      return M.json_report()
+    elseif format == "html" then
+      return M.html_report()
+    else
+      return M.summary_report()
+    end
   end
-  
-  return json_module.encode(M.summary_report())
 end
 
--- Generate a HTML report
-function M.html_report()
-  local report = M.summary_report()
+-- Generate a summary report (for backward compatibility)
+function M.summary_report()
+  local data = M.get_report_data()
   
-  -- Generate HTML header
-  local html = [[
+  -- Try to load the reporting module
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  if reporting_module then
+    return reporting_module.format_quality(data, "summary")
+  else
+    -- Build the report using legacy format
+    local report = {
+      level = data.level,
+      level_name = data.level_name,
+      tests_analyzed = data.summary.tests_analyzed,
+      tests_passing_quality = data.summary.tests_passing_quality,
+      quality_pct = data.summary.quality_percent,
+      assertions_total = data.summary.assertions_total,
+      assertions_per_test_avg = data.summary.assertions_per_test_avg,
+      assertion_types_found = data.summary.assertion_types_found,
+      issues = data.summary.issues,
+      tests = data.tests
+    }
+    
+    return report
+  end
+end
+
+-- Generate a JSON report (for backward compatibility)
+function M.json_report()
+  local data = M.get_report_data()
+  
+  -- Try to load the reporting module
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  if reporting_module then
+    return reporting_module.format_quality(data, "json")
+  else
+    -- Try to load JSON module
+    local json_module = package.loaded["src.json"] or require("src.json")
+    -- Fallback if JSON module isn't available
+    if not json_module then
+      json_module = { encode = function(t) return "{}" end }
+    end
+    
+    return json_module.encode(M.summary_report())
+  end
+end
+
+-- Generate a HTML report (for backward compatibility)
+function M.html_report()
+  local data = M.get_report_data()
+  
+  -- Try to load the reporting module
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  if reporting_module then
+    return reporting_module.format_quality(data, "html")
+  else
+    -- Fallback to legacy HTML generation
+    local report = M.summary_report()
+    
+    -- Generate HTML header
+    local html = [[
 <!DOCTYPE html>
 <html>
 <head>
@@ -982,10 +1040,10 @@ function M.html_report()
     <p>Average Assertions per Test: ]].. string.format("%.2f", report.assertions_per_test_avg) ..[[</p>
   </div>
   ]]
-  
-  -- Add issues if any
-  if #report.issues > 0 then
-    html = html .. [[
+    
+    -- Add issues if any
+    if #report.issues > 0 then
+      html = html .. [[
   <h2>Quality Issues</h2>
   <table>
     <tr>
@@ -993,23 +1051,23 @@ function M.html_report()
       <th>Issue</th>
     </tr>
   ]]
-    
-    for _, issue in ipairs(report.issues) do
-      html = html .. [[
+      
+      for _, issue in ipairs(report.issues) do
+        html = html .. [[
     <tr>
       <td>]].. issue.test ..[[</td>
       <td class="issue">]].. issue.issue ..[[</td>
     </tr>
   ]]
-    end
-    
-    html = html .. [[
+      end
+      
+      html = html .. [[
   </table>
   ]]
-  end
-  
-  -- Add test details
-  html = html .. [[
+    end
+    
+    -- Add test details
+    html = html .. [[
   <h2>Test Details</h2>
   <table>
     <tr>
@@ -1019,16 +1077,16 @@ function M.html_report()
       <th>Assertion Types</th>
     </tr>
   ]]
-  
-  for test_name, test_info in pairs(report.tests) do
-    -- Convert assertion types to a string
-    local assertion_types = {}
-    for atype, count in pairs(test_info.assertion_types) do
-      table.insert(assertion_types, atype .. " (" .. count .. ")")
-    end
-    local assertion_types_str = table.concat(assertion_types, ", ")
     
-    html = html .. [[
+    for test_name, test_info in pairs(report.tests) do
+      -- Convert assertion types to a string
+      local assertion_types = {}
+      for atype, count in pairs(test_info.assertion_types) do
+        table.insert(assertion_types, atype .. " (" .. count .. ")")
+      end
+      local assertion_types_str = table.concat(assertion_types, ", ")
+      
+      html = html .. [[
     <tr>
       <td>]].. test_name ..[[</td>
       <td>]].. M.get_level_name(test_info.quality_level) .. " (Level " .. test_info.quality_level .. [[)</td>
@@ -1036,15 +1094,16 @@ function M.html_report()
       <td>]].. assertion_types_str ..[[</td>
     </tr>
     ]]
-  end
-  
-  html = html .. [[
+    end
+    
+    html = html .. [[
   </table>
 </body>
 </html>
   ]]
-  
-  return html
+    
+    return html
+  end
 end
 
 -- Check if quality meets level requirement
@@ -1052,6 +1111,41 @@ function M.meets_level(level)
   level = level or M.config.level
   local report = M.summary_report()
   return report.level >= level
+end
+
+-- Save a quality report to a file
+function M.save_report(file_path, format)
+  format = format or "html"
+  
+  -- Try to load the reporting module
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  if reporting_module then
+    -- Get the data and use the reporting module to save it
+    local data = M.get_report_data()
+    return reporting_module.save_quality_report(file_path, data, format)
+  else
+    -- Fallback to directly saving the content
+    local content = M.report(format)
+    
+    -- Open the file for writing
+    local file, err = io.open(file_path, "w")
+    if not file then
+      return false, "Could not open file for writing: " .. tostring(err)
+    end
+    
+    -- Write content and close
+    local write_ok, write_err = pcall(function()
+      file:write(content)
+      file:close()
+    end)
+    
+    if not write_ok then
+      return false, "Error writing to file: " .. tostring(write_err)
+    end
+    
+    return true
+  end
 end
 
 -- Get level name from level number

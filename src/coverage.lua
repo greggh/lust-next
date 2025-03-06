@@ -266,48 +266,98 @@ function M.report(format)
   end
 end
 
--- Generate a summary report
-function M.summary_report()
-  local report = {
+-- Generate data for a summary report
+function M.get_report_data()
+  -- Load the reporting module if available
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  -- Generate structured data instead of formatted reports
+  local structured_data = {
     files = M.stats.files,
-    total_files = M.stats.total_files,
-    covered_files = M.stats.covered_files,
-    files_pct = M.stats.covered_files / math.max(1, M.stats.total_files) * 100,
-    
-    total_lines = M.stats.total_lines,
-    covered_lines = M.stats.covered_lines,
-    lines_pct = M.stats.covered_lines / math.max(1, M.stats.total_lines) * 100,
-    
-    total_functions = M.stats.total_functions,
-    covered_functions = M.stats.covered_functions,
-    functions_pct = M.stats.covered_functions / math.max(1, M.stats.total_functions) * 100,
-    
-    overall_pct = 0,
+    summary = {
+      total_files = M.stats.total_files,
+      covered_files = M.stats.covered_files,
+      total_lines = M.stats.total_lines,
+      covered_lines = M.stats.covered_lines,
+      total_functions = M.stats.total_functions,
+      covered_functions = M.stats.covered_functions,
+      line_coverage_percent = M.stats.total_lines > 0 and 
+                         (M.stats.covered_lines / M.stats.total_lines * 100) or 0,
+      function_coverage_percent = M.stats.total_functions > 0 and 
+                             (M.stats.covered_functions / M.stats.total_functions * 100) or 0,
+    }
   }
   
   -- Calculate overall percentage as weighted average of lines and functions
-  report.overall_pct = (report.lines_pct * 0.8) + (report.functions_pct * 0.2)
+  structured_data.summary.overall_percent = (structured_data.summary.line_coverage_percent * 0.8) + 
+                                          (structured_data.summary.function_coverage_percent * 0.2)
   
-  return report
+  return structured_data
 end
 
--- Generate a JSON report
-function M.json_report()
-  -- Try to load JSON module 
-  local json_module = package.loaded["src.json"] or require("src.json")
-  -- Fallback if JSON module isn't available
-  if not json_module then
-    json_module = { encode = function(t) return "{}" end }
+-- Generate a summary report (for backward compatibility)
+function M.summary_report()
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  -- Get structured data and format it as a summary report
+  local data = M.get_report_data()
+  
+  if reporting_module then
+    return reporting_module.format_coverage(data, "summary")
+  else
+    -- Fallback summary report format for backward compatibility
+    local report = {
+      files = M.stats.files,
+      total_files = M.stats.total_files,
+      covered_files = M.stats.covered_files,
+      files_pct = M.stats.covered_files / math.max(1, M.stats.total_files) * 100,
+      
+      total_lines = M.stats.total_lines,
+      covered_lines = M.stats.covered_lines,
+      lines_pct = M.stats.covered_lines / math.max(1, M.stats.total_lines) * 100,
+      
+      total_functions = M.stats.total_functions,
+      covered_functions = M.stats.covered_functions,
+      functions_pct = M.stats.covered_functions / math.max(1, M.stats.total_functions) * 100,
+      
+      overall_pct = data.summary.overall_percent,
+    }
+    
+    return report
   end
-  return json_module.encode(M.summary_report())
 end
 
--- Generate an HTML report
-function M.html_report()
-  local report = M.summary_report()
+-- Generate a JSON report (for backward compatibility)
+function M.json_report()
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local data = M.get_report_data()
   
-  -- Generate HTML header
-  local html = [[
+  if reporting_module then
+    return reporting_module.format_coverage(data, "json")
+  else
+    -- Fallback if reporting module isn't available
+    -- Try to load JSON module 
+    local json_module = package.loaded["src.json"] or require("src.json")
+    -- Fallback if JSON module isn't available
+    if not json_module then
+      json_module = { encode = function(t) return "{}" end }
+    end
+    return json_module.encode(M.summary_report())
+  end
+end
+
+-- Generate an HTML report (for backward compatibility)
+function M.html_report()
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local data = M.get_report_data()
+  
+  if reporting_module then
+    return reporting_module.format_coverage(data, "html")
+  else
+    -- Fallback to legacy HTML formatting if reporting module isn't available
+    local report = M.summary_report()
+    
+    -- Generate HTML header
+    local html = [[
 <!DOCTYPE html>
 <html>
 <head>
@@ -348,13 +398,13 @@ function M.html_report()
       <th>Function Coverage</th>
     </tr>
   ]]
-  
-  -- Add file rows
-  for file, stats in pairs(report.files) do
-    local line_pct = stats.covered_lines / math.max(1, stats.total_lines) * 100
-    local func_pct = stats.covered_functions / math.max(1, stats.total_functions) * 100
     
-    html = html .. [[
+    -- Add file rows
+    for file, stats in pairs(report.files) do
+      local line_pct = stats.covered_lines / math.max(1, stats.total_lines) * 100
+      local func_pct = stats.covered_functions / math.max(1, stats.total_functions) * 100
+      
+      html = html .. [[
     <tr>
       <td>]].. file ..[[</td>
       <td>]].. stats.covered_lines ..[[ / ]].. stats.total_lines ..[[</td>
@@ -373,60 +423,69 @@ function M.html_report()
       </td>
     </tr>
     ]]
-  end
-  
-  -- Close HTML
-  html = html .. [[
+    end
+    
+    -- Close HTML
+    html = html .. [[
   </table>
 </body>
 </html>
   ]]
-  
-  return html
+    
+    return html
+  end
 end
 
--- Generate an LCOV report
+-- Generate an LCOV report (for backward compatibility)
 function M.lcov_report()
-  local lcov = ""
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local data = M.get_report_data()
   
-  for file, data in pairs(M.data.files) do
-    lcov = lcov .. "SF:" .. file .. "\n"
+  if reporting_module then
+    return reporting_module.format_coverage(data, "lcov")
+  else
+    -- Fallback to legacy LCOV formatting if reporting module isn't available
+    local lcov = ""
     
-    -- Add function coverage
-    local func_count = 0
-    for func_name, _ in pairs(data.functions) do
-      func_count = func_count + 1
-      -- If function name is a line number, use that
-      if func_name:match("^line_(%d+)$") then
-        local line = func_name:match("^line_(%d+)$")
-        lcov = lcov .. "FN:" .. line .. "," .. func_name .. "\n"
-      else
-        -- We don't have line information for named functions in this simple implementation
-        lcov = lcov .. "FN:1," .. func_name .. "\n"
+    for file, data in pairs(M.data.files) do
+      lcov = lcov .. "SF:" .. file .. "\n"
+      
+      -- Add function coverage
+      local func_count = 0
+      for func_name, _ in pairs(data.functions) do
+        func_count = func_count + 1
+        -- If function name is a line number, use that
+        if func_name:match("^line_(%d+)$") then
+          local line = func_name:match("^line_(%d+)$")
+          lcov = lcov .. "FN:" .. line .. "," .. func_name .. "\n"
+        else
+          -- We don't have line information for named functions in this simple implementation
+          lcov = lcov .. "FN:1," .. func_name .. "\n"
+        end
+        lcov = lcov .. "FNDA:1," .. func_name .. "\n"
       end
-      lcov = lcov .. "FNDA:1," .. func_name .. "\n"
+      
+      lcov = lcov .. "FNF:" .. func_count .. "\n"
+      lcov = lcov .. "FNH:" .. func_count .. "\n"
+      
+      -- Add line coverage
+      local lines_data = {}
+      for line, _ in pairs(data.lines) do
+        table.insert(lines_data, line)
+      end
+      table.sort(lines_data)
+      
+      for _, line in ipairs(lines_data) do
+        lcov = lcov .. "DA:" .. line .. ",1\n"
+      end
+      
+      lcov = lcov .. "LF:" .. data.line_count .. "\n"
+      lcov = lcov .. "LH:" .. #lines_data .. "\n"
+      lcov = lcov .. "end_of_record\n"
     end
     
-    lcov = lcov .. "FNF:" .. func_count .. "\n"
-    lcov = lcov .. "FNH:" .. func_count .. "\n"
-    
-    -- Add line coverage
-    local lines_data = {}
-    for line, _ in pairs(data.lines) do
-      table.insert(lines_data, line)
-    end
-    table.sort(lines_data)
-    
-    for _, line in ipairs(lines_data) do
-      lcov = lcov .. "DA:" .. line .. ",1\n"
-    end
-    
-    lcov = lcov .. "LF:" .. data.line_count .. "\n"
-    lcov = lcov .. "LH:" .. #lines_data .. "\n"
-    lcov = lcov .. "end_of_record\n"
+    return lcov
   end
-  
-  return lcov
 end
 
 -- Check if coverage meets threshold
@@ -483,23 +542,32 @@ function M.calculate_stats()
   return M
 end
 
--- Utility function to write a file
-function M.write_file(file_path, content)
-  local file = io.open(file_path, "w")
-  if not file then
-    return false, "Could not open file for writing: " .. file_path
-  end
-  
-  file:write(content)
-  file:close()
-  return true
-end
-
 -- Save a coverage report to a file
 function M.save_report(file_path, format)
   format = format or "html"
-  local content = M.report(format)
-  return M.write_file(file_path, content)
+  
+  -- Try to load the reporting module
+  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  
+  if reporting_module then
+    -- Get the data and use the reporting module to save it
+    local data = M.get_report_data()
+    return reporting_module.save_coverage_report(file_path, data, format)
+  else
+    -- Fallback to directly saving the content
+    local content = M.report(format)
+    
+    -- Open the file for writing
+    local file = io.open(file_path, "w")
+    if not file then
+      return false, "Could not open file for writing: " .. file_path
+    end
+    
+    -- Write content and close
+    file:write(content)
+    file:close()
+    return true
+  end
 end
 
 -- Return the module
