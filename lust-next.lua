@@ -3117,6 +3117,7 @@ lust_next.mock = function(obj, method_name, implementation)
     local spy_obj = {
       _is_spy = true,
       _is_mock = true,
+      _is_stub = true, -- For compatibility with assertions
       calls = 0,
       call_history = {},
       original = original_method
