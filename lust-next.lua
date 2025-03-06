@@ -2419,12 +2419,15 @@ function lust_next.cli_run(dir, options)
         mkdir_cmd:close()
         
         local default_output = output_dir .. "/coverage-report." .. report_format
-        local success, err = coverage.save_report(default_output, report_format)
         
-        if success then
+        -- Write the file directly (bypass coverage.save_report to troubleshoot)
+        local file = io.open(default_output, "w")
+        if file then
+          file:write(report_content)
+          file:close()
           print("Coverage report automatically saved to: " .. default_output)
         else
-          print("Error saving coverage report: " .. (err or "unknown error"))
+          print("Error saving coverage report to: " .. default_output)
         end
       end
       
