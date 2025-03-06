@@ -4,7 +4,18 @@
 
 Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful testing library for Lua projects, offering a rich set of features while maintaining simplicity and ease of use.
 
-## Latest Updates (v0.7.4)
+## Latest Updates
+
+### Unreleased
+
+- **Enhanced Modular Reporting Architecture**:
+  - Centralized reporting module for all output formats
+  - Support for multiple report formats (HTML, JSON, LCOV, Summary)
+  - Robust fallback mechanisms for reliable report generation
+  - Comprehensive error handling and diagnostics
+  - Improved file operations and module loading
+
+### v0.7.4
 
 - **Module Reset Utilities**: New functions for ensuring clean test state:
   - `reset_module()`: Reset and reload modules between tests
@@ -23,12 +34,16 @@ Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful tes
   - [Async Testing](api/async.md): Testing asynchronous code
   - [Mocking](api/mocking.md): Mock and spy functionality
   - [Module Reset](api/module_reset.md): Module management utilities
+  - [Coverage](api/coverage.md): Code coverage tracking and reporting
+  - [Quality](api/quality.md): Test quality validation
+  - [Reporting](api/reporting.md): Report generation and file operations
   - [Test Filtering](api/filtering.md): Running specific test subsets
   - [CLI](api/cli.md): Command-line interface usage
   - [Test Discovery](api/discovery.md): Finding and running tests
 
 - [**Guides**](guides/README.md): How-to guides for common tasks
   - [Getting Started](guides/getting-started.md): Your first tests with Lust-Next
+  - [Reporting](guides/reporting.md): Using coverage, quality, and reporting
   - [Migrating from Other Frameworks](guides/migrating.md): Transitioning from other test frameworks
   - [CI Integration](guides/ci_integration.md): Setup for continuous integration
 
