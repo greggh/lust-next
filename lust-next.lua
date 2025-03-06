@@ -24,9 +24,9 @@ local function try_require(name)
   end
 end
 
--- Optional coverage module
+-- Optional modules for advanced features
 local coverage = try_require("src.coverage")
--- Also try to load the JSON module needed for coverage reporting
+local quality = try_require("src.quality")
 local json = try_require("src.json")
 
 local lust_next = {}
@@ -50,6 +50,15 @@ lust_next.coverage_options = {
   exclude = {"test_", "_spec%.lua$", "_test%.lua$"}, -- Files to exclude
   threshold = 80,             -- Coverage threshold percentage
   format = "summary",         -- Report format (summary, json, html, lcov)
+  output = nil,               -- Output file path (nil for console)
+}
+
+-- Quality options
+lust_next.quality_options = {
+  enabled = false,            -- Whether test quality validation is enabled
+  level = 1,                  -- Quality level to enforce (1-5)
+  strict = false,             -- Whether to fail on first quality issue
+  format = "summary",         -- Report format (summary, json, html)
   output = nil,               -- Output file path (nil for console)
 }
 
@@ -1005,6 +1014,14 @@ local paths = {
 }
 
 function lust_next.expect(v)
+  -- Count assertion
+  lust_next.assertion_count = (lust_next.assertion_count or 0) + 1
+  
+  -- Track assertion in quality module if enabled
+  if lust_next.quality_options.enabled and quality then
+    quality.track_assertion("expect", debug.getinfo(2, "n").name)
+  end
+  
   local assertion = {}
   assertion.val = v
   assertion.action = ''
@@ -2250,6 +2267,17 @@ function lust_next.cli_run(dir, options)
     coverage.start()
   end
   
+  -- Initialize quality validation if enabled
+  if lust_next.quality_options.enabled and quality then
+    quality.init(lust_next.quality_options)
+    quality.reset()
+    
+    -- Connect to coverage module if available
+    if coverage and coverage.summary_report then
+      quality.config.coverage_data = coverage
+    end
+  end
+  
   -- Apply filters if specified in options
   if options.tags then
     if type(options.tags) == "string" then
@@ -2392,6 +2420,109 @@ function lust_next.cli_run(dir, options)
       if failed == 0 then
         -- Tests passed but coverage failed
         print(yellow .. "⚠ TESTS PASSED BUT COVERAGE FAILED" .. normal)
+      end
+      lust_next.reset_filters()
+      lust_next.focus_mode = false
+      return false
+    end
+  end
+  
+  -- Process test quality validation if enabled
+  if lust_next.quality_options.enabled and quality then
+    -- Process test files for quality analysis
+    for _, file in ipairs(files) do
+      quality.analyze_file(file)
+    end
+    
+    -- Generate and display quality report
+    local report_format = lust_next.quality_options.format or "summary"
+    local report_content = quality.report(report_format)
+    
+    -- Print quality header
+    print("\n" .. string.rep("-", 70))
+    print("TEST QUALITY REPORT")
+    print(string.rep("-", 70))
+    
+    -- Handle report output
+    if lust_next.quality_options.output then
+      -- Try to save the report to a file
+      local output_file = io.open(lust_next.quality_options.output, "w")
+      if output_file then
+        output_file:write(report_content)
+        output_file:close()
+        print("Quality report saved to: " .. lust_next.quality_options.output)
+      else
+        print("Error saving quality report to: " .. lust_next.quality_options.output)
+      end
+    else
+      -- Print to console (only for summary format)
+      if report_format == "summary" then
+        local report = quality.summary_report()
+        local level = lust_next.quality_options.level or 1
+        local level_color = report.level >= level and green or red
+        
+        -- Print summary info
+        print("Quality Level:   " .. level_color .. report.level_name .. " (Level " .. report.level .. " of 5)" .. normal)
+        print("Tests Analyzed:  " .. report.tests_analyzed)
+        print("Tests Passing:   " .. report.tests_passing_quality .. " / " .. report.tests_analyzed .. 
+              " (" .. string.format("%.2f%%", report.quality_pct) .. ")")
+        print("Assertions/Test: " .. string.format("%.2f", report.assertions_per_test_avg))
+        
+        -- Print assertion types found 
+        if next(report.assertion_types_found) then
+          print("\nAssertion Types Found:")
+          local types = {}
+          for atype, count in pairs(report.assertion_types_found) do
+            table.insert(types, atype .. " (" .. count .. ")")
+          end
+          print("  " .. table.concat(types, ", "))
+        end
+        
+        -- Print issues if any
+        if #report.issues > 0 then
+          print("\nQuality Issues: " .. #report.issues)
+          
+          -- Limit to top 10 issues to avoid flooding console
+          local max_issues = math.min(10, #report.issues)
+          for i = 1, max_issues do
+            local issue = report.issues[i]
+            print("  - " .. issue.test .. ": " .. red .. issue.issue .. normal)
+          end
+          
+          if #report.issues > 10 then
+            print("  ... and " .. (#report.issues - 10) .. " more issues")
+          end
+        end
+        
+        -- Check if quality meets required level
+        if report.level < level then
+          print(red .. "✖ QUALITY BELOW REQUIRED LEVEL " .. normal .. 
+                "(" .. report.level_name .. " < Level " .. level .. ")")
+          print(string.rep("-", 70))
+        else
+          print(green .. "✓ QUALITY MEETS REQUIRED LEVEL " .. normal ..
+                "(" .. report.level_name .. " >= Level " .. level .. ")")
+          print(string.rep("-", 70))
+        end
+      elseif report_format == "json" then
+        print("JSON Report:")
+        print(report_content)
+        print(string.rep("-", 70))
+      elseif report_format == "html" then
+        print("HTML Report generated")
+        print("Use --quality-output to save the report to a file")
+        print(string.rep("-", 70))
+      end
+    end
+    
+    -- Check if quality meets required level
+    local meets_level = quality.meets_level(lust_next.quality_options.level)
+    
+    -- Return negative result if quality doesn't meet the level, regardless of test results
+    if not meets_level then
+      if failed == 0 then
+        -- Tests passed but quality failed
+        print(yellow .. "⚠ TESTS PASSED BUT QUALITY VALIDATION FAILED" .. normal)
       end
       lust_next.reset_filters()
       lust_next.focus_mode = false
@@ -2627,6 +2758,21 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
     elseif arg[i] == "--coverage-output" and arg[i+1] then
       lust_next.coverage_options.output = arg[i+1]
       i = i + 2
+    elseif arg[i] == "--quality" then
+      lust_next.quality_options.enabled = true
+      i = i + 1
+    elseif arg[i] == "--quality-level" and arg[i+1] then
+      lust_next.quality_options.level = tonumber(arg[i+1]) or 1
+      i = i + 2
+    elseif arg[i] == "--quality-strict" then
+      lust_next.quality_options.strict = true
+      i = i + 1
+    elseif arg[i] == "--quality-format" and arg[i+1] then
+      lust_next.quality_options.format = arg[i+1]
+      i = i + 2
+    elseif arg[i] == "--quality-output" and arg[i+1] then
+      lust_next.quality_options.output = arg[i+1]
+      i = i + 2
     elseif arg[i] == "--help" or arg[i] == "-h" then
       print("lust-next test runner v" .. lust_next.version)
       print("Usage:")
@@ -2649,6 +2795,13 @@ if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-ne
       print("  --coverage-threshold N       Minimum coverage percentage required (default: 80)")
       print("  --coverage-format FORMAT     Coverage report format (summary, json, html, lcov) (default: summary)")
       print("  --coverage-output FILE       Output file for coverage report (default: console output)")
+      
+      print("\nQuality Validation Options:")
+      print("  --quality                    Enable test quality validation")
+      print("  --quality-level N            Set quality level to enforce (1-5, default: 1)")
+      print("  --quality-strict             Strict mode: fail on first quality issue")
+      print("  --quality-format FORMAT      Quality report format (summary, json, html) (default: summary)")
+      print("  --quality-output FILE        Output file for quality report (default: console output)")
       
       print("\nSpecial Test Functions:")
       print("  describe/it      Regular test functions")
