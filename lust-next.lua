@@ -2718,18 +2718,43 @@ lust_next.assert.spy = function(spy_obj)
             error("Expected spy to be called at least once", 2)
           end
         end
-        return true
+        return spy_assert
       end,
       
       called_with = function(...)
         local expected_args = {...}
         local matched = false
         
+        -- Simple deep comparison for tables
+        local function is_equal(val1, val2)
+          if type(val1) ~= type(val2) then
+            return false
+          end
+          
+          if type(val1) == "table" then
+            -- Check if all keys in val1 are in val2 with same values
+            for k, v in pairs(val1) do
+              if not is_equal(v, val2[k]) then
+                return false
+              end
+            end
+            -- Check if all keys in val2 are in val1
+            for k, _ in pairs(val2) do
+              if val1[k] == nil then
+                return false
+              end
+            end
+            return true
+          else
+            return val1 == val2
+          end
+        end
+        
         for _, call_args in ipairs(spy_obj.call_history) do
           if #call_args == #expected_args then
             local all_match = true
             for i, arg in ipairs(expected_args) do
-              if arg ~= call_args[i] then
+              if not is_equal(arg, call_args[i]) then
                 all_match = false
                 break
               end
@@ -2744,14 +2769,14 @@ lust_next.assert.spy = function(spy_obj)
         if not matched then
           error("Expected spy to be called with matching arguments", 2)
         end
-        return true
+        return spy_assert
       end,
       
       not_called = function()
         if spy_obj.calls > 0 then
           error("Expected spy to not be called", 2)
         end
-        return true
+        return spy_assert
       end
     }
   }
