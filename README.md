@@ -25,6 +25,9 @@ Lust-Next is a lightweight, powerful testing library for Lua projects. This enha
 - **Async Support**: Test asynchronous code with parallel operations and conditions
 - **Mocking System**: Create and manage mocks for dependencies
 - **Cross-Platform**: Works in console and non-console environments
+- **Code Coverage**: Track and report code coverage with multiple output formats
+- **Quality Validation**: Validate test quality with customizable levels
+- **Modular Reporting**: Centralized reporting system with robust fallbacks
 
 ## Quick Start
 
@@ -78,6 +81,56 @@ describe('my project', function()
 end)
 ```
 
+## Modular Reporting System
+
+Lust-Next includes a powerful modular reporting system for generating coverage and quality reports:
+
+```lua
+-- Enable coverage tracking
+lust.coverage_options.enabled = true
+
+-- Run tests with coverage analysis
+lust.run_discovered("./tests", "*_test.lua", {
+  coverage = {
+    enabled = true,          -- Enable coverage tracking
+    format = "html",         -- Output format (html, json, lcov, summary)
+    threshold = 80,          -- Minimum required coverage percentage
+    output = "./coverage",   -- Output directory/file
+    include = {"src/*.lua"}, -- Patterns of files to include
+    exclude = {"test/*.lua"} -- Patterns of files to exclude
+  }
+})
+
+-- Generate coverage report programmatically
+lust.generate_coverage_report("html", "./coverage/report.html")
+
+-- Enable quality validation
+lust.quality_options.enabled = true
+lust.quality_options.level = 3 -- Quality level (1-5)
+
+-- Generate quality report
+lust.generate_quality_report("html", "./quality-report.html")
+```
+
+### Report Formats
+
+The reporting system supports multiple output formats:
+
+- **HTML**: Visual reports with color-coded coverage information
+- **JSON**: Machine-readable format for CI integration
+- **LCOV**: Industry-standard format for coverage tools
+- **Summary**: Text-based overview of results
+
+### Robust Implementation
+
+The modular reporting architecture ensures reliable report generation:
+
+- Separation of concerns between data collection and reporting
+- Multiple fallback mechanisms for reliable operation
+- Comprehensive error handling and diagnostics
+- Cross-platform compatibility
+- Directory creation with multiple fallback methods
+
 ## Integration with hooks-util
 
 Lust-Next is integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework, providing a standardized testing experience for Lua-based Neovim projects:
@@ -93,6 +146,7 @@ This integration provides:
 - Standard test directory structure
 - CI workflow generation for GitHub/GitLab/Azure
 - Pre-commit hook integration
+- Coverage and quality validation in pre-commit hooks
 
 See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using lust-next with hooks-util.
 
