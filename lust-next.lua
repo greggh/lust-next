@@ -126,6 +126,12 @@ end
 
 -- The main describe function with support for focus and exclusion
 function lust_next.describe(name, fn, options)
+  if type(options) == 'function' then
+    -- Handle case where options is actually a function (support for tags("tag")(fn) syntax)
+    fn = options
+    options = {}
+  end
+  
   options = options or {}
   local focused = options.focused or false
   local excluded = options.excluded or false
@@ -2823,6 +2829,18 @@ function lust_next.assert.same(expected, actual, message)
   
   if not is_equal(expected, actual) then
     local msg = message or "Tables are not the same"
+    error(msg, 2)
+  end
+  return true
+end
+
+-- Approximate equality for floating point values
+function lust_next.assert.near(expected, actual, tolerance, message)
+  tolerance = tolerance or 0.0001
+  
+  if math.abs(expected - actual) > tolerance then
+    local msg = message or string.format("Expected %f to be near %f (within tolerance %f)", 
+      actual, expected, tolerance)
     error(msg, 2)
   end
   return true
