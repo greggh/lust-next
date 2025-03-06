@@ -3036,7 +3036,7 @@ lust_next.expect = function(fn_or_obj)
   }
   
   return expect_obj
-}
+end
 
 -- Aliases and exports
 lust_next.test = lust_next.it
