@@ -154,11 +154,11 @@ coverage_formatters.json = function(coverage_data)
   return json_module.encode(report)
 end
 
--- Generate an HTML coverage report
+-- Generate an HTML coverage report with syntax highlighting
 coverage_formatters.html = function(coverage_data)
   local report = coverage_formatters.summary(coverage_data)
   
-  -- Generate HTML header
+  -- Generate HTML header with enhanced styling for syntax highlighting
   local html = [[
 <!DOCTYPE html>
 <html>
@@ -177,7 +177,39 @@ coverage_formatters.html = function(coverage_data)
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #f2f2f2; }
     tr:nth-child(even) { background-color: #f9f9f9; }
+    .file-link { color: #0366d6; text-decoration: none; cursor: pointer; }
+    .file-link:hover { text-decoration: underline; }
+    
+    /* Source code viewer */
+    .source-container { display: none; margin: 20px 0; background: #f8f8f8; border: 1px solid #ddd; border-radius: 5px; }
+    .source-header { padding: 10px; background: #eaeaea; border-bottom: 1px solid #ddd; font-weight: bold; }
+    .source-code { font-family: 'Courier New', monospace; padding: 0; margin: 0; }
+    .source-line { padding: 2px 8px; display: flex; }
+    .source-line:hover { background-color: #f0f0f0; }
+    .source-line-number { color: #999; text-align: right; padding-right: 10px; border-right: 1px solid #ddd; min-width: 40px; user-select: none; }
+    .source-line-content { padding-left: 10px; white-space: pre; }
+    .source-line.covered { background-color: rgba(77, 175, 80, 0.1); }
+    .source-line.not-covered { background-color: rgba(244, 67, 54, 0.1); }
+    
+    /* Syntax highlighting */
+    .keyword { color: #0000ff; font-weight: bold; }
+    .string { color: #a31515; }
+    .comment { color: #008000; font-style: italic; }
+    .number { color: #098658; }
+    .operator { color: #666666; }
+    .function-name { color: #795e26; }
+    .table-key { color: #267f99; }
   </style>
+  <script>
+    function toggleSource(fileId) {
+      const container = document.getElementById('source-' + fileId);
+      if (container.style.display === 'none' || container.style.display === '') {
+        container.style.display = 'block';
+      } else {
+        container.style.display = 'none';
+      }
+    }
+  </script>
 </head>
 <body>
   <h1>Lust-Next Coverage Report</h1>
@@ -202,15 +234,20 @@ coverage_formatters.html = function(coverage_data)
   ]]
   
   -- Add file rows
-  for file, stats in pairs(report.files) do
-    local line_pct = stats.total_lines > 0 and 
-                    (stats.covered_lines / stats.total_lines * 100) or 0
-    local func_pct = stats.total_functions > 0 and 
-                    (stats.covered_functions / stats.total_functions * 100) or 0
+  local fileId = 0
+  for file, stats in pairs(report.files or {}) do
+    fileId = fileId + 1
+    local line_pct = (stats.total_lines or 0) > 0 and 
+                    ((stats.covered_lines or 0) / stats.total_lines * 100) or 0
+    local func_pct = (stats.total_functions or 0) > 0 and 
+                    ((stats.covered_functions or 0) / stats.total_functions * 100) or 0
+    
+    -- Extract filename for display
+    local filename = file:match("([^/\\]+)$") or file
     
     html = html .. [[
     <tr>
-      <td>]].. file ..[[</td>
+      <td><span class="file-link" onclick="toggleSource(']] .. fileId .. [[')" title="Click to view source">]].. filename ..[[</span> <small>]].. file ..[[</small></td>
       <td>]].. stats.covered_lines ..[[ / ]].. stats.total_lines ..[[</td>
       <td>
         <div class="progress">
@@ -227,6 +264,90 @@ coverage_formatters.html = function(coverage_data)
       </td>
     </tr>
     ]]
+    
+    -- Add the source code section for this file
+    local source_content = ""
+    
+    -- Try to read the file content
+    local file_path = file
+    local file_content = {}
+    local source_file = io.open(file_path, "r")
+    if source_file then
+      for line in source_file:lines() do
+        table.insert(file_content, line)
+      end
+      source_file:close()
+    end
+    
+    -- Get the lines that are covered (from original coverage data)
+    local covered_lines = {}
+    if coverage_data.files and coverage_data.files[file] and coverage_data.files[file].lines then
+      covered_lines = coverage_data.files[file].lines
+    end
+    
+    -- Simple Lua syntax highlighting function
+    local function highlight_lua(line)
+      -- Replace HTML special chars first
+      line = line:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+      
+      -- Keywords
+      local keywords = {
+        "and", "break", "do", "else", "elseif", "end", "false", "for", 
+        "function", "if", "in", "local", "nil", "not", "or", "repeat", 
+        "return", "then", "true", "until", "while"
+      }
+      
+      for _, keyword in ipairs(keywords) do
+        line = line:gsub("([^%w_])" .. keyword .. "([^%w_])", "%1<span class=\"keyword\">" .. keyword .. "</span>%2")
+      end
+      
+      -- String literals
+      line = line:gsub("(\".-[^\\]\")", "<span class=\"string\">%1</span>")
+      line = line:gsub("('.-[^\\]')", "<span class=\"string\">%1</span>")
+      
+      -- Multi-line strings aren't properly handled in this simple highlighter
+      
+      -- Comments (only handles single-line comments)
+      line = line:gsub("(%-%-.-$)", "<span class=\"comment\">%1</span>")
+      
+      -- Numbers
+      line = line:gsub("([^%w_])(%d+%.?%d*)", "%1<span class=\"number\">%2</span>")
+      
+      -- Function calls
+      line = line:gsub("([%w_]+)(%s*%b())", "<span class=\"function-name\">%1</span>%2")
+      
+      -- Table keys
+      line = line:gsub("([%w_]+)(%s*=)", "<span class=\"table-key\">%1</span>%2")
+      
+      return line
+    end
+    
+    -- Add the source container
+    source_content = source_content .. [[
+    <div id="source-]] .. fileId .. [[" class="source-container">
+      <div class="source-header">Source: ]] .. file .. [[</div>
+      <div class="source-code">
+    ]]
+    
+    -- Add each line of code with highlighting
+    for i, line in ipairs(file_content) do
+      local is_covered = covered_lines[i] ~= nil
+      local line_class = is_covered and "covered" or "not-covered"
+      
+      source_content = source_content .. [[
+        <div class="source-line ]] .. line_class .. [[">
+          <div class="source-line-number">]] .. i .. [[</div>
+          <div class="source-line-content">]] .. highlight_lua(line) .. [[</div>
+        </div>
+      ]]
+    end
+    
+    source_content = source_content .. [[
+      </div>
+    </div>
+    ]]
+    
+    html = html .. source_content
   end
   
   -- Close HTML
