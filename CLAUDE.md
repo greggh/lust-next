@@ -15,14 +15,43 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 
 ## Project Structure
 
-- `/src`: Core modules (coverage.lua, quality.lua, reporting.lua)
+- `/src`: Core modules (coverage.lua, quality.lua, codefix.lua, reporting.lua)
 - `/tests`: Test files for framework functionality
 - `/examples`: Example scripts demonstrating usage
 - `/scripts`: Utility scripts for running tests
 - `lust-next.lua`: Main framework file
 - `lust.lua`: Compatibility layer for original lust
 
-## Current Focus
+## Current Focus - Code Quality Module (Codefix)
+
+Our new top priority was creating a comprehensive Lua code quality module that goes beyond what's possible with existing tools:
+
+- Create codefix.lua module: ✅
+  - [x] Core code quality analysis capabilities
+  - [x] Integration with StyLua for formatting
+  - [x] Integration with Luacheck for linting
+  - [x] Custom fixers for issues neither tool handles well
+  - [x] API for shell script integration
+  - [x] Comprehensive configuration system
+
+- Custom fixers for common issues: ✅
+  - [x] Trailing whitespace in multiline strings
+  - [x] Proper unused variable handling
+  - [x] Type annotation generation
+  - [x] String concatenation optimization
+  - [x] Lua version compatibility handling
+  - [x] Neovim-specific module configuration
+  
+- Command-line interface: ✅
+  - [x] List issues without fixing
+  - [x] Fix specific issues
+  - [x] Fix all issues
+  - [x] Generate reports
+  - [x] Integration with hooks-util
+
+See the [Code Quality Plan](/home/gregg/Projects/test-projects/hooks-util-testbed-lua-lib/.githooks/hooks-util/docs/CODE_QUALITY_PLAN.md) for full details.
+
+## Future Focus
 
 - Enhancing the modular reporting architecture
 - Creating robust test cases for edge cases
