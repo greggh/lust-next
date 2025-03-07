@@ -2,8 +2,8 @@
 
 # Lust-Next
 
-[![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
-[![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
+[![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
+[![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg?style=flat-square)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
 [![GitHub License](https://img.shields.io/github/license/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/blob/main/LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/stargazers)
 [![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
@@ -11,12 +11,12 @@
 
 *A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original.*
 
-[Features](#features) • 
-[Installation](#installation) • 
-[Quick Start](#quick-start) • 
-[Documentation](#documentation) • 
-[Contributing](#contributing) • 
-[License](#license) • 
+[Features](#features) •
+[Installation](#installation) •
+[Quick Start](#quick-start) •
+[Documentation](#documentation) •
+[Contributing](#contributing) •
+[License](#license) •
 [Discussions](https://github.com/greggh/lust-next/discussions)
 
 </div>
@@ -68,7 +68,8 @@ describe('my project', function()
     end)
   end)
 end)
-```
+
+```text
 
 ### Option 2: Import specific functions (traditional approach)
 
@@ -92,7 +93,8 @@ describe('my project', function()
     end)
   end)
 end)
-```
+
+```text
 
 ## Modular Reporting System
 
@@ -123,7 +125,8 @@ lust.quality_options.level = 3 -- Quality level (1-5)
 
 -- Generate quality report
 lust.generate_quality_report("html", "./quality-report.html")
-```
+
+```text
 
 ### Report Formats
 
@@ -152,9 +155,11 @@ Lust-Next is integrated with the [hooks-util](https://github.com/greggh/hooks-ut
 -- From hooks-util, set up a project with lust-next testing
 local lust_next = require("hooks-util.lust-next")
 lust_next.setup_project("/path/to/your/project")
-```
+
+```text
 
 This integration provides:
+
 - Automatic test discovery and setup
 - Standard test directory structure
 - CI workflow generation for GitHub/GitLab/Azure
@@ -183,7 +188,8 @@ end)
 xdescribe("excluded group", function()
   -- Excluded test group - these tests NEVER run
 end)
-```
+
+```text
 
 #### `lust.it(name, func)`, `lust.fit(name, func)`, `lust.xit(name, func)`
 
@@ -204,7 +210,8 @@ xit("work in progress", function()
   -- Excluded test - this test NEVER runs
   expect(false).to.be.truthy() -- Won't fail since it's excluded
 end)
-```
+
+```text
 
 #### `lust.before(fn)` and `lust.after(fn)`
 
@@ -215,16 +222,17 @@ describe("database tests", function()
   before(function()
     -- Set up database connection
   end)
-  
+
   after(function()
     -- Close database connection
   end)
-  
+
   it("queries data correctly", function()
     -- Test here
   end)
 end)
-```
+
+```text
 
 ### Assertions
 
@@ -233,7 +241,8 @@ Lust uses "expect style" assertions that can be chained for readable tests:
 ```lua
 expect(value).to.equal(expected)
 expect(value).to_not.be.nil()
-```
+
+```text
 
 #### Basic Assertions
 
@@ -251,6 +260,7 @@ expect(value).to_not.be.nil()
 #### Enhanced Assertions
 
 ##### Table Assertions
+
 ```lua
 -- Check for specific keys
 expect(table).to.contain.key("id")
@@ -265,39 +275,48 @@ expect(small_table).to.contain.subset(big_table)
 
 -- Check for exact key set
 expect(table).to.contain.exactly({"only", "these", "keys"})
-```
+
+```text
 
 ##### String Assertions
+
 ```lua
 -- Check string prefix/suffix
 expect(str).to.start_with("hello")
 expect(str).to.end_with("world")
-```
+
+```text
 
 ##### Type Assertions
+
 ```lua
 -- Advanced type checking
 expect(fn).to.be_type("callable")  -- Function or callable table
 expect(num).to.be_type("comparable")  -- Can use < operator
 expect(table).to.be_type("iterable")  -- Can iterate with pairs()
-```
+
+```text
 
 ##### Numeric Assertions
+
 ```lua
 -- Numeric comparisons
 expect(value).to.be_greater_than(minimum)
 expect(value).to.be_less_than(maximum)
 expect(value).to.be_between(min, max)  -- Inclusive
 expect(value).to.be_approximately(target, delta)
-```
+
+```text
 
 ##### Error Assertions
+
 ```lua
 -- Enhanced error checking
 expect(function_that_throws).to.throw.error()  
 expect(function_that_throws).to.throw.error_matching("pattern")
 expect(function_that_throws).to.throw.error_type("string")
-```
+
+```text
 
 ### Spies
 
@@ -308,7 +327,8 @@ local spy = lust.spy(myFunction)
 spy(1, 2, 3)
 expect(#spy).to.equal(1)
 expect(spy[1][1]).to.equal(1)
-```
+
+```text
 
 ### Custom Assertions
 
@@ -326,7 +346,8 @@ lust.paths.empty = {
 table.insert(lust.paths.be, 'empty')
 
 expect({}).to.be.empty()
-```
+
+```text
 
 ### New Features
 
@@ -349,11 +370,13 @@ lust.format({
 
 -- Or disable colors
 lust.nocolor()
-```
+
+```text
 
 Available command-line options when running tests:
 
 ```bash
+
 # Use different output formats
 lua lust-next.lua --format dot       # Minimal output with dots (. for pass, F for fail)
 lua lust-next.lua --format compact   # Compact output with minimal details
@@ -367,7 +390,8 @@ lua lust-next.lua --indent 4         # Use 4 spaces for indentation
 
 # Disable colors
 lua lust-next.lua --no-color
-```
+
+```text
 
 #### Focused and Excluded Tests
 
@@ -379,7 +403,7 @@ fdescribe("important module", function()
   it("does something", function()
     -- This test runs because parent is focused
   end)
-  
+
   xit("isn't ready", function()
     -- This test is excluded even though parent is focused
   end)
@@ -389,12 +413,13 @@ describe("other module", function()
   it("normal test", function()
     -- This won't run when focus mode is active
   end)
-  
+
   fit("critical feature", function()
     -- This test runs because it's focused
   end)
 })
-```
+
+```text
 
 When any `fdescribe` or `fit` is present, lust-next enters "focus mode" where only focused tests run. This is useful for working on a specific feature or debugging a failure.
 
@@ -405,7 +430,8 @@ Automatically find and run all test files:
 ```lua
 -- Run all test files in the current directory and subdirectories
 lust.run_discovered(".")
-```
+
+```text
 
 #### Module Reset Utilities
 
@@ -418,12 +444,12 @@ local fresh_module = lust.reset_module("path.to.module")
 -- Ensure modules are reset between tests
 describe("Database tests", function()
   local db
-  
+
   before_each(function()
     -- Reset the module before each test to ensure clean state
     db = lust.reset_module("my.database")
   end)
-  
+
   it("performs operations correctly", function()
     -- Test with a fresh module instance
     db.connect()
@@ -437,9 +463,11 @@ lust.with_fresh_module("path.to.module", function(mod)
   mod.function_call()
   expect(mod.result).to.equal(expected)
 end)
-```
+
+```text
 
 The module reset utilities provide several benefits:
+
 - Ensures each test runs with a fresh module state
 - Eliminates test cross-contamination
 - Reduces boilerplate with clear, consistent syntax
@@ -459,7 +487,7 @@ end)
 -- Add tags to a group of tests
 describe("Math operations", function()
   lust.tags("unit", "math")
-  
+
   it("test1", function() end)
   it("test2", function() end)
   -- Both tests inherit the "unit" and "math" tags
@@ -479,7 +507,8 @@ lust.reset_filters()
 -- Command line filtering (when running directly)
 -- lua lust-next.lua --tags unit,math
 -- lua lust-next.lua --filter "addition"
-```
+
+```text
 
 You can use the filtering system to run specific subsets of your tests:
 
@@ -492,7 +521,8 @@ lust.run_discovered("./tests", "*_test.lua", {
 
 -- Run filtered tests from CLI
 -- lua lust-next.lua --dir ./tests --tags unit,fast --filter calculation
-```
+
+```text
 
 #### Async Testing
 
@@ -502,15 +532,15 @@ Test asynchronous code with await/async:
 -- Basic usage with it_async shorthand
 it_async("tests async code", function()
   local result = nil
-  
+
   -- Start async operation
   startAsyncOperation(function(data) 
     result = data
   end)
-  
+
   -- Wait for a specific amount of time
   lust.await(100) -- Wait 100ms
-  
+
   -- Make assertions after the wait
   expect(result).to.equal("expected result")
 end)
@@ -518,13 +548,13 @@ end)
 -- Use wait_until for condition-based waiting
 it_async("waits for a condition", function()
   local value = false
-  
+
   -- Start async operation that will set value to true
   setTimeout(function() value = true end, 50)
-  
+
   -- Wait until value becomes true or timeout after 200ms
   lust.wait_until(function() return value end, 200)
-  
+
   -- Assert after condition is met
   expect(value).to.be.truthy()
 end)
@@ -546,27 +576,28 @@ it_async("handles parallel operations", function()
     await(100)
     return "op1 result"
   end
-  
+
   local function op2()
     await(200)
     return "op2 result"
   end
-  
+
   local function op3()
     await(300)
     return "op3 result"
   end
-  
+
   -- Run all operations in parallel and get all results
   local results = parallel_async(op1, op2, op3)
-  
+
   -- Verify all results
   expect(#results).to.equal(3)
   expect(results[1]).to.equal("op1 result")
   expect(results[2]).to.equal("op2 result")
   expect(results[3]).to.equal("op3 result")
 end)
-```
+
+```text
 
 Key async features:
 
@@ -640,15 +671,16 @@ expect(api_mock:verify_sequence({
 lust.with_mocks(function(mock)
   local api_mock = mock(api)
   api_mock:stub("get_data", {success = true, items = {}})
-  
+
   -- Test code that uses api.get_data()
-  
+
   -- Verify all expectations
   api_mock:verify_expectations()
-  
+
   -- No need to restore - happens automatically
 end)
-```
+
+```text
 
 The enhanced mocking system includes:
 
@@ -668,29 +700,34 @@ The enhanced mocking system includes:
 Simply copy `lust-next.lua` into your project directory:
 
 ```bash
+
 # Download the file
 curl -O https://raw.githubusercontent.com/greggh/lust-next/main/lust-next.lua
 
 # Or clone and copy
 git clone https://github.com/greggh/lust-next.git
 cp lust-next/lust-next.lua your-project/
-```
+
+```text
 
 ### Method 2: LuaRocks
 
 ```bash
 luarocks install lust-next
-```
+
+```text
 
 ### Method 3: As a Git Submodule
 
 ```bash
+
 # Add as submodule
 git submodule add https://github.com/greggh/lust-next.git deps/lust-next
 
 # Update your package path in your main Lua file
 package.path = package.path .. ";./deps/lust-next/?.lua"
-```
+
+```text
 
 ### Method 4: With [packer.nvim](https://github.com/wbthomason/packer.nvim)
 
@@ -700,7 +737,8 @@ use {
   ft = 'lua',
   cmd = { 'LustRun' }
 }
-```
+
+```text
 
 ### Method 5: With [lazy.nvim](https://github.com/folke/lazy.nvim)
 
@@ -710,7 +748,8 @@ use {
   ft = 'lua',
   cmd = { 'LustRun' },
 }
-```
+
+```text
 
 ## Usage with Non-Console Environments
 
@@ -718,7 +757,8 @@ If Lua is embedded in an application without ANSI color support:
 
 ```lua
 local lust = require('lust').nocolor()
-```
+
+```text
 
 ## Contributing
 
@@ -740,5 +780,6 @@ We're grateful to these projects for advancing the state of Lua testing and prov
 ---
 
 <div align="center">
-  <p>Made with ❤️ by <a href="https://github.com/greggh">greggh</a></p>
+  <p>Made with ❤️ by <a href="https://github.com/greggh">Gregg Housh</a></p>
 </div>
+

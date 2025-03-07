@@ -1,3 +1,4 @@
+
 # Contributing Guidelines
 
 Thank you for considering contributing to this project! We welcome contributions from everyone, whether you're fixing a typo, adding new features, or improving documentation.
@@ -10,15 +11,17 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating
 
 1. Fork the repository
 2. Clone your fork and create a new branch:
+
    ```bash
    git clone https://github.com/username/project-name.git
    cd project-name
    git checkout -b my-feature-branch
    ```
-3. Set up your development environment following the instructions in [DEVELOPMENT.md](DEVELOPMENT.md)
-4. Make your changes
-5. Test your changes
-6. Push to your fork and submit a pull request
+
+1. Set up your development environment following the instructions in [DEVELOPMENT.md](DEVELOPMENT.md)
+2. Make your changes
+3. Test your changes
+4. Push to your fork and submit a pull request
 
 ## Development Process
 

@@ -1,3 +1,4 @@
+
 # Coverage Module API
 
 The coverage module in lust-next provides comprehensive code coverage tracking and reporting capabilities.
@@ -18,14 +19,17 @@ lust.run_discovered('./tests')
 
 -- Generate a coverage report
 local report = lust.generate_coverage_report('html', './coverage-report.html')
-```
+
+```text
 
 From the command line:
 
 ```bash
+
 # Run tests with coverage enabled
 lua lust-next.lua --coverage tests/
-```
+
+```text
 
 ## Configuration Options
 
@@ -41,7 +45,8 @@ lust.coverage_options = {
   exclude = {"test/*.lua"} -- Patterns of files to exclude from coverage
   debug = false            -- Enable debug output (default: false)
 }
-```
+
+```text
 
 ## API Reference
 
@@ -71,7 +76,8 @@ lust.with_coverage({
   -- Run tests here
   lust.run_discovered('./tests')
 end)
-```
+
+```text
 
 ### `lust.start_coverage(options)`
 
@@ -88,7 +94,8 @@ lust.run_discovered('./tests')
 
 -- Stop coverage
 lust.stop_coverage()
-```
+
+```text
 
 ### `lust.stop_coverage()`
 
@@ -100,7 +107,8 @@ Get the collected coverage data as a structured table:
 
 ```lua
 local coverage_data = lust.get_coverage_data()
-```
+
+```text
 
 ### `lust.generate_coverage_report(format, output_path)`
 
@@ -118,9 +126,11 @@ lust.generate_coverage_report("lcov", "./coverage-report.lcov")
 
 -- Generate a summary report (returns text, doesn't write to file)
 local summary = lust.generate_coverage_report("summary")
-```
+
+```text
 
 Parameters:
+
 - `format` (string): Output format (html, json, lcov, summary)
 - `output_path` (string): Path to save the report (optional for summary format)
 
@@ -134,9 +144,11 @@ if lust.coverage_meets_threshold(80) then
 else
   print("Coverage is below threshold!")
 end
-```
+
+```text
 
 Parameters:
+
 - `threshold` (number): Coverage percentage threshold (0-100)
 
 ## Robust Fallback Mechanisms
@@ -148,12 +160,12 @@ The coverage module includes several fallback mechanisms to ensure reliable oper
    - Pattern-based source file detection
    - Automatic path normalization for consistent matching
 
-2. **Data Collection Fallbacks**:
+1. **Data Collection Fallbacks**:
    - Manual dataset creation when debug hooks fail
    - Comprehensive debugging output for troubleshooting
    - Automatic resolution of relative paths to absolute paths
 
-3. **Module Loading Fallbacks**:
+1. **Module Loading Fallbacks**:
    - Multiple search paths for finding modules
    - Direct file loading when module resolution fails
    - Graceful degradation with partial functionality
@@ -167,6 +179,7 @@ The coverage module supports glob-style patterns for include and exclude options
 - `?` - Matches any single character
 
 Examples:
+
 - `src/*.lua` - All Lua files in the src directory
 - `src/**/*.lua` - All Lua files in the src directory and subdirectories
 - `src/module?.lua` - Matches module1.lua, module2.lua, etc.
@@ -188,7 +201,8 @@ lust.run_discovered('./tests')
 
 -- Generate report
 lust.generate_coverage_report("html", "./coverage-report.html")
-```
+
+```text
 
 ### Custom Coverage Configuration
 
@@ -226,11 +240,13 @@ end
 lust.generate_coverage_report("html", "./coverage/report.html")
 lust.generate_coverage_report("json", "./coverage/report.json")
 lust.generate_coverage_report("lcov", "./coverage/report.lcov")
-```
+
+```text
 
 ### Command Line Usage
 
 ```bash
+
 # Run tests with basic coverage
 lua lust-next.lua --coverage tests/
 
@@ -248,4 +264,6 @@ lua lust-next.lua --coverage --coverage-format html --coverage-output ./reports/
 
 # Enable debug mode
 lua lust-next.lua --coverage --debug tests/
-```
+
+```text
+

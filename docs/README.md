@@ -1,3 +1,4 @@
+
 # Lust-Next Documentation
 
 [![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
@@ -56,12 +57,14 @@ Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful tes
 ## Installation
 
 ```bash
+
 # Option 1: Copy the single file to your project
 curl -o lust-next.lua https://raw.githubusercontent.com/greggh/lust-next/master/lust-next.lua
 
 # Option 2: Use as Git submodule
 git submodule add https://github.com/greggh/lust-next.git deps/lust-next
-```
+
+```text
 
 ## Basic Usage
 
@@ -75,13 +78,15 @@ describe("Calculator", function()
   it("adds numbers correctly", function()
     assert.equal(5, 2 + 3)
   end)
-  
+
   it("subtracts numbers correctly", function()
     assert.equal(5, 8 - 3)
   end)
 end)
-```
+
+```text
 
 ## Contributing
 
 Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/lust-next/blob/main/CONTRIBUTING.md) for details on how to get involved.
+

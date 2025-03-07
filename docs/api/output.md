@@ -1,3 +1,4 @@
+
 # Output Formatting API
 
 This document describes the output formatting capabilities provided by Lust-Next, allowing you to customize how test results are displayed.
@@ -15,12 +16,15 @@ The output formatting options can dramatically improve the readability of your t
 Configures the output formatting options.
 
 **Parameters:**
+
 - `options` (table): A table of formatting options (see formatting options table below)
 
 **Returns:**
+
 - The lust object (for chaining)
 
 **Example:**
+
 ```lua
 -- Configure output formatting
 lust.format({
@@ -29,20 +33,24 @@ lust.format({
   indent_size = 2,
   compact = true
 })
-```
+
+```text
 
 ### lust.nocolor()
 
 Disables colored output. This is a shorthand for `lust.format({ use_color = false })`.
 
 **Returns:**
+
 - The lust object (for chaining)
 
 **Example:**
+
 ```lua
 -- Disable colored output
 lust.nocolor()
-```
+
+```text
 
 ## Formatting Options
 
@@ -78,7 +86,8 @@ describe("My feature", function()
     expect(1 + 1).to.equal(2)
   end)
 end)
-```
+
+```text
 
 ### Different Output Styles
 
@@ -90,13 +99,16 @@ lust.format({
   show_success_detail = true,
   compact = false
 })
-```
+
+```text
 
 This produces verbose output with colors:
-```
+
+```text
 My feature
   PASS Test works correctly
-```
+
+```text
 
 #### Compact Output
 
@@ -105,13 +117,16 @@ lust.format({
   compact = true,
   show_success_detail = false
 })
-```
+
+```text
 
 This produces less verbose output:
-```
+
+```text
 My feature
   .
-```
+
+```text
 
 #### Dot Mode
 
@@ -119,12 +134,15 @@ My feature
 lust.format({
   dot_mode = true
 })
-```
+
+```text
 
 This produces minimal output with dots for passing tests and 'F' for failing tests:
-```
+
+```text
 ...F..
-```
+
+```text
 
 #### Summary Only
 
@@ -132,12 +150,15 @@ This produces minimal output with dots for passing tests and 'F' for failing tes
 lust.format({
   summary_only = true
 })
-```
+
+```text
 
 This only shows the final summary:
-```
+
+```text
 5 passes, 1 failure
-```
+
+```text
 
 #### Plain Text (No Colors)
 
@@ -145,13 +166,15 @@ This only shows the final summary:
 lust.format({
   use_color = false
 })
-```
+
+```text
 
 or simply:
 
 ```lua
 lust.nocolor()
-```
+
+```text
 
 This disables ANSI color codes, useful for environments that don't support them.
 
@@ -169,7 +192,8 @@ lust.format({
   indent_char = '\t',
   indent_size = 1
 })
-```
+
+```text
 
 ### Showing Stack Traces
 
@@ -177,22 +201,26 @@ lust.format({
 lust.format({
   show_trace = true
 })
-```
+
+```text
 
 This shows full stack traces for errors:
-```
+
+```text
 FAIL Test that will fail
   stack traceback:
     test.lua:10: in function 'fn'
     lust-next.lua:283: in upvalue 'subject'
     lust-next.lua:289: in function <lust-next.lua:278>
-```
+
+```text
 
 ## Command Line Integration
 
 When running tests via the command line, you can use the `--format` option to specify a predefined format.
 
 ```bash
+
 # Run tests with dot mode
 lua lust-next.lua --format dot
 
@@ -207,11 +235,13 @@ lua lust-next.lua --format detailed
 
 # Run tests with plain text (no colors)
 lua lust-next.lua --format plain
-```
+
+```text
 
 You can also customize indentation from the command line:
 
 ```bash
+
 # Use spaces for indentation
 lua lust-next.lua --indent spaces
 
@@ -220,7 +250,8 @@ lua lust-next.lua --indent 4
 
 # Use tabs for indentation
 lua lust-next.lua --indent tabs
-```
+
+```text
 
 ## Best Practices
 
@@ -229,19 +260,19 @@ lua lust-next.lua --indent tabs
    - Use dot mode or compact mode for large test suites
    - Use summary only for CI systems
 
-2. **Consider the environment**:
+1. **Consider the environment**:
    - Disable colors for environments that don't support ANSI color codes
    - Use plain text output for logs that will be stored
 
-3. **Adjust verbosity for test size**:
+1. **Adjust verbosity for test size**:
    - For large test suites, use compact or dot mode
    - For focused testing, use detailed output with stack traces
 
-4. **Consistent configuration**:
+1. **Consistent configuration**:
    - Set up standard formatting in project init files
    - Document formatting conventions for your team
 
-5. **Configure for maximum readability**:
+1. **Configure for maximum readability**:
    - Use indentation that matches your code style
    - Use colors when supported to highlight important information
 
@@ -263,12 +294,13 @@ describe("Error handling", function()
     local function will_error()
       error("Something went wrong")
     end
-    
+
     -- This will fail and show detailed error information
     will_error()
   end)
 end)
-```
+
+```text
 
 ### CI Integration
 
@@ -291,7 +323,8 @@ else
     compact = false
   })
 end
-```
+
+```text
 
 ### Large Test Suites
 
@@ -306,4 +339,6 @@ lust.format({
 -- .........................F...........
 -- 
 -- Followed by details on the single failure
-```
+
+```text
+

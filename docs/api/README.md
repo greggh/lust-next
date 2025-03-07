@@ -1,3 +1,4 @@
+
 # Lust-Next API Reference
 
 This section contains detailed API documentation for all Lust-Next functionality.
@@ -34,7 +35,8 @@ end)
 -- Setup and teardown
 lust.before(function() -- Run before each test end)
 lust.after(function() -- Run after each test end)
-```
+
+```text
 
 ### Assertions
 
@@ -50,7 +52,8 @@ expect(table).to.contain.values({"a", "b"})
 
 -- String assertions
 expect(str).to.start_with("prefix")
-```
+
+```text
 
 ### Async Testing
 
@@ -67,7 +70,8 @@ local results = lust.parallel_async(
   function() lust.await(100); return "first" end,
   function() lust.await(200); return "second" end
 )
-```
+
+```text
 
 ### Module Reset
 
@@ -79,7 +83,8 @@ local fresh_module = lust.reset_module("app.module")
 lust.with_fresh_module("app.module", function(mod)
   -- Test using the fresh module
 end)
-```
+
+```text
 
 ### Mocking
 
@@ -90,7 +95,8 @@ mock_obj:stub("method", function() return "mocked" end)
 
 -- Create a spy
 local spy = lust.spy(function() end)
-```
+
+```text
 
 ### Coverage and Quality
 
@@ -112,7 +118,8 @@ lust.quality_options.level = 3 -- Comprehensive quality level
 
 -- Generate a quality report
 lust.generate_quality_report("html", "./quality-report.html")
-```
+
+```text
 
 ### Reporting
 
@@ -126,6 +133,8 @@ local quality_data = lust.get_quality_data()
 
 -- Auto-save all report formats
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
-```
+
+```text
 
 See the individual sections for detailed documentation on each API area.
+

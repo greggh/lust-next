@@ -1,3 +1,4 @@
+
 # Guide to Coverage, Quality, and Reporting
 
 This guide provides an overview of lust-next's coverage tracking, quality validation, and reporting capabilities.
@@ -11,6 +12,7 @@ The lust-next testing framework includes three interconnected modules for ensuri
 3. **Reporting Module**: Formats and saves reports from both modules
 
 These modules work together in a modular architecture, with clear separation of concerns:
+
 - Coverage and quality modules collect data during test execution
 - The reporting module handles formatting and file I/O operations
 - Multiple fallback mechanisms ensure reliable operation under all conditions
@@ -32,14 +34,17 @@ lust.run_discovered('./tests')
 
 -- Generate an HTML report
 lust.generate_coverage_report('html', './coverage-report.html')
-```
+
+```text
 
 From the command line:
 
 ```bash
+
 # Run tests with coverage and generate HTML report
 lua lust-next.lua --coverage --coverage-format html tests/
-```
+
+```text
 
 ### Interpreting Coverage Reports
 
@@ -51,6 +56,7 @@ Coverage reports provide several key metrics:
 - **Overall Coverage**: Weighted average of line and function coverage
 
 The HTML report provides a visual breakdown with color-coded indicators:
+
 - **Green**: Good coverage (80% or higher)
 - **Orange**: Moderate coverage (50-80%)
 - **Red**: Poor coverage (below 50%)
@@ -73,14 +79,17 @@ lust.coverage_options = {
   },
   threshold = 90         -- Require 90% coverage
 }
-```
+
+```text
 
 From the command line:
 
 ```bash
+
 # Set custom include/exclude patterns
 lua lust-next.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
-```
+
+```text
 
 ## Getting Started with Quality Validation
 
@@ -100,14 +109,17 @@ lust.run_discovered('./tests')
 
 -- Generate an HTML report
 lust.generate_quality_report('html', './quality-report.html')
-```
+
+```text
 
 From the command line:
 
 ```bash
+
 # Run tests with quality validation at level 3
 lua lust-next.lua --quality --quality-level 3 tests/
-```
+
+```text
 
 ### Understanding Quality Levels
 
@@ -118,24 +130,24 @@ The quality module supports five progressive quality levels:
    - Proper test naming
    - No empty test blocks
 
-2. **Standard** (Level 2): 
+1. **Standard** (Level 2): 
    - Multiple assertions per test
    - Error case handling
    - Clear test organization
 
-3. **Comprehensive** (Level 3): 
+1. **Comprehensive** (Level 3): 
    - Edge case testing
    - Type checking assertions
    - Proper mock/stub usage
    - Isolated setup/teardown
 
-4. **Advanced** (Level 4): 
+1. **Advanced** (Level 4): 
    - Boundary condition testing
    - Complete mock verification
    - Integration and unit test separation
    - Performance validation
 
-5. **Complete** (Level 5): 
+1. **Complete** (Level 5): 
    - 100% branch coverage
    - Security testing
    - API contract testing
@@ -152,7 +164,8 @@ it("should add two numbers", function()
   -- One basic assertion
   expect(calculator.add(2, 3)).to.equal(5)
 end)
-```
+
+```text
 
 #### Level 2: Standard
 
@@ -161,46 +174,48 @@ it("should add two numbers correctly", function()
   -- Multiple assertions
   expect(calculator.add(2, 3)).to.equal(5)
   expect(calculator.add(-1, 1)).to.equal(0)
-  
+
   -- Error case handling
   expect(function() calculator.add("a", 2) end).to.fail()
 end)
-```
+
+```text
 
 #### Level 3: Comprehensive
 
 ```lua
 describe("calculator.add", function()
   local calculator
-  
+
   before_each(function()
     -- Isolated setup
     calculator = reset_module("src.calculator")
   end)
-  
+
   it("should handle various numeric inputs", function()
     -- Edge cases
     expect(calculator.add(0, 0)).to.equal(0)
     expect(calculator.add(-1, -1)).to.equal(-2)
     expect(calculator.add(math.huge, 1)).to.equal(math.huge)
-    
+
     -- Type checking
     expect(calculator.add(1.5, 2.5)).to.equal(4.0)
     expect(calculator.add(0, -0)).to.equal(0)
   end)
-  
+
   it("should validate inputs", function()
     -- Mock usage
     local validator = lust.mock(calculator.validator)
     validator:stub("is_number", true)
-    
+
     calculator.add(2, 3)
-    
+
     -- Verify mock was called correctly
     expect(validator.stubs.is_number).to.be.called.times(2)
   end)
 end)
-```
+
+```text
 
 #### Level 4: Advanced
 
@@ -208,23 +223,23 @@ end)
 describe("calculator.divide", function()
   local calculator
   local logs
-  
+
   before_each(function()
     calculator = reset_module("src.calculator")
     logs = lust.mock(calculator.logs)
   end)
-  
+
   after_each(function()
     -- Cleanup resources
     logs:restore()
   end)
-  
+
   it("should handle boundary conditions", function()
     -- Boundary testing
     expect(calculator.divide(1, 0.0001)).to.be.approximately(10000, 0.01)
     expect(calculator.divide(0, 5)).to.equal(0)
     expect(function() calculator.divide(1, 0) end).to.throw.error_matching("division by zero")
-    
+
     -- Performance validation
     local start_time = os.clock()
     for i = 1, 1000 do
@@ -233,27 +248,28 @@ describe("calculator.divide", function()
     local elapsed = os.clock() - start_time
     expect(elapsed).to.be_less_than(0.01) -- 10ms for 1000 operations
   end)
-  
+
   it("should properly validate and log operations", function()
     -- Complete mock verification
     local validator = lust.mock(calculator.validator)
     validator:stub("is_number", true)
     logs:stub("record")
-    
+
     calculator.divide(10, 2)
-    
+
     -- Verify call sequence
     expect(validator:verify_sequence({
       {method = "is_number", args = {10}},
       {method = "is_number", args = {2}}
     })).to.be.truthy()
-    
+
     expect(logs.stubs.record).to.be.called.with(
       lust.arg_matcher.string_containing("division")
     )
   end)
 end)
-```
+
+```text
 
 #### Level 5: Complete
 
@@ -261,72 +277,73 @@ end)
 describe("calculator.evaluate", function()
   local calculator
   local security
-  
+
   before_each(function()
     calculator = reset_module("src.calculator")
     security = lust.mock(calculator.security)
     security:stub("validate_expression", true)
   end)
-  
+
   -- Comprehensive branch coverage
   it("should handle addition expressions", function()
     expect(calculator.evaluate("2 + 3")).to.equal(5)
   end)
-  
+
   it("should handle subtraction expressions", function()
     expect(calculator.evaluate("5 - 3")).to.equal(2)
   end)
-  
+
   it("should handle multiplication expressions", function()
     expect(calculator.evaluate("2 * 3")).to.equal(6)
   end)
-  
+
   it("should handle division expressions", function()
     expect(calculator.evaluate("6 / 2")).to.equal(3)
   end)
-  
+
   it("should handle invalid operations", function()
     expect(function() calculator.evaluate("2 $ 3") end).to.throw.error()
   end)
-  
+
   -- Security testing
   it("should prevent code injection", function()
     -- Test for security vulnerabilities
     local malicious_input = "2 + 3; os.execute('rm -rf /')"
-    
+
     -- Verify security validation is called
     calculator.evaluate(malicious_input)
     expect(security.stubs.validate_expression).to.be.called.with(malicious_input)
-    
+
     -- Verify error is thrown if validation fails
     security:stub("validate_expression", false)
     expect(function() calculator.evaluate(malicious_input) end).to.throw.error_matching("security")
   end)
-  
+
   -- API contract testing
   it("should validate the complete API contract", function()
     -- Verify function signature
     expect(calculator.evaluate).to.be_type("callable")
-    
+
     -- Verify argument validation
     expect(function() calculator.evaluate(123) end).to.throw.error()
     expect(function() calculator.evaluate(nil) end).to.throw.error()
     expect(function() calculator.evaluate({}) end).to.throw.error()
-    
+
     -- Verify return value
     local result = calculator.evaluate("2 + 3")
     expect(result).to.be_type("number")
-    
+
     -- Verify error conditions
     expect(function() calculator.evaluate("") end).to.throw.error()
     expect(function() calculator.evaluate("1 / 0") end).to.throw.error()
-    
+
     -- Verify complex expressions
     expect(calculator.evaluate("(2 + 3) * 4")).to.equal(20)
     expect(calculator.evaluate("2 + 3 * 4")).to.equal(14)
   end)
 end)
-```
+
+```text
 
 ## Using the Modular Reporting System
 
@@ -364,7 +381,8 @@ local html_quality = reporting.format_quality(quality_data, "html")
 reporting.write_file("./reports/coverage.html", html_coverage)
 reporting.write_file("./reports/coverage.json", json_coverage)
 reporting.write_file("./reports/quality.html", html_quality)
-```
+
+```text
 
 ### Auto-Save Functionality
 
@@ -392,13 +410,15 @@ reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 -- ./reports/coverage-report.lcov
 -- ./reports/quality-report.html
 -- ./reports/quality-report.json
-```
+
+```text
 
 ### Command Line Usage
 
 The most convenient way to generate reports is through the command line:
 
 ```bash
+
 # Run tests with coverage and quality validation
 lua lust-next.lua --coverage --quality --quality-level 3 tests/
 
@@ -407,7 +427,8 @@ lua lust-next.lua --coverage --coverage-format html --quality --quality-format j
 
 # Set custom output paths
 lua lust-next.lua --coverage --coverage-output ./reports/coverage.html tests/
-```
+
+```text
 
 ## Robust Fallback Mechanisms
 
@@ -429,7 +450,8 @@ if not mod then
   local ok, loaded = pcall(dofile, "./deps/lust-next/src/reporting.lua")
   if ok then mod = loaded end
 end
-```
+
+```text
 
 ### Directory Creation Fallbacks
 
@@ -439,12 +461,13 @@ local success = ensure_directory(path)
 if not success then
   -- Fallback to direct OS command
   os.execute('mkdir -p "' .. path .. '"')
-  
+
   -- Verify directory exists
   local test_cmd = 'test -d "' .. path .. '"'
   success = (os.execute(test_cmd) == 0)
 end
-```
+
+```text
 
 ### Data Collection Fallbacks
 
@@ -462,7 +485,7 @@ if not coverage_data or not coverage_data.files or not next(coverage_data.files)
       -- ... other defaults
     }
   }
-  
+
   -- Add known source files
   for _, file_path in ipairs(source_files) do
     -- Count lines and create coverage data
@@ -474,7 +497,8 @@ if not coverage_data or not coverage_data.files or not next(coverage_data.files)
     }
   end
 end
-```
+
+```text
 
 ### File Writing Fallbacks
 
@@ -495,7 +519,8 @@ if not ok then
     os.execute('mv "' .. tmpfile .. '" "' .. file_path .. '"')
   end
 end
-```
+
+```text
 
 ## Best Practices
 
@@ -512,37 +537,39 @@ end
    end)
    ```
 
-2. **Isolate test state properly**:
+1. **Isolate test state properly**:
+
    ```lua
    describe("Database operations", function()
      local db
-     
+
      before_each(function()
        db = reset_module("src.database")
      end)
-     
+
      after_each(function()
        db.disconnect()
      end)
-     
+
      it("should connect successfully", function()
        -- Test code
      end)
    end)
    ```
 
-3. **Use appropriate assertion levels**:
+1. **Use appropriate assertion levels**:
    - Basic tests: `expect(value).to.equal(expected)`
    - Type tests: `expect(value).to.be_type("number")`
    - Error tests: `expect(function() fn() end).to.throw.error()`
    - Complex tests: `expect(object).to.contain.keys({"id", "name"})`
 
-4. **Test both happy and error paths**:
+1. **Test both happy and error paths**:
+
    ```lua
    it("should handle valid inputs", function()
      expect(fn("valid")).to.equal("expected")
    end)
-   
+
    it("should handle invalid inputs", function()
      expect(function() fn(nil) end).to.throw.error()
      expect(function() fn("") end).to.throw.error()
@@ -556,7 +583,8 @@ end
    - Ensure error handling paths are covered
    - Test boundary conditions and edge cases
 
-2. **Use pattern-based inclusion/exclusion**:
+1. **Use pattern-based inclusion/exclusion**:
+
    ```lua
    lust.coverage_options = {
      include = {"src/core/*.lua", "src/api/*.lua"},
@@ -564,7 +592,8 @@ end
    }
    ```
 
-3. **Verify coverage with CI integration**:
+1. **Verify coverage with CI integration**:
+
    ```bash
    # Run in CI environment
    lua lust-next.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
@@ -573,40 +602,43 @@ end
 ### CI Integration
 
 1. **GitHub Actions Example**:
+
    ```yaml
    name: Tests
-   
+
    on: [push, pull_request]
-   
+
    jobs:
      test:
        runs-on: ubuntu-latest
-       
+
        steps:
+
        - uses: actions/checkout@v2
-       
+
        - name: Setup Lua
          uses: leafo/gh-actions-lua@v8
          with:
            luaVersion: "5.3"
-       
+
        - name: Run tests with coverage
          run: |
            lua lust-next.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
-           
+
        - name: Upload coverage report
          uses: codecov/codecov-action@v2
          with:
            files: ./coverage-reports/coverage-report.lcov
    ```
 
-2. **Pre-commit Hook Example**:
+1. **Pre-commit Hook Example**:
+
    ```bash
    #!/bin/bash
-   
+
    # Run tests with coverage and quality validation
    lua lust-next.lua --coverage --coverage-threshold 80 --quality --quality-level 3 tests/
-   
+
    # Check exit code
    if [ $? -ne 0 ]; then
      echo "Tests failed or coverage/quality below threshold"

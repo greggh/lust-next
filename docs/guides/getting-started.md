@@ -1,3 +1,4 @@
+
 # Getting Started with Lust-Next
 
 This guide will help you get started with Lust-Next, a lightweight and powerful testing framework for Lua.
@@ -15,7 +16,8 @@ The simplest way to use Lust-Next is to copy the `lust-next.lua` file directly i
 
 ```bash
 luarocks install lust-next
-```
+
+```text
 
 ## Basic Usage
 
@@ -32,26 +34,27 @@ local describe, it, expect = lust.describe, lust.it, lust.expect
 
 -- Define a test suite
 describe("Math operations", function()
-  
+
   -- Define a test
   it("adds two numbers correctly", function()
     expect(1 + 1).to.equal(2)
   end)
-  
+
   -- Define another test
   it("subtracts two numbers correctly", function()
     expect(5 - 3).to.equal(2)
   end)
-  
+
   -- Test for errors
   it("raises an error when dividing by zero", function()
     expect(function() 
       return 5 / 0 
     end).to.fail()
   end)
-  
+
 end)
-```
+
+```text
 
 ### 2. Run the Test
 
@@ -59,16 +62,18 @@ Run the test using the Lua interpreter:
 
 ```bash
 lua example_test.lua
-```
+
+```text
 
 You should see output similar to:
 
-```
+```text
 Math operations
-	PASS adds two numbers correctly
-	PASS subtracts two numbers correctly
-	PASS raises an error when dividing by zero
-```
+ PASS adds two numbers correctly
+ PASS subtracts two numbers correctly
+ PASS raises an error when dividing by zero
+
+```text
 
 ## Writing Tests
 
@@ -106,7 +111,8 @@ expect(num).to.be_approximately(0.3, 0.0001)
 -- Error assertions
 expect(function() error("oops") end).to.fail()
 expect(function() error("invalid") end).to.throw.error_matching("invalid")
-```
+
+```text
 
 ### Before and After Hooks
 
@@ -115,23 +121,24 @@ You can use `before` and `after` hooks for setup and teardown:
 ```lua
 describe("Database tests", function()
   local db
-  
+
   before(function()
     -- Set up database connection before each test
     db = Database.connect()
   end)
-  
+
   it("queries data", function()
     local result = db:query("SELECT * FROM users")
     expect(#result).to.be_greater_than(0)
   end)
-  
+
   after(function()
     -- Clean up after each test
     db:disconnect()
   end)
 end)
-```
+
+```text
 
 ## Organizing Tests
 
@@ -145,19 +152,20 @@ describe("User module", function()
     it("logs in valid users", function()
       -- Test code
     end)
-    
+
     it("rejects invalid credentials", function()
       -- Test code
     end)
   end)
-  
+
   describe("Profile", function()
     it("updates user information", function()
       -- Test code
     end)
   end)
 end)
-```
+
+```text
 
 ### Tagging Tests
 
@@ -166,17 +174,18 @@ You can add tags to your tests for filtering:
 ```lua
 describe("User module", function()
   lust.tags("unit")
-  
+
   it("validates username format", function()
     -- Fast unit test
   end)
-  
+
   lust.tags("integration", "slow")
   it("stores user in database", function()
     -- Slower integration test
   end)
 end)
-```
+
+```text
 
 ## Running Tests
 
@@ -184,7 +193,8 @@ end)
 
 ```bash
 lua example_test.lua
-```
+
+```text
 
 ### Running Multiple Test Files
 
@@ -192,7 +202,8 @@ Create a directory for your tests (e.g., `tests`) and use Lust-Next's test disco
 
 ```bash
 lua lust-next.lua --dir ./tests
-```
+
+```text
 
 ### Filtering Tests
 
@@ -200,13 +211,15 @@ Run only tests with specific tags:
 
 ```bash
 lua lust-next.lua --tags unit
-```
+
+```text
 
 Run only tests matching a pattern:
 
 ```bash
 lua lust-next.lua --filter authentication
-```
+
+```text
 
 ## Asynchronous Testing
 
@@ -215,20 +228,21 @@ For testing asynchronous code, use the async testing support:
 ```lua
 lust.it_async("fetches data asynchronously", function()
   local result = nil
-  
+
   -- Start async operation
   fetchData(function(data) 
     result = data
   end)
-  
+
   -- Wait for operation to complete
   lust.wait_until(function() return result ~= nil end)
-  
+
   -- Make assertions on the result
   expect(result).to.exist()
   expect(result.status).to.equal("success")
 end)
-```
+
+```text
 
 ## Mocking
 
@@ -253,7 +267,8 @@ expect(db_mock._stubs.query.called).to.be.truthy()
 
 -- Restore original methods
 db_mock:restore()
-```
+
+```text
 
 ## Next Steps
 
@@ -264,3 +279,4 @@ Now that you understand the basics of Lust-Next, you can:
 3. Check out [Advanced Topics](../guides/advanced-topics.md) for advanced features
 
 Happy testing!
+

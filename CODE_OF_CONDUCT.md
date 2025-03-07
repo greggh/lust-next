@@ -1,3 +1,4 @@
+
 # Code of Conduct
 
 ## Our Pledge
@@ -23,22 +24,22 @@ Examples of unacceptable behavior include:
 
 ## Our Responsibilities
 
-Project maintainers are responsible for clarifying the standards of acceptable behavior and are expected 
+Project maintainers are responsible for clarifying the standards of acceptable behavior and are expected
 to take appropriate and fair corrective action in response to any instances of unacceptable behavior.
 
 ## Scope
 
-This Code of Conduct applies both within project spaces and in public spaces when an individual is 
+This Code of Conduct applies both within project spaces and in public spaces when an individual is
 representing the project or its community.
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported by contacting the project team at [YOUR EMAIL]. 
-All complaints will be reviewed and investigated and will result in a response that is deemed necessary 
+Instances of unacceptable behavior may be reported by contacting the project team at [YOUR EMAIL].
+All complaints will be reviewed and investigated and will result in a response that is deemed necessary
 and appropriate to the circumstances.
 
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), 
-version 2.0, available at 
+This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/),
+version 2.0, available at
 [https://www.contributor-covenant.org/version/2/0/code_of_conduct.html](https://www.contributor-covenant.org/version/2/0/code_of_conduct.html).

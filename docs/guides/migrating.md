@@ -1,3 +1,4 @@
+
 # Migrating from lust to lust-next
 
 This guide helps users of the original [lust](https://github.com/bjornbytes/lust) testing framework migrate to lust-next, which adds significant new functionality while maintaining backward compatibility.
@@ -25,16 +26,20 @@ Lust-next is a direct enhancement of the original lust, maintaining all existing
 ### 1. Installation
 
 **Original lust:**
+
 ```lua
 -- Copy lust.lua to your project
 local lust = require 'lust'
-```
+
+```text
 
 **lust-next:**
+
 ```lua
 -- Copy lust-next.lua to your project
 local lust = require 'lust-next'  -- You can keep the original require name
-```
+
+```text
 
 ### 2. Update Core Testing Patterns
 
@@ -49,13 +54,15 @@ describe("My test suite", function()
     expect(1 + 1).to.equal(2)
   end)
 end)
-```
+
+```text
 
 ### 3. Take Advantage of Enhanced Assertions
 
 lust-next includes many new assertion types that make tests more expressive:
 
 **Original lust:**
+
 ```lua
 -- Basic assertions
 expect(x).to.exist()
@@ -65,9 +72,11 @@ expect(x).to.be.truthy()
 expect(x).to.be.a(y)
 expect(x).to.have(y)
 expect(f).to.fail()
-```
+
+```text
 
 **lust-next:**
+
 ```lua
 -- Enhanced table assertions
 expect(table).to.contain.key("id")
@@ -87,22 +96,26 @@ expect(value).to.be_approximately(target, delta)
 -- Enhanced error assertions
 expect(function_that_throws).to.throw.error_matching("pattern")
 expect(function_that_throws).to.throw.error_type("string")
-```
+
+```text
 
 ### 4. Upgrade Your Mocking Strategy
 
 The enhanced mocking system is one of the most significant improvements:
 
 **Original lust:**
+
 ```lua
 -- Basic spy in original lust
 local spy = lust.spy(myFunction)
 spy(1, 2, 3)
 expect(#spy).to.equal(1)
 expect(spy[1][1]).to.equal(1)
-```
+
+```text
 
 **lust-next:**
+
 ```lua
 -- Enhanced spy with better API
 local spy = lust.spy(myFunction)
@@ -122,7 +135,8 @@ end)
 
 -- Set expectations with fluent API
 db_mock:expect("get_users").with(lust.arg_matcher.any()).to.be.called.times(1)
-```
+
+```text
 
 ### 5. Implement Focused and Excluded Tests
 
@@ -134,7 +148,7 @@ fdescribe("important module", function()
   it("does something", function()
     -- This test runs because parent is focused
   end)
-  
+
   xit("isn't ready", function()
     -- This test is excluded even though parent is focused
   end)
@@ -144,12 +158,13 @@ describe("other module", function()
   it("normal test", function()
     -- This won't run when focus mode is active
   end)
-  
+
   fit("critical feature", function()
     -- This test runs because it's focused
   end)
 })
-```
+
+```text
 
 ### 6. Add Async Testing Support
 
@@ -159,15 +174,15 @@ For code that is asynchronous, use the new async testing support:
 -- Basic usage with it_async shorthand
 it_async("tests async code", function()
   local result = nil
-  
+
   -- Start async operation
   startAsyncOperation(function(data) 
     result = data
   end)
-  
+
   -- Wait for a specific amount of time
   lust.await(100) -- Wait 100ms
-  
+
   -- Make assertions after the wait
   expect(result).to.equal("expected result")
 end)
@@ -175,17 +190,18 @@ end)
 -- Use wait_until for condition-based waiting
 it_async("waits for a condition", function()
   local value = false
-  
+
   -- Start async operation that will set value to true
   setTimeout(function() value = true end, 50)
-  
+
   -- Wait until value becomes true or timeout after 200ms
   lust.wait_until(function() return value end, 200)
-  
+
   -- Assert after condition is met
   expect(value).to.be.truthy()
 end)
-```
+
+```text
 
 ### 7. Implement Test Tagging and Filtering
 
@@ -201,7 +217,7 @@ end)
 -- Add tags to a group of tests
 describe("Math operations", function()
   lust.tags("unit", "math")
-  
+
   it("test1", function() end)
   it("test2", function() end)
   -- Both tests inherit the "unit" and "math" tags
@@ -214,13 +230,15 @@ lust.run_discovered("./tests")
 -- Command line filtering
 -- lua lust-next.lua --tags unit,math
 -- lua lust-next.lua --filter "addition"
-```
+
+```text
 
 ## Code Examples: Before and After
 
 ### Example 1: Basic Test Structure
 
 **Original lust:**
+
 ```lua
 local lust = require 'lust'
 local describe, it, expect = lust.describe, lust.it, lust.expect
@@ -229,14 +247,16 @@ describe('math', function()
   it('addition', function()
     expect(1 + 1).to.equal(2)
   end)
-  
+
   it('subtraction', function()
     expect(5 - 3).to.equal(2)
   end)
 end)
-```
+
+```text
 
 **lust-next:** (Unchanged - backwards compatible)
+
 ```lua
 local lust = require 'lust-next'
 local describe, it, expect = lust.describe, lust.it, lust.expect
@@ -245,16 +265,18 @@ describe('math', function()
   it('addition', function()
     expect(1 + 1).to.equal(2)
   end)
-  
+
   it('subtraction', function()
     expect(5 - 3).to.equal(2)
   end)
 end)
-```
+
+```text
 
 ### Example 2: Using Enhanced Assertions
 
 **Original lust:**
+
 ```lua
 describe('user', function()
   it('validates user data', function()
@@ -265,14 +287,16 @@ describe('user', function()
     -- Limited assertions available
   end)
 end)
-```
+
+```text
 
 **lust-next:**
+
 ```lua
 describe('user', function()
   it('validates user data', function()
     local user = {id = 1, name = "Test", email = "test@example.com"}
-    
+
     -- Enhanced assertions
     expect(user).to.contain.keys({"id", "name", "email"})
     expect(user.id).to.be_greater_than(0)
@@ -280,50 +304,55 @@ describe('user', function()
     expect(user.email).to.match("@example%.com$")
   end)
 end)
-```
+
+```text
 
 ### Example 3: Mocking
 
 **Original lust:**
+
 ```lua
 describe('database', function()
   it('queries data', function()
     local db = {
       query = function(sql) return {id = 1, name = "Test"} end
     }
-    
+
     local querySpy = lust.spy(db.query)
     db.query = querySpy
-    
+
     local result = db.query("SELECT * FROM users")
     expect(#querySpy).to.equal(1)
     expect(querySpy[1][1]).to.equal("SELECT * FROM users")
   end)
 end)
-```
+
+```text
 
 **lust-next:**
+
 ```lua
 describe('database', function()
   it('queries data', function()
     local db = {
       query = function(sql) return {id = 1, name = "Test"} end
     }
-    
+
     local db_mock = lust.mock(db)
     db_mock:stub("query", function(sql)
       expect(sql).to.match("SELECT")
       return {id = 1, name = "Test"}
     end)
-    
+
     local result = db.query("SELECT * FROM users")
-    
+
     expect(db_mock._stubs.query.called).to.be.truthy()
     expect(db_mock._stubs.query:called_with("SELECT * FROM users")).to.be.truthy()
     expect(db_mock._stubs.query.call_count).to.equal(1)
   end)
 end)
-```
+
+```text
 
 ## Common Migration Issues and Solutions
 
@@ -332,6 +361,7 @@ end)
 **Problem:** The spy API in lust-next has been enhanced and differs from the original.
 
 **Solution:** Update spy usages to use the new properties:
+
 ```lua
 -- Old style
 expect(#spy).to.equal(1)
@@ -342,7 +372,8 @@ expect(spy.call_count).to.equal(1)
 expect(spy.calls[1][1]).to.equal("arg")
 -- or
 expect(spy:called_with("arg")).to.be.truthy()
-```
+
+```text
 
 ### Issue 2: New Features Causing Confusion
 
@@ -355,6 +386,7 @@ expect(spy:called_with("arg")).to.be.truthy()
 **Problem:** Test output format looks different from the original lust.
 
 **Solution:** Configure the output format to your liking:
+
 ```lua
 lust.format({
   use_color = true,          -- Whether to use color codes
@@ -369,14 +401,17 @@ lust.format({
 
 -- Or use the basic mode
 lust.format({ compact = true })
-```
+
+```text
 
 ### Issue 4: Test Discovery and Command-Line Options
 
 **Problem:** Running tests from the command line works differently.
 
 **Solution:** Use the new CLI options:
+
 ```bash
+
 # Run all tests in a directory
 lua lust-next.lua --dir ./tests
 
@@ -388,7 +423,8 @@ lua lust-next.lua --tags unit,fast
 
 # Run with specific output format
 lua lust-next.lua --format dot
-```
+
+```text
 
 ## Feature Comparison Table
 
@@ -435,3 +471,4 @@ lua lust-next.lua --format dot
 Migrating from lust to lust-next should be a smooth process for most users. Since lust-next is fully backward compatible, you can gradually adopt new features as needed. The enhancements provide significant improvements to test organization, assertion capabilities, and mocking functionality, making your tests more expressive and maintainable.
 
 For more information, consult the [API Reference](../api/README.md) and [Example Files](../../examples).
+

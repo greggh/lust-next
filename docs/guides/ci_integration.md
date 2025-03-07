@@ -1,3 +1,4 @@
+
 # CI/CD Integration with Lust-Next
 
 This guide explains how to set up Lust-Next in various Continuous Integration (CI) environments to automate your Lua testing workflow.
@@ -32,32 +33,34 @@ jobs:
   test:
     name: Run Lust-Next Tests
     runs-on: ubuntu-latest
-    
+
     steps:
+
       - uses: actions/checkout@v3
-      
+
       - name: Install Lua
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.3
-          
+
       - name: Run tests
         run: |
           # Run all tests in the tests directory
           lua lust-next.lua --dir ./tests
-          
+
       - name: Generate test report (optional)
         run: |
           # If using a reporter/formatter
           lua lust-next.lua --dir ./tests --reporter junit > test-results.xml
-          
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v3
         with:
           name: test-results
           path: test-results.xml
-```
+
+```text
 
 ### GitLab CI
 
@@ -71,23 +74,28 @@ Create a file at `.gitlab-ci.yml`:
 image: ubuntu:latest
 
 stages:
+
   - test
 
 before_script:
+
   - apt-get update -qq
   - apt-get install -y lua5.3
 
 run_tests:
   stage: test
   script:
+
     - lua lust-next.lua --dir ./tests
   artifacts:
     when: always
     paths:
+
       - test-results.xml
     reports:
       junit: test-results.xml
-```
+
+```text
 
 ### CircleCI
 
@@ -103,18 +111,22 @@ version: 2.1
 jobs:
   test:
     docker:
+
       - image: cimg/base:2023.03
     steps:
+
       - checkout
       - run:
           name: Install Lua
           command: |
             sudo apt-get update
             sudo apt-get install -y lua5.3
+
       - run:
           name: Run tests
           command: |
             lua lust-next.lua --dir ./tests
+
       - store_test_results:
           path: test-results
 
@@ -122,8 +134,10 @@ workflows:
   version: 2
   build-and-test:
     jobs:
+
       - test
-```
+
+```text
 
 ### Jenkins
 
@@ -136,7 +150,7 @@ Create a file at `Jenkinsfile`:
 ```groovy
 pipeline {
     agent any
-    
+
     stages {
         stage('Setup') {
             steps {
@@ -155,7 +169,8 @@ pipeline {
         }
     }
 }
-```
+
+```text
 
 ## Best Practices for CI Testing
 
@@ -172,56 +187,65 @@ Structure your tests in a way that makes them easy to run in CI:
 ```lua
 describe("Database module", function()
   lust.tags("integration", "database")
-  
+
   it("connects to the database", function()
     -- Test code
   end)
 end)
-```
+
+```text
 
 In your CI configuration, you can run specific test groups:
 
 ```bash
 lua lust-next.lua --tags unit  # Run only unit tests
 lua lust-next.lua --tags integration  # Run only integration tests
-```
+
+```text
 
 ### 3. Manage Test Environments
 
 For tests that require specific environment setup:
 
 ```yaml
+
 # In GitHub Actions
 steps:
+
   - name: Set up test environment
     run: |
       # Set environment variables
       echo "DB_HOST=localhost" >> $GITHUB_ENV
       echo "API_KEY=test-key" >> $GITHUB_ENV
-      
+
   - name: Run integration tests
     run: |
       lua lust-next.lua --tags integration
-```
+
+```text
 
 ### 4. Configure Test Timeouts
 
 For long-running tests, set appropriate timeouts:
 
 ```yaml
+
 # In GitHub Actions
 steps:
+
   - name: Run tests with timeout
     timeout-minutes: 10
     run: |
       lua lust-next.lua --dir ./tests
-```
+
+```text
 
 ### 5. Parallel Test Execution
 
 For large test suites, consider running tests in parallel:
 
 ```yaml
+
 # In GitHub Actions
 jobs:
   test:
@@ -229,10 +253,12 @@ jobs:
       matrix:
         test-group: [unit, integration, functional]
     steps:
+
       - name: Run tests
         run: |
           lua lust-next.lua --tags ${{ matrix.test-group }}
-```
+
+```text
 
 ## Interpreting Test Results
 
@@ -242,13 +268,14 @@ Lust-Next provides different output formats to help you interpret test results i
 
 By default, Lust-Next outputs test results to the console:
 
-```
+```text
 Math operations
   PASS adds two numbers correctly
   PASS subtracts two numbers correctly
   FAIL raises an error when dividing by zero
     Expected function to fail but it did not
-```
+
+```text
 
 ### JUnit XML Format (For CI Systems)
 
@@ -256,7 +283,8 @@ For better CI integration, use the JUnit XML reporter:
 
 ```bash
 lua lust-next.lua --dir ./tests --reporter junit > test-results.xml
-```
+
+```text
 
 This generates an XML file that most CI systems can parse and display as test reports.
 
@@ -266,19 +294,20 @@ For custom processing of test results:
 
 ```bash
 lua lust-next.lua --dir ./tests --reporter json > test-results.json
-```
+
+```text
 
 ## Tips for Effective CI Configuration
 
 1. **Cache dependencies**: Speed up CI runs by caching Lua modules and dependencies.
 
-2. **Fail fast**: Configure your tests to fail as soon as any test fails to get faster feedback.
+1. **Fail fast**: Configure your tests to fail as soon as any test fails to get faster feedback.
 
-3. **Notifications**: Set up notifications for test failures to relevant team members.
+1. **Notifications**: Set up notifications for test failures to relevant team members.
 
-4. **Branch protection**: Require passing tests before merging pull requests.
+1. **Branch protection**: Require passing tests before merging pull requests.
 
-5. **Scheduled runs**: Set up scheduled test runs for nightly builds or integration tests.
+1. **Scheduled runs**: Set up scheduled test runs for nightly builds or integration tests.
 
 ## Complete Example: GitHub Actions Workflow
 
@@ -294,6 +323,7 @@ on:
     branches: [ main, master ]
   schedule:
     # Run nightly at midnight UTC
+
     - cron: '0 0 * * *'
 
 jobs:
@@ -307,6 +337,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
+
       - uses: actions/checkout@v3
 
       - name: Setup Lua
@@ -333,7 +364,8 @@ jobs:
           name: test-results-${{ matrix.lua-version }}-${{ matrix.os }}
           path: |
             *-test-results.xml
-```
+
+```text
 
 ## Further Resources
 
@@ -343,3 +375,4 @@ jobs:
 - [Jenkins Documentation](https://www.jenkins.io/doc/)
 
 For more information on testing strategies, see the [Testing Patterns](testing-patterns.md) guide.
+

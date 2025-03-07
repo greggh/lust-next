@@ -1,3 +1,4 @@
+
 # Quality Module API
 
 The quality module in lust-next provides test quality validation with customizable levels and reporting capabilities.
@@ -19,14 +20,17 @@ lust.run_discovered('./tests')
 
 -- Generate a quality report
 local report = lust.generate_quality_report('html', './quality-report.html')
-```
+
+```text
 
 From the command line:
 
 ```bash
+
 # Run tests with quality validation at level 3
 lua lust-next.lua --quality --quality-level 3 tests/
-```
+
+```text
 
 ## Quality Levels
 
@@ -37,25 +41,25 @@ The quality module defines five progressive quality levels:
    - Proper test and describe block naming
    - No empty test blocks
 
-2. **Standard (Level 2)**
+1. **Standard (Level 2)**
    - Multiple assertions per test
    - Testing of basic functionality
    - Error case handling
    - Clear test organization
 
-3. **Comprehensive (Level 3)**
+1. **Comprehensive (Level 3)**
    - Edge case testing
    - Type checking assertions
    - Proper mock/stub usage
    - Isolated test setup and teardown
 
-4. **Advanced (Level 4)**
+1. **Advanced (Level 4)**
    - Boundary condition testing
    - Complete mock verification
    - Integration and unit test separation
    - Performance validation where applicable
 
-5. **Complete (Level 5)**
+1. **Complete (Level 5)**
    - 100% branch coverage
    - Security vulnerability testing
    - Comprehensive API contract testing
@@ -77,7 +81,8 @@ lust.quality_options = {
     min_assertions_per_test = 2
   }
 }
-```
+
+```text
 
 ## API Reference
 
@@ -106,7 +111,8 @@ lust.with_quality({
   -- Run tests here
   lust.run_discovered('./tests')
 end)
-```
+
+```text
 
 ### `lust.start_quality(options)`
 
@@ -123,7 +129,8 @@ lust.run_discovered('./tests')
 
 -- Stop quality validation
 lust.stop_quality()
-```
+
+```text
 
 ### `lust.stop_quality()`
 
@@ -135,7 +142,8 @@ Get the collected quality data as a structured table:
 
 ```lua
 local quality_data = lust.get_quality_data()
-```
+
+```text
 
 ### `lust.generate_quality_report(format, output_path)`
 
@@ -150,9 +158,11 @@ lust.generate_quality_report("json", "./quality-report.json")
 
 -- Generate a summary report (returns text, doesn't write to file)
 local summary = lust.generate_quality_report("summary")
-```
+
+```text
 
 Parameters:
+
 - `format` (string): Output format (html, json, summary)
 - `output_path` (string): Path to save the report (optional for summary format)
 
@@ -166,9 +176,11 @@ if lust.quality_meets_level(3) then
 else
   print("Quality is below level 3!")
 end
-```
+
+```text
 
 Parameters:
+
 - `level` (number): Quality level threshold (1-5)
 
 ## Custom Rules
@@ -186,7 +198,8 @@ lust.quality_options.custom_rules = {
   naming_pattern = "^should_.*$",      -- Test name pattern requirement
   max_nesting_level = 3                -- Maximum nesting level for describes
 }
-```
+
+```text
 
 ## Examples
 
@@ -204,7 +217,8 @@ lust.run_discovered('./tests')
 
 -- Generate report
 lust.generate_quality_report("html", "./quality-report.html")
-```
+
+```text
 
 ### Custom Quality Configuration
 
@@ -238,11 +252,13 @@ end
 -- Generate reports in different formats
 lust.generate_quality_report("html", "./quality/report.html")
 lust.generate_quality_report("json", "./quality/report.json")
-```
+
+```text
 
 ### Command Line Usage
 
 ```bash
+
 # Run tests with basic quality validation
 lua lust-next.lua --quality tests/
 
@@ -257,4 +273,6 @@ lua lust-next.lua --quality --quality-format html --quality-output ./reports/qua
 
 # Run with both quality and coverage
 lua lust-next.lua --quality --quality-level 3 --coverage tests/
-```
+
+```text
+

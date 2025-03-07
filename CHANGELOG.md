@@ -1,3 +1,4 @@
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -8,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Enhanced modular reporting architecture:
   - Centralized reporting module for all output formats
   - Standardized data interfaces between modules
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Robust fallback mechanisms for reliable report generation
 
 ### Fixed
+
 - Coverage data flow issues between modules
 - File operations with enhanced directory handling
 - Module loading with better search paths and fallbacks
@@ -23,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform compatibility issues in file paths
 
 ### Improved
+
 - Coverage tracking with better source file detection
 - Input validation throughout the reporting process
 - Directory creation with multiple fallback methods
@@ -32,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.4] - 2025-03-18
 
 ### Added
+
 - Module management utilities:
   - `reset_module(module_name)` to reload modules and ensure a clean state
   - `with_fresh_module(module_name, test_fn)` to run tests with freshly loaded modules
@@ -42,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Better error handling in timeout scenarios
 
 ### Fixed
+
 - `wait_until()` error handling to properly throw errors on timeout
 - Reduced boilerplate in tests with proper module reset utilities
 - Improved async testing ergonomics with parallel execution support
@@ -49,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0] - 2025-03-05
 
 ### Added
+
 - Enhanced mocking system with advanced verification options:
   - Argument matchers for flexible verification:
     - Type-based matchers (`string()`, `number()`, `table()`, etc.)
@@ -70,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New example file demonstrating all new mocking features
 
 ### Changed
+
 - Replaced timestamp-based call ordering with sequence-based tracking:
   - More deterministic verification of call order
   - No longer dependent on system clock precision
@@ -77,6 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Backward compatible with existing tests
 
 ### Fixed
+
 - Improved argument comparison for table values in mocking system
 - Better error messages for expectation failures with detailed diffs
 - Enhanced mock cleanup to prevent test cross-contamination
@@ -84,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.1] - 2025-03-05
 
 ### Fixed
+
 - Bug in excluded tests where test functions in `xit` were still being executed
 - Proper state reset between test files in CLI runner
 - Focus mode state management for consistent behavior when running multiple files
@@ -93,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2025-03-05
 
 ### Added
+
 - Focused and excluded test support:
   - `fdescribe` and `fit` for focused test blocks and tests
   - `xdescribe` and `xit` for excluded test blocks and tests
@@ -119,11 +130,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Better visual separation for test runs
 
 ### Fixed
+
 - Improved error handling in describe blocks
 - Enhanced context display in test summaries
 - Better skipped test reporting with reasons
 
 ### Added
+
 - Fork from bjornbytes/lust to enhance functionality
 - GitHub Actions CI workflow for testing on multiple Lua versions
 - GitHub structure with templates and community health files
@@ -185,6 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This is where the fork begins. Original [lust project](https://github.com/bjornbytes/lust) features:
 
 ### Features
+
 - Nested describe/it blocks
 - Before/after handlers
 - Expect-style assertions
