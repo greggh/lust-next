@@ -41,7 +41,7 @@
 - 📈 **Code Coverage** - Track and report code coverage with multiple output formats
 - 🔬 **Quality Validation** - Validate test quality with customizable levels
 - 📋 **Modular Reporting** - Centralized reporting system with robust fallbacks
-- 🧹 **Code Fixing** - Fix common Lua code issues with StyLua and Luacheck integration
+- 🧹 **Code Fixing** - Fix common Lua code issues with custom fixers and tool integration (StyLua, Luacheck)
 
 ## Quick Start
 
