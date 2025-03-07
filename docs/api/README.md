@@ -13,6 +13,7 @@ This section contains detailed API documentation for all Lust-Next functionality
 - [Coverage](coverage.md) - Code coverage tracking and reporting
 - [Quality](quality.md) - Test quality validation
 - [Reporting](reporting.md) - Report generation and file operations
+- [Codefix](codefix.md) - Code quality checking and fixing
 - [Test Filtering](filtering.md) - Test filtering and tagging support
 - [CLI](cli.md) - Command-line interface and options
 - [Test Discovery](discovery.md) - Automatic test discovery capabilities
@@ -133,8 +134,23 @@ local quality_data = lust.get_quality_data()
 
 -- Auto-save all report formats
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
+```
 
-```text
+### Code Quality and Fixing
+
+```lua
+-- Enable code fixing
+lust.codefix_options.enabled = true
+
+-- Fix a specific file
+lust.fix_file("path/to/file.lua")
+
+-- Fix multiple files
+lust.fix_files({"file1.lua", "file2.lua"})
+
+-- Find and fix all Lua files in a directory
+lust.fix_lua_files("src")
+```
 
 See the individual sections for detailed documentation on each API area.
 

@@ -41,6 +41,7 @@
 - 📈 **Code Coverage** - Track and report code coverage with multiple output formats
 - 🔬 **Quality Validation** - Validate test quality with customizable levels
 - 📋 **Modular Reporting** - Centralized reporting system with robust fallbacks
+- 🧹 **Code Fixing** - Fix common Lua code issues with StyLua and Luacheck integration
 
 ## Quick Start
 
@@ -168,7 +169,29 @@ This integration provides:
 
 See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using lust-next with hooks-util.
 
+## Upcoming Features
+
+### Comprehensive Lua Code Quality Module
+
+We're developing a powerful Lua code quality module that goes beyond what existing tools like StyLua and Luacheck can do:
+
+- **Advanced Fixing Capabilities**: Automatically fix issues that other tools can only detect
+- **Neovim-Specific Rules**: Special handling for Neovim plugin development patterns
+- **Integration with Existing Tools**: Seamless integration with StyLua and Luacheck
+- **Custom Fixers**: Special handling for multiline strings, unused variables, and more
+- **Flexible Configuration**: Adapt to different Lua codebases and style preferences
+- **hooks-util Integration**: Built into the hooks-util pre-commit system
+
+The quality module will be available as a standalone component as well as integrated with hooks-util.
+
 ## Documentation
+
+Full documentation is available in the [docs](docs/) directory:
+
+- [Getting Started](docs/guides/getting-started.md) - Detailed guide for beginners
+- [API Reference](docs/api/README.md) - Complete API documentation 
+- [Examples](examples/) - Example scripts demonstrating features
+- [Migration Guide](docs/guides/migrating.md) - Migrating from other test frameworks
 
 ### Core Functions
 

@@ -27,6 +27,7 @@ end
 -- Optional modules for advanced features
 local coverage = try_require("src.coverage")
 local quality = try_require("src.quality")
+local codefix = try_require("src.codefix")
 local json = try_require("src.json")
 
 local lust_next = {}
@@ -51,6 +52,30 @@ lust_next.coverage_options = {
   threshold = 80,             -- Coverage threshold percentage
   format = "summary",         -- Report format (summary, json, html, lcov)
   output = nil,               -- Custom output file path (if nil, html/lcov auto-saved to ./coverage-reports/)
+}
+
+-- Code quality options
+lust_next.codefix_options = {
+  enabled = false,           -- Enable code fixing functionality
+  verbose = false,           -- Enable verbose output
+  debug = false,             -- Enable debug output
+  
+  -- StyLua options
+  use_stylua = true,         -- Use StyLua for formatting
+  stylua_path = "stylua",    -- Path to StyLua executable
+  
+  -- Luacheck options
+  use_luacheck = true,       -- Use Luacheck for linting
+  luacheck_path = "luacheck", -- Path to Luacheck executable
+  
+  -- Custom fixers
+  custom_fixers = {
+    trailing_whitespace = true,    -- Fix trailing whitespace in strings
+    unused_variables = true,       -- Fix unused variables by prefixing with underscore
+    string_concat = true,          -- Optimize string concatenation
+    type_annotations = false,      -- Add type annotations (disabled by default)
+    lua_version_compat = false,    -- Fix Lua version compatibility issues (disabled by default)
+  },
 }
 
 -- Quality options
@@ -3974,6 +3999,11 @@ end
 -- Auto expose globals if LUST_NEXT_AUTO_EXPOSE is set
 if os.getenv("LUST_NEXT_AUTO_EXPOSE") then
   lust_next.expose_globals()
+end
+
+-- Initialize codefix module if available
+if codefix then
+  codefix.register_with_lust(lust_next)
 end
 
 -- Backward compatibility for users upgrading from lust
