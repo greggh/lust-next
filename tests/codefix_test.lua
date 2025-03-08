@@ -83,13 +83,36 @@ return test_function
     end
   end)
   
-  -- Clean up test files
-  lust.after(function()
+  -- Clean up function that can be called directly
+  local function cleanup_test_files()
+    print("Cleaning up test files...")
+    
+    -- Regular cleanup of test files in the list
     for _, filename in ipairs(test_files) do
+      print("Removing: " .. filename)
       os.remove(filename)
       os.remove(filename .. ".bak")
     end
-  end)
+    
+    -- Extra safety check to make sure format_test.lua is removed
+    print("Removing: format_test.lua")
+    os.remove("format_test.lua")
+    os.remove("format_test.lua.bak")
+    
+    -- Clean up test directory if it exists
+    print("Removing: codefix_test_dir")
+    os.execute("rm -rf codefix_test_dir")
+    
+    -- Empty the test files table
+    while #test_files > 0 do
+      table.remove(test_files)
+    end
+    
+    print("Cleanup complete")
+  end
+  
+  -- Register cleanup for after tests
+  lust.after(cleanup_test_files)
   
   -- Test codefix module initialization
   it("should load and initialize", function()
@@ -240,10 +263,105 @@ return badlyFormattedFunction
     codefix.config.enabled = true
     
     -- Apply fixes to all test files
-    local success = codefix.fix_files(test_files)
+    local success, results = codefix.fix_files(test_files)
     
-    -- We consider this a pending test until we can fix the implementation details
-    return lust.pending("Multiple file fixing implementation in progress")
+    -- Verify the results
+    expect(type(success)).to.equal("boolean")
+    expect(type(results)).to.equal("table")
+    expect(#results).to.equal(#test_files)
+    
+    -- Check that each result has the expected structure
+    for _, result in ipairs(results) do
+      expect(result.file).to_not.equal(nil)
+      expect(type(result.success)).to.equal("boolean")
+    end
+  end)
+  
+  -- Test directory-based fixing
+  it("should fix files in a directory", function()
+    local codefix = require("../src/codefix")
+    local test_dir = "codefix_test_dir"
+    local dir_test_files = {}
+    
+    -- Create a test directory
+    os.execute("mkdir -p " .. test_dir)
+    
+    -- Create test files directly in the directory
+    local file1 = test_dir .. "/test1.lua"
+    local content1 = [[
+local function test(a, b, c)
+  local unused = 123
+  return a + b
+end
+return test
+]]
+    create_test_file(file1, content1)
+    table.insert(dir_test_files, file1)
+    
+    local file2 = test_dir .. "/test2.lua"
+    local content2 = [=[
+local multiline = [[
+  This has trailing spaces   
+  on multiple lines   
+]]
+return multiline
+]=]
+    create_test_file(file2, content2)
+    table.insert(dir_test_files, file2)
+    
+    -- Test fix_lua_files function
+    if codefix.fix_lua_files then
+      -- Enable module
+      codefix.config.enabled = true
+      codefix.config.verbose = true
+      
+      -- Custom options for testing
+      local options = {
+        include = {"%.lua$"},
+        exclude = {},
+        sort_by_mtime = true,
+        limit = 2
+      }
+      
+      -- Run the function
+      local success, results = codefix.fix_lua_files(test_dir, options)
+      
+      -- Check results
+      expect(type(success)).to.equal("boolean")
+      if results then
+        expect(type(results)).to.equal("table")
+        -- Since we limited to 2 files
+        expect(#results <= 2).to.equal(true)
+      end
+      
+      -- Clean up test files
+      for _, file in ipairs(dir_test_files) do
+        os.remove(file)
+        os.remove(file .. ".bak")
+      end
+      
+      -- Clean up directory
+      os.execute("rm -rf " .. test_dir)
+    else
+      lust.pending("fix_lua_files function not available")
+    end
+  end)
+  
+  -- Test file finding with patterns
+  it("should find files matching patterns", function()
+    local codefix = require("../src/codefix")
+    
+    -- Use private find_files via the run_cli function
+    local cli_result = codefix.run_cli({"find", ".", "--include", "unused_vars.*%.lua$"})
+    expect(cli_result).to.equal(true)
+    
+    -- Test another pattern
+    cli_result = codefix.run_cli({"find", ".", "--include", "whitespace.*%.lua$"})
+    expect(cli_result).to.equal(true)
+    
+    -- Test non-matching pattern
+    cli_result = codefix.run_cli({"find", ".", "--include", "nonexistent_file%.lua$"})
+    expect(cli_result).to.equal(true)
   end)
   
   -- Test CLI functionality via the run_cli function
@@ -255,17 +373,37 @@ return badlyFormattedFunction
       return
     end
     
-    -- Test the CLI function with check command
-    local result = codefix.run_cli({"check", test_files[1]})
-    expect(type(result)).to.equal("boolean")
+    -- Create a specific test file for CLI tests
+    local cli_test_file = "cli_test_file.lua"
+    local cli_test_content = [[
+    local function test() return 42 end
+    return test
+    ]]
     
-    -- Test the CLI function with fix command
-    result = codefix.run_cli({"fix", test_files[1]})
-    expect(type(result)).to.equal("boolean")
+    if create_test_file(cli_test_file, cli_test_content) then
+      -- Add to cleanup list
+      table.insert(test_files, cli_test_file)
+      
+      -- Test the CLI function with check command
+      local result = codefix.run_cli({"check", cli_test_file})
+      expect(type(result)).to.equal("boolean")
+      
+      -- Test the CLI function with fix command
+      result = codefix.run_cli({"fix", cli_test_file})
+      expect(type(result)).to.equal("boolean")
+    end
     
     -- Test the CLI function with help command
-    result = codefix.run_cli({"help"})
+    local result = codefix.run_cli({"help"})
     expect(result).to.equal(true)
+    
+    -- Test new CLI options with a limit to avoid processing too many files
+    result = codefix.run_cli({"fix", ".", "--sort-by-mtime", "--limit", "2"})
+    expect(type(result)).to.equal("boolean")
+    
+    -- Clean up any remaining files explicitly
+    os.remove(cli_test_file)
+    os.remove(cli_test_file .. ".bak")
   end)
 end)
 

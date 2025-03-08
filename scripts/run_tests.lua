@@ -27,6 +27,17 @@ local watch_interval = 1.0
 local exclude_patterns = {"node_modules", "%.git"}
 local interactive_mode_enabled = false
 
+-- Report configuration options
+local report_config = {
+  report_dir = "./coverage-reports",
+  report_suffix = nil,
+  coverage_path_template = nil,
+  quality_path_template = nil,
+  results_path_template = nil,
+  timestamp_format = "%Y-%m-%d",
+  verbose = false
+}
+
 -- Print usage information
 local function print_usage()
   print("Usage: run_tests.lua [options] [file.lua]")
@@ -41,11 +52,29 @@ local function print_usage()
   print("  --exclude <pattern>       Pattern to exclude from watching (can be multiple)")
   print("  --interactive, -i         Start interactive CLI mode")
   print("  --help                    Show this help message")
-  print("Examples:")
+  
+  print("\nReport Configuration Options:")
+  print("  --output-dir DIR          Base directory for all reports (default: ./coverage-reports)")
+  print("  --report-suffix STR       Add a suffix to all report filenames (e.g., \"-v1.0\")")
+  print("  --coverage-path PATH      Path template for coverage reports")
+  print("  --quality-path PATH       Path template for quality reports")
+  print("  --results-path PATH       Path template for test results reports")
+  print("  --timestamp-format FMT    Format string for timestamps (default: \"%Y-%m-%d\")")
+  print("  --verbose-reports         Enable verbose output during report generation")
+  print("\n  Path templates support the following placeholders:")
+  print("    {format}    - Output format (html, json, etc.)")
+  print("    {type}      - Report type (coverage, quality, etc.)")
+  print("    {date}      - Current date using timestamp format")
+  print("    {datetime}  - Current date and time (%Y-%m-%d_%H-%M-%S)")
+  print("    {suffix}    - The report suffix if specified")
+  
+  print("\nExamples:")
   print("  run_tests.lua                     Run all tests in ./tests")
   print("  run_tests.lua specific_test.lua   Run a specific test file")
   print("  run_tests.lua --watch             Run all tests and watch for changes")
   print("  run_tests.lua --interactive       Start interactive CLI mode")
+  print("  run_tests.lua --output-dir ./reports --report-suffix \"-$(date +%Y%m%d)\"")
+  print("  run_tests.lua --coverage-path \"coverage-{date}.{format}\"")
   os.exit(0)
 end
 
@@ -93,6 +122,28 @@ while i <= #arg do
     i = i + 2
   elseif arg[i] == "--interactive" or arg[i] == "-i" then
     interactive_mode_enabled = true
+    i = i + 1
+  -- Report configuration options
+  elseif arg[i] == "--output-dir" and arg[i+1] then
+    report_config.report_dir = arg[i+1]
+    i = i + 2
+  elseif arg[i] == "--report-suffix" and arg[i+1] then
+    report_config.report_suffix = arg[i+1]
+    i = i + 2
+  elseif arg[i] == "--coverage-path" and arg[i+1] then
+    report_config.coverage_path_template = arg[i+1]
+    i = i + 2
+  elseif arg[i] == "--quality-path" and arg[i+1] then
+    report_config.quality_path_template = arg[i+1]
+    i = i + 2
+  elseif arg[i] == "--results-path" and arg[i+1] then
+    report_config.results_path_template = arg[i+1]
+    i = i + 2
+  elseif arg[i] == "--timestamp-format" and arg[i+1] then
+    report_config.timestamp_format = arg[i+1]
+    i = i + 2
+  elseif arg[i] == "--verbose-reports" then
+    report_config.verbose = true
     i = i + 1
   elseif arg[i]:match("%.lua$") then
     run_single_file = arg[i]
@@ -147,6 +198,21 @@ end
 -- Run tests
 local success = false
 
+-- Configure reporting options in lust_next
+if reporting then
+  -- Pass the report configuration to lust_next
+  lust_next.report_config = report_config
+  
+  -- Update the coverage and quality options to use the report configuration
+  if lust_next.coverage_options then
+    lust_next.coverage_options.report_config = report_config
+  end
+  
+  if lust_next.quality_options then
+    lust_next.quality_options.report_config = report_config
+  end
+end
+
 -- Check for interactive mode first
 if interactive_mode_enabled then
   -- Try to load interactive module
@@ -165,7 +231,8 @@ if interactive_mode_enabled then
     watch_mode = watch_mode_enabled,
     watch_dirs = watch_dirs,
     watch_interval = watch_interval,
-    exclude_patterns = exclude_patterns
+    exclude_patterns = exclude_patterns,
+    report_config = report_config  -- Pass report config to interactive mode
   }
   
   success = interactive.start(lust_next, options)
@@ -183,7 +250,8 @@ elseif watch_mode_enabled then
     {
       pattern = pattern,
       exclude_patterns = exclude_patterns,
-      interval = watch_interval
+      interval = watch_interval,
+      report_config = report_config  -- Pass report config to watch mode
     }
   )
 else

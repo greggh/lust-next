@@ -243,36 +243,60 @@ local function find_files(include_patterns, exclude_patterns, start_dir)
   start_dir = start_dir or "."
   local files = {}
   
+  -- Normalize the start_dir path
+  if start_dir:sub(-1) == "/" or start_dir:sub(-1) == "\\" then
+    start_dir = start_dir:sub(1, -2)
+  end
+  
+  -- Convert relative path to absolute if possible
+  if not start_dir:match("^[/\\]") and not start_dir:match("^%a:") then
+    local pwd_result = execute_command("pwd")
+    if pwd_result then
+      start_dir = pwd_result:gsub("%s+$", "") .. "/" .. start_dir
+    end
+  end
+  
+  log_debug("Finding files in directory: " .. start_dir)
+  
   local find_cmd
   local os_name = get_os()
   
-  -- Check if fd or find is available
+  -- Check if fd or find or other tools are available
   local use_fd = command_exists("fd")
+  local use_find = command_exists("find")
   
   if use_fd then
     -- Use fd for more efficient file finding (if available)
-    find_cmd = string.format("fd -t f . %s", start_dir)
+    -- fd automatically follows symbolic links but doesn't recurse into hidden directories
+    find_cmd = string.format('fd -t f -L . "%s"', start_dir)
   elseif os_name == "windows" then
-    -- Windows dir command
+    -- Windows dir command with recursive search
     find_cmd = string.format('dir /b /s /a-d "%s"', start_dir)
+  elseif use_find then
+    -- Unix find command with symbolic link following
+    find_cmd = string.format('find -L "%s" -type f', start_dir)
   else
-    -- Unix find command
-    find_cmd = string.format('find "%s" -type f', start_dir)
+    -- Fallback method for systems without find/fd
+    log_warning("No efficient file finding tool available, using Lua-based file discovery")
+    return find_files_lua(include_patterns, exclude_patterns, start_dir)
   end
   
+  log_debug("Executing find command: " .. find_cmd)
   local result, success = execute_command(find_cmd)
   if not success or not result then
-    log_error("Failed to find files")
+    log_error("Failed to find files: " .. (result or "unknown error"))
     return {}
   end
   
   -- Process the output and filter by patterns
   for file in result:gmatch("[^\r\n]+") do
+    -- Normalize path separators
+    local normalized_file = file:gsub("\\", "/")
     local include_file = false
     
     -- Check include patterns
     for _, pattern in ipairs(include_patterns) do
-      if file:match(pattern) then
+      if normalized_file:match(pattern) then
         include_file = true
         break
       end
@@ -281,7 +305,7 @@ local function find_files(include_patterns, exclude_patterns, start_dir)
     -- Check exclude patterns
     if include_file then
       for _, pattern in ipairs(exclude_patterns) do
-        if file:match(pattern) then
+        if normalized_file:match(pattern) then
           include_file = false
           break
         end
@@ -289,10 +313,74 @@ local function find_files(include_patterns, exclude_patterns, start_dir)
     end
     
     if include_file then
+      log_debug("Including file: " .. file)
       table.insert(files, file)
     end
   end
   
+  log_info(string.format("Found %d matching files", #files))
+  return files
+end
+
+-- Pure Lua implementation of file finding for systems without find/fd
+local function find_files_lua(include_patterns, exclude_patterns, dir)
+  local files = {}
+  
+  -- Helper function to recursively scan directories
+  local function scan_dir(current_dir)
+    log_debug("Scanning directory: " .. current_dir)
+    local handle, err = io.popen('ls -la "' .. current_dir .. '" 2>/dev/null')
+    if not handle then
+      log_error("Failed to list directory: " .. current_dir .. ", error: " .. (err or "unknown"))
+      return
+    end
+    
+    local result = handle:read("*a")
+    handle:close()
+    
+    for entry in result:gmatch("[^\r\n]+") do
+      -- Parse ls -la output: match permissions, links, owner, group, size, date, name
+      local name = entry:match("^.+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+%d+%s+%d+:?%d*%s+(.+)$")
+      if name and name ~= "." and name ~= ".." then
+        local full_path = current_dir .. "/" .. name
+        
+        -- Check if it's a directory
+        local is_dir = entry:sub(1, 1) == "d"
+        
+        if is_dir then
+          scan_dir(full_path) -- Recurse into subdirectory
+        else
+          local include_file = false
+          
+          -- Check include patterns
+          for _, pattern in ipairs(include_patterns) do
+            if full_path:match(pattern) then
+              include_file = true
+              break
+            end
+          end
+          
+          -- Check exclude patterns
+          if include_file then
+            for _, pattern in ipairs(exclude_patterns) do
+              if full_path:match(pattern) then
+                include_file = false
+                break
+              end
+            end
+          end
+          
+          if include_file then
+            log_debug("Including file: " .. full_path)
+            table.insert(files, full_path)
+          end
+        end
+      end
+    end
+  end
+  
+  scan_dir(dir)
+  log_info(string.format("Found %d matching files with Lua-based scanner", #files))
   return files
 end
 
@@ -793,38 +881,173 @@ function M.fix_files(file_paths)
     return true
   end
   
+  if type(file_paths) ~= "table" or #file_paths == 0 then
+    log_warning("No files provided to fix")
+    return false
+  end
+  
+  log_info(string.format("Fixing %d files", #file_paths))
+  
   local success_count = 0
   local failure_count = 0
+  local results = {}
   
-  for _, file_path in ipairs(file_paths) do
-    if M.fix_file(file_path) then
-      success_count = success_count + 1
-    else
+  for i, file_path in ipairs(file_paths) do
+    log_info(string.format("Processing file %d/%d: %s", i, #file_paths, file_path))
+    
+    -- Check if file exists before attempting to fix
+    if not file_exists(file_path) then
+      log_error(string.format("File does not exist: %s", file_path))
       failure_count = failure_count + 1
+      table.insert(results, {
+        file = file_path,
+        success = false,
+        error = "File not found"
+      })
+    else
+      local success = M.fix_file(file_path)
+      
+      if success then
+        success_count = success_count + 1
+        table.insert(results, {
+          file = file_path,
+          success = true
+        })
+      else
+        failure_count = failure_count + 1
+        table.insert(results, {
+          file = file_path,
+          success = false,
+          error = "Failed to fix file"
+        })
+      end
+    end
+    
+    -- Provide progress update for large batches
+    if #file_paths > 10 and (i % 10 == 0 or i == #file_paths) then
+      log_info(string.format("Progress: %d/%d files processed (%.1f%%)", 
+        i, #file_paths, (i / #file_paths) * 100))
     end
   end
   
-  log_info(string.format("Fixed %d files, %d failures", success_count, failure_count))
+  -- Generate summary
+  log_info(string.rep("-", 40))
+  log_info(string.format("Fix summary: %d successful, %d failed, %d total", 
+    success_count, failure_count, #file_paths))
   
-  return failure_count == 0
+  if success_count > 0 then
+    log_success(string.format("Successfully fixed %d files", success_count))
+  end
+  
+  if failure_count > 0 then
+    log_warning(string.format("Failed to fix %d files", failure_count))
+  end
+  
+  return failure_count == 0, results
 end
 
 -- Find and fix Lua files
-function M.fix_lua_files(directory)
+function M.fix_lua_files(directory, options)
   directory = directory or "."
+  options = options or {}
   
   if not M.config.enabled then
     log_debug("Codefix is disabled, skipping")
     return true
   end
   
+  -- Allow for custom include/exclude patterns
+  local include_patterns = options.include or M.config.include
+  local exclude_patterns = options.exclude or M.config.exclude
+  
   log_info("Finding Lua files in " .. directory)
   
-  local files = find_files(M.config.include, M.config.exclude, directory)
+  local files = find_files(include_patterns, exclude_patterns, directory)
   
   log_info(string.format("Found %d Lua files to fix", #files))
   
-  return M.fix_files(files)
+  if #files == 0 then
+    log_warning("No matching files found in " .. directory)
+    return true
+  end
+  
+  -- Allow for limiting the number of files processed
+  if options.limit and options.limit > 0 and options.limit < #files then
+    log_info(string.format("Limiting to %d files (out of %d found)", options.limit, #files))
+    local limited_files = {}
+    for i = 1, options.limit do
+      table.insert(limited_files, files[i])
+    end
+    files = limited_files
+  end
+  
+  -- Sort files by modification time if requested
+  if options.sort_by_mtime then
+    log_info("Sorting files by modification time")
+    local file_times = {}
+    
+    for _, file in ipairs(files) do
+      local mtime
+      local os_name = get_os()
+      
+      if os_name == "windows" then
+        local result = execute_command(string.format('dir "%s" /TC /B', file))
+        if result then
+          mtime = result:match("(%d+/%d+/%d+%s+%d+:%d+%s+%a+)")
+        end
+      else
+        local result = execute_command(string.format('stat -c "%%Y" "%s"', file))
+        if result then
+          mtime = tonumber(result:match("%d+"))
+        end
+      end
+      
+      mtime = mtime or 0
+      table.insert(file_times, {file = file, mtime = mtime})
+    end
+    
+    table.sort(file_times, function(a, b) return a.mtime > b.mtime end)
+    
+    files = {}
+    for _, entry in ipairs(file_times) do
+      table.insert(files, entry.file)
+    end
+  end
+  
+  -- Run the file fixing
+  local success, results = M.fix_files(files)
+  
+  -- Generate a detailed report if requested
+  if options.generate_report and json then
+    local report = {
+      timestamp = os.time(),
+      directory = directory,
+      total_files = #files,
+      successful = 0,
+      failed = 0,
+      results = results
+    }
+    
+    for _, result in ipairs(results) do
+      if result.success then
+        report.successful = report.successful + 1
+      else
+        report.failed = report.failed + 1
+      end
+    end
+    
+    local report_file = options.report_file or "codefix_report.json"
+    local file = io.open(report_file, "w")
+    if file then
+      file:write(json.encode(report))
+      file:close()
+      log_info("Wrote detailed report to " .. report_file)
+    else
+      log_error("Failed to write report to " .. report_file)
+    end
+  end
+  
+  return success, results
 end
 
 -- Command line interface
@@ -834,14 +1057,30 @@ function M.run_cli(args)
   -- Enable module
   M.config.enabled = true
   
-  -- Handle command line arguments
+  -- Parse arguments
   local command = args[1] or "fix"
-  local target = args[2] or "."
+  local target = nil
+  local options = {
+    include = M.config.include,
+    exclude = M.config.exclude,
+    limit = 0,
+    sort_by_mtime = false,
+    generate_report = false,
+    report_file = "codefix_report.json",
+    include_patterns = {},
+    exclude_patterns = {}
+  }
   
-  -- Check for flags
-  for i = 1, #args do
+  -- Extract target and options from args
+  for i = 2, #args do
     local arg = args[i]
     
+    -- Skip flags when looking for target
+    if not arg:match("^%-") and not target then
+      target = arg
+    end
+    
+    -- Handle flags
     if arg == "--verbose" or arg == "-v" then
       M.config.verbose = true
     elseif arg == "--debug" or arg == "-d" then
@@ -853,7 +1092,39 @@ function M.run_cli(args)
       M.config.use_stylua = false
     elseif arg == "--no-luacheck" or arg == "-nl" then
       M.config.use_luacheck = false
+    elseif arg == "--sort-by-mtime" or arg == "-s" then
+      options.sort_by_mtime = true
+    elseif arg == "--generate-report" or arg == "-r" then
+      options.generate_report = true
+    elseif arg == "--limit" or arg == "-l" then
+      if args[i+1] and tonumber(args[i+1]) then
+        options.limit = tonumber(args[i+1])
+      end
+    elseif arg == "--report-file" then
+      if args[i+1] then
+        options.report_file = args[i+1]
+      end
+    elseif arg == "--include" or arg == "-i" then
+      if args[i+1] and not args[i+1]:match("^%-") then
+        table.insert(options.include_patterns, args[i+1])
+      end
+    elseif arg == "--exclude" or arg == "-e" then
+      if args[i+1] and not args[i+1]:match("^%-") then
+        table.insert(options.exclude_patterns, args[i+1])
+      end
     end
+  end
+  
+  -- Set default target if not specified
+  target = target or "."
+  
+  -- Apply custom include/exclude patterns if specified
+  if #options.include_patterns > 0 then
+    options.include = options.include_patterns
+  end
+  
+  if #options.exclude_patterns > 0 then
+    options.exclude = options.exclude_patterns
   end
   
   -- Run the appropriate command
@@ -862,7 +1133,7 @@ function M.run_cli(args)
     if target:match("%.lua$") and file_exists(target) then
       return M.fix_file(target)
     else
-      return M.fix_lua_files(target)
+      return M.fix_lua_files(target, options)
     end
   elseif command == "check" then
     -- Only run checks, don't fix
@@ -871,13 +1142,47 @@ function M.run_cli(args)
     if target:match("%.lua$") and file_exists(target) then
       return M.run_luacheck(target)
     else
-      log_error("Check command only supports individual files")
-      return false
+      -- Allow checking multiple files without fixing
+      options.check_only = true
+      local files = find_files(options.include, options.exclude, target)
+      
+      if #files == 0 then
+        log_warning("No matching files found")
+        return true
+      end
+      
+      log_info(string.format("Checking %d files...", #files))
+      
+      local issues_count = 0
+      for _, file in ipairs(files) do
+        local _, issues = M.run_luacheck(file)
+        if issues and #issues > 0 then
+          issues_count = issues_count + #issues
+        end
+      end
+      
+      log_info(string.format("Found %d issues in %d files", issues_count, #files))
+      return issues_count == 0
     end
+  elseif command == "find" then
+    -- Just find and list matching files
+    local files = find_files(options.include, options.exclude, target)
+    
+    if #files == 0 then
+      log_warning("No matching files found")
+    else
+      log_info(string.format("Found %d matching files:", #files))
+      for _, file in ipairs(files) do
+        print(file)
+      end
+    end
+    
+    return true
   elseif command == "help" then
     print("lust-next codefix usage:")
     print("  fix [directory or file] - Fix Lua files")
-    print("  check [file] - Check a Lua file without fixing")
+    print("  check [directory or file] - Check Lua files without fixing")
+    print("  find [directory] - Find Lua files matching patterns")
     print("  help - Show this help message")
     print("")
     print("Options:")
@@ -886,6 +1191,18 @@ function M.run_cli(args)
     print("  --no-backup, -nb    - Disable backup files")
     print("  --no-stylua, -ns    - Disable StyLua formatting")
     print("  --no-luacheck, -nl  - Disable Luacheck verification")
+    print("  --sort-by-mtime, -s - Sort files by modification time (newest first)")
+    print("  --generate-report, -r - Generate a JSON report file")
+    print("  --report-file FILE  - Specify report file name (default: codefix_report.json)")
+    print("  --limit N, -l N     - Limit processing to N files")
+    print("  --include PATTERN, -i PATTERN - Add file pattern to include (can be used multiple times)")
+    print("  --exclude PATTERN, -e PATTERN - Add file pattern to exclude (can be used multiple times)")
+    print("")
+    print("Examples:")
+    print("  fix src/ --no-stylua")
+    print("  check src/ --include \"%.lua$\" --exclude \"_spec%.lua$\"")
+    print("  fix . --sort-by-mtime --limit 10")
+    print("  fix . --generate-report --report-file codefix_results.json")
     return true
   else
     log_error("Unknown command: " .. command)
@@ -907,10 +1224,64 @@ function M.register_with_lust(lust)
   lust.fix_files = M.fix_files
   lust.fix_lua_files = M.fix_lua_files
   
-  -- Add CLI command
+  -- Add the full codefix module as a namespace for advanced usage
+  lust.codefix = M
+  
+  -- Add CLI commands
   lust.commands = lust.commands or {}
   lust.commands.fix = function(args)
     return M.run_cli(args)
+  end
+  
+  lust.commands.check = function(args)
+    table.insert(args, 1, "check")
+    return M.run_cli(args)
+  end
+  
+  lust.commands.find = function(args)
+    table.insert(args, 1, "find")
+    return M.run_cli(args)
+  end
+  
+  -- Register a custom reporter for code quality
+  if lust.register_reporter then
+    lust.register_reporter("codefix", function(results, options)
+      options = options or {}
+      
+      -- Check if codefix should be run
+      if not options.codefix then
+        return
+      end
+      
+      -- Find all source files in the test files
+      local test_files = {}
+      for _, test in ipairs(results.tests) do
+        if test.source_file and not test_files[test.source_file] then
+          test_files[test.source_file] = true
+        end
+      end
+      
+      -- Convert to array
+      local files_to_fix = {}
+      for file in pairs(test_files) do
+        table.insert(files_to_fix, file)
+      end
+      
+      -- Run codefix on all test files
+      if #files_to_fix > 0 then
+        print(string.format("\nRunning codefix on %d source files...", #files_to_fix))
+        M.config.enabled = true
+        M.config.verbose = options.verbose or false
+        
+        local success, fix_results = M.fix_files(files_to_fix)
+        
+        if success then
+          print("✅ All files fixed successfully")
+        else
+          print("⚠️ Some files could not be fixed")
+        end
+      end
+    end)
   end
   
   return M

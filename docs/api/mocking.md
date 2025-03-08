@@ -333,7 +333,145 @@ local config = get_config() -- Returns {debug = true, timeout = 1000}
 local calculate = lust.stub(function(a, b) return a * b end)
 local result = calculate(2, 3) -- Returns 6
 
+-- Stub with sequential return values
+local status = lust.stub(nil):returns_in_sequence({"starting", "in_progress", "complete"})
+status() -- Returns "starting"
+status() -- Returns "in_progress"
+status() -- Returns "complete"
+status() -- Returns nil (sequence exhausted)
+
 ```text
+
+### stub:returns_in_sequence(values)
+
+Sets up a stub to return different values on successive calls.
+
+**Parameters:**
+
+- `values` (table): Array of values to return in sequence on successive calls
+
+**Returns:**
+
+- A new stub that returns values in sequence
+
+**Example:**
+
+```lua
+local counter = lust.stub("initial"):returns_in_sequence({
+  1,
+  2,
+  3,
+  function() return 4 * 2 end -- Can include dynamic functions
+})
+
+counter() -- Returns 1
+counter() -- Returns 2
+counter() -- Returns 3
+counter() -- Returns 8 (from function call)
+counter() -- Returns nil (sequence exhausted)
+```
+
+### stub:cycle_sequence(enable)
+
+Configures a stub with sequential return values to cycle through the values after reaching the end of the sequence.
+
+**Parameters:**
+
+- `enable` (boolean, optional): Whether to enable cycling (default: true)
+
+**Returns:**
+
+- The stub object for method chaining
+
+**Example:**
+
+```lua
+local light = lust.stub():returns_in_sequence({"red", "yellow", "green"}):cycle_sequence()
+
+light() -- Returns "red"
+light() -- Returns "yellow"
+light() -- Returns "green"
+light() -- Returns "red" (cycles back to beginning)
+light() -- Returns "yellow"
+```
+
+### stub:when_exhausted(behavior, [custom_value])
+
+Configures what happens when a sequence of return values is exhausted.
+
+**Parameters:**
+
+- `behavior` (string): One of:
+  - `"nil"`: Return nil (default behavior)
+  - `"fallback"`: Fall back to the original implementation
+  - `"custom"`: Return a custom value
+- `custom_value` (any, optional): Value to return when behavior is "custom"
+
+**Returns:**
+
+- The stub object for method chaining
+
+**Example:**
+
+```lua
+-- Return a custom error object when exhausted
+local api = lust.stub():returns_in_sequence({
+  { status = "success", data = "first" },
+  { status = "success", data = "second" }
+}):when_exhausted("custom", { status = "error", message = "No more data" })
+
+api() -- Returns { status = "success", data = "first" }
+api() -- Returns { status = "success", data = "second" }
+api() -- Returns { status = "error", message = "No more data" }
+
+-- Fall back to original implementation when exhausted
+local obj = { get_data = function() return "original" end }
+local mock_obj = lust.mock(obj)
+mock_obj:stub_in_sequence("get_data", {"mocked"})
+  :when_exhausted("fallback")
+
+obj.get_data() -- Returns "mocked"
+obj.get_data() -- Returns "original" (falls back)
+```
+
+### stub:reset_sequence()
+
+Resets a sequence stub to start returning values from the beginning of the sequence again.
+
+**Returns:**
+
+- The stub object for method chaining
+
+**Example:**
+
+```lua
+local counter = lust.stub():returns_in_sequence({1, 2, 3})
+
+counter() -- Returns 1
+counter() -- Returns 2
+counter() -- Returns 3
+counter() -- Returns nil (exhausted)
+
+counter:reset_sequence() -- Reset to start from beginning
+
+counter() -- Returns 1 again
+counter() -- Returns 2 again
+```
+
+**Chain Configuration Example:**
+
+```lua
+-- Configure multiple behaviors in a single chain
+local api = lust.stub()
+  :returns_in_sequence({"pending", "processing", "complete"})
+  :cycle_sequence(true)
+  :when_exhausted("custom", "error")
+
+api() -- Returns "pending"
+api() -- Returns "processing"
+api() -- Returns "complete"
+api() -- Returns "pending" (cycles)
+```
 
 ### stub.called, stub.call_count, stub:called_with, etc.
 
@@ -394,6 +532,49 @@ end)
 
 -- Stub with a return value
 db_mock:stub("connect", {connected = true})
+
+```text
+
+### mock:stub_in_sequence(name, sequence_values)
+
+Stubs a method on the mock object to return different values on successive calls.
+
+**Parameters:**
+
+- `name` (string): Name of the method to stub
+- `sequence_values` (table): Array of values to return in sequence on successive calls
+
+**Returns:**
+
+- The mock object for method chaining
+
+**Example:**
+
+```lua
+local api = { get_status = function() return "online" end }
+local mock_api = lust.mock(api)
+
+-- Stub with sequential return values
+mock_api:stub_in_sequence("get_status", {
+  "starting",
+  "connecting",
+  "online",
+  "disconnecting"
+})
+
+-- Each call returns the next value in sequence
+api.get_status() -- Returns "starting"
+api.get_status() -- Returns "connecting"
+api.get_status() -- Returns "online"
+api.get_status() -- Returns "disconnecting"
+api.get_status() -- Returns nil (sequence exhausted)
+
+-- Can combine with functions for dynamic values
+mock_api:stub_in_sequence("get_status", {
+  "online",
+  function() return "error: " .. os.time() end,
+  "reconnected"
+})
 
 ```text
 
@@ -883,7 +1064,9 @@ end)
    - Use stubs when you need to replace functionality
    - Use mocks when you need both replacement and verification
 
-## Advanced Example: Using Expectations API and Call Sequence Verification
+## Advanced Examples
+
+### Using Expectations API and Call Sequence Verification
 
 ```lua
 describe("Order processing system", function()
@@ -940,5 +1123,211 @@ describe("Order processing system", function()
   end)
 end)
 
+```text
+
+### Using Sequential Return Values
+
+```lua
+describe("API client with changing state", function()
+  it("correctly handles a resource lifecycle", function()
+    -- Function under test - polls until a job is complete
+    local function wait_for_job_completion(api_client, job_id, max_attempts)
+      max_attempts = max_attempts or 5
+      local attempts = 0
+      
+      repeat
+        attempts = attempts + 1
+        local job_status = api_client.get_job_status(job_id)
+        
+        if job_status.status == "completed" then
+          return true, job_status.result
+        elseif job_status.status == "failed" then
+          return false, job_status.error
+        end
+        
+        -- In real code, would wait between attempts
+      until attempts >= max_attempts
+      
+      return false, "Timed out waiting for job completion"
+    end
+    
+    -- Setup mocked API client
+    local api_client = {
+      get_job_status = function(id) 
+        return { status = "queued", id = id } 
+      end
+    }
+    
+    -- Test the normal success path
+    lust.with_mocks(function(mock)
+      local mock_api = mock(api_client)
+      
+      -- Mock a job that progresses through multiple states
+      mock_api:stub_in_sequence("get_job_status", {
+        { status = "queued", id = 123 },
+        { status = "processing", id = 123, progress = 25 },
+        { status = "processing", id = 123, progress = 75 },
+        { status = "completed", id = 123, result = "success" }
+      })
+      
+      -- Call the function under test
+      local success, result = wait_for_job_completion(api_client, 123)
+      
+      -- Check results
+      expect(success).to.equal(true)
+      expect(result).to.equal("success")
+      expect(mock_api._stubs.get_job_status.call_count).to.equal(4)
+    end)
+    
+    -- Test the error path
+    lust.with_mocks(function(mock)
+      local mock_api = mock(api_client)
+      
+      -- Mock a job that fails midway
+      mock_api:stub_in_sequence("get_job_status", {
+        { status = "queued", id = 456 },
+        { status = "processing", id = 456, progress = 30 },
+        { status = "failed", id = 456, error = "Resource not found" }
+      })
+      
+      -- Call the function under test
+      local success, result = wait_for_job_completion(api_client, 456)
+      
+      -- Check results
+      expect(success).to.equal(false)
+      expect(result).to.equal("Resource not found")
+      expect(mock_api._stubs.get_job_status.call_count).to.equal(3)
+    end)
+    
+    -- Test timeout scenario with manual cycling implementation
+    lust.with_mocks(function(mock)
+      local mock_api = mock(api_client)
+      
+      -- Use a manual implementation for reliable cycling
+      local cycle_values = {
+        { status = "processing", id = 789, progress = 10 },
+        { status = "processing", id = 789, progress = 20 },
+        { status = "processing", id = 789, progress = 30 }
+      }
+      local index = 1
+      
+      -- Create a stub with reliable cycling behavior
+      mock_api:stub("get_job_status", function()
+        local result = cycle_values[((index - 1) % #cycle_values) + 1]
+        index = index + 1
+        return result
+      end)
+      
+      -- Call the function with 3 max attempts
+      local success, result = wait_for_job_completion(api_client, 789, 3)
+      
+      -- Check results
+      expect(success).to.equal(false)
+      expect(result).to.equal("Timed out waiting for job completion")
+      expect(mock_api._stubs.get_job_status.call_count).to.equal(3)
+    end)
+  end)
+end)
+```
+
+### Advanced Sequence Control Examples
+
+```lua
+describe("Advanced sequence behavior", function()
+  it("demonstrates custom exhaustion behavior", function()
+    local api = { get_status = function() return "online" end }
+    local mock_api = lust.mock(api)
+    
+    -- Option 1: Using direct implementation for reliable control
+    local sequence_values = {
+      "starting",
+      "connecting" 
+    }
+    local exhausted_value = "error"
+    local index = 1
+    
+    mock_api:stub("get_status", function()
+      if index <= #sequence_values then
+        local result = sequence_values[index]
+        index = index + 1
+        return result
+      else
+        -- Return custom value on exhaustion
+        return exhausted_value
+      end
+    end)
+    
+    -- First calls get sequence values
+    expect(api.get_status()).to.equal("starting")
+    expect(api.get_status()).to.equal("connecting")
+    
+    -- After exhaustion, gets custom value
+    expect(api.get_status()).to.equal("error")
+  end)
+  
+  it("demonstrates falling back to original implementation", function()
+    local original_impl = function() return "original value" end
+    local obj = { method = original_impl }
+    local mock_obj = lust.mock(obj)
+    
+    -- Setup sequence with fallback to original
+    local sequence = { "mock 1", "mock 2" }
+    local index = 1
+    
+    mock_obj:stub("method", function()
+      if index <= #sequence then
+        local value = sequence[index]
+        index = index + 1
+        return value
+      else
+        -- Fall back to original implementation
+        return original_impl()
+      end
+    end)
+    
+    -- Use sequence values first
+    expect(obj.method()).to.equal("mock 1")
+    expect(obj.method()).to.equal("mock 2")
+    
+    -- Then fall back to original
+    expect(obj.method()).to.equal("original value")
+  end)
+  
+  it("demonstrates resetting a sequence", function()
+    local obj = { method = function() return "real" end }
+    local mock_obj = lust.mock(obj)
+    
+    -- Create a sequence we can reset
+    local sequence = { "value 1", "value 2" }
+    local index = 1
+    
+    -- Function to reset the sequence
+    local reset_sequence = function()
+      index = 1
+    end
+    
+    mock_obj:stub("method", function()
+      if index <= #sequence then
+        local value = sequence[index]
+        index = index + 1
+        return value
+      else
+        return nil
+      end
+    end)
+    
+    -- First run through sequence
+    expect(obj.method()).to.equal("value 1")
+    expect(obj.method()).to.equal("value 2")
+    expect(obj.method()).to.equal(nil)
+    
+    -- Reset sequence
+    reset_sequence()
+    
+    -- Run through again
+    expect(obj.method()).to.equal("value 1")
+    expect(obj.method()).to.equal("value 2")
+  end)
+end)
 ```text
 

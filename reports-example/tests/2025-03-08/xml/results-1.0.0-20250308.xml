@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Report Path Example" tests="2" failures="0" errors="0" skipped="0" time="0.001" timestamp="2025-03-08T15:27:58">
+  <testcase name="generates multiple reports in organized structure" classname="Report Path Configuration Test" time="0.001">
+  </testcase>
+  <testcase name="generates data for report analysis" classname="Report Path Configuration Test" time="0.001">
+  </testcase>
+</testsuite>

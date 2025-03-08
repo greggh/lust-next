@@ -210,7 +210,7 @@ coverage_formatters.html = function(coverage_data)
   
   -- Generate HTML header with enhanced styling for syntax highlighting
   local html = [[
-<\!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>Lust-Next Coverage Report</title>
@@ -463,100 +463,100 @@ local results_formatters = formatters.results
 
 -- TAP (Test Anything Protocol) formatter
 results_formatters.tap = function(results_data)
-  -- Validate input
-  if not results_data then
-    print("ERROR [Reporting] Missing test results data")
-    return "TAP version 13\n1..0\n# No test results provided"
-  end
+    -- Validate input
+    if not results_data then
+      print("ERROR [Reporting] Missing test results data")
+      return "TAP version 13\n1..0\n# No test results provided"
+    end
 
-  local lines = {}
-  
-  -- Add TAP version header
-  table.insert(lines, "TAP version 13")
-  
-  -- Handle multiple test suites if present
-  local test_cases = {}
-  if results_data.suites then
-    -- Flatten multiple test suites into a single list for TAP output
-    for _, suite in ipairs(results_data.suites) do
-      for _, test_case in ipairs(suite.test_cases or {}) do
-        -- Add suite information to the test case
-        test_case.suite_name = suite.name
-        table.insert(test_cases, test_case)
+    local lines = {}
+    
+    -- Add TAP version header
+    table.insert(lines, "TAP version 13")
+    
+    -- Handle multiple test suites if present
+    local test_cases = {}
+    if results_data.suites then
+      -- Flatten multiple test suites into a single list for TAP output
+      for _, suite in ipairs(results_data.suites) do
+        for _, test_case in ipairs(suite.test_cases or {}) do
+          -- Add suite information to the test case
+          test_case.suite_name = suite.name
+          table.insert(test_cases, test_case)
+        end
       end
-    end
-  else
-    -- Single test suite format
-    test_cases = results_data.test_cases or {}
-  end
-  
-  -- Add TAP plan based on test count
-  local total_tests = #test_cases
-  table.insert(lines, "1.." .. total_tests)
-  
-  -- Process each test case
-  for i, test_case in ipairs(test_cases) do
-    local test_num = i
-    local test_name = test_case.name or ""
-    if test_case.suite_name then
-      test_name = test_case.suite_name .. " - " .. test_name
-    end
-    local status = test_case.status or "unknown"
-    
-    -- Convert classname path to something more readable if provided
-    if test_case.classname and test_case.classname ~= "Unknown" then
-      test_name = test_case.classname .. ": " .. test_name
-    end
-    
-    -- Determine TAP status line
-    local status_line = ""
-    if status == "pass" then
-      status_line = "ok " .. test_num .. " - " .. test_name
-    elseif status == "pending" or status == "skipped" then
-      -- For skipped/pending tests, use SKIP directive
-      local skip_message = test_case.skip_message or "Test not implemented"
-      status_line = "ok " .. test_num .. " - " .. test_name .. " # SKIP " .. skip_message
     else
-      -- For failed or error tests
-      status_line = "not ok " .. test_num .. " - " .. test_name
+      -- Single test suite format
+      test_cases = results_data.test_cases or {}
     end
     
-    table.insert(lines, status_line)
+    -- Add TAP plan based on test count
+    local total_tests = #test_cases
+    table.insert(lines, "1.." .. total_tests)
     
-    -- Add YAML block with details for failed or error tests
-    if status == "fail" or status == "error" then
-      table.insert(lines, "  ---")
+    -- Process each test case
+    for i, test_case in ipairs(test_cases) do
+      local test_num = i
+      local test_name = test_case.name or ""
+      if test_case.suite_name then
+        test_name = test_case.suite_name .. " - " .. test_name
+      end
+      local status = test_case.status or "unknown"
       
-      if status == "fail" and test_case.failure then
-        table.insert(lines, "  message: " .. (test_case.failure.message or "Test failed"))
-        if test_case.failure.type then
-          table.insert(lines, "  type: " .. test_case.failure.type)
-        end
-        if test_case.failure.details then
-          local details = test_case.failure.details:gsub("\n", "\n  ")
-          table.insert(lines, "  details: |\n    " .. details)
-        end
-      elseif status == "error" and test_case.error then
-        table.insert(lines, "  message: " .. (test_case.error.message or "Test error"))
-        if test_case.error.type then
-          table.insert(lines, "  type: " .. test_case.error.type)
-        end
-        if test_case.error.details then
-          local details = test_case.error.details:gsub("\n", "\n  ")
-          table.insert(lines, "  details: |\n    " .. details)
-        end
+      -- Convert classname path to something more readable if provided
+      if test_case.classname and test_case.classname ~= "Unknown" then
+        test_name = test_case.classname .. ": " .. test_name
       end
       
-      if test_case.time then
-        table.insert(lines, "  duration: " .. test_case.time .. "s")
+      -- Determine TAP status line
+      local status_line = ""
+      if status == "pass" then
+        status_line = "ok " .. test_num .. " - " .. test_name
+      elseif status == "pending" or status == "skipped" then
+        -- For skipped/pending tests, use SKIP directive
+        local skip_message = test_case.skip_message or "Test not implemented"
+        status_line = "ok " .. test_num .. " - " .. test_name .. " # SKIP " .. skip_message
+      else
+        -- For failed or error tests
+        status_line = "not ok " .. test_num .. " - " .. test_name
       end
       
-      table.insert(lines, "  ...")
+      table.insert(lines, status_line)
+      
+      -- Add YAML block with details for failed or error tests
+      if status == "fail" or status == "error" then
+        table.insert(lines, "  ---")
+        
+        if status == "fail" and test_case.failure then
+          table.insert(lines, "  message: " .. (test_case.failure.message or "Test failed"))
+          if test_case.failure.type then
+            table.insert(lines, "  type: " .. test_case.failure.type)
+          end
+          if test_case.failure.details then
+            local details = test_case.failure.details:gsub("\n", "\n  ")
+            table.insert(lines, "  details: |\n    " .. details)
+          end
+        elseif status == "error" and test_case.error then
+          table.insert(lines, "  message: " .. (test_case.error.message or "Test error"))
+          if test_case.error.type then
+            table.insert(lines, "  type: " .. test_case.error.type)
+          end
+          if test_case.error.details then
+            local details = test_case.error.details:gsub("\n", "\n  ")
+            table.insert(lines, "  details: |\n    " .. details)
+          end
+        end
+        
+        if test_case.time then
+          table.insert(lines, "  duration: " .. test_case.time .. "s")
+        end
+        
+        table.insert(lines, "  ...")
+      end
     end
-  end
-  
-  return table.concat(lines, "\n")
-end
+    
+    return table.concat(lines, "\n")
+  end,
 
 -- CSV formatter
 results_formatters.csv = function(results_data)
@@ -652,7 +652,8 @@ results_formatters.csv = function(results_data)
   end
   
   return table.concat(lines, "\n")
-end
+  end
+}
 
 -- Generate JUnit XML for test results
 results_formatters.junit = function(results_data)
@@ -860,7 +861,7 @@ quality_formatters.html = function(quality_data)
   
   -- Generate HTML header
   local html = [[
-<\!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <title>Lust-Next Test Quality Report</title>
@@ -956,6 +957,10 @@ quality_formatters.html = function(quality_data)
   
   return html
 end
+
+---------------------------
+-- OUTPUT GENERATION
+---------------------------
 
 ---------------------------
 -- CUSTOM FORMATTER REGISTRATION

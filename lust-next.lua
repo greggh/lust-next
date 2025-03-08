@@ -32,6 +32,10 @@ local codefix = try_require("src.codefix")
 local reporting = try_require("src.reporting")
 local watcher = try_require("src.watcher")
 local json = try_require("src.json")
+local type_checking = try_require("src.type_checking")
+local async_module = try_require("src.async")
+local interactive = try_require("src.interactive")
+local discover_module = try_require("scripts.discover")
 
 local lust_next = {}
 lust_next.level = 0
@@ -43,9 +47,371 @@ lust_next.version = "0.7.5"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
-lust_next.running_async = false
-lust_next.async_timeout = 5000 -- Default timeout in ms
+-- Default configuration for modules
+lust_next.async_options = {
+  timeout = 5000 -- Default timeout in ms
+}
 lust_next.focus_mode = false -- Tracks if any focused tests are present
+lust_next.skipped = 0 -- Track skipped tests
+
+-- Export async functions if the module is available
+if async_module then
+  -- Import core async functions
+  lust_next.async = async_module.async
+  lust_next.await = async_module.await
+  lust_next.wait_until = async_module.wait_until
+  lust_next.parallel_async = async_module.parallel_async
+  
+  -- Configure the async module with our options
+  if lust_next.async_options and lust_next.async_options.timeout then
+    async_module.set_timeout(lust_next.async_options.timeout)
+  end
+else
+  -- Define stub functions for when the module isn't available
+  local function async_error()
+    error("Async module not available. Make sure src/async.lua exists.", 2)
+  end
+  
+  lust_next.async = async_error
+  lust_next.await = async_error
+  lust_next.wait_until = async_error
+  lust_next.parallel_async = async_error
+end
+
+-- Register codefix module if available
+if codefix then
+  codefix.register_with_lust(lust_next)
+end
+
+-- Add test discovery functionality
+if discover_module then
+  -- Simple test file discovery function
+  function lust_next.discover(dir, pattern)
+    dir = dir or "./tests"
+    pattern = pattern or "*_test.lua"
+    
+    -- Platform-specific command to find test files
+    local command
+    if package.config:sub(1,1) == '\\' then
+      -- Windows
+      command = 'dir /s /b "' .. dir .. '\\' .. pattern .. '" > lust_temp_files.txt'
+    else
+      -- Unix
+      command = 'find "' .. dir .. '" -name "' .. pattern .. '" -type f > lust_temp_files.txt'
+    end
+    
+    -- Execute the command
+    os.execute(command)
+    
+    -- Read the results from the temporary file
+    local files = {}
+    local file = io.open("lust_temp_files.txt", "r")
+    if file then
+      for line in file:lines() do
+        if line:match(pattern:gsub("*", ".*"):gsub("?", ".")) then
+          table.insert(files, line)
+        end
+      end
+      file:close()
+      os.remove("lust_temp_files.txt")
+    end
+    
+    return files
+  end
+  
+  -- Run all discovered test files
+  function lust_next.run_discovered(dir, pattern)
+    local files = lust_next.discover(dir, pattern)
+    local success = true
+    
+    if #files == 0 then
+      print("No test files found in " .. (dir or "./tests"))
+      return false
+    end
+    
+    for _, file in ipairs(files) do
+      local file_results = lust_next.run_file(file)
+      if not file_results.success or file_results.errors > 0 then
+        success = false
+      end
+    end
+    
+    return success
+  end
+  
+  -- CLI runner function for command-line usage
+  function lust_next.cli_run(args)
+    args = args or {}
+    local options = {
+      dir = "./tests",
+      pattern = "*_test.lua",
+      files = {},
+      tags = {},
+      watch = false,
+      interactive = false,
+      coverage = false,
+      quality = false,
+      quality_level = 1,
+      format = "summary",
+      
+      -- Report configuration options
+      report_dir = "./coverage-reports",
+      report_suffix = nil,
+      coverage_path_template = nil,
+      quality_path_template = nil,
+      results_path_template = nil,
+      timestamp_format = "%Y-%m-%d",
+      verbose = false,
+      
+      -- Custom formatter options
+      coverage_format = nil,      -- Custom format for coverage reports
+      quality_format = nil,       -- Custom format for quality reports
+      results_format = nil,       -- Custom format for test results
+      formatter_module = nil      -- Custom formatter module to load
+    }
+    
+    -- Parse command line arguments
+    local i = 1
+    while i <= #args do
+      local arg = args[i]
+      if arg == "--watch" or arg == "-w" then
+        options.watch = true
+        i = i + 1
+      elseif arg == "--interactive" or arg == "-i" then
+        options.interactive = true
+        i = i + 1
+      elseif arg == "--coverage" or arg == "-c" then
+        options.coverage = true
+        i = i + 1
+      elseif arg == "--quality" or arg == "-q" then
+        options.quality = true
+        i = i + 1
+      elseif arg == "--quality-level" or arg == "-ql" then
+        if args[i+1] and tonumber(args[i+1]) then
+          options.quality_level = tonumber(args[i+1])
+          i = i + 2
+        else
+          i = i + 1
+        end
+      elseif arg == "--format" or arg == "-f" then
+        if args[i+1] then
+          options.format = args[i+1]
+          i = i + 2
+        else
+          i = i + 1
+        end
+      elseif arg == "--dir" or arg == "-d" then
+        if args[i+1] then
+          options.dir = args[i+1]
+          i = i + 2
+        else
+          i = i + 1
+        end
+      elseif arg == "--pattern" or arg == "-p" then
+        if args[i+1] then
+          options.pattern = args[i+1]
+          i = i + 2
+        else
+          i = i + 1
+        end
+      elseif arg == "--tag" or arg == "-t" then
+        if args[i+1] then
+          table.insert(options.tags, args[i+1])
+          i = i + 2
+        else
+          i = i + 1
+        end
+      -- Report configuration options
+      elseif arg == "--output-dir" and args[i+1] then
+        options.report_dir = args[i+1]
+        i = i + 2
+      elseif arg == "--report-suffix" and args[i+1] then
+        options.report_suffix = args[i+1]
+        i = i + 2
+      elseif arg == "--coverage-path" and args[i+1] then
+        options.coverage_path_template = args[i+1]
+        i = i + 2
+      elseif arg == "--quality-path" and args[i+1] then
+        options.quality_path_template = args[i+1]
+        i = i + 2
+      elseif arg == "--results-path" and args[i+1] then
+        options.results_path_template = args[i+1]
+        i = i + 2
+      elseif arg == "--timestamp-format" and args[i+1] then
+        options.timestamp_format = args[i+1]
+        i = i + 2
+      elseif arg == "--verbose-reports" then
+        options.verbose = true
+        i = i + 1
+      -- Custom formatter options
+      elseif arg == "--coverage-format" and args[i+1] then
+        options.coverage_format = args[i+1]
+        i = i + 2
+      elseif arg == "--quality-format" and args[i+1] then
+        options.quality_format = args[i+1]
+        i = i + 2
+      elseif arg == "--results-format" and args[i+1] then
+        options.results_format = args[i+1]
+        i = i + 2
+      elseif arg == "--formatter-module" and args[i+1] then
+        options.formatter_module = args[i+1]
+        i = i + 2
+      elseif arg == "--help" or arg == "-h" then
+        lust_next.show_help()
+        return true
+      elseif not arg:match("^%-") then
+        -- Not a flag, assume it's a file
+        table.insert(options.files, arg)
+        i = i + 1
+      else
+        -- Skip unknown options
+        i = i + 1
+      end
+    end
+    
+    -- Set tags if specified
+    if #options.tags > 0 then
+      lust_next.active_tags = options.tags
+    end
+    
+    -- Load custom formatter module if specified
+    if options.formatter_module and reporting then
+      local ok, custom_formatters = pcall(require, options.formatter_module)
+      if ok and custom_formatters then
+        print("Loading custom formatters from module: " .. options.formatter_module)
+        
+        local count = reporting.load_formatters(custom_formatters)
+        print("Registered " .. count .. " custom formatters")
+        
+        -- Get list of available formatters for display
+        local formatters = reporting.get_available_formatters()
+        print("Available formatters:")
+        print("  Coverage: " .. table.concat(formatters.coverage, ", "))
+        print("  Quality: " .. table.concat(formatters.quality, ", "))
+        print("  Results: " .. table.concat(formatters.results, ", "))
+      else
+        print("WARNING: Failed to load custom formatter module '" .. options.formatter_module .. "'")
+      end
+    end
+    
+    -- Set coverage format from CLI if specified
+    if options.coverage_format then
+      options.format = options.coverage_format
+    end
+    
+    -- Configure report options
+    local report_config = {
+      report_dir = options.report_dir,
+      report_suffix = options.report_suffix,
+      coverage_path_template = options.coverage_path_template,
+      quality_path_template = options.quality_path_template,
+      results_path_template = options.results_path_template,
+      timestamp_format = options.timestamp_format,
+      verbose = options.verbose
+    }
+    
+    -- Set quality options
+    if options.quality and quality then
+      quality.init(lust_next, { 
+        enabled = true, 
+        level = options.quality_level,
+        format = options.quality_format or options.format,
+        report_config = report_config
+      })
+    end
+    
+    -- Set coverage options
+    if options.coverage and coverage then
+      coverage.init(lust_next, { 
+        enabled = true,
+        format = options.format,
+        report_config = report_config
+      })
+    end
+    
+    -- Store report config for other modules to use
+    lust_next.report_config = report_config
+    
+    -- Store custom format settings
+    if options.results_format then
+      lust_next.results_format = options.results_format
+    end
+    
+    -- If interactive mode is enabled and the module is available
+    if options.interactive and interactive then
+      interactive.run(lust_next, options)
+      return true
+    end
+    
+    -- If watch mode is enabled and the module is available
+    if options.watch and watcher then
+      watcher.init({"."}, {"node_modules", "%.git"})
+      
+      -- Run tests
+      local run_tests = function()
+        lust_next.reset()
+        if #options.files > 0 then
+          -- Run specific files
+          for _, file in ipairs(options.files) do
+            lust_next.run_file(file)
+          end
+        else
+          -- Run all discovered tests
+          lust_next.run_discovered(options.dir)
+        end
+      end
+      
+      -- Initial test run
+      run_tests()
+      
+      -- Watch loop
+      print("Watching for changes. Press Ctrl+C to exit.")
+      while true do
+        local changes = watcher.check_for_changes()
+        if changes then
+          print("\nFile changes detected. Re-running tests...")
+          run_tests()
+        end
+        os.execute("sleep 0.5")
+      end
+      
+      return true
+    end
+    
+    -- Run tests normally (no watch mode or interactive mode)
+    if #options.files > 0 then
+      -- Run specific files
+      local success = true
+      for _, file in ipairs(options.files) do
+        local file_results = lust_next.run_file(file)
+        if not file_results.success or file_results.errors > 0 then
+          success = false
+        end
+      end
+      
+      -- Exit with appropriate code
+      return success
+    else
+      -- Run all discovered tests
+      local success = lust_next.run_discovered(options.dir, options.pattern)
+      return success
+    end
+  end
+else
+  -- Stub functions when the discovery module isn't available
+  function lust_next.discover()
+    return {}
+  end
+  
+  function lust_next.run_discovered()
+    return false
+  end
+  
+  function lust_next.cli_run()
+    print("Test discovery not available.")
+    return false
+  end
+end
 
 -- Reset function to clear state between test runs
 function lust_next.reset()
@@ -58,13 +424,14 @@ function lust_next.reset()
   lust_next.active_tags = {}
   lust_next.current_tags = {}
   lust_next.focus_mode = false
+  lust_next.skipped = 0
   
   -- Reset assertion count if tracking is enabled
   lust_next.assertion_count = 0
   
-  -- Make sure all hooks for the next test run are cleaned up
-  if lust_next.running_async then
-    lust_next.running_async = false
+  -- Reset the async module if available
+  if async_module and async_module.reset then
+    async_module.reset()
   end
   
   -- Preserve the paths table because it's essential for expect assertions
@@ -325,7 +692,7 @@ local function should_run_test(name, tags)
   if #lust_next.active_tags == 0 and not lust_next.filter_pattern then
     return true
   end
-
+  
   -- Check pattern filter
   if lust_next.filter_pattern and not name:match(lust_next.filter_pattern) then
     return false
@@ -403,8 +770,8 @@ function lust_next.it(name, fn, options)
       end
     end
   end
-
-  -- Handle both regular and async tests (returned from lust_next.async())
+  
+  -- Handle both regular and async tests
   local success, err
   if type(fn) == "function" then
     success, err = pcall(fn)
@@ -413,10 +780,10 @@ function lust_next.it(name, fn, options)
     success, err = true, fn
   end
   
-  if success then 
-    lust_next.passes = lust_next.passes + 1 
-  else 
-    lust_next.errors = lust_next.errors + 1 
+  if success then
+    lust_next.passes = lust_next.passes + 1
+  else
+    lust_next.errors = lust_next.errors + 1
   end
   
   -- Output based on format options
@@ -427,7 +794,7 @@ function lust_next.it(name, fn, options)
     else
       io.write(red .. "F" .. normal)
     end
-  elseif not lust_next.format_options.summary_only then 
+  elseif not lust_next.format_options.summary_only then
     -- Full output mode
     local color = success and green or red
     local label = success and 'PASS' or 'FAIL'
@@ -479,24 +846,38 @@ function lust_next.xit(name, fn)
   return lust_next.it(name, function() end, {excluded = true})
 end
 
+-- Asynchronous version of it
+function lust_next.it_async(name, fn, timeout)
+  if not async_module then
+    error("it_async requires the async module to be available", 2)
+  end
+  
+  -- Delegate to the async module for the implementation
+  local async_fn = lust_next.async(fn)
+  return lust_next.it(name, function()
+    return async_fn()()
+  end)
+end
+
+-- Pending test helper
+function lust_next.pending(message)
+  message = message or "Test not yet implemented"
+  if not lust_next.format_options.summary_only and not lust_next.format_options.dot_mode then
+    print(indent() .. yellow .. "PENDING: " .. normal .. message)
+  elseif lust_next.format_options.dot_mode then
+    io.write(yellow .. "P" .. normal)
+  end
+  return message -- Return the message to allow it to be used as a return value
+end
+
 function lust_next.before(fn)
   lust_next.befores[lust_next.level] = lust_next.befores[lust_next.level] or {}
   table.insert(lust_next.befores[lust_next.level], fn)
 end
 
--- Alias for before
-function lust_next.before_each(fn)
-  return lust_next.before(fn)
-end
-
 function lust_next.after(fn)
   lust_next.afters[lust_next.level] = lust_next.afters[lust_next.level] or {}
   table.insert(lust_next.afters[lust_next.level], fn)
-end
-
--- Alias for after
-function lust_next.after_each(fn)
-  return lust_next.after(fn)
 end
 
 -- Assertions
@@ -511,7 +892,7 @@ local function isa(v, x)
         'expected ' .. tostring(v) .. ' to be a ' .. tostring(x),
         'expected ' .. tostring(v) .. ' to not be a ' .. tostring(x)
     end
-
+    
     local seen = {}
     local meta = v
     while meta and not seen[meta] do
@@ -519,12 +900,12 @@ local function isa(v, x)
       seen[meta] = true
       meta = getmetatable(meta) and getmetatable(meta).__index
     end
-
+    
     return false,
       'expected ' .. tostring(v) .. ' to be a ' .. tostring(x),
       'expected ' .. tostring(v) .. ' to not be a ' .. tostring(x)
   end
-
+  
   error('invalid type ' .. tostring(x))
 end
 
@@ -554,12 +935,12 @@ local function stringify(t, depth)
   local indent_str = string.rep("  ", depth)
   
   -- Handle basic types directly
-  if type(t) == 'string' then 
-    return "'" .. tostring(t) .. "'" 
+  if type(t) == 'string' then
+    return "'" .. tostring(t) .. "'"
   elseif type(t) == 'number' or type(t) == 'boolean' or type(t) == 'nil' then
     return tostring(t)
-  elseif type(t) ~= 'table' or (getmetatable(t) and getmetatable(t).__tostring) then 
-    return tostring(t) 
+  elseif type(t) ~= 'table' or (getmetatable(t) and getmetatable(t).__tostring) then
+    return tostring(t)
   end
   
   -- Handle empty tables
@@ -644,11 +1025,14 @@ end
 
 local paths = {
   [''] = { 'to', 'to_not' },
-  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy' },
-  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy', chain = function(a) a.negate = not a.negate end },
+  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', 'satisfy', 'implement_interface', 'be_truthy', 'be_falsy', 'be_falsey', 'is_exact_type', 'is_instance_of', 'implements' },
+  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', 'satisfy', 'implement_interface', 'be_truthy', 'be_falsy', 'be_falsey', 'is_exact_type', 'is_instance_of', 'implements', chain = function(a) a.negate = not a.negate end },
   a = { test = isa },
   an = { test = isa },
-  be = { 'a', 'an', 'truthy', 'falsey',
+  truthy = { test = function(v) return v and true or false, 'expected ' .. tostring(v) .. ' to be truthy', 'expected ' .. tostring(v) .. ' to not be truthy' end },
+  falsy = { test = function(v) return not v, 'expected ' .. tostring(v) .. ' to be falsy', 'expected ' .. tostring(v) .. ' to not be falsy' end },
+  falsey = { test = function(v) return not v, 'expected ' .. tostring(v) .. ' to be falsey', 'expected ' .. tostring(v) .. ' to not be falsey' end },
+  be = { 'a', 'an', 'truthy', 'falsy', 'falsey', 'nil', 'type',
     test = function(v, x)
       return v == x,
         'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to be the same',
@@ -664,17 +1048,30 @@ local paths = {
   },
   truthy = {
     test = function(v)
-      return v ~= false and v ~= nil,
+      return v and true or false,
         'expected ' .. tostring(v) .. ' to be truthy',
         'expected ' .. tostring(v) .. ' to not be truthy'
     end
   },
-  
-  falsey = {
+  falsy = {
     test = function(v)
-      return v == false or v == nil,
-        'expected ' .. tostring(v) .. ' to be falsey',
-        'expected ' .. tostring(v) .. ' to not be falsey'
+      return not v and true or false,
+        'expected ' .. tostring(v) .. ' to be falsy',
+        'expected ' .. tostring(v) .. ' to not be falsy'
+    end
+  },
+  ['nil'] = {
+    test = function(v)
+      return v == nil,
+        'expected ' .. tostring(v) .. ' to be nil',
+        'expected ' .. tostring(v) .. ' to not be nil'
+    end
+  },
+  type = {
+    test = function(v, expected_type)
+      return type(v) == expected_type,
+        'expected ' .. tostring(v) .. ' to be of type ' .. expected_type .. ', got ' .. type(v),
+        'expected ' .. tostring(v) .. ' to not be of type ' .. expected_type
     end
   },
   equal = {
@@ -688,30 +1085,14 @@ local paths = {
           comparison = '\n' .. indent(lust_next.level + 1) .. diff_values(v, x)
         else
           -- For primitive types, show a simple comparison
-          comparison = '\n' .. indent(lust_next.level + 1) .. 'Expected: ' .. stringify(x) 
+          comparison = '\n' .. indent(lust_next.level + 1) .. 'Expected: ' .. stringify(x)
                      .. '\n' .. indent(lust_next.level + 1) .. 'Got:      ' .. stringify(v)
         end
       end
-
+      
       return equal,
         'Values are not equal: ' .. comparison,
         'expected ' .. stringify(v) .. ' and ' .. stringify(x) .. ' to not be equal'
-    end
-  },
-  
-  be_truthy = {
-    test = function(v)
-      return v ~= false and v ~= nil,
-        'expected ' .. tostring(v) .. ' to be truthy',
-        'expected ' .. tostring(v) .. ' to not be truthy'
-    end
-  },
-  
-  be_falsey = {
-    test = function(v)
-      return v == false or v == nil,
-        'expected ' .. tostring(v) .. ' to be falsey',
-        'expected ' .. tostring(v) .. ' to not be falsey'
     end
   },
   have = {
@@ -719,13 +1100,13 @@ local paths = {
       if type(v) ~= 'table' then
         error('expected ' .. stringify(v) .. ' to be a table')
       end
-
+      
       -- Create a formatted table representation for better error messages
       local table_str = stringify(v)
-      local content_preview = #table_str > 70 
-          and table_str:sub(1, 67) .. "..." 
+      local content_preview = #table_str > 70
+          and table_str:sub(1, 67) .. "..."
           or table_str
-
+      
       return has(v, x),
         'expected table to contain ' .. stringify(x) .. '\nTable contents: ' .. content_preview,
         'expected table not to contain ' .. stringify(x) .. ' but it was found\nTable contents: ' .. content_preview
@@ -749,301 +1130,24 @@ local paths = {
   match = {
     test = function(v, p)
       if type(v) ~= 'string' then v = tostring(v) end
-      local result = string.find(v, p)
-      return result ~= nil,
-        'expected ' .. v .. ' to match pattern [[' .. p .. ']]',
-        'expected ' .. v .. ' to not match pattern [[' .. p .. ']]'
+      local result = string.find(v, p) ~= nil
+      return result,
+        'expected "' .. v .. '" to match pattern "' .. p .. '"',
+        'expected "' .. v .. '" to not match pattern "' .. p .. '"'
     end
   },
   
-  -- Enhanced contain assertion for both tables and strings
-  contain = { 'keys', 'values', 'key', 'value', 'subset', 'exactly',
-    test = function(v, x)
-      -- Handle strings - check for substring
-      if type(v) == 'string' then
-        if type(x) ~= 'string' then
-          x = tostring(x)
-        end
-        
-        local found = string.find(v, x, 1, true) ~= nil
-        return found,
-          'expected string "' .. v .. '" to contain "' .. x .. '"',
-          'expected string "' .. v .. '" to not contain "' .. x .. '"'
-      end
-      
-      -- Handle tables
-      if type(v) == 'table' then
-        -- Default behavior is to check if the value is in the table (similar to have)
-        return has(v, x),
-          'expected table to contain ' .. tostring(x),
-          'expected table not to contain ' .. tostring(x)
-      end
-      
-      -- If we get here, v is neither a table nor a string
-      error('expected ' .. tostring(v) .. ' to be a table or a string')
-    end
-  },
-  
-  -- Check if a table contains all specified keys
-  keys = {
-    test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
-      end
-      
-      if type(x) ~= 'table' then
-        error('expected ' .. tostring(x) .. ' to be a table containing keys to check for')
-      end
-      
-      for _, key in ipairs(x) do
-        if v[key] == nil then
-          return false, 
-            'expected ' .. stringify(v) .. ' to contain key ' .. tostring(key),
-            'expected ' .. stringify(v) .. ' to not contain key ' .. tostring(key)
-        end
-      end
-      
-      return true,
-        'expected ' .. stringify(v) .. ' to contain keys ' .. stringify(x),
-        'expected ' .. stringify(v) .. ' to not contain keys ' .. stringify(x)
-    end
-  },
-  
-  -- Check if a table contains a specific key
-  key = {
-    test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
-      end
-      
-      return v[x] ~= nil,
-        'expected ' .. stringify(v) .. ' to contain key ' .. tostring(x),
-        'expected ' .. stringify(v) .. ' to not contain key ' .. tostring(x)
-    end
-  },
-  
-  -- Check if a table contains all specified values
-  values = {
-    test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
-      end
-      
-      if type(x) ~= 'table' then
-        error('expected ' .. tostring(x) .. ' to be a table containing values to check for')
-      end
-      
-      local found = {}
-      for _, val in ipairs(x) do
-        found[val] = false
-        for _, v_val in pairs(v) do
-          if eq(val, v_val) then
-            found[val] = true
-            break
-          end
-        end
-        
-        if not found[val] then
-          return false,
-            'expected ' .. stringify(v) .. ' to contain value ' .. tostring(val),
-            'expected ' .. stringify(v) .. ' to not contain value ' .. tostring(val)
-        end
-      end
-      
-      return true,
-        'expected ' .. stringify(v) .. ' to contain values ' .. stringify(x),
-        'expected ' .. stringify(v) .. ' to not contain values ' .. stringify(x)
-    end
-  },
-  
-  -- Check if a table contains a specific value
-  value = {
-    test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
-      end
-      
-      for _, val in pairs(v) do
-        if eq(val, x) then
-          return true,
-            'expected ' .. stringify(v) .. ' to contain value ' .. tostring(x),
-            'expected ' .. stringify(v) .. ' to not contain value ' .. tostring(x)
-        end
-      end
-      
-      return false,
-        'expected ' .. stringify(v) .. ' to contain value ' .. tostring(x),
-        'expected ' .. stringify(v) .. ' to not contain value ' .. tostring(x)
-    end
-  },
-  
-  -- Check if a table is a subset of another table
-  subset = {
-    test = function(v, x)
-      if type(v) ~= 'table' or type(x) ~= 'table' then
-        error('both arguments must be tables')
-      end
-      
-      for k, val in pairs(v) do
-        if not eq(x[k], val) then
-          return false,
-            'expected ' .. stringify(v) .. ' to be a subset of ' .. stringify(x),
-            'expected ' .. stringify(v) .. ' to not be a subset of ' .. stringify(x)
-        end
-      end
-      
-      return true,
-        'expected ' .. stringify(v) .. ' to be a subset of ' .. stringify(x),
-        'expected ' .. stringify(v) .. ' to not be a subset of ' .. stringify(x)
-    end
-  },
-  
-  -- Check if a table contains exactly the specified keys
-  exactly = {
-    test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
-      end
-      
-      if type(x) ~= 'table' then
-        error('expected ' .. tostring(x) .. ' to be a table containing expected keys')
-      end
-      
-      -- Check if all keys in x are in v
-      for _, key in ipairs(x) do
-        if v[key] == nil then
-          return false,
-            'expected ' .. stringify(v) .. ' to contain exactly keys ' .. stringify(x) .. ' (missing ' .. tostring(key) .. ')',
-            'expected ' .. stringify(v) .. ' to not contain exactly keys ' .. stringify(x)
-        end
-      end
-      
-      -- Check if all keys in v are in x
-      local x_set = {}
-      for _, key in ipairs(x) do
-        x_set[key] = true
-      end
-      
-      for k, _ in pairs(v) do
-        if not x_set[k] then
-          return false,
-            'expected ' .. stringify(v) .. ' to contain exactly keys ' .. stringify(x) .. ' (unexpected ' .. tostring(k) .. ')',
-            'expected ' .. stringify(v) .. ' to not contain exactly keys ' .. stringify(x)
-        end
-      end
-      
-      return true,
-        'expected ' .. stringify(v) .. ' to contain exactly keys ' .. stringify(x),
-        'expected ' .. stringify(v) .. ' to not contain exactly keys ' .. stringify(x)
-    end
-  },
-  
-  -- String assertions
-  start_with = {
-    test = function(v, x)
-      if type(v) ~= 'string' then
-        error('expected ' .. tostring(v) .. ' to be a string')
-      end
-      
-      if type(x) ~= 'string' then
-        error('expected ' .. tostring(x) .. ' to be a string')
-      end
-      
-      return v:sub(1, #x) == x,
-        'expected "' .. v .. '" to start with "' .. x .. '"',
-        'expected "' .. v .. '" to not start with "' .. x .. '"'
-    end
-  },
-  
-  end_with = {
-    test = function(v, x)
-      if type(v) ~= 'string' then
-        error('expected ' .. tostring(v) .. ' to be a string')
-      end
-      
-      if type(x) ~= 'string' then
-        error('expected ' .. tostring(x) .. ' to be a string')
-      end
-      
-      return v:sub(-#x) == x,
-        'expected "' .. v .. '" to end with "' .. x .. '"',
-        'expected "' .. v .. '" to not end with "' .. x .. '"'
-    end
-  },
-  
-  -- Type checking assertions beyond the basic types
-  be_type = { 'callable', 'comparable', 'iterable', 'exact', 'instance_of', 'implementing',
-    test = function(v, expected_type)
-      if expected_type == 'callable' then
-        local is_callable = type(v) == 'function' or 
-                           (type(v) == 'table' and getmetatable(v) and getmetatable(v).__call)
-        return is_callable,
-          'expected ' .. tostring(v) .. ' to be callable',
-          'expected ' .. tostring(v) .. ' to not be callable'
-      elseif expected_type == 'comparable' then
-        local success = pcall(function() return v < v end)
-        return success,
-          'expected ' .. tostring(v) .. ' to be comparable',
-          'expected ' .. tostring(v) .. ' to not be comparable'
-      elseif expected_type == 'iterable' then
-        local success = pcall(function() 
-          for _ in pairs(v) do break end
-        end)
-        return success,
-          'expected ' .. tostring(v) .. ' to be iterable',
-          'expected ' .. tostring(v) .. ' to not be iterable'
-      else
-        error('unknown type check: ' .. tostring(expected_type))
-      end
-    end
-  },
-
-  -- Enhanced type checking with distinct assertions
-  is_exact_type = {
-    test = function(v, expected_type)
-      local actual_type = type(v)
-      
-      return actual_type == expected_type,
-        'expected value to be exactly of type \'' .. expected_type .. '\', but got \'' .. actual_type .. '\'',
-        'expected value not to be of type \'' .. expected_type .. '\''
-    end
-  },
-  
-  is_instance_of = {
-    test = function(v, expected_class)
-      if type(v) ~= 'table' or type(expected_class) ~= 'table' then
-        return false,
-          'expected a table instance and class, but got ' .. type(v) .. ' and ' .. type(expected_class),
-          'expected value not to be an instance of the given class'
-      end
-      
-      -- Check if value is an instance of expected_class
-      local is_instance = false
-      local mt = getmetatable(v)
-      while mt do
-        if mt == expected_class or mt.__index == expected_class then
-          is_instance = true
-          break
-        end
-        mt = getmetatable(mt) and getmetatable(mt).__index
-      end
-      
-      local class_name = expected_class.__name or tostring(expected_class)
-      return is_instance,
-        'expected value to be an instance of \'' .. class_name .. '\', but it isn\'t',
-        'expected value not to be an instance of \'' .. class_name .. '\''
-    end
-  },
-  
-  implements = {
+  -- Interface implementation checking
+  implement_interface = {
     test = function(v, interface)
-      if type(v) ~= 'table' or type(interface) ~= 'table' then
-        return false,
-          'expected a table implementing interface, but got ' .. type(v) .. ' and ' .. type(interface),
-          'expected value not to implement the given interface'
+      if type(v) ~= 'table' then
+        return false, 'expected ' .. tostring(v) .. ' to be a table', nil
       end
       
-      -- Check if value implements all methods and properties in interface
+      if type(interface) ~= 'table' then
+        return false, 'expected interface to be a table', nil
+      end
+      
       local missing_keys = {}
       local wrong_types = {}
       
@@ -1073,6 +1177,131 @@ local paths = {
       return true,
         'expected object to implement interface',
         'expected object not to implement interface'
+    end
+  },
+  
+  -- Enhanced type checking assertions (delegated to type_checking module)
+  is_exact_type = {
+    test = function(v, expected_type, message)
+      if type_checking then
+        -- Delegate to the type checking module
+        local ok, err = pcall(type_checking.is_exact_type, v, expected_type, message)
+        if ok then
+          return true, nil, nil
+        else
+          return false, err, nil
+        end
+      else
+        -- Minimal fallback if module is not available
+        local actual_type = type(v)
+        return actual_type == expected_type,
+          message or string.format("Expected value to be exactly of type '%s', but got '%s'", expected_type, actual_type),
+          "Expected value not to be of type " .. expected_type
+      end
+    end
+  },
+  
+  is_instance_of = {
+    test = function(v, class, message)
+      if type_checking then
+        -- Delegate to the type checking module
+        local ok, err = pcall(type_checking.is_instance_of, v, class, message)
+        if ok then
+          return true, nil, nil
+        else
+          return false, err, nil
+        end
+      else
+        -- Fallback to basic implementation using isa function
+        return isa(v, class)
+      end
+    end
+  },
+  
+  implements = {
+    test = function(v, interface, message)
+      if type_checking then
+        -- Delegate to the type checking module
+        local ok, err = pcall(type_checking.implements, v, interface, message)
+        if ok then
+          return true, nil, nil
+        else
+          return false, err, nil
+        end
+      else
+        -- Fallback to existing implement_interface
+        return paths.implement_interface.test(v, interface, message)
+      end
+    end
+  },
+  
+  -- Table inspection assertions
+  contain = { 'keys', 'values', 'key', 'value', 'subset', 'exactly',
+    test = function(v, x)
+      -- Delegate to the type_checking module if available
+      if type_checking and type_checking.contains then
+        local ok, err = pcall(type_checking.contains, v, x)
+        if ok then
+          return true, nil, nil
+        else
+          return false, err, nil
+        end
+      else
+        -- Minimal fallback implementation
+        if type(v) == 'string' then
+          -- Handle string containment
+          local x_str = tostring(x)
+          return string.find(v, x_str, 1, true) ~= nil,
+            'expected string "' .. v .. '" to contain "' .. x_str .. '"',
+            'expected string "' .. v .. '" to not contain "' .. x_str .. '"'
+        elseif type(v) == 'table' then
+          -- Handle table containment
+          return has(v, x),
+            'expected ' .. tostring(v) .. ' to contain ' .. tostring(x),
+            'expected ' .. tostring(v) .. ' to not contain ' .. tostring(x)
+        else
+          -- Error for unsupported types
+          error('cannot check containment in a ' .. type(v))
+        end
+      end
+    end
+  },
+  
+  -- Check if a table contains all specified keys
+  keys = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      if type(x) ~= 'table' then
+        error('expected ' .. tostring(x) .. ' to be a table containing keys to check for')
+      end
+      
+      for _, key in ipairs(x) do
+        if v[key] == nil then
+          return false,
+            'expected ' .. stringify(v) .. ' to contain key ' .. tostring(key),
+            'expected ' .. stringify(v) .. ' to not contain key ' .. tostring(key)
+        end
+      end
+      
+      return true,
+        'expected ' .. stringify(v) .. ' to contain keys ' .. stringify(x),
+        'expected ' .. stringify(v) .. ' to not contain keys ' .. stringify(x)
+    end
+  },
+  
+  -- Check if a table contains a specific key
+  key = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. tostring(v) .. ' to be a table')
+      end
+      
+      return v[x] ~= nil,
+        'expected ' .. stringify(v) .. ' to contain key ' .. tostring(x),
+        'expected ' .. stringify(v) .. ' to not contain key ' .. tostring(x)
     end
   },
   
@@ -1125,6 +1354,30 @@ local paths = {
     end
   },
   
+  be_truthy = {
+    test = function(v)
+      return v and true or false,
+        'expected ' .. tostring(v) .. ' to be truthy',
+        'expected ' .. tostring(v) .. ' to not be truthy'
+    end
+  },
+  
+  be_falsy = {
+    test = function(v)
+      return not v,
+        'expected ' .. tostring(v) .. ' to be falsy',
+        'expected ' .. tostring(v) .. ' to not be falsy'
+    end
+  },
+  
+  be_falsey = {
+    test = function(v)
+      return not v,
+        'expected ' .. tostring(v) .. ' to be falsey',
+        'expected ' .. tostring(v) .. ' to not be falsey'
+    end
+  },
+  
   be_approximately = {
     test = function(v, x, delta)
       if type(v) ~= 'number' then
@@ -1158,6 +1411,66 @@ local paths = {
       return result,
         'expected value to satisfy the given predicate function',
         'expected value to not satisfy the given predicate function'
+    end
+  },
+  
+  -- String assertions
+  start_with = {
+    test = function(v, x)
+      if type(v) ~= 'string' then
+        error('expected ' .. tostring(v) .. ' to be a string')
+      end
+      
+      if type(x) ~= 'string' then
+        error('expected ' .. tostring(x) .. ' to be a string')
+      end
+      
+      return v:sub(1, #x) == x,
+        'expected "' .. v .. '" to start with "' .. x .. '"',
+        'expected "' .. v .. '" to not start with "' .. x .. '"'
+    end
+  },
+  
+  end_with = {
+    test = function(v, x)
+      if type(v) ~= 'string' then
+        error('expected ' .. tostring(v) .. ' to be a string')
+      end
+      
+      if type(x) ~= 'string' then
+        error('expected ' .. tostring(x) .. ' to be a string')
+      end
+      
+      return v:sub(-#x) == x,
+        'expected "' .. v .. '" to end with "' .. x .. '"',
+        'expected "' .. v .. '" to not end with "' .. x .. '"'
+    end
+  },
+  
+  -- Type checking assertions
+  be_type = { 'callable', 'comparable', 'iterable',
+    test = function(v, expected_type)
+      if expected_type == 'callable' then
+        local is_callable = type(v) == 'function' or
+                         (type(v) == 'table' and getmetatable(v) and getmetatable(v).__call)
+        return is_callable,
+          'expected ' .. tostring(v) .. ' to be callable',
+          'expected ' .. tostring(v) .. ' to not be callable'
+      elseif expected_type == 'comparable' then
+        local success = pcall(function() return v < v end)
+        return success,
+          'expected ' .. tostring(v) .. ' to be comparable',
+          'expected ' .. tostring(v) .. ' to not be comparable'
+      elseif expected_type == 'iterable' then
+        local success = pcall(function()
+          for _ in pairs(v) do break end
+        end)
+        return success,
+          'expected ' .. tostring(v) .. ' to be iterable',
+          'expected ' .. tostring(v) .. ' to not be iterable'
+      else
+        error('unknown type check: ' .. tostring(expected_type))
+      end
     end
   },
   
@@ -1255,7 +1568,7 @@ function lust_next.expect(v)
   assertion.val = v
   assertion.action = ''
   assertion.negate = false
-
+  
   setmetatable(assertion, {
     __index = function(t, k)
       if has(paths[rawget(t, 'action')], k) then
@@ -1279,3284 +1592,587 @@ function lust_next.expect(v)
       end
     end
   })
-
+  
   return assertion
 end
 
--- Mocking and Spy system
--- Global registry to track mocks for cleanup
-local _mocks = {}
+-- Load the mocking system
+package.path = "./lib/?.lua;./lib/?/init.lua;" .. package.path
+local mocking_ok, mocking = pcall(require, "mocking")
 
--- Helper function to check if a table is a mock
-local function is_mock(obj)
-  return type(obj) == "table" and obj._is_lust_mock == true
-end
-
--- Helper function to register a mock for cleanup
-local function register_mock(mock)
-  table.insert(_mocks, mock)
-  return mock
-end
-
--- Helper function to restore all mocks
-local function restore_all_mocks()
-  for _, mock in ipairs(_mocks) do
-    mock:restore()
-  end
-  _mocks = {}
-end
-
--- Deep comparison of tables for equality
-local function tables_equal(t1, t2)
-  if type(t1) ~= "table" or type(t2) ~= "table" then
-    return t1 == t2
-  end
+-- If the mocking module is available, use it
+if mocking_ok and mocking then
+  -- Export the mocking functionality to lust_next
+  lust_next.spy = mocking.spy
+  lust_next.stub = mocking.stub
+  lust_next.mock = mocking.mock
+  lust_next.with_mocks = mocking.with_mocks
+  lust_next.arg_matcher = mocking.arg_matcher or {}
   
-  -- Check each key-value pair in t1
-  for k, v in pairs(t1) do
-    if not tables_equal(v, t2[k]) then
-      return false
-    end
-  end
-  
-  -- Check for any extra keys in t2
-  for k, _ in pairs(t2) do
-    if t1[k] == nil then
-      return false
-    end
-  end
-  
-  return true
-end
-
--- Convert value to string representation for error messages
-local function value_to_string(value, max_depth)
-  max_depth = max_depth or 3
-  if max_depth < 0 then return "..." end
-  
-  if type(value) == "string" then
-    return '"' .. value .. '"'
-  elseif type(value) == "table" then
-    if max_depth == 0 then return "{...}" end
+  -- Override the test runner to use our mocking system
+  local original_it = lust_next.it
+  lust_next.it = function(name, fn, options)
+    local wrapped_fn
     
-    local parts = {}
-    for k, v in pairs(value) do
-      local key_str = type(k) == "string" and k or "[" .. tostring(k) .. "]"
-      table.insert(parts, key_str .. " = " .. value_to_string(v, max_depth - 1))
-    end
-    return "{ " .. table.concat(parts, ", ") .. " }"
-  elseif type(value) == "function" then
-    return "function(...)"
-  else
-    return tostring(value)
-  end
-end
-
--- Argument matcher system
-lust_next.arg_matcher = {}
-
--- Base matcher class
-local function create_matcher(match_fn, description)
-  return {
-    _is_matcher = true,
-    match = match_fn,
-    description = description,
-    __matcher_value = true
-  }
-end
-
--- Match any value
-function lust_next.arg_matcher.any()
-  return create_matcher(function() return true end, "any value")
-end
-
--- Type-based matchers
-function lust_next.arg_matcher.string()
-  return create_matcher(function(val) return type(val) == "string" end, "string value")
-end
-
-function lust_next.arg_matcher.number()
-  return create_matcher(function(val) return type(val) == "number" end, "number value")
-end
-
-function lust_next.arg_matcher.boolean()
-  return create_matcher(function(val) return type(val) == "boolean" end, "boolean value")
-end
-
-function lust_next.arg_matcher.table()
-  return create_matcher(function(val) return type(val) == "table" end, "table value")
-end
-
-function lust_next.arg_matcher.func()
-  return create_matcher(function(val) return type(val) == "function" end, "function value")
-end
-
--- Table containing specific keys/values
-function lust_next.arg_matcher.table_containing(partial)
-  return create_matcher(function(val)
-    if type(val) ~= "table" then return false end
-    
-    for k, v in pairs(partial) do
-      if val[k] == nil then return false end
-      
-      -- If v is a matcher, use its match function
-      if type(v) == "table" and v._is_matcher then
-        if not v.match(val[k]) then return false end
-      -- Otherwise do a direct comparison
-      elseif val[k] ~= v then
-        return false
+    if options and (options.focused or options.excluded) then
+      -- If this is a focused or excluded test, don't wrap it with mocking
+      wrapped_fn = fn
+    else
+      -- Otherwise, wrap the function with mocking context
+      wrapped_fn = function()
+        return mocking.with_mocks(function()
+          return fn()
+        end)
       end
     end
     
-    return true
-  end, "table containing " .. value_to_string(partial))
+    return original_it(name, wrapped_fn, options)
+  end
 end
 
--- Custom matcher with user-provided function
-function lust_next.arg_matcher.custom(fn, description)
-  return create_matcher(fn, description or "custom matcher")
-end
-
--- Helper to check if value matches the matcher
-local function matches_arg(expected, actual)
-  -- If expected is a matcher, use its match function
-  if type(expected) == "table" and expected._is_matcher then
-    return expected.match(actual)
-  end
-  
-  -- If both are tables, do deep comparison
-  if type(expected) == "table" and type(actual) == "table" then
-    return tables_equal(expected, actual)
-  end
-  
-  -- Otherwise do direct comparison
-  return expected == actual
-end
-
--- Check if args match a set of expected args (with potential matchers)
-local function args_match(expected_args, actual_args)
-  if #expected_args ~= #actual_args then
-    return false
-  end
-  
-  for i, expected in ipairs(expected_args) do
-    if not matches_arg(expected, actual_args[i]) then
-      return false
-    end
-  end
-  
-  return true
-end
-
--- Format args for error messages
-local function format_args(args)
-  local parts = {}
-  for i, arg in ipairs(args) do
-    if type(arg) == "table" and arg._is_matcher then
-      table.insert(parts, arg.description)
-    else
-      table.insert(parts, value_to_string(arg))
-    end
-  end
-  return table.concat(parts, ", ")
-end
-
--- Spy function with enhanced features
-function lust_next.spy(target, name, run)
-  local spy = {
-    calls = {},
-    called = false,
-    call_count = 0,
-    original = nil,
-    target = nil,
-    name = nil,
-    call_sequence = {}, -- Track call sequence numbers for order verification
-    call_timestamps = {} -- Kept for backward compatibility
+-- CLI Helper functions
+function lust_next.parse_args(args)
+  local options = {
+    dir = "./tests",
+    format = "default",
+    tags = {},
+    filter = nil,
+    files = {},
+    interactive = false, -- Interactive CLI mode option
+    watch = false,       -- Watch mode option
+    
+    -- Report configuration options
+    report_dir = "./coverage-reports",
+    report_suffix = nil,
+    coverage_path_template = nil,
+    quality_path_template = nil,
+    results_path_template = nil,
+    timestamp_format = "%Y-%m-%d",
+    verbose = false,
+    
+    -- Custom formatter options
+    coverage_format = nil,      -- Custom format for coverage reports
+    quality_format = nil,       -- Custom format for quality reports
+    results_format = nil,       -- Custom format for test results
+    formatter_module = nil      -- Custom formatter module to load
   }
   
-  local subject
-
-  local function capture(...)
-    -- Update call tracking state
-    spy.called = true
-    spy.call_count = spy.call_count + 1
-    
-    -- Record arguments
-    local args = {...}
-    table.insert(spy.calls, args)
-    
-    -- Instead of relying purely on clock time, we'll use a global sequence counter
--- that increases for every call across all spies, guaranteeing a strict ordering
-if not _G._lust_next_sequence_counter then
-    _G._lust_next_sequence_counter = 0
-end
-_G._lust_next_sequence_counter = _G._lust_next_sequence_counter + 1
-
--- Store a sequence number that ensures strict ordering
--- This ensures exact ordering regardless of system clock precision
-local sequence_number = _G._lust_next_sequence_counter
-    table.insert(spy.call_sequence, sequence_number)
-    
-    -- Also store in timestamps for backward compatibility
-    table.insert(spy.call_timestamps, sequence_number)
-    
-    -- Call the original or stubbed function
-    if subject then
-      return subject(...)
-    end
-    return nil
-  end
-
-  if type(target) == 'table' then
-    spy.target = target
-    spy.name = name
-    spy.original = target[name]
-    subject = spy.original
-    target[name] = capture
-  else
-    run = name
-    subject = target or function() end
-  end
-
-  -- Add spy methods
-  function spy:restore()
-    if self.target and self.name then
-      self.target[self.name] = self.original
-    end
-  end
-  
-  function spy:called_with(...)
-    local expected_args = {...}
-    local found = false
-    local matching_call_index = nil
-    
-    for i, call_args in ipairs(self.calls) do
-      if args_match(expected_args, call_args) then
-        found = true
-        matching_call_index = i
-        break
-      end
-    end
-    
-    -- If no matching call was found, return false
-    if not found then
-      return false
-    end
-    
-    -- Return an object with chainable methods
-    local result = {
-      result = true,
-      call_index = matching_call_index,
-      
-      -- Check if this call came before another spy's call
-      called_before = function(other_spy)
-        if type(other_spy) == "table" and other_spy.call_timestamps then
-          -- Make sure other spy has been called
-          if #other_spy.call_timestamps == 0 then
-            return false
-          end
-          
-          -- Compare timestamps
-          return spy.call_timestamps[matching_call_index] < other_spy.call_timestamps[1]
-        end
-        return false
-      end,
-      
-      -- Check if this call came after another spy's call
-      called_after = function(other_spy)
-        if type(other_spy) == "table" and other_spy.call_timestamps then
-          -- Make sure other spy has been called
-          if #other_spy.call_timestamps == 0 then
-            return false
-          end
-          
-          -- Compare timestamps
-          local other_timestamp = other_spy.call_timestamps[#other_spy.call_timestamps]
-          return spy.call_timestamps[matching_call_index] > other_timestamp
-        end
-        return false
-      end
-    }
-    
-    -- Make it work in boolean contexts
-    setmetatable(result, {
-      __call = function() return true end,
-      __tostring = function() return "true" end
-    })
-    
-    return result
-  end
-  
-  function spy:called_times(n)
-    return self.call_count == n
-  end
-  
-  function spy:not_called()
-    return self.call_count == 0
-  end
-  
-  function spy:called_once()
-    return self.call_count == 1
-  end
-  
-  function spy:last_call()
-    if #self.calls > 0 then
-      return self.calls[#self.calls]
-    end
-    return nil
-  end
-  
-  -- Check if a call happened before another spy's call
-  function spy:called_before(other_spy, call_index)
-    call_index = call_index or 1
-    
-    -- Safety checks
-    if not other_spy or type(other_spy) ~= "table" then
-      error("called_before requires a spy object as argument")
-    end
-    
-    if not other_spy.call_sequence then
-      error("called_before requires a spy object with call_sequence")
-    end
-    
-    -- Make sure both spies have been called
-    if self.call_count == 0 or other_spy.call_count == 0 then
-      return false
-    end
-    
-    -- Make sure other_spy has been called enough times
-    if other_spy.call_count < call_index then
-      return false
-    end
-    
-    -- Get sequence number of the other spy's call
-    local other_sequence = other_spy.call_sequence[call_index]
-    if not other_sequence then
-      return false
-    end
-    
-    -- Check if any of this spy's calls happened before that
-    for _, sequence in ipairs(self.call_sequence) do
-      if sequence < other_sequence then
-        return true
-      end
-    end
-    
-    return false
-  end
-  
-  -- Check if a call happened after another spy's call
-  function spy:called_after(other_spy, call_index)
-    call_index = call_index or 1
-    
-    -- Safety checks
-    if not other_spy or type(other_spy) ~= "table" then
-      error("called_after requires a spy object as argument")
-    end
-    
-    if not other_spy.call_sequence then
-      error("called_after requires a spy object with call_sequence")
-    end
-    
-    -- Make sure both spies have been called
-    if self.call_count == 0 or other_spy.call_count == 0 then
-      return false
-    end
-    
-    -- Make sure other_spy has been called enough times
-    if other_spy.call_count < call_index then
-      return false
-    end
-    
-    -- Get sequence of the other spy's call
-    local other_sequence = other_spy.call_sequence[call_index]
-    if not other_sequence then
-      return false
-    end
-    
-    -- Check if any of this spy's calls happened after that
-    local last_self_sequence = self.call_sequence[self.call_count]
-    if last_self_sequence > other_sequence then
-      return true
-    end
-    
-    return false
-  end
-  
-  -- NEW: Find call index for a specific set of arguments
-  function spy:find_call_index(...)
-    local expected_args = {...}
-    
-    for i, call_args in ipairs(self.calls) do
-      if args_match(expected_args, call_args) then
-        return i
-      end
-    end
-    
-    return nil
-  end
-  
-  -- NEW: Check if any calls match a specific pattern of arguments
-  function spy:has_calls_with(...)
-    local expected_pattern = {...}
-    
-    for _, call_args in ipairs(self.calls) do
-      if #call_args >= #expected_pattern then
-        local match = true
-        for i, pattern_arg in ipairs(expected_pattern) do
-          if not matches_arg(pattern_arg, call_args[i]) then
-            match = false
-            break
-          end
-        end
-        
-        if match then
-          return true
-        end
-      end
-    end
-    
-    return false
-  end
-
-  -- Set up call method
-  setmetatable(spy, {
-    __call = function(_, ...)
-      return capture(...)
-    end
-  })
-
-  if run then run() end
-
-  return spy
-end
-
--- Create an expectation object for mock expectations
-local function create_expectation(mock, method_name)
-  local expectation = {
-    method = method_name,
-    min_calls = nil,
-    max_calls = nil,
-    exact_calls = nil,
-    args = nil,
-    return_value = nil,
-    required_before = nil,
-    required_after = nil
-  }
-  
-  -- Add expectation to mock's list
-  if not mock._expectations then
-    mock._expectations = {}
-  end
-  table.insert(mock._expectations, expectation)
-  
-  -- Create fluent interface for setting expectations
-  local fluent = {}
-  
-  -- Base 'to' connector for fluent API
-  fluent.to = {
-    be = {
-      called = {
-        -- Set exact number of times
-        times = function(n)
-          expectation.exact_calls = n
-          return fluent
-        end,
-        
-        -- Must be called exactly once
-        once = function()
-          expectation.exact_calls = 1
-          return fluent
-        end,
-        
-        -- Called at least n times
-        at_least = function(n)
-          expectation.min_calls = n
-          return fluent
-        end,
-        
-        -- Called at most n times
-        at_most = function(n)
-          expectation.max_calls = n
-          return fluent
-        end,
-        
-        -- With specific arguments
-        with = function(...)
-          expectation.args = {...}
-          return fluent
-        end,
-        
-        -- Should be called after another method
-        after = function(other_method)
-          expectation.required_after = other_method
-          return fluent
-        end
-      }
-    }
-  }
-  
-  -- Short form for setting arguments
-  fluent.with = function(...)
-    expectation.args = {...}
-    return fluent
-  end
-  
-  -- Shorthand for called once
-  fluent.once = function()
-    expectation.exact_calls = 1
-    return fluent
-  end
-  
-  -- Set return value
-  fluent.and_return = function(value)
-    expectation.return_value = value
-    -- Also stub the method to return this value
-    mock:stub(method_name, value)
-    return fluent
-  end
-  
-  -- Negative expectations
-  fluent.to.not_be = {
-    called = function()
-      expectation.exact_calls = 0
-      return fluent
-    end
-  }
-  
-  return fluent
-end
-
--- Create a mock object with verifiable behavior
-function lust_next.mock(target, options)
-  options = options or {}
-  
-  local mock = {
-    _is_lust_mock = true,
-    target = target,
-    _stubs = {},
-    _originals = {},
-    _expectations = {},
-    _verify_all_expectations_called = options.verify_all_expectations_called ~= false
-  }
-  
-  -- Method to stub a function with a return value or implementation
-  function mock:stub(name, implementation_or_value)
-    self._originals[name] = self.target[name]
-    
-    local implementation
-    if type(implementation_or_value) == "function" then
-      implementation = implementation_or_value
-    else
-      implementation = function() return implementation_or_value end
-    end
-    
-    local spy = lust_next.spy(implementation)
-    self._stubs[name] = spy
-    self.target[name] = spy
-    
-    return self
-  end
-  
-  -- Restore a specific stub
-  function mock:restore_stub(name)
-    if self._originals[name] then
-      self.target[name] = self._originals[name]
-      self._originals[name] = nil
-      self._stubs[name] = nil
-    end
-  end
-  
-  -- Restore all stubs for this mock
-  function mock:restore()
-    for name, _ in pairs(self._originals) do
-      self.target[name] = self._originals[name]
-    end
-    self._stubs = {}
-    self._originals = {}
-  end
-  
-  -- Verify all expected stubs were called
-  function mock:verify()
-    local failures = {}
-    
-    if self._verify_all_expectations_called then
-      for name, stub in pairs(self._stubs) do
-        if not stub.called then
-          table.insert(failures, "Expected " .. name .. " to be called, but it was not")
-        end
-      end
-    end
-    
-    if #failures > 0 then
-      error("Mock verification failed:\n  " .. table.concat(failures, "\n  "), 2)
-    end
-    
-    return true
-  end
-  
-  -- NEW: Set expectation for a method
-  function mock:expect(method_name)
-    return create_expectation(self, method_name)
-  end
-  
-  -- NEW: Verify that all expectations were met
-  function mock:verify_expectations()
-    if not self._expectations then
-      return true
-    end
-    
-    for _, expectation in ipairs(self._expectations) do
-      local stub = self._stubs[expectation.method]
-      
-      -- If stub doesn't exist, create one that tracks calls to original method
-      if not stub then
-        self:stub(expectation.method, self.target[expectation.method])
-        stub = self._stubs[expectation.method]
-      end
-      
-      -- Check call count expectations
-      if expectation.exact_calls ~= nil then
-        if stub.call_count ~= expectation.exact_calls then
-          error("Expectation failed: Method '" .. expectation.method .. 
-                "' expected to be called exactly " .. expectation.exact_calls .. 
-                " times but was called " .. stub.call_count .. " times")
-        end
-      end
-      
-      if expectation.min_calls ~= nil and stub.call_count < expectation.min_calls then
-        error("Expectation failed: Method '" .. expectation.method .. 
-              "' expected to be called at least " .. expectation.min_calls .. 
-              " times but was called only " .. stub.call_count .. " times")
-      end
-      
-      if expectation.max_calls ~= nil and stub.call_count > expectation.max_calls then
-        error("Expectation failed: Method '" .. expectation.method .. 
-              "' expected to be called at most " .. expectation.max_calls .. 
-              " times but was called " .. stub.call_count .. " times")
-      end
-      
-      -- Check argument expectations
-      if expectation.args and stub.called then
-        local arg_match_found = false
-        for _, call_args in ipairs(stub.calls) do
-          if args_match(expectation.args, call_args) then
-            arg_match_found = true
-            break
-          end
-        end
-        
-        if not arg_match_found then
-          local expected_str = format_args(expectation.args)
-          local actual_calls = {}
-          for _, call_args in ipairs(stub.calls) do
-            table.insert(actual_calls, "(" .. format_args(call_args) .. ")")
-          end
-          
-          error("Expectation failed: Method '" .. expectation.method .. 
-                "' expected to be called with (" .. expected_str .. 
-                ") but was called with " .. table.concat(actual_calls, ", "))
-        end
-      end
-      
-      -- Check sequence expectations
-      if expectation.required_after then
-        local other_stub = self._stubs[expectation.required_after]
-        if not other_stub then
-          error("Expectation failed: Method '" .. expectation.method .. 
-                "' expected to be called after '" .. expectation.required_after .. 
-                "' but '" .. expectation.required_after .. "' was never stubbed")
-        end
-        
-        -- Make sure both stubs have been called
-        if not stub.called or not other_stub.called then
-          if not stub.called then
-            error("Expectation failed: Method '" .. expectation.method .. 
-                  "' expected to be called after '" .. expectation.required_after .. 
-                  "' but was never called")
-          else
-            error("Expectation failed: Method '" .. expectation.method .. 
-                  "' expected to be called after '" .. expectation.required_after .. 
-                  "' but '" .. expectation.required_after .. "' was never called")
-          end
-        end
-        
-        -- Check if the sequence numbers indicate the correct order
-        local last_stub_sequence = stub.call_sequence[stub.call_count]
-        local first_other_sequence = other_stub.call_sequence[1]
-        
-        if last_stub_sequence < first_other_sequence then
-          local stub_sequences = {}
-          for _, seq in ipairs(stub.call_sequence) do
-            table.insert(stub_sequences, tostring(seq))
-          end
-          
-          local other_sequences = {}
-          for _, seq in ipairs(other_stub.call_sequence) do
-            table.insert(other_sequences, tostring(seq))
-          end
-          
-          error("Expectation failed: Method '" .. expectation.method .. 
-                "' expected to be called after '" .. expectation.required_after .. 
-                "' but was called before it.\n" ..
-                "Method '" .. expectation.method .. "' called at sequences: " .. table.concat(stub_sequences, ", ") .. 
-                "\nMethod '" .. expectation.required_after .. "' called at sequences: " .. table.concat(other_sequences, ", "))
-        end
-      end
-    end
-    
-    return true
-  end
-  
-  -- Verify a specific sequence of method calls
-  function mock:verify_sequence(expected_sequence)
-    local actual_calls = {}
-    
-    -- First, make sure all the expected methods have stubs
-    for _, expected in ipairs(expected_sequence) do
-      if not self._stubs[expected.method] then
-        error("Method '" .. expected.method .. "' is expected in sequence but was never stubbed")
-      end
-    end
-    
-    -- Build a flattened list of all calls across methods
-    for name, stub in pairs(self._stubs) do
-      for i, call_args in ipairs(stub.calls) do
-        if stub.call_sequence and stub.call_sequence[i] then
-          table.insert(actual_calls, {
-            method = name,
-            args = call_args,
-            sequence = stub.call_sequence[i],
-            timestamp = stub.call_timestamps and stub.call_timestamps[i] -- For backward compatibility
-          })
-        end
-      end
-    end
-    
-    -- Sort by sequence number to get the actual sequence
-    table.sort(actual_calls, function(a, b)
-      return a.sequence < b.sequence
-    end)
-    
-    -- Debug info for troubleshooting
-    local debug_sequence = {}
-    for _, actual in ipairs(actual_calls) do
-      table.insert(debug_sequence, actual.method .. " (sequence #" .. tostring(actual.sequence) .. ")")
-    end
-    
-    -- If no calls happened but sequence expects some, fail
-    if #actual_calls == 0 and #expected_sequence > 0 then
-      local expected_methods = {}
-      for _, expected in ipairs(expected_sequence) do
-        table.insert(expected_methods, expected.method)
-      end
-      error("Expected methods to be called in sequence: " .. 
-            table.concat(expected_methods, ", ") .. 
-            " but no methods were called")
-    end
-    
-    -- If fewer calls happened than expected, fail
-    if #actual_calls < #expected_sequence then
-      local expected_methods = {}
-      for _, expected in ipairs(expected_sequence) do
-        table.insert(expected_methods, expected.method)
-      end
-      local actual_methods = {}
-      for _, actual in ipairs(actual_calls) do
-        table.insert(actual_methods, actual.method)
-      end
-      error("Expected sequence of " .. #expected_sequence .. 
-            " method calls: " .. table.concat(expected_methods, ", ") .. 
-            " but only " .. #actual_calls .. " happened: " .. 
-            table.concat(actual_methods, ", "))
-    end
-    
-    -- Check each call in the expected sequence
-    for i, expected in ipairs(expected_sequence) do
-      local actual = actual_calls[i]
-      
-      -- Check method name first
-      if actual.method ~= expected.method then
-        error("Call sequence mismatch at position " .. i .. 
-              ": Expected method '" .. expected.method .. 
-              "' but got '" .. actual.method .. "'" ..
-              "\nActual sequence was: " .. table.concat(debug_sequence, ", "))
-      end
-      
-      -- Check arguments if specified
-      if expected.args then
-        if not args_match(expected.args, actual.args) then
-          local expected_str = format_args(expected.args)
-          local actual_str = format_args(actual.args)
-          
-          error("Call sequence argument mismatch at position " .. i .. 
-                " for method '" .. expected.method .. 
-                "': Expected (" .. expected_str .. 
-                ") but got (" .. actual_str .. ")")
-        end
-      end
-    end
-    
-    return true
-  end
-  
-  -- Register for auto-cleanup
-  register_mock(mock)
-  
-  return mock
-end
-
--- Create a standalone stub function
-function lust_next.stub(return_value_or_implementation)
-  if type(return_value_or_implementation) == "function" then
-    return lust_next.spy(return_value_or_implementation)
-  else
-    return lust_next.spy(function() return return_value_or_implementation end)
-  end
-end
-
--- Context manager for mocks that auto-restores
-function lust_next.with_mocks(fn)
-  local prev_mocks = _mocks
-  _mocks = {}
-  
-  local ok, result = pcall(fn, lust_next.mock)
-  
-  -- Always restore mocks, even on failure
-  for _, mock in ipairs(_mocks) do
-    mock:restore()
-  end
-  
-  _mocks = prev_mocks
-  
-  if not ok then
-    error(result, 2)
-  end
-  
-  return result
-end
-
--- Register hook to clean up mocks after tests
-local original_it = lust_next.it
-function lust_next.it(name, fn)
-  local wrapped_fn = function()
-    local prev_mocks = _mocks
-    _mocks = {}
-    
-    local result = fn()
-    
-    -- Restore any mocks created during the test
-    for _, mock in ipairs(_mocks) do
-      mock:restore()
-    end
-    
-    _mocks = prev_mocks
-    
-    return result
-  end
-  
-  return original_it(name, wrapped_fn)
-end
-
--- Test Discovery System
--- Simplified test discovery for self-running
-function lust_next.discover(root_dir, pattern)
-  root_dir = root_dir or "."
-  pattern = pattern or "**/*_test.lua"
-  
-  -- For better test discovery, use scripts/run_tests.lua
-  if pattern ~= "**/*_test.lua" and pattern ~= "*_test.lua" then
-    print("Warning: Complex pattern matching not fully supported in built-in discover")
-    print("For better test discovery, use scripts/run_tests.lua")
-  end
-  
-  local test_files = {}
-  
-  -- Platform-specific directory listing implementation
-  local function list_directory(dir)
-    local files = {}
-    local handle, err
-    
-    if package.config:sub(1,1) == '\\' then
-      -- Windows implementation
-      local result = io.popen('dir /b "' .. dir .. '"')
-      if result then
-        for name in result:lines() do
-          table.insert(files, name)
-        end
-        result:close()
-      end
-    else
-      -- Unix implementation
-      local result = io.popen('ls -a "' .. dir .. '" 2>/dev/null')
-      if result then
-        for name in result:lines() do
-          if name ~= "." and name ~= ".." then
-            table.insert(files, name)
-          end
-        end
-        result:close()
-      end
-    end
-    
-    return files
-  end
-  
-  -- Get file type (directory or file)
-  local function get_file_type(path)
-    local success, result
-    
-    if package.config:sub(1,1) == '\\' then
-      -- Windows implementation
-      local cmd = 'if exist "' .. path .. '\\*" (echo directory) else (echo file)'
-      success, result = pcall(function()
-        local p = io.popen(cmd)
-        local output = p:read('*l')
-        p:close()
-        return output
-      end)
-    else
-      -- Unix implementation
-      success, result = pcall(function()
-        local p = io.popen('test -d "' .. path .. '" && echo directory || echo file')
-        local output = p:read('*l')
-        p:close()
-        return output
-      end)
-    end
-    
-    if success and result then
-      return result:match("directory") and "directory" or "file"
-    else
-      -- Default to file if we can't determine
-      return "file"
-    end
-  end
-  
-  -- Simple pattern matching (supports basic glob patterns)
-  local function match_pattern(name, pattern)
-    -- For simplicity, we'll do a more direct pattern match for now
-    if pattern == "**/*_test.lua" then
-      return name:match("_test%.lua$") ~= nil
-    elseif pattern == "*_test.lua" then
-      return name:match("_test%.lua$") ~= nil
-    else
-      -- Fallback to basic ending match
-      local ending = pattern:gsub("*", "")
-      return name:match(ending:gsub("%.", "%%.") .. "$") ~= nil
-    end
-  end
-  
-  -- Get test files directly using os.execute and capturing output
-  local files = {}
-  
-  -- Determine the command to run based on the platform
-  local command
-  if package.config:sub(1,1) == '\\' then
-    -- Windows
-    command = 'dir /s /b "' .. root_dir .. '\\*_test.lua" > lust_temp_files.txt'
-  else
-    -- Unix
-    command = 'find "' .. root_dir .. '" -name "*_test.lua" -type f > lust_temp_files.txt'
-  end
-  
-  -- Execute the command
-  os.execute(command)
-  
-  -- Read the results from the temporary file
-  local file = io.open("lust_temp_files.txt", "r")
-  if file then
-    for line in file:lines() do
-      if line:match("_test%.lua$") then
-        table.insert(files, line)
-      end
-    end
-    file:close()
-    os.remove("lust_temp_files.txt")
-  end
-  
-  return files
-end
-
--- Process a single test file
-local function process_test_file(file, results)
-  -- Reset state before each file
-  local prev_passes = lust_next.passes
-  local prev_errors = lust_next.errors
-  
-  print("\nFile: " .. file)
-  local success, err = pcall(function()
-    dofile(file)
-  end)
-  
-  if not success then
-    results.failed_files = results.failed_files + 1
-    table.insert(results.failures, {
-      file = file,
-      error = "Error loading file: " .. err
-    })
-    print(red .. "ERROR: " .. err .. normal)
-  else
-    local file_passes = lust_next.passes - prev_passes
-    local file_errors = lust_next.errors - prev_errors
-    
-    results.total_tests = results.total_tests + file_passes + file_errors
-    results.passed_tests = results.passed_tests + file_passes
-    results.failed_tests = results.failed_tests + file_errors
-    
-    if file_errors > 0 then
-      results.failed_files = results.failed_files + 1
-    else
-      results.passed_files = results.passed_files + 1
-    end
-  end
-end
-
--- Run discovered tests
-function lust_next.run_discovered(root_dir, pattern, options)
-  options = options or {}
-  
-  -- Reset all state before running tests
-  lust_next.focus_mode = false
-  lust_next.skipped = 0
-  lust_next.current_tags = {}
-  lust_next.active_tags = {}
-  lust_next.filter_pattern = nil
-  
-  -- Apply filters if specified in options
-  if options.tags then
-    if type(options.tags) == "string" then
-      lust_next.only_tags(options.tags)
-    elseif type(options.tags) == "table" then
-      -- Use table.unpack for Lua 5.2+ or unpack for Lua 5.1
-      local unpack_func = table.unpack or unpack
-      lust_next.only_tags(unpack_func(options.tags))
-    end
-  end
-  
-  if options.filter then
-    lust_next.filter(options.filter)
-  end
-  
-  local files = lust_next.discover(root_dir, pattern)
-  local results = {
-    total_files = #files,
-    passed_files = 0,
-    failed_files = 0,
-    total_tests = 0,
-    passed_tests = 0,
-    failed_tests = 0,
-    skipped_tests = 0,
-    failures = {}
-  }
-  
-  -- Initial pass/error counters
-  local initial_passes = lust_next.passes
-  local initial_errors = lust_next.errors
-  
-  -- Build filter information for summary
-  local filter_info = ""
-  if #lust_next.active_tags > 0 then
-    filter_info = filter_info .. " (filtered by tags: " .. table.concat(lust_next.active_tags, ", ") .. ")"
-  end
-  if lust_next.filter_pattern then
-    filter_info = filter_info .. " (filtered by pattern: " .. lust_next.filter_pattern .. ")"
-  end
-  
-  print("\n" .. green .. "Running " .. #files .. " test files" .. normal .. filter_info)
-  print(string.rep("-", 70))
-  
-  -- Process each file
-  for _, file in ipairs(files) do
-    process_test_file(file, results)
-  end
-  
-  -- Print summary
-  print("\n" .. string.rep("-", 70))
-  print("Test Summary:")
-  print(string.rep("-", 70))
-  
-  -- File statistics
-  local total_color = results.failed_files > 0 and red or green
-  print("Files:  " .. total_color .. results.passed_files .. "/" 
-       .. results.total_files .. normal 
-       .. " (" .. (results.total_files > 0 and math.floor(results.passed_files/results.total_files*100) or 0) .. "% passed)")
-  
-  -- Test statistics
-  total_color = results.failed_tests > 0 and red or green
-  print("Tests:  " .. total_color .. results.passed_tests .. "/" 
-       .. results.total_tests .. normal 
-       .. " (" .. (results.total_tests > 0 and math.floor(results.passed_tests/results.total_tests*100) or 0) .. "% passed)")
-  
-  -- Print skipped tests if we have any
-  if results.skipped_tests and results.skipped_tests > 0 then
-    print("Skipped: " .. results.skipped_tests .. " tests due to filtering")
-  end
-  
-  -- List failures
-  if #results.failures > 0 then
-    print("\n" .. red .. "Failures:" .. normal)
-    for i, failure in ipairs(results.failures) do
-      print(i .. ") " .. failure.file)
-      if failure.error then
-        print("   " .. failure.error)
-      end
-    end
-  end
-  
-  print(string.rep("-", 70))
-  
-  if results.failed_tests > 0 then
-    print(red .. "✖ Tests Failed" .. normal)
-  else
-    print(green .. "✓ All Tests Passed" .. normal)
-  end
-  
-  print(string.rep("-", 70) .. "\n")
-  
-  -- Reset filters after run
-  lust_next.reset_filters()
-  
-  return results
-end
-
--- Track skipped tests directly in the lust_next object
-lust_next.skipped = 0
-
--- Run a single test file
-function lust_next.run_file(file_path)
-  local prev_passes = lust_next.passes
-  local prev_errors = lust_next.errors
-  local prev_skipped = lust_next.skipped
-  
-  -- Important: Reset state before running the file
-  lust_next.skipped = 0
-  lust_next.focus_mode = false
-  
-  print("\nRunning file: " .. file_path)
-  local success, err = pcall(function()
-    -- Set the package path to include the directory of the test file
-    local dir = file_path:match("(.*[/\\])")
-    package.path = dir .. "?.lua;" .. dir .. "../?.lua;" .. package.path
-    dofile(file_path)
-  end)
-  
-  local results = {
-    success = success,
-    error = err,
-    passes = lust_next.passes - prev_passes,
-    errors = lust_next.errors - prev_errors,
-    skipped = lust_next.skipped,
-    focus_mode = lust_next.focus_mode
-  }
-  
-  if not success then
-    print(red .. "ERROR: " .. err .. normal)
-  else
-    local summary = green .. "Completed with " .. results.passes .. " passes, " 
-                  .. results.errors .. " failures" .. normal
-    
-    if lust_next.skipped > 0 then
-      summary = summary .. " (" .. lust_next.skipped .. " skipped)"
-    end
-    
-    if lust_next.focus_mode then
-      summary = summary .. " [FOCUS MODE ACTIVE]"
-    end
-    
-    print(summary)
-  end
-  
-  -- Reset state after the run
-  lust_next.focus_mode = false
-  -- Important: Also reset all other state that might affect future runs
-  lust_next.current_tags = {}
-  lust_next.active_tags = {}
-  lust_next.filter_pattern = nil
-  
-  return results
-end
-
--- CLI runner that finds and runs tests
-function lust_next.cli_run(dir, options)
-  dir = dir or "./tests"
-  options = options or {}
-  
-  -- Reset state before running any tests
-  lust_next.focus_mode = false
-  lust_next.skipped = 0
-  lust_next.current_tags = {}
-  lust_next.active_tags = {}
-  lust_next.filter_pattern = nil
-  
-  -- Initialize coverage if enabled
-  if lust_next.coverage_options.enabled and coverage then
-    coverage.init(lust_next.coverage_options)
-    coverage.reset()
-    coverage.start()
-  end
-  
-  -- Initialize quality validation if enabled
-  if lust_next.quality_options.enabled and quality then
-    quality.init(lust_next.quality_options)
-    quality.reset()
-    
-    -- Connect to coverage module if available
-    if coverage and coverage.summary_report then
-      quality.config.coverage_data = coverage
-    end
-  end
-  
-  -- Apply filters if specified in options
-  if options.tags then
-    if type(options.tags) == "string" then
-      lust_next.only_tags(options.tags)
-    elseif type(options.tags) == "table" then
-      -- Use table.unpack for Lua 5.2+ or unpack for Lua 5.1
-      local unpack_func = table.unpack or unpack
-      lust_next.only_tags(unpack_func(options.tags))
-    end
-  end
-  
-  if options.filter then
-    lust_next.filter(options.filter)
-  end
-  
-  local files = lust_next.discover(dir)
-  
-  -- Build filter information for summary
-  local filter_info = ""
-  if #lust_next.active_tags > 0 then
-    filter_info = filter_info .. " (filtered by tags: " .. table.concat(lust_next.active_tags, ", ") .. ")"
-  end
-  if lust_next.filter_pattern then
-    filter_info = filter_info .. " (filtered by pattern: " .. lust_next.filter_pattern .. ")"
-  end
-  
-  print(green .. "Running " .. #files .. " test files" .. normal .. filter_info)
-  
-  local passed = 0
-  local failed = 0
-  local skipped = 0
-  
-  for _, file in ipairs(files) do
-    -- Each file runs with clean state
-    local results = lust_next.run_file(file)
-    if results.success and results.errors == 0 then
-      passed = passed + 1
-    else
-      failed = failed + 1
-    end
-    if results.skipped then
-      skipped = skipped + (results.skipped or 0)
-    end
-  end
-  
-  -- Add a line break after dot mode output
-  if lust_next.format_options.dot_mode then
-    print("\n")
-  end
-  
-  print("\n" .. string.rep("-", 70))
-  print("TEST SUMMARY")
-  print(string.rep("-", 70))
-  
-  print("Results:  " .. green .. passed .. " passed" .. normal .. ", " .. 
-        (failed > 0 and red or green) .. failed .. " failed" .. normal .. 
-        (skipped > 0 and ", " .. yellow .. skipped .. " skipped" .. normal or ""))
-  
-  -- Calculate percentage
-  local total = passed + failed
-  local percentage = total > 0 and math.floor((passed / total) * 100) or 100
-  local percent_color = percentage >= 90 and green or (percentage >= 75 and yellow or red)
-  
-  print("Success:  " .. percent_color .. percentage .. "%" .. normal)
-  print("Duration: " .. string.format("%.2f", os.clock()) .. "s")
-  
-  if lust_next.focus_mode then
-    print(cyan .. "FOCUS MODE: Only focused tests were run" .. normal)
-  end
-  
-  print(string.rep("-", 70))
-  
-  -- Stop coverage collection if enabled
-  if lust_next.coverage_options.enabled and coverage then
-    print("\nDEBUG [lust-next] Stopping coverage collection and generating reports...")
-    coverage.stop()
-    
-    -- Calculate stats explicitly to ensure they're up to date
-    coverage.calculate_stats()
-    
-    -- Try to use the new reporting module for report generation and saving
-    local reporting_module
-    local pcall_result, result = pcall(function()
-      -- Try to load the reporting module from various possible paths
-      for _, path in ipairs({
-        "src.reporting",
-        "deps.lust-next.src.reporting",
-        "./deps/lust-next/src/reporting",
-        "./src/reporting"
-      }) do
-        local success, mod = pcall(require, path)
-        if success then
-          print("DEBUG [lust-next] Successfully loaded reporting module from: " .. path)
-          return mod
-        end
-      end
-      
-      -- If we couldn't load the module with require, try loading it directly
-      local file_paths = {
-        "./src/reporting.lua",
-        "./deps/lust-next/src/reporting.lua",
-        "/home/gregg/Projects/lust-next/src/reporting.lua"
-      }
-      
-      for _, file_path in ipairs(file_paths) do
-        local success, mod = pcall(function() return dofile(file_path) end)
-        if success then
-          print("DEBUG [lust-next] Successfully loaded reporting module with dofile from: " .. file_path)
-          return mod
-        end
-      end
-      
-      error("Could not find reporting module")
-    end)
-    
-    if pcall_result then
-      reporting_module = result
-      print("DEBUG [lust-next] Successfully obtained reporting module")
-    else
-      print("DEBUG [lust-next] Failed to load reporting module: " .. tostring(result))
-    end
-    
-    -- Generate and display coverage report
-    local report_format = lust_next.coverage_options.format or "summary"
-    local report_content
-    local coverage_data
-    
-    -- Get structured coverage data if possible, otherwise fall back to standard report
-    if coverage.get_report_data then
-      print("DEBUG [lust-next] Getting coverage data from coverage.get_report_data()")
-      coverage_data = coverage.get_report_data()
-      if reporting_module then
-        print("DEBUG [lust-next] Using reporting module to format coverage data")
-        report_content = reporting_module.format_coverage(coverage_data, report_format)
-      else
-        print("DEBUG [lust-next] Using coverage module to format coverage data")
-        report_content = coverage.report(report_format)
-      end
-    else
-      print("DEBUG [lust-next] No get_report_data method, using coverage.report() directly")
-      report_content = coverage.report(report_format)
-    end
-    
-    -- Print coverage header
-    print("\n" .. string.rep("-", 70))
-    print("COVERAGE REPORT")
-    print(string.rep("-", 70))
-    
-    -- Handle report output
-    if lust_next.coverage_options.output then
-      -- Save to file using the reporting module if available
-      if reporting_module and coverage_data then
-        print("DEBUG [lust-next] Saving coverage report to specified output file: " .. lust_next.coverage_options.output)
-        local success, err = reporting_module.save_coverage_report(
-          lust_next.coverage_options.output, 
-          coverage_data, 
-          report_format
-        )
-        if success then
-          print("Coverage report saved to: " .. lust_next.coverage_options.output)
-        else
-          print("Error saving coverage report: " .. (err or "unknown error"))
-        end
-      else
-        -- Fall back to using the coverage module directly
-        print("DEBUG [lust-next] Using coverage module to save report to: " .. lust_next.coverage_options.output)
-        local success, err = coverage.save_report(lust_next.coverage_options.output, report_format)
-        if success then
-          print("Coverage report saved to: " .. lust_next.coverage_options.output)
-        else
-          print("Error saving coverage report: " .. (err or "unknown error"))
-        end
-      end
-    else
-      -- Always save the report to a file for non-summary formats
-      if report_format ~= "summary" then
-        -- Determine output path
-        local output_dir = "./coverage-reports"
-        local output_path = output_dir .. "/coverage-report." .. report_format
-        
-        -- Create the directory if it doesn't exist
-        print("DEBUG [lust-next] Creating directory: " .. output_dir)
-        os.execute("mkdir -p \"" .. output_dir .. "\"")
-        
-        -- If we have the reporting module and coverage data, use it for auto-saving
-        if reporting_module and coverage_data then
-          print("DEBUG [lust-next] Using reporting module to auto-save all report formats")
-          
-          -- Try the auto_save_reports method if available
-          if reporting_module.auto_save_reports then
-            print("DEBUG [lust-next] Using reporting.auto_save_reports for batch report generation")
-            local results = reporting_module.auto_save_reports(coverage_data, nil, output_dir)
-            
-            -- Log the results
-            for format, result in pairs(results) do
-              if result.success then
-                print("Successfully saved " .. format .. " report to: " .. result.path)
-              else
-                print("Failed to save " .. format .. " report: " .. tostring(result.error))
-              end
-            end
-          else
-            -- If auto_save_reports is not available, save formats individually
-            print("DEBUG [lust-next] Using reporting module to save individual report formats")
-            
-            -- Save primary format
-            local save_result
-            print("DEBUG [lust-next] Saving " .. report_format .. " report to: " .. output_path)
-            save_result = reporting_module.save_coverage_report(
-              output_path, 
-              coverage_data, 
-              report_format
-            )
-            
-            if save_result then
-              print("Successfully saved " .. report_format .. " report to: " .. output_path)
-            else
-              print("Error saving report to: " .. output_path)
-            end
-            
-            -- Also save other useful formats automatically
-            if report_format ~= "html" then
-              local html_path = output_dir .. "/coverage-report.html"
-              print("DEBUG [lust-next] Saving HTML report to: " .. html_path)
-              local html_result = reporting_module.save_coverage_report(
-                html_path, 
-                coverage_data, 
-                "html"
-              )
-              if html_result then
-                print("Also saved HTML report to: " .. html_path)
-              end
-            end
-            
-            if report_format ~= "lcov" then
-              local lcov_path = output_dir .. "/coverage-report.lcov"
-              print("DEBUG [lust-next] Saving LCOV report to: " .. lcov_path)
-              local lcov_result = reporting_module.save_coverage_report(
-                lcov_path, 
-                coverage_data, 
-                "lcov"
-              )
-              if lcov_result then
-                print("Also saved LCOV report to: " .. lcov_path)
-              end
-            end
-          end
-        else
-          -- Fall back to manual file saving
-          print("Using default output path: " .. output_path)
-          
-          -- Debug output
-          print("DEBUG: Writing coverage report")
-          print("DEBUG: Format: " .. report_format)
-          print("DEBUG: Output path: " .. output_path)
-          print("DEBUG: Report length: " .. #report_content .. " bytes") 
-          
-          -- Handle directory creation
-          -- Extract directory part from path using a reliable method
-          local last_separator = output_path:match("^(.*)[\\/][^\\/]*$")
-          local dir_path = last_separator or "./"
-          
-          -- Create directory if needed
-          if dir_path ~= "./" then
-            print("Creating directory: " .. dir_path)
-            
-            -- Try different approaches to ensure the directory exists
-            -- First, try standard os.execute
-            os.execute("mkdir -p \"" .. dir_path .. "\"")
-            
-            -- Fallback to io.popen to get any error message
-            local mkdir_result = io.popen("mkdir -p \"" .. dir_path .. "\" 2>&1"):read("*a")
-            if mkdir_result and mkdir_result ~= "" then
-              print("Note: " .. mkdir_result)
-            end
-          end
-          
-          -- Write the report to file with error handling
-          print("Writing report to: " .. output_path)
-          
-          -- Try to write the file
-          local file, open_err = io.open(output_path, "w")
-          if not file then
-            print("Error opening file: " .. tostring(open_err))
-          else
-            local write_ok, write_err = pcall(function() 
-              file:write(report_content)
-              file:close()
-            end)
-            
-            if write_ok then
-              print("Successfully saved " .. report_format .. " report to: " .. output_path)
-            else
-              print("Error writing to file: " .. tostring(write_err))
-            end
-          end
-        end
-      end
-      
-      -- Print to console (only for summary and small reports)
-      if report_format == "summary" then
-        local report = coverage.summary_report()
-        local threshold = lust_next.coverage_options.threshold or 80
-        local overall_color = report.overall_pct >= threshold and green or red
-        
-        print("Overall:   " .. overall_color .. string.format("%.2f%%", report.overall_pct) .. normal)
-        print("Lines:     " .. string.format("%d/%d (%.2f%%)", 
-          report.covered_lines, report.total_lines, report.lines_pct))
-        print("Functions: " .. string.format("%d/%d (%.2f%%)", 
-          report.covered_functions, report.total_functions, report.functions_pct))
-        print("Files:     " .. string.format("%d/%d (%.2f%%)", 
-          report.covered_files, report.total_files, report.files_pct))
-        
-        -- Check threshold
-        if report.overall_pct < threshold then
-          print(red .. "✖ COVERAGE BELOW THRESHOLD " .. normal .. 
-                "(" .. string.format("%.2f%% < %.2f%%", report.overall_pct, threshold) .. ")")
-          print(string.rep("-", 70))
-        else
-          print(green .. "✓ COVERAGE MEETS THRESHOLD " .. normal ..
-                "(" .. string.format("%.2f%% >= %.2f%%", report.overall_pct, threshold) .. ")")
-          print(string.rep("-", 70))
-        end
-      elseif report_format == "json" then
-        print("JSON Report:")
-        print(report_content)
-        print(string.rep("-", 70))
-      elseif report_format == "lcov" then
-        print("LCOV Report generated")
-        print(string.rep("-", 70))
-      elseif report_format == "html" then
-        print("HTML Report generated")
-        print(string.rep("-", 70))
-      end
-    end
-    
-    -- Check if coverage meets threshold
-    local threshold = lust_next.coverage_options.threshold or 80
-    local meets_threshold = coverage.meets_threshold(threshold)
-    
-    -- Return negative result if coverage doesn't meet threshold, regardless of test results
-    if not meets_threshold then
-      if failed == 0 then
-        -- Tests passed but coverage failed
-        print(yellow .. "⚠ TESTS PASSED BUT COVERAGE FAILED" .. normal)
-      end
-      lust_next.reset_filters()
-      lust_next.focus_mode = false
-      return false
-    end
-  end
-  
-  -- Process test quality validation if enabled
-  if lust_next.quality_options.enabled and quality then
-    print("\nDEBUG [lust-next] Running quality validation on test files...")
-    
-    -- Process test files for quality analysis
-    for _, file in ipairs(files) do
-      print("DEBUG [lust-next] Analyzing file for quality: " .. file)
-      quality.analyze_file(file)
-    end
-    
-    -- Generate and display quality report
-    local report_format = lust_next.quality_options.format or "summary"
-    print("DEBUG [lust-next] Generating quality report with format: " .. report_format)
-    
-    -- Get quality data for reporting
-    local quality_data
-    if quality.get_report_data then
-      print("DEBUG [lust-next] Getting quality data with quality.get_report_data()")
-      quality_data = quality.get_report_data()
-    end
-    
-    -- Get report content
-    local report_content
-    if reporting_module and quality_data then
-      print("DEBUG [lust-next] Using reporting module to format quality data")
-      report_content = reporting_module.format_quality(quality_data, report_format)
-    else
-      print("DEBUG [lust-next] Using quality.report() to get formatted report")
-      report_content = quality.report(report_format)
-    end
-    
-    -- Print quality header
-    print("\n" .. string.rep("-", 70))
-    print("TEST QUALITY REPORT")
-    print(string.rep("-", 70))
-    
-    -- Handle report output
-    if lust_next.quality_options.output then
-      -- Try to save the report using the reporting module if available
-      if reporting_module and quality_data then
-        print("DEBUG [lust-next] Saving quality report to specified output file: " .. lust_next.quality_options.output)
-        local success, err = reporting_module.save_quality_report(
-          lust_next.quality_options.output, 
-          quality_data, 
-          report_format
-        )
-        if success then
-          print("Quality report saved to: " .. lust_next.quality_options.output)
-        else
-          print("Error saving quality report: " .. (err or "unknown error"))
-        end
-      elseif quality.save_report then
-        -- Use quality module's save_report if available
-        print("DEBUG [lust-next] Using quality.save_report to save to: " .. lust_next.quality_options.output)
-        local success, err = quality.save_report(lust_next.quality_options.output, report_format)
-        if success then
-          print("Quality report saved to: " .. lust_next.quality_options.output)
-        else
-          print("Error saving quality report: " .. (err or "unknown error"))
-        end
-      else
-        -- Fallback to direct file writing
-        print("DEBUG [lust-next] Using direct file I/O to save quality report")
-        
-        -- Create the directory if needed
-        local dir_path = lust_next.quality_options.output:match("^(.*)[\\/][^\\/]*$")
-        if dir_path then
-          print("DEBUG [lust-next] Creating directory: " .. dir_path)
-          os.execute("mkdir -p \"" .. dir_path .. "\"")
-        end
-        
-        local output_file = io.open(lust_next.quality_options.output, "w")
-        if output_file then
-          output_file:write(report_content)
-          output_file:close()
-          print("Quality report saved to: " .. lust_next.quality_options.output)
-        else
-          print("Error saving quality report to: " .. lust_next.quality_options.output)
-        end
-      end
-    else
-      -- Auto-save quality reports
-      local output_dir = "./coverage-reports"
-      
-      -- Create the directory if it doesn't exist
-      print("DEBUG [lust-next] Creating directory for quality reports: " .. output_dir)
-      os.execute("mkdir -p \"" .. output_dir .. "\"")
-      
-      if reporting_module and quality_data then
-        -- Try to use auto_save_reports if it's available
-        if reporting_module.auto_save_reports then
-          print("DEBUG [lust-next] Using reporting.auto_save_reports to save quality reports")
-          -- Note: Pass coverage_data as nil since we're only saving quality reports
-          local results = reporting_module.auto_save_reports(nil, quality_data, output_dir)
-          
-          -- Log the results
-          local any_success = false
-          for format, result in pairs(results) do
-            if string.match(format, "quality") and result.success then
-              print("Successfully saved " .. format .. " report to: " .. result.path)
-              any_success = true
-            elseif string.match(format, "quality") then
-              print("Failed to save " .. format .. " report: " .. tostring(result.error))
-            end
-          end
-          
-          if not any_success then
-            print("WARNING: No quality reports were successfully saved")
-          end
-        else
-          -- Save reports individually
-          print("DEBUG [lust-next] Saving quality reports individually")
-          
-          -- Save HTML report
-          local html_path = output_dir .. "/quality-report.html"
-          print("DEBUG [lust-next] Saving quality HTML report to: " .. html_path)
-          local html_result = reporting_module.save_quality_report(html_path, quality_data, "html")
-          if html_result then
-            print("Successfully saved quality HTML report to: " .. html_path)
-          else
-            print("Failed to save quality HTML report to: " .. html_path)
-          end
-          
-          -- Save JSON report
-          local json_path = output_dir .. "/quality-report.json"
-          print("DEBUG [lust-next] Saving quality JSON report to: " .. json_path)
-          local json_result = reporting_module.save_quality_report(json_path, quality_data, "json")
-          if json_result then
-            print("Successfully saved quality JSON report to: " .. json_path)
-          else
-            print("Failed to save quality JSON report to: " .. json_path)
-          end
-        end
-      elseif quality.save_report then
-        -- Use the quality module's save_report method
-        print("DEBUG [lust-next] Using quality.save_report for quality reports")
-        
-        -- Save HTML report
-        local html_path = output_dir .. "/quality-report.html"
-        local html_result = quality.save_report(html_path, "html")
-        if html_result then
-          print("Successfully saved quality HTML report to: " .. html_path)
-        else
-          print("Failed to save quality HTML report")
-        end
-        
-        -- Save JSON report
-        local json_path = output_dir .. "/quality-report.json"
-        local json_result = quality.save_report(json_path, "json")
-        if json_result then
-          print("Successfully saved quality JSON report to: " .. json_path)
-        else
-          print("Failed to save quality JSON report")
-        end
-      else
-        print("WARNING: Could not save quality reports - no compatible module available")
-      end
-      -- Print to console (only for summary format)
-      if report_format == "summary" then
-        local report = quality.summary_report()
-        local level = lust_next.quality_options.level or 1
-        local level_color = report.level >= level and green or red
-        
-        -- Print summary info
-        print("Quality Level:   " .. level_color .. report.level_name .. " (Level " .. report.level .. " of 5)" .. normal)
-        print("Tests Analyzed:  " .. report.tests_analyzed)
-        print("Tests Passing:   " .. report.tests_passing_quality .. " / " .. report.tests_analyzed .. 
-              " (" .. string.format("%.2f%%", report.quality_pct) .. ")")
-        print("Assertions/Test: " .. string.format("%.2f", report.assertions_per_test_avg))
-        
-        -- Print assertion types found 
-        if next(report.assertion_types_found) then
-          print("\nAssertion Types Found:")
-          local types = {}
-          for atype, count in pairs(report.assertion_types_found) do
-            table.insert(types, atype .. " (" .. count .. ")")
-          end
-          print("  " .. table.concat(types, ", "))
-        end
-        
-        -- Print issues if any
-        if #report.issues > 0 then
-          print("\nQuality Issues: " .. #report.issues)
-          
-          -- Limit to top 10 issues to avoid flooding console
-          local max_issues = math.min(10, #report.issues)
-          for i = 1, max_issues do
-            local issue = report.issues[i]
-            print("  - " .. issue.test .. ": " .. red .. issue.issue .. normal)
-          end
-          
-          if #report.issues > 10 then
-            print("  ... and " .. (#report.issues - 10) .. " more issues")
-          end
-        end
-        
-        -- Check if quality meets required level
-        if report.level < level then
-          print(red .. "✖ QUALITY BELOW REQUIRED LEVEL " .. normal .. 
-                "(" .. report.level_name .. " < Level " .. level .. ")")
-          print(string.rep("-", 70))
-        else
-          print(green .. "✓ QUALITY MEETS REQUIRED LEVEL " .. normal ..
-                "(" .. report.level_name .. " >= Level " .. level .. ")")
-          print(string.rep("-", 70))
-        end
-      elseif report_format == "json" then
-        print("JSON Report:")
-        print(report_content)
-        print(string.rep("-", 70))
-      elseif report_format == "html" then
-        print("HTML Report generated")
-        print("Use --quality-output to save the report to a file")
-        print(string.rep("-", 70))
-      end
-    end
-    
-    -- Check if quality meets required level
-    local meets_level = quality.meets_level(lust_next.quality_options.level)
-    
-    -- Return negative result if quality doesn't meet the level, regardless of test results
-    if not meets_level then
-      if failed == 0 then
-        -- Tests passed but quality failed
-        print(yellow .. "⚠ TESTS PASSED BUT QUALITY VALIDATION FAILED" .. normal)
-      end
-      lust_next.reset_filters()
-      lust_next.focus_mode = false
-      return false
-    end
-  end
-  
-  if failed > 0 then
-    print(red .. "✖ FAILED " .. normal .. "(" .. failed .. " of " .. total .. " tests failed)")
-    lust_next.reset_filters()
-    lust_next.focus_mode = false
-    return false
-  else
-    print(green .. "✓ SUCCESS " .. normal .. "(" .. passed .. " of " .. total .. " tests passed)")
-    lust_next.reset_filters()
-    lust_next.focus_mode = false
-    return true
-  end
-end
-
--- Async testing implementation
-local clock
-if os.clock then
-  clock = os.clock
-else
-  -- Fallback for environments without os.clock
-  clock = function()
-    return os.time()
-  end
-end
-
--- Wrapper to create an async test function
-function lust_next.async(fn, timeout)
-  return function(...)
-    local args = {...}
-    return function()
-      lust_next.running_async = true
-      
-      -- Create the coroutine for this test
-      local co = coroutine.create(function()
-        -- Use table.unpack for Lua 5.2+ or unpack for Lua 5.1
-        local unpack_func = table.unpack or unpack
-        return fn(unpack_func(args))
-      end)
-      
-      -- Set timeout (use provided timeout or default)
-      local test_timeout = timeout or lust_next.async_timeout
-      local start_time = clock() * 1000
-      local is_complete = false
-      
-      -- First resume to start the coroutine
-      local success, result = coroutine.resume(co)
-      
-      -- Handle immediate completion or error
-      if coroutine.status(co) == "dead" then
-        is_complete = true
-        lust_next.running_async = false
-        
-        if not success then
-          error(result, 2) -- Propagate the error
-        end
-        return result
-      end
-      
-      -- Loop until coroutine completes or times out
-      while coroutine.status(co) ~= "dead" do
-        -- Check for timeout
-        local current_time = clock() * 1000
-        if current_time - start_time > test_timeout then
-          lust_next.running_async = false
-          error("Async test timed out after " .. test_timeout .. "ms", 2)
-        end
-        
-        -- Sleep a little to avoid hogging CPU
-        lust_next.sleep(10)
-        
-        -- Resume the coroutine
-        success, result = coroutine.resume(co)
-        
-        if not success then
-          lust_next.running_async = false
-          error(result, 2) -- Propagate the error
-        end
-      end
-      
-      lust_next.running_async = false
-      return result
-    end
-  end
-end
-
--- Wait for a specified time in milliseconds
-function lust_next.await(ms)
-  if not lust_next.running_async then
-    error("lust_next.await() can only be called within an async test", 2)
-  end
-  
-  local start = clock() * 1000
-  while (clock() * 1000) - start < ms do
-    coroutine.yield()
-  end
-end
-
--- Wait until a condition function returns true or timeout
-function lust_next.wait_until(condition_fn, timeout, check_interval)
-  if not lust_next.running_async then
-    error("lust_next.wait_until() can only be called within an async test", 2)
-  end
-  
-  timeout = timeout or lust_next.async_timeout
-  check_interval = check_interval or 10
-  
-  local start_time = clock() * 1000
-  
-  while not condition_fn() do
-    if (clock() * 1000) - start_time > timeout then
-      error("Timeout waiting for condition after " .. timeout .. "ms", 2)
-    end
-    lust_next.await(check_interval)
-  end
-  
-  return true -- Return true when condition is met (for consistent API)
-end
-
--- Simple sleep function that works in any environment
-function lust_next.sleep(ms)
-  local start = clock()
-  local duration = ms / 1000 -- convert to seconds
-  while clock() - start < duration do
-    -- Busy wait
-  end
-end
-
--- Set global default timeout for async tests
-function lust_next.set_timeout(ms)
-  lust_next.async_timeout = ms
-  return lust_next
-end
-
--- Async version of 'it' for easier test writing
-function lust_next.it_async(name, fn, timeout)
-  return lust_next.it(name, lust_next.async(fn, timeout)())
-end
-
--- Enhanced assertion and spy/mock helpers
-lust_next.assert = {}
-
--- Add spy/stub assertion helpers
-lust_next.assert.spy = function(spy_obj)
-  if not spy_obj or type(spy_obj) ~= "table" or not spy_obj._is_spy then
-    error("assert.spy expects a spy object created with spy.on()", 2)
-  end
-  
-  local spy_assert = {
-    was = {
-      called = function(times)
-        if times then
-          if spy_obj.calls ~= times then
-            error(string.format("Expected spy to be called %d times but was called %d times", 
-              times, spy_obj.calls), 2)
-          end
-        else
-          if spy_obj.calls == 0 then
-            error("Expected spy to be called at least once", 2)
-          end
-        end
-        return spy_assert
-      end,
-      
-      called_with = function(...)
-        local expected_args = {...}
-        local matched = false
-        
-        -- Simple deep comparison for tables
-        local function is_equal(val1, val2)
-          if type(val1) ~= type(val2) then
-            return false
-          end
-          
-          if type(val1) == "table" then
-            -- Check if all keys in val1 are in val2 with same values
-            for k, v in pairs(val1) do
-              if not is_equal(v, val2[k]) then
-                return false
-              end
-            end
-            -- Check if all keys in val2 are in val1
-            for k, _ in pairs(val2) do
-              if val1[k] == nil then
-                return false
-              end
-            end
-            return true
-          else
-            return val1 == val2
-          end
-        end
-        
-        for _, call_args in ipairs(spy_obj.call_history) do
-          if #call_args == #expected_args then
-            local all_match = true
-            for i, arg in ipairs(expected_args) do
-              if not is_equal(arg, call_args[i]) then
-                all_match = false
-                break
-              end
-            end
-            if all_match then
-              matched = true
-              break
-            end
-          end
-        end
-        
-        if not matched then
-          error("Expected spy to be called with matching arguments", 2)
-        end
-        return spy_assert
-      end,
-      
-      not_called = function()
-        if spy_obj.calls > 0 then
-          error("Expected spy to not be called", 2)
-        end
-        return spy_assert
-      end
-    }
-  }
-  
-  return spy_assert
-end
-
--- Standard assertion helpers
-function lust_next.assert.equal(expected, actual, message)
-  if expected ~= actual then
-    local msg = message or string.format("Expected %s but got %s", 
-      tostring(expected), tostring(actual))
-    error(msg, 2)
-  end
-  return true
-end
-
--- Deep equality comparison for tables
-function lust_next.assert.same(expected, actual, message)
-  -- Simple deep comparison for tables
-  local function is_equal(val1, val2)
-    if type(val1) ~= type(val2) then
-      return false
-    end
-    
-    if type(val1) == "table" then
-      -- Check if all keys in val1 are in val2 with same values
-      for k, v in pairs(val1) do
-        if not is_equal(v, val2[k]) then
-          return false
-        end
-      end
-      -- Check if all keys in val2 are in val1
-      for k, _ in pairs(val2) do
-        if val1[k] == nil then
-          return false
-        end
-      end
-      return true
-    else
-      return val1 == val2
-    end
-  end
-  
-  if not is_equal(expected, actual) then
-    local msg = message or "Tables are not the same"
-    error(msg, 2)
-  end
-  return true
-end
-
--- Approximate equality for floating point values
-function lust_next.assert.near(expected, actual, tolerance, message)
-  tolerance = tolerance or 0.0001
-  
-  if math.abs(expected - actual) > tolerance then
-    local msg = message or string.format("Expected %f to be near %f (within tolerance %f)", 
-      actual, expected, tolerance)
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.not_equal(expected, actual, message)
-  if expected == actual then
-    local msg = message or string.format("Expected %s to not equal %s", 
-      tostring(expected), tostring(actual))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_true(value, message)
-  if value ~= true then
-    local msg = message or string.format("Expected value to be true but got %s", 
-      tostring(value))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_false(value, message)
-  if value ~= false then
-    local msg = message or string.format("Expected value to be false but got %s", 
-      tostring(value))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_truthy(value, message)
-  if value == false or value == nil then
-    local msg = message or string.format("Expected value to be truthy but got %s", 
-      tostring(value))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_falsey(value, message)
-  if value ~= false and value ~= nil then
-    local msg = message or string.format("Expected value to be falsey but got %s", 
-      tostring(value))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_nil(value, message)
-  if value ~= nil then
-    local msg = message or string.format("Expected value to be nil but got %s", 
-      tostring(value))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_not_nil(value, message)
-  if value == nil then
-    local msg = message or "Expected value to not be nil"
-    error(msg, 2)
-  end
-  return true
-end
-
--- Add 'not_nil' as a more natural alias for is_not_nil
-function lust_next.assert.not_nil(value, message)
-  return lust_next.assert.is_not_nil(value, message)
-end
-
-function lust_next.assert.has_error(fn, message)
-  local success, _ = pcall(fn)
-  if success then
-    local msg = message or "Expected function to throw an error but it didn't"
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.has_no_error(fn, message)
-  local success, err = pcall(fn)
-  if not success then
-    local msg = message or string.format("Expected function to not throw an error but got: %s", 
-      tostring(err))
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.type_of(value, expected_type, message)
-  if type(value) ~= expected_type then
-    local msg = message or string.format("Expected value to be of type %s but got %s", 
-      expected_type, type(value))
-    error(msg, 2)
-  end
-  return true
-end
-
--- Enhanced type checking assertions
-function lust_next.assert.is_exact_type(value, expected_type, message)
-  local actual_type = type(value)
-  
-  if actual_type ~= expected_type then
-    local msg = message or string.format("Expected value to be exactly of type '%s', but got '%s'", 
-      expected_type, actual_type)
-    error(msg, 2)
-  end
-  return true
-end
-
-function lust_next.assert.is_instance_of(value, expected_class, message)
-  if type(value) ~= "table" or type(expected_class) ~= "table" then
-    local msg = message or string.format("Expected a table instance and class, but got %s and %s", 
-      type(value), type(expected_class))
-    error(msg, 2)
-  end
-  
-  -- Check if value is an instance of expected_class
-  local is_instance = false
-  local mt = getmetatable(value)
-  while mt do
-    if mt == expected_class or mt.__index == expected_class then
-      is_instance = true
-      break
-    end
-    mt = getmetatable(mt) and getmetatable(mt).__index
-  end
-  
-  if not is_instance then
-    local class_name = expected_class.__name or tostring(expected_class)
-    local msg = message or string.format("Expected value to be an instance of '%s', but it isn't", 
-      class_name)
-    error(msg, 2)
-  end
-  
-  return true
-end
-
-function lust_next.assert.implements(value, interface, message)
-  if type(value) ~= "table" or type(interface) ~= "table" then
-    local msg = message or string.format("Expected a table implementing interface, but got %s and %s", 
-      type(value), type(interface))
-    error(msg, 2)
-  end
-  
-  -- Check if value implements all methods and properties in interface
-  local missing_keys = {}
-  local wrong_types = {}
-  
-  for key, expected in pairs(interface) do
-    local actual = value[key]
-    
-    if actual == nil then
-      table.insert(missing_keys, key)
-    elseif type(expected) == "function" and type(actual) ~= "function" then
-      table.insert(wrong_types, key .. " (expected function, got " .. type(actual) .. ")")
-    end
-  end
-  
-  if #missing_keys > 0 or #wrong_types > 0 then
-    local msg = "Expected object to implement interface, but: "
-    if #missing_keys > 0 then
-      msg = msg .. "missing: " .. table.concat(missing_keys, ", ")
-    end
-    if #wrong_types > 0 then
-      if #missing_keys > 0 then msg = msg .. "; " end
-      msg = msg .. "wrong types: " .. table.concat(wrong_types, ", ")
-    end
-    
-    error(message or msg, 2)
-  end
-  
-  return true
-end
-
-function lust_next.assert.is_callable(value, message)
-  local is_callable = type(value) == "function" or 
-                     (type(value) == "table" and getmetatable(value) and getmetatable(value).__call)
-  
-  if not is_callable then
-    local msg = message or string.format("Expected value to be callable, but got %s", type(value))
-    error(msg, 2)
-  end
-  
-  return true
-end
-
-function lust_next.assert.satisfies(value, predicate, message)
-  if type(predicate) ~= "function" then
-    error("assert.satisfies expects a function as its second argument", 2)
-  end
-  
-  local success, result = pcall(function() return predicate(value) end)
-  
-  if not success then
-    error("Predicate function raised an error: " .. result, 2)
-  end
-  
-  if not result then
-    local msg = message or "Expected value to satisfy the given predicate"
-    error(msg, 2)
-  end
-  
-  return true
-end
-
-function lust_next.assert.contains(value, expected_item, message)
-  -- Handle strings - check for substring
-  if type(value) == "string" then
-    if type(expected_item) ~= "string" then
-      expected_item = tostring(expected_item)
-    end
-    
-    if string.find(value, expected_item, 1, true) then
-      return true
-    end
-    
-    local msg = message or string.format("Expected string '%s' to contain '%s' but it wasn't found", 
-      value, expected_item)
-    error(msg, 2)
-  end
-  
-  -- Handle tables - check for element
-  if type(value) == "table" then
-    for _, v in pairs(value) do
-      if v == expected_item then
-        return true
-      end
-    end
-    
-    local msg = message or string.format("Expected table to contain %s but it wasn't found", 
-      tostring(expected_item))
-    error(msg, 2)
-  end
-  
-  -- Otherwise, error with type information
-  error("assert.contains expects a string or table as its first argument, got " .. type(value), 2)
-end
-
--- Enhanced spy, mock, and stub functionality
-lust_next.spy = {
-  on = function(obj, method_name)
-    if not obj or type(obj) ~= "table" then
-      error("spy.on requires a table as the first argument", 2)
-    end
-    
-    if not method_name or type(method_name) ~= "string" then
-      error("spy.on requires a method name as the second argument", 2)
-    end
-    
-    if not obj[method_name] or type(obj[method_name]) ~= "function" then
-      error("Method '" .. method_name .. "' does not exist or is not a function", 2)
-    end
-    
-    local original_method = obj[method_name]
-    local spy_obj = {
-      _is_spy = true,
-      calls = 0,
-      call_history = {},
-      original = original_method
-    }
-    
-    obj[method_name] = function(...)
-      spy_obj.calls = spy_obj.calls + 1
-      local args = {...}
-      table.insert(spy_obj.call_history, args)
-      return original_method(...)
-    end
-    
-    -- Add the restore/revert methods (both names for compatibility)
-    spy_obj.restore = function()
-      obj[method_name] = original_method
-    end
-    
-    -- Also provide revert alias for compatibility with common test frameworks
-    spy_obj.revert = function()
-      obj[method_name] = original_method
-    end
-    
-    return spy_obj
-  end,
-  
-  new = function(implementation)
-    -- Create spy object with trackable stats
-    local spy_fn = {
-      _is_spy = true,
-      calls = 0,
-      call_history = {},
-      implementation = implementation or function() return nil end
-    }
-    
-    -- Define the function that will be used when called
-    local function call_handler(...)
-      spy_fn.calls = spy_fn.calls + 1
-      local args = {...}
-      table.insert(spy_fn.call_history, args)
-      
-      -- Run the implementation if provided
-      if spy_fn.implementation then
-        return spy_fn.implementation(...)
-      end
-      return nil
-    end
-    
-    -- Store the function for reference and backwards compatibility
-    spy_fn.fn = call_handler
-    
-    -- Make the spy itself callable
-    setmetatable(spy_fn, {
-      __call = function(_, ...)
-        return call_handler(...)
-      end
-    })
-    
-    return spy_fn
-  end
-}
-
--- Add stub assertion helpers (alias for spy assertions)
-lust_next.assert.stub = lust_next.assert.spy
-
--- Stub functionality - creates a function that can be controlled
-lust_next.stub = function(obj, method_name, implementation)
-  -- Check if this is the simple version just creating a standalone stub
-  if method_name == nil and implementation == nil then
-    local return_value = obj -- In this case, obj is the return value
-    
-    -- First declare stub_fn so it's accessible in closures
-    local stub_fn
-    
-    stub_fn = {
-      _is_stub = true,
-      _is_spy = true, -- For compatibility with spy assertions
-      calls = 0,
-      call_history = {},
-      
-      -- Default implementation
-      fn = function(...)
-        if not stub_fn then return nil end -- Safety check
-        stub_fn.calls = stub_fn.calls + 1
-        local args = {...}
-        table.insert(stub_fn.call_history, args)
-        
-        if type(return_value) == "function" then
-          return return_value(...)
-        else
-          return return_value
-        end
-      end,
-    
-    -- Configure the stub to throw an error
-    throws = function(error_message)
-      if not stub_fn then return nil end -- Safety check
-      stub_fn.fn = function(...)
-        if not stub_fn then return nil end -- Safety check
-        stub_fn.calls = stub_fn.calls + 1
-        local args = {...}
-        table.insert(stub_fn.call_history, args)
-        error(error_message, 2)
-      end
-      return stub_fn
-    end,
-    
-    -- Configure the stub to return a specific value
-    returns = function(value)
-      if not stub_fn then return nil end -- Safety check
-      stub_fn.fn = function(...)
-        if not stub_fn then return nil end -- Safety check
-        stub_fn.calls = stub_fn.calls + 1
-        local args = {...}
-        table.insert(stub_fn.call_history, args)
-        return value
-      end
-      return stub_fn
-    end
-  }
-  
-  -- Wrap the function so it can be called directly
-  setmetatable(stub_fn, {
-    __call = function(self, ...)
-      return self.fn(...)
-    end
-  })
-  
-  return stub_fn
-  
-  -- If this is the object method stubbing version
-  elseif type(obj) == "table" and type(method_name) == "string" then
-    -- Similar to mock, but simpler
-    if not obj[method_name] or type(obj[method_name]) ~= "function" then
-      error("Method '" .. method_name .. "' does not exist or is not a function", 2)
-    end
-    
-    local original_method = obj[method_name]
-    local spy_obj = {
-      _is_spy = true,
-      _is_stub = true,
-      calls = 0,
-      call_history = {},
-      original = original_method
-    }
-    
-    -- Replace the method with our implementation
-    obj[method_name] = function(...)
-      spy_obj.calls = spy_obj.calls + 1
-      local args = {...}
-      table.insert(spy_obj.call_history, args)
-      
-      if type(implementation) == "function" then
-        return implementation(...)
-      else
-        return implementation
-      end
-    end
-    
-    -- Add restore/revert methods
-    spy_obj.restore = function()
-      obj[method_name] = original_method
-    end
-    
-    spy_obj.revert = function()
-      obj[method_name] = original_method
-    end
-    
-    return spy_obj
-  end
-  
-  error("Invalid arguments to stub(). Use stub(return_value) or stub(obj, method_name, implementation)", 2)
-end
-
--- Mock functionality - replaces an object's methods with stubs or implementation
-lust_next.mock = function(obj, method_name, implementation)
-  if not obj or type(obj) ~= "table" then
-    error("mock requires a table as the first argument", 2)
-  end
-  
-  -- Handle different calling patterns:
-  -- mock(obj, "method", implementation)
-  -- mock(obj, methods_table)
-  -- mock(obj) -- mock all methods
-  
-  -- Case 1: Single method with implementation
-  if type(method_name) == "string" then
-    if not obj[method_name] or type(obj[method_name]) ~= "function" then
-      error("Method '" .. method_name .. "' does not exist or is not a function", 2)
-    end
-    
-    local original_method = obj[method_name]
-    
-    -- Default implementation if none provided
-    if implementation == nil then
-      if method_name == "connect" or method_name == "disconnect" then
-        implementation = true  -- Return true for connect/disconnect by default
-      elseif method_name == "query" then
-        implementation = {success = true, rows = {}}  -- Return empty result set for queries
-      end
-    end
-    
-    -- Create mock object with proper flags for assertions
-    local mock_obj = {
-      _is_spy = true,
-      _is_mock = true,
-      _is_stub = true, -- For compatibility with assertions
-      calls = 0,
-      call_history = {},
-      original = original_method,
-      obj = obj,
-      method_name = method_name
-    }
-    
-    -- Create the mock function that will track calls
-    local mock_function = function(...)
-      mock_obj.calls = mock_obj.calls + 1
-      local args = {...}
-      table.insert(mock_obj.call_history, args)
-      
-      if type(implementation) == "function" then
-        return implementation(...)
-      else
-        return implementation
-      end
-    end
-    
-    -- Replace the method with our implementation
-    obj[method_name] = mock_function
-    
-    -- Special handling for the database.async_query pattern
-    -- Detect if we're mocking a database query that might affect async_query
-    if method_name == "query" and obj.async_query and type(obj.async_query) == "function" then
-      local original_async = obj.async_query
-      
-      -- Also mock the async_query to use our mocked query function
-      obj.async_query = function(sql, params, callback)
-        -- Verify callback is valid
-        if type(callback) ~= "function" then
-          error("Callback must be a function")
-        end
-        
-        -- Get the result from our mocked query function
-        local result = mock_function(sql, params)
-        
-        -- Call the callback with the mocked result
-        callback(result)
-        return true
-      end
-      
-      -- Make sure to restore all modified functions
-      mock_obj.restore = function()
-        obj[method_name] = original_method
-        obj.async_query = original_async
-      end
-      
-      mock_obj.revert = function()
-        obj[method_name] = original_method
-        obj.async_query = original_async
-      end
-    else
-      -- Standard restore/revert methods
-      mock_obj.restore = function()
-        obj[method_name] = original_method
-      end
-      
-      mock_obj.revert = function()
-        obj[method_name] = original_method
-      end
-    end
-    
-    return mock_obj
-  end
-  
-  -- Case 2: Multiple methods as a table or all methods
-  local methods_to_mock = method_name
-  
-  local mock_obj = {
-    _is_mock = true,
-    _is_spy = true,  -- Make mock objects compatible with expect()
-    _is_stub = true, -- Make mock objects compatible with assertions
-    originals = {},
-    stubs = {},
-    calls = 0,
-    call_history = {}
-  }
-  
-  -- If methods is a table, mock just those methods
-  if methods_to_mock and type(methods_to_mock) == "table" then
-    for _, method_name in ipairs(methods_to_mock) do
-      if obj[method_name] and type(obj[method_name]) == "function" then
-        mock_obj.originals[method_name] = obj[method_name]
-        
-        -- Create a stub function for this method
-        local stub_func = function(...)
-          mock_obj.calls = mock_obj.calls + 1
-          return nil -- Default behavior for stubs
-        end
-        
-        mock_obj.stubs[method_name] = {
-          _is_stub = true,
-          calls = 0,
-          call_history = {},
-          returns = function() end,
-          original = obj[method_name]
-        }
-        
-        -- Replace the method with the stub
-        obj[method_name] = stub_func
-      end
-    end
-  else
-    -- Mock all methods
-    for mname, method in pairs(obj) do
-      if type(method) == "function" then
-        mock_obj.originals[mname] = method
-        
-        -- Create a stub function for this method
-        local stub_func = function(...)
-          mock_obj.calls = mock_obj.calls + 1
-          return nil -- Default behavior for stubs
-        end
-        
-        mock_obj.stubs[mname] = {
-          _is_stub = true,
-          calls = 0,
-          call_history = {},
-          returns = function() end,
-          original = method
-        }
-        
-        -- Replace the method with the stub
-        obj[mname] = stub_func
-      end
-    end
-  end
-  
-  -- Add a restore method to the mock
-  mock_obj.restore = function()
-    for mname, original in pairs(mock_obj.originals) do
-      obj[mname] = original
-    end
-  end
-  
-  -- Add revert alias for compatibility
-  mock_obj.revert = mock_obj.restore
-  
-  return mock_obj
-end
-
--- Expect functionality for verification
-lust_next.expect = function(fn_or_obj)
-  local expect_obj = {
-    to = {
-      be = {
-        called = function(times)
-          -- Check if it's a spy/stub/mock
-          if fn_or_obj._is_spy or fn_or_obj._is_stub or fn_or_obj._is_mock then
-            local expected_times = times or 1
-            if fn_or_obj.calls ~= expected_times then
-              error(string.format("Expected function to be called %d times but was called %d times", 
-                expected_times, fn_or_obj.calls), 2)
-            end
-          else
-            error("expect().to.be.called() requires a spy or stub", 2)
-          end
-          return expect_obj
-        end,
-        
-        -- Alias for compatibility
-        same = function(value)
-          if fn_or_obj ~= value then
-            error(string.format("Expected %s to be the same as %s", 
-              tostring(fn_or_obj), tostring(value)), 2)
-          end
-          return expect_obj
-        end
-      },
-      
-      -- Shorthand for called
-      been = {
-        called = function(times)
-          return expect_obj.to.be.called(times)
-        end
-      }
-    },
-    
-    -- Add call sequence support
-    and_then = function(next_spy)
-      -- Check that the original spy was called
-      if fn_or_obj._is_spy or fn_or_obj._is_stub or fn_or_obj._is_mock then
-        if fn_or_obj.calls == 0 then
-          error("Expected function to be called at least once", 2)
-        end
-      else
-        error("expect().and_then() requires a spy or stub", 2)
-      end
-      
-      -- Return a new expect object for the next spy
-      return lust_next.expect(next_spy)
-    end
-  }
-  
-  -- Also add the to_be alias for compatibility
-  expect_obj.to_be = expect_obj.to.be
-  
-  return expect_obj
-end
-
--- Function to mark tests as pending (skipped)
-function lust_next.pending(message)
-  message = message or "Test marked as pending"
-  lust_next.skipped = lust_next.skipped + 1
-  
-  if not lust_next.format_options.summary_only and not lust_next.format_options.dot_mode then
-    print(indent() .. yellow .. 'PENDING' .. normal .. ' ' .. message)
-  elseif lust_next.format_options.dot_mode then
-    -- In dot mode, print an 'S' for skipped/pending
-    io.write(yellow .. "S" .. normal)
-  end
-  
-  -- Return a truthy value so the test passes but is marked as pending
-  return true
-end
-
--- Aliases and exports
-lust_next.test = lust_next.it
-lust_next.test_async = lust_next.it_async
-lust_next.paths = paths
-
--- Command-line runner with enhanced options
--- Only run this if we're invoked directly (not through require)
-local debug_info = debug.getinfo(3, "S")
-local is_main = debug_info and debug_info.source == arg[0]
-
-if is_main and arg and (arg[0]:match("lust_next.lua$") or arg[0]:match("lust%-next.lua$")) then
-  local options = {}
-  local dir = "./tests"
-  local specific_file = nil
-  
-  -- Parse command line arguments
   local i = 1
-  while i <= #arg do
-    if arg[i] == "--dir" and arg[i+1] then
-      dir = arg[i+1]
+  while i <= #args do
+    if args[i] == "--dir" and args[i+1] then
+      options.dir = args[i+1]
       i = i + 2
-    elseif arg[i] == "--tags" and arg[i+1] then
-      options.tags = {}
-      -- Split tags by comma
-      for tag in arg[i+1]:gmatch("[^,]+") do
+    elseif args[i] == "--format" and args[i+1] then
+      options.format = args[i+1]
+      i = i + 2
+    elseif args[i] == "--tags" and args[i+1] then
+      for tag in args[i+1]:gmatch("[^,]+") do
         table.insert(options.tags, tag:match("^%s*(.-)%s*$")) -- Trim whitespace
       end
       i = i + 2
-    elseif arg[i] == "--filter" and arg[i+1] then
-      options.filter = arg[i+1]
+    elseif args[i] == "--filter" and args[i+1] then
+      options.filter = args[i+1]
       i = i + 2
-    elseif arg[i] == "--format" and arg[i+1] then
-      local format_name = arg[i+1]
-      if format_name == "dot" then
-        lust_next.format({ dot_mode = true })
-      elseif format_name == "compact" then
-        lust_next.format({ compact = true, show_success_detail = false })
-      elseif format_name == "summary" then
-        lust_next.format({ summary_only = true })
-      elseif format_name == "detailed" then
-        lust_next.format({ show_success_detail = true, show_trace = true })
-      elseif format_name == "plain" then
-        lust_next.format({ use_color = false })
-      else
-        print("Unknown format: " .. format_name)
-        os.exit(1)
-      end
-      i = i + 2
-    elseif arg[i] == "--indent" and arg[i+1] then
-      if arg[i+1] == "space" or arg[i+1] == "spaces" then
-        lust_next.format({ indent_char = ' ', indent_size = 2 })
-      elseif arg[i+1] == "tab" or arg[i+1] == "tabs" then
-        lust_next.format({ indent_char = '\t', indent_size = 1 })
-      else
-        local num = tonumber(arg[i+1])
-        if num then
-          lust_next.format({ indent_char = ' ', indent_size = num })
-        else
-          print("Invalid indent: " .. arg[i+1])
-          os.exit(1)
-        end
-      end
-      i = i + 2
-    elseif arg[i] == "--no-color" then
-      lust_next.nocolor()
-      i = i + 1
-    elseif arg[i]:match("%.lua$") then
-      specific_file = arg[i]
-      i = i + 1
-    elseif arg[i] == "--coverage" then
-      lust_next.coverage_options.enabled = true
-      i = i + 1
-    elseif arg[i] == "--coverage-include" and arg[i+1] then
-      lust_next.coverage_options.include = {}
-      for pattern in arg[i+1]:gmatch("[^,]+") do
-        table.insert(lust_next.coverage_options.include, pattern:match("^%s*(.-)%s*$")) -- Trim whitespace
-      end
-      i = i + 2
-    elseif arg[i] == "--coverage-exclude" and arg[i+1] then
-      lust_next.coverage_options.exclude = {}
-      for pattern in arg[i+1]:gmatch("[^,]+") do
-        table.insert(lust_next.coverage_options.exclude, pattern:match("^%s*(.-)%s*$")) -- Trim whitespace
-      end
-      i = i + 2
-    elseif arg[i] == "--coverage-threshold" and arg[i+1] then
-      lust_next.coverage_options.threshold = tonumber(arg[i+1]) or 80
-      i = i + 2
-    elseif arg[i] == "--coverage-format" and arg[i+1] then
-      lust_next.coverage_options.format = arg[i+1]
-      i = i + 2
-    elseif arg[i] == "--coverage-output" and arg[i+1] then
-      lust_next.coverage_options.output = arg[i+1]
-      i = i + 2
-    elseif arg[i] == "--quality" then
-      lust_next.quality_options.enabled = true
-      i = i + 1
-    elseif arg[i] == "--quality-level" and arg[i+1] then
-      lust_next.quality_options.level = tonumber(arg[i+1]) or 1
-      i = i + 2
-    elseif arg[i] == "--quality-strict" then
-      lust_next.quality_options.strict = true
-      i = i + 1
-    elseif arg[i] == "--quality-format" and arg[i+1] then
-      lust_next.quality_options.format = arg[i+1]
-      i = i + 2
-    elseif arg[i] == "--quality-output" and arg[i+1] then
-      lust_next.quality_options.output = arg[i+1]
-      i = i + 2
-    elseif arg[i] == "--help" or arg[i] == "-h" then
-      print("lust-next test runner v" .. lust_next.version)
-      print("Usage:")
-      print("  lua lust-next.lua [options] [file.lua]")
-      
-      print("\nTest Selection Options:")
-      print("  --dir DIR        Directory to search for tests (default: ./tests)")
-      print("  --tags TAG1,TAG2 Only run tests with matching tags")
-      print("  --filter PATTERN Only run tests with names matching pattern")
-      
-      print("\nOutput Format Options:")
-      print("  --format FORMAT  Output format (dot, compact, summary, detailed, plain)")
-      print("  --indent TYPE    Indentation style (space, tab, or number of spaces)")
-      print("  --no-color       Disable colored output")
-      
-      print("\nCoverage Options:")
-      print("  --coverage                   Enable code coverage tracking")
-      print("  --coverage-include PATTERNS  Comma-separated file patterns to include (default: *.lua)")
-      print("  --coverage-exclude PATTERNS  Comma-separated file patterns to exclude (default: test_*,*_spec.lua,*_test.lua)")
-      print("  --coverage-threshold N       Minimum coverage percentage required (default: 80)")
-      print("  --coverage-format FORMAT     Coverage report format (summary, json, html, lcov) (default: summary)")
-      print("  --coverage-output FILE       Output file for coverage report (default: console output)")
-      
-      print("\nQuality Validation Options:")
-      print("  --quality                    Enable test quality validation")
-      print("  --quality-level N            Set quality level to enforce (1-5, default: 1)")
-      print("  --quality-strict             Strict mode: fail on first quality issue")
-      print("  --quality-format FORMAT      Quality report format (summary, json, html) (default: summary)")
-      print("  --quality-output FILE        Output file for quality report (default: console output)")
-      
-      print("\nSpecial Test Functions:")
-      print("  describe/it      Regular test functions")
-      print("  fdescribe/fit    Focused tests (only these will run)")
-      print("  xdescribe/xit    Excluded tests (these will be skipped)")
-      
-      print("\nExamples:")
-      print("  lua lust-next.lua --dir tests --format dot")
-      print("  lua lust-next.lua --tags unit,api --format compact")
-      print("  lua lust-next.lua tests/specific_test.lua --format detailed")
+    elseif args[i] == "--help" or args[i] == "-h" then
+      lust_next.show_help()
       os.exit(0)
+    elseif args[i] == "--file" and args[i+1] then
+      table.insert(options.files, args[i+1])
+      i = i + 2
+    elseif args[i] == "--watch" or args[i] == "-w" then
+      options.watch = true
+      i = i + 1
+    elseif args[i] == "--interactive" or args[i] == "-i" then
+      options.interactive = true
+      i = i + 1
+    -- Report configuration options
+    elseif args[i] == "--output-dir" and args[i+1] then
+      options.report_dir = args[i+1]
+      i = i + 2
+    elseif args[i] == "--report-suffix" and args[i+1] then
+      options.report_suffix = args[i+1]
+      i = i + 2
+    elseif args[i] == "--coverage-path" and args[i+1] then
+      options.coverage_path_template = args[i+1]
+      i = i + 2
+    elseif args[i] == "--quality-path" and args[i+1] then
+      options.quality_path_template = args[i+1]
+      i = i + 2
+    elseif args[i] == "--results-path" and args[i+1] then
+      options.results_path_template = args[i+1]
+      i = i + 2
+    elseif args[i] == "--timestamp-format" and args[i+1] then
+      options.timestamp_format = args[i+1]
+      i = i + 2
+    elseif args[i] == "--verbose-reports" then
+      options.verbose = true
+      i = i + 1
+    -- Custom formatter options
+    elseif args[i] == "--coverage-format" and args[i+1] then
+      options.coverage_format = args[i+1]
+      i = i + 2
+    elseif args[i] == "--quality-format" and args[i+1] then
+      options.quality_format = args[i+1]
+      i = i + 2
+    elseif args[i] == "--results-format" and args[i+1] then
+      options.results_format = args[i+1]
+      i = i + 2
+    elseif args[i] == "--formatter-module" and args[i+1] then
+      options.formatter_module = args[i+1]
+      i = i + 2
+    elseif args[i]:match("%.lua$") then
+      table.insert(options.files, args[i])
+      i = i + 1
     else
       i = i + 1
     end
   end
   
-  if specific_file then
-    -- Run a specific test file
-    local results = lust_next.run_file(specific_file)
-    if not results.success or results.errors > 0 then
-      os.exit(1)
-    else
-      os.exit(0)
-    end
-  else
-    -- Run tests with options
-    local success = lust_next.cli_run(dir, options)
-    os.exit(success and 0 or 1)
-  end
+  return options
 end
 
--- Function to expose all test functions as globals
--- Module Reset Utilities
--- Reset and reload a module, ensuring a fresh state
-function lust_next.reset_module(module_name)
-  -- Clear the module from package.loaded
-  package.loaded[module_name] = nil
-  -- Re-require the module and return it
-  return require(module_name)
+function lust_next.show_help()
+  print("lust-next test runner v" .. lust_next.version)
+  print("Usage:")
+  print("  lua lust-next.lua [options] [file.lua]")
+  
+  print("\nTest Selection Options:")
+  print("  --dir DIR        Directory to search for tests (default: ./tests)")
+  print("  --file FILE      Run a specific test file")
+  print("  --tags TAG1,TAG2 Only run tests with matching tags")
+  print("  --filter PATTERN Only run tests with names matching pattern")
+  
+  print("\nOutput Format Options:")
+  print("  --format FORMAT  Output format (dot, compact, summary, detailed, plain)")
+  
+  print("\nRuntime Mode Options:")
+  print("  --interactive, -i Start interactive CLI mode")
+  print("  --watch, -w      Watch for file changes and automatically re-run tests")
+  
+  print("\nReport Configuration Options:")
+  print("  --output-dir DIR       Base directory for all reports (default: ./coverage-reports)")
+  print("  --report-suffix STR    Add a suffix to all report filenames (e.g., \"-v1.0\")")
+  print("  --coverage-path PATH   Path template for coverage reports")
+  print("  --quality-path PATH    Path template for quality reports")
+  print("  --results-path PATH    Path template for test results reports")
+  print("  --timestamp-format FMT Format string for timestamps (default: \"%Y-%m-%d\")")
+  print("  --verbose-reports      Enable verbose output during report generation")
+  print("\n  Path templates support the following placeholders:")
+  print("    {format}    - Output format (html, json, etc.)")
+  print("    {type}      - Report type (coverage, quality, etc.)")
+  print("    {date}      - Current date using timestamp format")
+  print("    {datetime}  - Current date and time (%Y-%m-%d_%H-%M-%S)")
+  print("    {suffix}    - The report suffix if specified")
+  
+  print("\nCustom Formatter Options:")
+  print("  --coverage-format FMT  Set format for coverage reports (html, json, lcov, or custom)")
+  print("  --quality-format FMT   Set format for quality reports (html, json, summary, or custom)")
+  print("  --results-format FMT   Set format for test results (junit, tap, csv, or custom)")
+  print("  --formatter-module MOD Load custom formatter module (Lua module path)")
+  
+  print("\nExamples:")
+  print("  lua lust-next.lua --dir tests --format dot")
+  print("  lua lust-next.lua --tags unit,api --format compact")
+  print("  lua lust-next.lua tests/specific_test.lua")
+  print("  lua lust-next.lua --interactive")
+  print("  lua lust-next.lua --watch tests/specific_test.lua")
+  print("  lua lust-next.lua --coverage --output-dir ./reports --report-suffix \"-$(date +%Y%m%d)\"")
+  print("  lua lust-next.lua --coverage-path \"coverage-{date}.{format}\"")
+  print("  lua lust-next.lua --formatter-module \"my_formatters\" --results-format \"markdown\"")
 end
 
--- Run a function with a freshly loaded module
-function lust_next.with_fresh_module(module_name, test_fn)
-  local mod = lust_next.reset_module(module_name)
-  local result = test_fn(mod)
-  -- No automatic cleanup needed since package.loaded is already cleared
-  return result
-end
-
--- Create better async testing utilities
--- Run several async functions in parallel and wait for all to complete
-function lust_next.parallel_async(...)
-  local functions = {...}
-  local results = {}
-  local completed = 0
-  local total = #functions
+-- Create a module that can be required
+local module = setmetatable({
+  lust_next = lust_next,
   
-  -- Start all functions
-  for i, fn in ipairs(functions) do
-    async(function()
-      results[i] = fn()
-      completed = completed + 1
-    end)()
-  end
+  -- Export paths to allow extensions to register assertions
+  paths = paths,
   
-  -- Wait for all to complete
-  wait_until(function() return completed == total end)
+  -- Export the main functions directly
+  describe = lust_next.describe,
+  fdescribe = lust_next.fdescribe,
+  xdescribe = lust_next.xdescribe,
+  it = lust_next.it,
+  fit = lust_next.fit,
+  xit = lust_next.xit,
+  it_async = lust_next.it_async,
+  before = lust_next.before,
+  after = lust_next.after,
+  pending = lust_next.pending,
+  expect = lust_next.expect,
+  tags = lust_next.tags,
+  only_tags = lust_next.only_tags,
+  filter = lust_next.filter,
+  reset = lust_next.reset,
+  reset_filters = lust_next.reset_filters,
   
-  return results
-end
-
-function lust_next.expose_globals()
-  -- BDD style functions
-  _G.describe = lust_next.describe
-  _G.it = lust_next.it
-  _G.before = lust_next.before
-  _G.after = lust_next.after
-  _G.before_each = lust_next.before_each
-  _G.after_each = lust_next.after_each
+  -- Export CLI functions
+  parse_args = lust_next.parse_args,
+  show_help = lust_next.show_help,
   
-  -- Ensure spy/mock/stub are defined for assertions
-  _G.spy = lust_next.spy
-  _G.mock = lust_next.mock
-  _G.stub = lust_next.stub
-  _G.expect = lust_next.expect
+  -- Export mocking functions if available
+  spy = lust_next.spy,
+  stub = lust_next.stub,
+  mock = lust_next.mock,
+  with_mocks = lust_next.with_mocks,
+  arg_matcher = lust_next.arg_matcher,
   
-  -- Focused and excluded tests
-  _G.fdescribe = lust_next.fdescribe
-  _G.fit = lust_next.fit
-  _G.xdescribe = lust_next.xdescribe
-  _G.xit = lust_next.xit
+  -- Export async functions
+  async = lust_next.async,
+  await = lust_next.await,
+  wait_until = lust_next.wait_until,
   
-  -- Tags and filtering
-  _G.tags = lust_next.tags
+  -- Export interactive mode
+  interactive = interactive,
   
-  -- Mocking functions
-  _G.spy = lust_next.spy
-  _G.mock = lust_next.mock
-  _G.stub = lust_next.stub
-  _G.expect = lust_next.expect
-  
-  -- Async functions
-  _G.async = lust_next.async
-  _G.await = lust_next.await
-  _G.wait_until = lust_next.wait_until
-  _G.it_async = lust_next.it_async
-  _G.parallel_async = lust_next.parallel_async
-  
-  -- Module reset utilities
-  _G.reset_module = lust_next.reset_module
-  _G.with_fresh_module = lust_next.with_fresh_module
-  
-  -- Handle assertions specially because _G.assert exists by default and is a function
-  local orig_assert = _G.assert
-  
-  -- Create a new assert table with metatable to handle both function calls
-  -- and assertion methods
-  local assert_table = {}
-  for name, func in pairs(lust_next.assert) do
-    assert_table[name] = func
-  end
-  
-  -- Set up metatable to handle function calls to assert
-  setmetatable(assert_table, {
-    __call = function(_, ...)
-      return orig_assert(...)
-    end
-  })
-  
-  -- Replace the global assert
-  _G.assert = assert_table
-  
-  return lust_next
-end
-
--- Auto expose globals if LUST_NEXT_AUTO_EXPOSE is set
-if os.getenv("LUST_NEXT_AUTO_EXPOSE") then
-  lust_next.expose_globals()
-end
-
--- Initialize codefix module if available
-if codefix then
-  codefix.register_with_lust(lust_next)
-end
-
--- Backward compatibility for users upgrading from lust
-local lust = setmetatable({}, {
-  __index = function(_, key)
-    print("Warning: Using 'lust' directly is deprecated, please use 'lust_next' instead")
-    return lust_next[key]
-  end
-})
-
--- Fix for the expect assertion system
--- Redefine the entire expect function to address all issues
-
--- Clear expect-related paths to ensure we rebuild them correctly
-lust_next.paths = {
-  [''] = { 'to', 'to_not' },
-  
-  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 
-        'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 
-        'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy' },
-        
-  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 
-            'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 
-            'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy', 
-            chain = function(a) a.negate = not a.negate end },
-  
-  a = { test = isa },
-  an = { test = isa },
-  
-  be = { 'a', 'an', 'truthy', 'falsey',
-    test = function(v, x)
-      return v == x,
-        'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to be the same',
-        'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to not be the same'
-    end
-  },
-  
-  exist = {
-    test = function(v)
-      return v ~= nil,
-        'expected ' .. tostring(v) .. ' to exist',
-        'expected ' .. tostring(v) .. ' to not exist'
-    end
-  },
-  
-  truthy = {
-    test = function(v)
-      return v ~= false and v ~= nil,
-        'expected ' .. tostring(v) .. ' to be truthy',
-        'expected ' .. tostring(v) .. ' to not be truthy'
-    end
-  },
-  
-  falsey = {
-    test = function(v)
-      return v == false or v == nil,
-        'expected ' .. tostring(v) .. ' to be falsey',
-        'expected ' .. tostring(v) .. ' to not be falsey'
-    end
-  },
-  
-  be_truthy = {
-    test = function(v)
-      return v ~= false and v ~= nil,
-        'expected ' .. tostring(v) .. ' to be truthy',
-        'expected ' .. tostring(v) .. ' to not be truthy'
-    end
-  },
-  
-  be_falsey = {
-    test = function(v)
-      return v == false or v == nil,
-        'expected ' .. tostring(v) .. ' to be falsey',
-        'expected ' .. tostring(v) .. ' to not be falsey'
-    end
-  },
-  
-  equal = {
-    test = function(v, x, eps)
-      local equal = eq(v, x, eps)
-      local comparison = ''
-      
-      if not equal then
-        if type(v) == 'table' or type(x) == 'table' then
-          -- For tables, generate a detailed diff
-          comparison = '\n' .. indent(lust_next.level + 1) .. diff_values(v, x)
-        else
-          -- For primitive types, show a simple comparison
-          comparison = '\n' .. indent(lust_next.level + 1) .. 'Expected: ' .. stringify(x) 
-                     .. '\n' .. indent(lust_next.level + 1) .. 'Got:      ' .. stringify(v)
-        end
-      end
-
-      return equal,
-        'Values are not equal: ' .. comparison,
-        'expected ' .. stringify(v) .. ' and ' .. stringify(x) .. ' to not be equal'
-    end
-  },
-  
-  have = {
-    test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. stringify(v) .. ' to be a table')
-      end
-
-      -- Create a formatted table representation for better error messages
-      local table_str = stringify(v)
-      local content_preview = #table_str > 70 
-          and table_str:sub(1, 67) .. "..." 
-          or table_str
-
-      return has(v, x),
-        'expected table to contain ' .. stringify(x) .. '\nTable contents: ' .. content_preview,
-        'expected table not to contain ' .. stringify(x) .. ' but it was found\nTable contents: ' .. content_preview
-    end
-  },
-  
-  fail = { 'with',
-    test = function(v)
-      return not pcall(v),
-        'expected ' .. tostring(v) .. ' to fail',
-        'expected ' .. tostring(v) .. ' to not fail'
-    end
-  },
-  
-  with = {
-    test = function(v, pattern)
-      local ok, message = pcall(v)
-      return not ok and message:match(pattern),
-        'expected ' .. tostring(v) .. ' to fail with error matching "' .. pattern .. '"',
-        'expected ' .. tostring(v) .. ' to not fail with error matching "' .. pattern .. '"'
-    end
-  },
-  
-  match = {
-    test = function(v, p)
-      if type(v) ~= 'string' then v = tostring(v) end
-      local result = string.find(v, p)
-      return result ~= nil,
-        'expected ' .. v .. ' to match pattern [[' .. p .. ']]',
-        'expected ' .. v .. ' to not match pattern [[' .. p .. ']]'
-    end
-  }
-}
-
--- Validate that the expect assertion system is properly initialized
-local function validate_expect_assertions()
-  -- Ensure to/to_not methods are available for chaining
-  if not lust_next.paths.to or not lust_next.paths.to_not then
-    lust_next.paths.to = { chain = function(t) end }
-    lust_next.paths.to_not = { chain = function(t) t.negate = true end }
-  end
-  
-  -- Make sure .be and other chainable properties work correctly
-  if not lust_next.paths.be then
-    lust_next.paths.be = {
-      chain = function(t) end,
-      truthy = lust_next.paths.truthy,
-      falsey = lust_next.paths.falsey,
-      a = lust_next.paths.a
-    }
-  end
-  
-  -- Ensure all paths are properly set up for chaining
-  for k, v in pairs(lust_next.paths) do
-    if type(v) == "table" and v.test and not v.chain then
-      v.chain = function(t) end
-    end
-  end
-end
-
--- Completely rewrite the expect function to fix all issues
-function lust_next.expect(v)
-  -- Count assertion
-  lust_next.assertion_count = (lust_next.assertion_count or 0) + 1
-  
-  -- Track assertion in quality module if enabled
-  if lust_next.quality_options and lust_next.quality_options.enabled and quality then
-    quality.track_assertion("expect", debug.getinfo(2, "n").name)
-  end
-  
-  local assertion = {}
-  assertion.val = v
-  assertion.action = ''
-  assertion.negate = false
-
-  setmetatable(assertion, {
-    __index = function(t, k)
-      if has(lust_next.paths[rawget(t, 'action')], k) then
-        rawset(t, 'action', k)
-        local chain = lust_next.paths[rawget(t, 'action')].chain
-        if chain then chain(t) end
-        return t
-      end
-      return rawget(t, k)
-    end,
-    __call = function(t, ...)
-      if lust_next.paths[t.action].test then
-        local res, err, nerr = lust_next.paths[t.action].test(t.val, ...)
-        if assertion.negate then
-          res = not res
-          err = nerr or err
-        end
-        if not res then
-          error(err or 'unknown failure', 2)
-        end
-      end
-    end
-  })
-
-  -- Ensure expect assertions work properly
-  validate_expect_assertions()
-  
-  return assertion
-end
-
--- Make module loading easier by offering multiple options
-local module = setmetatable({}, {
-  __call = function(_, ...)
-    -- If called as a function, expose globals and return the module
-    lust_next.expose_globals()
+  -- Global exposure utility for easier test writing
+  expose_globals = function()
+    -- Test building blocks
+    _G.describe = lust_next.describe
+    _G.fdescribe = lust_next.fdescribe
+    _G.xdescribe = lust_next.xdescribe
+    _G.it = lust_next.it
+    _G.fit = lust_next.fit
+    _G.xit = lust_next.xit
+    _G.before = lust_next.before
+    _G.before_each = lust_next.before  -- Alias for compatibility
+    _G.after = lust_next.after
+    _G.after_each = lust_next.after    -- Alias for compatibility
     
-    -- Ensure the expect assertion system works even when exposed as globals
-    validate_expect_assertions()
+    -- Assertions
+    _G.expect = lust_next.expect
+    _G.pending = lust_next.pending
+    
+    -- Add lust.assert namespace for direct assertions
+    if not lust_next.assert then
+      lust_next.assert = {}
+      
+      -- Define basic assertions
+      lust_next.assert.equal = function(actual, expected, message)
+        if actual ~= expected then
+          error(message or ("Expected " .. tostring(actual) .. " to equal " .. tostring(expected)), 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.not_equal = function(actual, expected, message)
+        if actual == expected then
+          error(message or ("Expected " .. tostring(actual) .. " to not equal " .. tostring(expected)), 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.is_true = function(value, message)
+        if value ~= true then
+          error(message or ("Expected value to be true, got " .. tostring(value)), 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.is_false = function(value, message)
+        if value ~= false then
+          error(message or ("Expected value to be false, got " .. tostring(value)), 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.is_nil = function(value, message)
+        if value ~= nil then
+          error(message or ("Expected value to be nil, got " .. tostring(value)), 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.is_not_nil = function(value, message)
+        if value == nil then
+          error(message or "Expected value to not be nil", 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.is_truthy = function(value, message)
+        if not value then
+          error(message or ("Expected value to be truthy, got " .. tostring(value)), 2)
+        end
+        return true
+      end
+      
+      lust_next.assert.is_falsey = function(value, message)
+        if value then
+          error(message or ("Expected value to be falsey, got " .. tostring(value)), 2)
+        end
+        return true
+      end
+      
+      -- Additional assertion methods for enhanced reporting tests
+      lust_next.assert.not_nil = lust_next.assert.is_not_nil
+      
+      lust_next.assert.contains = function(container, item, message)
+        if type_checking then
+          -- Delegate to the type checking module
+          return type_checking.contains(container, item, message)
+        else
+          -- Simple fallback implementation
+          if type(container) == "string" then
+            -- Handle string containment
+            local item_str = tostring(item)
+            if not string.find(container, item_str, 1, true) then
+              error(message or ("Expected string to contain '" .. item_str .. "'"), 2)
+            end
+            return true
+          elseif type(container) == "table" then
+            -- Handle table containment
+            for _, value in pairs(container) do
+              if value == item then
+                return true
+              end
+            end
+            error(message or ("Expected table to contain " .. tostring(item)), 2)
+          else
+            -- Error for unsupported types
+            error("Cannot check containment in a " .. type(container), 2)
+          end
+        end
+      end
+      
+      -- Add enhanced type checking assertions (delegate to type_checking module)
+      lust_next.assert.is_exact_type = function(value, expected_type, message)
+        if type_checking then
+          -- Delegate to the type checking module
+          return type_checking.is_exact_type(value, expected_type, message)
+        else
+          -- Minimal fallback
+          if type(value) ~= expected_type then
+            error(message or ("Expected value to be exactly of type '" .. expected_type .. "', got '" .. type(value) .. "'"), 2)
+          end
+          return true
+        end
+      end
+      
+      lust_next.assert.is_instance_of = function(object, class, message)
+        if type_checking then
+          -- Delegate to the type checking module
+          return type_checking.is_instance_of(object, class, message)
+        else
+          -- Basic fallback
+          if type(object) ~= 'table' or type(class) ~= 'table' then
+            error(message or "Expected an object and a class (both tables)", 2)
+          end
+          
+          local mt = getmetatable(object)
+          if not mt or mt ~= class then
+            error(message or "Object is not an instance of the specified class", 2)
+          end
+          
+          return true
+        end
+      end
+      
+      lust_next.assert.implements = function(object, interface, message)
+        if type_checking then
+          -- Delegate to the type checking module
+          return type_checking.implements(object, interface, message)
+        else
+          -- Simple fallback
+          if type(object) ~= 'table' or type(interface) ~= 'table' then
+            error(message or "Expected an object and an interface (both tables)", 2)
+          end
+          
+          -- Check all interface keys
+          for key, expected in pairs(interface) do
+            if object[key] == nil then
+              error(message or ("Object missing required property: " .. key), 2)
+            end
+          end
+          
+          return true
+        end
+      end
+      
+      lust_next.assert.has_error = function(fn, message)
+        if type_checking then
+          -- Delegate to the type checking module
+          return type_checking.has_error(fn, message)
+        else
+          -- Simple fallback
+          if type(fn) ~= 'function' then
+            error("Expected a function to test for errors", 2)
+          end
+          
+          local ok, err = pcall(fn)
+          if ok then
+            error(message or "Expected function to throw an error, but it did not", 2)
+          end
+          
+          return err
+        end
+      end
+      
+      -- Add satisfies assertion for predicate testing
+      lust_next.assert.satisfies = function(value, predicate, message)
+        if type(predicate) ~= 'function' then
+          error("Expected second argument to be a predicate function", 2)
+        end
+        
+        local success, result = pcall(predicate, value)
+        if not success then
+          error("Predicate function failed: " .. result, 2)
+        end
+        
+        if not result then
+          error(message or "Expected value to satisfy the predicate function", 2)
+        end
+        
+        return true
+      end
+      
+      lust_next.assert.type_of = function(value, expected_type, message)
+        if type(value) ~= expected_type then
+          error(message or ("Expected value to be of type '" .. expected_type .. "', got '" .. type(value) .. "'"), 2)
+        end
+        return true
+      end
+    end
+    
+    -- Expose lust.assert namespace and global assert for convenience
+    _G.lust = { assert = lust_next.assert }
+    _G.assert = lust_next.assert
+    
+    -- Mocking utilities
+    if lust_next.spy then
+      _G.spy = lust_next.spy
+      _G.stub = lust_next.stub
+      _G.mock = lust_next.mock
+      _G.with_mocks = lust_next.with_mocks
+    end
+    
+    -- Async testing utilities
+    if async_module then
+      _G.async = lust_next.async
+      _G.await = lust_next.await
+      _G.wait_until = lust_next.wait_until
+      _G.it_async = lust_next.it_async
+    end
     
     return lust_next
   end,
+
+  -- Main entry point when called
+  __call = function(_, ...)
+    -- Check if we are running tests directly or just being required
+    local info = debug.getinfo(2, "S")
+    local is_main_module = info and (info.source == "=(command line)" or info.source:match("lust%-next%.lua$"))
+    
+    if is_main_module and arg then
+      -- Parse command line arguments
+      local options = lust_next.parse_args(arg)
+      
+      -- Start interactive mode if requested
+      if options.interactive then
+        if interactive then
+          interactive.start(lust_next, {
+            test_dir = options.dir,
+            pattern = options.files[1] or "*_test.lua",
+            watch_mode = options.watch
+          })
+          return lust_next
+        else
+          print("Error: Interactive mode not available. Make sure src/interactive.lua exists.")
+          os.exit(1)
+        end
+      end
+      
+      -- Apply format options
+      if options.format == "dot" then
+        lust_next.format({ dot_mode = true })
+      elseif options.format == "compact" then
+        lust_next.format({ compact = true, show_success_detail = false })
+      elseif options.format == "summary" then
+        lust_next.format({ summary_only = true })
+      elseif options.format == "detailed" then
+        lust_next.format({ show_success_detail = true, show_trace = true })
+      elseif options.format == "plain" then
+        lust_next.format({ use_color = false })
+      end
+      
+      -- Apply tag filtering
+      if #options.tags > 0 then
+        lust_next.only_tags(table.unpack(options.tags))
+      end
+      
+      -- Apply pattern filtering
+      if options.filter then
+        lust_next.filter(options.filter)
+      end
+      
+      -- Handle watch mode
+      if options.watch then
+        if watcher then
+          print("Starting watch mode...")
+          
+          -- Set up watcher
+          watcher.set_check_interval(2) -- 2 seconds
+          watcher.init({"."}, {"node_modules", "%.git"})
+          
+          -- Run tests
+          local run_tests = function()
+            lust_next.reset()
+            if #options.files > 0 then
+              -- Run specific files
+              for _, file in ipairs(options.files) do
+                lust_next.run_file(file)
+              end
+            else
+              -- Run all discovered tests
+              lust_next.run_discovered(options.dir)
+            end
+          end
+          
+          -- Initial test run
+          run_tests()
+          
+          -- Watch loop
+          print("Watching for changes. Press Ctrl+C to exit.")
+          while true do
+            local changes = watcher.check_for_changes()
+            if changes then
+              print("\nFile changes detected. Re-running tests...")
+              run_tests()
+            end
+            os.execute("sleep 0.5")
+          end
+          
+          return lust_next
+        else
+          print("Error: Watch mode not available. Make sure src/watcher.lua exists.")
+          os.exit(1)
+        end
+      end
+      
+      -- Run tests normally (no watch mode or interactive mode)
+      if #options.files > 0 then
+        -- Run specific files
+        local success = true
+        for _, file in ipairs(options.files) do
+          local file_results = lust_next.run_file(file)
+          if not file_results.success or file_results.errors > 0 then
+            success = false
+          end
+        end
+        
+        -- Exit with appropriate code
+        os.exit(success and 0 or 1)
+      else
+        -- Run all discovered tests
+        local success = lust_next.run_discovered(options.dir)
+        os.exit(success and 0 or 1)
+      end
+    end
+    
+    -- When required as module, just return the module
+    return lust_next
+  end,
+}, {
   __index = lust_next
 })
 

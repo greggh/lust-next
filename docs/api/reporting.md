@@ -136,24 +136,51 @@ Returns:
 - `success` (boolean): True if the report was saved successfully
 - `error` (string, optional): Error message if the operation failed
 
-#### `reporting.auto_save_reports(coverage_data, quality_data, base_dir)`
+#### `reporting.auto_save_reports(coverage_data, quality_data, results_data, options)`
 
-Automatically save multiple report formats to a directory:
+Automatically save multiple report formats to a directory with configurable paths:
 
 ```lua
--- Save coverage reports (HTML, JSON, LCOV)
-reporting.auto_save_reports(coverage_data, nil, "./reports")
+-- Simple usage (backward compatible)
+reporting.auto_save_reports(coverage_data, nil, nil, "./reports")
 
 -- Save both coverage and quality reports
-reporting.auto_save_reports(coverage_data, quality_data, "./reports")
+reporting.auto_save_reports(coverage_data, quality_data, nil, "./reports")
 
-```text
+-- Advanced usage with path templates
+reporting.auto_save_reports(coverage_data, quality_data, results_data, {
+  report_dir = "./reports",
+  report_suffix = "-v1.0",
+  coverage_path_template = "coverage-{date}.{format}",
+  quality_path_template = "quality/report-{date}.{format}",
+  results_path_template = "test-results-{datetime}.{format}",
+  timestamp_format = "%Y-%m-%d",
+  verbose = true
+})
+```
 
 Parameters:
 
 - `coverage_data` (table, optional): Coverage data structure
 - `quality_data` (table, optional): Quality data structure
-- `base_dir` (string): Base directory to save reports (default: ./coverage-reports)
+- `results_data` (table, optional): Test results data structure
+- `options` (string or table):
+  - If string: Base directory path (backward compatibility)
+  - If table: Configuration options with the following properties:
+    - `report_dir` (string): Base directory for reports (default: "./coverage-reports")
+    - `report_suffix` (string, optional): Suffix to add to all report filenames
+    - `coverage_path_template` (string, optional): Path template for coverage reports
+    - `quality_path_template` (string, optional): Path template for quality reports
+    - `results_path_template` (string, optional): Path template for test results reports
+    - `timestamp_format` (string, optional): Format string for timestamps (default: "%Y-%m-%d")
+    - `verbose` (boolean, optional): Enable verbose debugging output
+
+Path templates support the following placeholders:
+- `{format}`: Output format (html, json, lcov, etc.)
+- `{type}`: Report type (coverage, quality, results)
+- `{date}`: Current date using timestamp format
+- `{datetime}`: Current date and time (%Y-%m-%d_%H-%M-%S)
+- `{suffix}`: The report suffix if specified
 
 Returns:
 
@@ -220,6 +247,16 @@ end
 
 ## Report Formats
 
+### Test Results Report Formats
+
+- **JUnit XML**: Standard XML format for CI/CD integration, compatible with most test runners and reporting tools
+- **TAP (Test Anything Protocol)**: Simple text-based format widely used in testing frameworks
+  - TAP version 13 compatible
+  - YAML diagnostic blocks for failures and errors
+  - SKIP directives for pending/skipped tests
+- **CSV (Comma-Separated Values)**: Tabular format for easy import into spreadsheets and data analysis tools
+  - Fields: test ID, test suite, test name, status, duration, message, error type, details, timestamp
+
 ### Coverage Report Formats
 
 - **HTML**: Visual reports with color-coded coverage information
@@ -233,7 +270,77 @@ end
 - **JSON**: Machine-readable format for CI integration
 - **Summary**: Text-based quality evaluation
 
+## Command-Line Configuration
+
+The reporting functionality can be configured through command-line options:
+
+```bash
+# Set the output directory for all reports
+lua run_tests.lua --output-dir ./reports
+
+# Add a suffix to all report filenames (useful for versioning)
+lua run_tests.lua --report-suffix "-2025-03-08"
+
+# Custom path template for coverage reports
+lua run_tests.lua --coverage-path "coverage-{date}.{format}"
+
+# Custom path template for quality reports
+lua run_tests.lua --quality-path "quality/report-{date}.{format}"
+
+# Custom path template for test results
+lua run_tests.lua --results-path "results/{datetime}.{format}"
+
+# Custom timestamp format
+lua run_tests.lua --timestamp-format "%Y%m%d"
+
+# Enable verbose output during report generation
+lua run_tests.lua --verbose-reports
+```
+
+These options can be combined with other lust-next options:
+
+```bash
+lua run_tests.lua --coverage --output-dir ./reports --report-suffix "-$(date +%Y%m%d)" tests/coverage_test.lua
+```
+
 ## Examples
+
+### Test Results Report Generation
+
+```lua
+local lust = require('lust-next')
+local reporting = require('src.reporting')
+
+-- Run tests
+lust.run_discovered('./tests')
+
+-- Get test results data
+local results_data = lust.get_test_results()
+
+-- Generate different report formats
+local junit_report = reporting.format_results(results_data, "junit")
+local tap_report = reporting.format_results(results_data, "tap")
+local csv_report = reporting.format_results(results_data, "csv")
+
+-- Save reports to files
+reporting.write_file("./reports/test-results.xml", junit_report)
+reporting.write_file("./reports/test-results.tap", tap_report)
+reporting.write_file("./reports/test-results.csv", csv_report)
+
+-- Or save a specific format
+reporting.save_results_report("./reports/test-results.tap", results_data, "tap")
+
+-- Or use the auto-save function for all formats (includes JUnit XML, TAP, and CSV)
+reporting.auto_save_reports(nil, nil, results_data, "./reports")
+
+-- Or use the advanced configuration features
+reporting.auto_save_reports(nil, nil, results_data, {
+  report_dir = "./reports",
+  report_suffix = "-" .. os.date("%Y%m%d"),
+  results_path_template = "junit/results-{date}.{format}",
+  verbose = true
+})
+```
 
 ### Coverage Report Generation
 

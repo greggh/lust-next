@@ -1,81 +1,88 @@
-# lust-next Mocking System
+# lust-next Mocking System Implementation Plan
+
+## Overview
+
+The mocking system for lust-next has been reimplemented with a more robust and modular design. This document outlines the implementation details and integration plan.
 
 ## Current Status
 
-The mocking system in lust-next has a basic implementation with some features working and others that need to be completed. This document outlines the current state and implementation requirements for the mocking system.
+The following components have been successfully implemented and tested:
 
-## Existing Functionality
+1. **Spy Module** (`src/spy.lua`):
+   - Function call tracking with arguments
+   - `called_with()` verification method
+   - Call count verification methods (`called_times`, `not_called`, `called_once`)
+   - Last call retrieval (`last_call()`)
+   - Call sequence tracking (`called_before`, `called_after`)
+   - Original functionality restoration
 
-The following features are currently working:
+2. **Stub Module** (`src/stub.lua`):
+   - Simple value stubs
+   - Function implementation stubs
+   - Return value configuration (`returns()`)
+   - Error throwing configuration (`throws()`)
 
-1. **Basic mock functionality**: 
-   - Creating mocks for object methods with simple return values
-   - Restoring mocked methods
+3. **Mock Module** (`src/mock.lua`):
+   - Stubbing object methods
+   - Method verification
+   - Automatic restoration
 
-2. **Basic stub functionality**:
-   - Creating standalone stubs that return specific values
-   - Creating stubs with function implementations
+4. **Context Management** (`mock.with_mocks`):
+   - Error handling
+   - Automatic cleanup
 
-## Implementation Requirements
+## Integration Plan
 
-The following features need to be fully implemented:
+To integrate the modular mocking system into the main lust-next.lua file, follow these steps:
 
-### Spy Functionality
+1. **Replace the existing mocking implementation** in lust-next.lua with the new modular approach:
+   - Replace the spy functionality (around line 1460-1640)
+   - Replace the stub functionality (around line 2350-2480)
+   - Replace the mock functionality (around line 1980-2350)
+   - Replace the with_mocks functionality (around line 2480-2500)
 
-1. **Function Call Tracking**:
-   - Track when a function is called
-   - Maintain a call count
-   - Record arguments for each call
+2. **Update the test file** (`tests/mocking_test.lua`) to use the new API structure:
+   - The tests should now pass without using `pending()`
+   - Verify that all features are working as expected
 
-2. **Spy Methods**:
-   - `called_with()` - Check if a function was called with specific arguments
-   - `not_called()` - Check if a function was never called
-   - `called_once()` - Check if a function was called exactly once
-   - `called_times(n)` - Check if a function was called exactly n times
-   - `last_call()` - Get the arguments from the most recent call
+3. **Documentation Update**:
+   - Update documentation to reflect the new functionality
+   - Add examples for each feature
+   - Clarify API differences and compatibility
 
-3. **Call Sequence Tracking**:
-   - `called_before(other_spy)` - Check if one spy was called before another
-   - `called_after(other_spy)` - Check if one spy was called after another
+## Completed Enhancements
 
-### Mock Functionality
+The mocking system now includes these advanced features:
 
-1. **Expectation Setting**:
-   - Set up expectations for method calls
-   - `expect(method)` - Start defining expectations for a method
-   - Fluent API for configuring expectations:
-     - `.to.be.called.once()`
-     - `.to.be.called.times(n)`
-     - `.with(...args)`
-     - `.and_return(value)`
-     - `.after(other_method)`
+1. **Sequential Return Values**:
+   - `returns_in_sequence()` method to define values returned in sequence
+   - Multiple exhaustion behaviors:
+     - Return nil (default)
+     - Return custom fallback value 
+     - Fall back to original implementation
+     - Cycle through the sequence repeatedly
+   - Sequence reset functionality via `reset_sequence()`
+   - Support for both fixed values and dynamic functions in sequences
+   - Example implementation in `examples/mock_sequence_returns_example.lua`
 
-2. **Call Verification**:
-   - `verify_expectations()` - Verify that all expectations have been met
-   - `verify_sequence()` - Verify that methods were called in a specific order
+2. **Call Sequence Verification**:
+   - Enhanced sequence verification with deterministic ordering
+   - `was_called_before()` and `was_called_after()` methods for relative ordering
+   - Support for verifying multiple call sequences in complex tests
+   - Example implementation in `examples/mock_sequence_example.lua`
 
-3. **Stub Management**:
-   - `restore_stub(method)` - Restore a single stubbed method
-   - Ensure proper cleanup of all stubs
+## Future Enhancements
 
-### Stub Enhancement
+Consider these enhancements for future iterations:
 
-1. **Stub Configuration**:
-   - `.returns(value)` - Configure a stub to return a specific value
-   - `.throws(error)` - Configure a stub to throw an error
+1. **Argument Matchers**:
+   - Add more sophisticated argument matching capabilities
+   - Allow custom matchers to be defined
 
-### Context Management
+2. **Expectation API**:
+   - Add a fluent API for setting call expectations
+   - Implement automatic verification of expectations
 
-1. **with_mocks Enhancement**:
-   - Ensure proper cleanup of all mocks even when errors occur
-   - Support for complex mock scenarios
+## Conclusion
 
-## Implementation Plan
-
-1. Start with the spy functionality as it's the foundation of the mocking system
-2. Implement stub configuration methods
-3. Add mock expectation functionality
-4. Enhance the context management system
-5. Complete the verification system
-
-Once fully implemented, the mocking system will provide comprehensive functionality for test isolation and behavior verification in lust-next tests.
+The modular mocking system provides a robust foundation for testing with lust-next. By following this implementation plan, the mocking system will be fully integrated into lust-next while maintaining backward compatibility and adding powerful new features.

@@ -5,7 +5,7 @@ This document describes the asynchronous testing capabilities provided by Lust-N
 
 ## Overview
 
-Lust-Next provides a set of functions for testing asynchronous code. These functions use Lua's coroutines to manage asynchronous operations within tests.
+Lust-Next provides a modular system for testing asynchronous code. The `src/async.lua` module implements the core functionality, which is then integrated into the main testing framework.
 
 ## Async Test Functions
 
@@ -129,23 +129,26 @@ end)
 
 ```text
 
-### lust.parallel_async(fn1, fn2, ...)
+### lust.parallel_async(operations, [timeout])
 
-Runs multiple async functions in parallel and waits for all to complete.
+Runs multiple async operations concurrently and waits for all to complete.
 
 **Parameters:**
 
-- `fn1, fn2, ...` (functions): Async functions to run in parallel
+- `operations` (table): Array of functions to run concurrently
+- `timeout` (number, optional): Maximum time in milliseconds to wait before failing (default: configured timeout)
 
 **Returns:**
 
-- Array of results from all async functions in the same order they were provided
+- Array of results from all operations in the same order they were provided
 
 **Notes:**
 
 - Can only be called within an async test function
-- All functions run concurrently and the result is only returned when all have completed
-- Significantly faster than running async functions sequentially
+- All operations run concurrently and the results are only returned when all have completed
+- Significantly faster than running operations sequentially
+- If any operation fails, an error is thrown with details about which operations failed
+- If the timeout is reached, an error is thrown listing the operations that didn't complete
 
 **Example:**
 
@@ -168,7 +171,7 @@ lust.it_async("runs operations in parallel", function()
   end
 
   -- Run all operations in parallel (completes in ~150ms instead of ~330ms)
-  local results = lust.parallel_async(fetch_users, fetch_posts, fetch_comments)
+  local results = lust.parallel_async({fetch_users, fetch_posts, fetch_comments})
 
   -- Verify all results
   expect(#results).to.equal(3)
@@ -179,32 +182,29 @@ lust.it_async("runs operations in parallel", function()
   expect(results[2][1].title).to.equal("Post 1")
   expect(results[3][1].text).to.equal("Comment 1")
 end)
+```
 
-```text
+### Configuring Timeouts
 
-### lust.set_timeout(milliseconds)
-
-Sets the default timeout for all async tests.
-
-**Parameters:**
-
-- `milliseconds` (number): Default timeout in milliseconds
-
-**Returns:**
-
-- The lust object (for chaining)
-
-**Example:**
+To set the default timeout for all async operations, access the async module directly:
 
 ```lua
--- Set a longer default timeout for all async tests
-lust.set_timeout(10000)
+local async_module = package.loaded["src.async"]
+if async_module then
+  async_module.set_timeout(10000) -- 10 seconds
+end
 
 lust.it_async("long running test", function()
   -- This test has up to 10 seconds to complete
 end)
+```
 
-```text
+Individual timeouts can also be specified when using `wait_until`:
+
+```lua
+-- Wait for up to 5 seconds, checking every 100ms
+wait_until(condition_fn, 5000, 100)
+```
 
 ## Working with Asynchronous Code
 

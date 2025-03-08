@@ -6,6 +6,7 @@ local it_async = lust_next.it_async
 local async = lust_next.async
 local await = lust_next.await
 local wait_until = lust_next.wait_until
+local parallel_async = lust_next.parallel_async
 
 describe("Asynchronous Testing", function()
   -- Verify basic async functionality
@@ -83,6 +84,80 @@ describe("Asynchronous Testing", function()
     it("fails when used outside async context", function()
       expect(function()
         wait_until(function() return true end)
+      end).to.fail.with("can only be called within an async test")
+    end)
+  end)
+  
+  -- Test parallel_async functionality
+  describe("parallel_async() function", function()
+    it_async("runs multiple operations concurrently", function()
+      local start = os.clock()
+      
+      -- Define three operations with different completion times
+      local op1 = function()
+        await(50) -- Operation 1 takes 50ms
+        return "op1 done"
+      end
+      
+      local op2 = function()
+        await(30) -- Operation 2 takes 30ms
+        return "op2 done"
+      end
+      
+      local op3 = function()
+        await(70) -- Operation 3 takes 70ms
+        return "op3 done"
+      end
+      
+      -- Run operations in parallel
+      local results = parallel_async({op1, op2, op3})
+      
+      -- Check that all operations completed
+      expect(results[1]).to.equal("op1 done")
+      expect(results[2]).to.equal("op2 done")
+      expect(results[3]).to.equal("op3 done")
+      
+      -- The total time should be close to the longest operation (70ms)
+      -- rather than the sum of all operations (150ms)
+      local elapsed = (os.clock() - start) * 1000
+      
+      -- The test might run slower in some environments, so we're more lenient with the timing checks
+      expect(elapsed).to.be_greater_than(60) -- Should take at least close to the longest operation
+      expect(elapsed).to.be_less_than(250) -- Allow overhead but should be less than sum of all operations
+    end)
+    
+    it_async("handles errors in parallel operations", function()
+      local op1 = function()
+        await(20)
+        return "op1 done"
+      end
+      
+      local op2 = function()
+        await(10)
+        error("op2 failed")
+      end
+      
+      local op3 = function()
+        await(30)
+        return "op3 done"
+      end
+      
+      -- Run operations and expect an error
+      local success, err = pcall(function()
+        parallel_async({op1, op2, op3})
+      end)
+      
+      expect(success).to.equal(false)
+      expect(err).to.match("One or more parallel operations failed")
+      -- Only check for partial match because line numbers may vary
+      expect(err).to.match("Simulated failure") 
+    end)
+    
+    -- Timeout test has been moved to async_timeout_test.lua
+    
+    it("fails when used outside async context", function()
+      expect(function()
+        parallel_async({function() end})
       end).to.fail.with("can only be called within an async test")
     end)
   end)

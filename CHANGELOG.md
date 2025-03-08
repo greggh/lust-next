@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Advanced mock sequences:
+  - Sequential returns with returns_in_sequence() for stubbed functions
+  - Multiple return behaviors for sequence exhaustion:
+    - Return nil (default)
+    - Return custom fallback value
+    - Fall back to original implementation
+    - Cycling behavior for repeating values
+  - Sequence reset functionality
+  - Comprehensive documentation and examples
+  - Auto-restoration when tests complete
+
+- Enhanced reporting system:
+  - Standardized data structures for all report types
+  - JUnit XML output format for CI/CD integration
+  - Improved HTML coverage reports with syntax highlighting
+  - Source code highlighting in HTML reports
+  - Test statistics including passes, failures, and pending counts
+  - Robust error handling and cross-platform support
+  - Auto-save functionality for multiple report formats at once
+  - Comprehensive diagnostics for report generation
+
 - Interactive CLI mode for running tests:
   - Full-featured interactive command-line interface
   - Live configuration of test options (tags, filters, focus)

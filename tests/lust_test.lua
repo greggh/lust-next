@@ -18,9 +18,24 @@ describe("lust-next", function()
   end)
   
   it("has spy functionality", function()
-    -- Since the spy implementation seems to be incomplete,
-    -- we'll skip this test for now
-    expect(true).to.be(true)
-    return lust_next.pending("Spy functionality test skipped until implementation is complete")
+    -- Test the spy functionality which is now implemented
+    expect(lust_next.spy).to_not.be(nil)
+    -- The spy is a module with new and on functions
+    expect(lust_next.spy.new).to.be.a("function")
+    expect(lust_next.spy.on).to.be.a("function")
+    
+    -- Test basic spy functionality
+    local test_fn = function(a, b) return a + b end
+    local spied = lust_next.spy.new(test_fn)
+    
+    -- Spy should work like the original function
+    expect(spied(2, 3)).to.be(5)
+    
+    -- Spy should track calls
+    expect(spied.calls).to.be.a("table")
+    expect(#spied.calls).to.be(1)
+    expect(spied.calls[1][1]).to.be(2)
+    expect(spied.calls[1][2]).to.be(3)
+    expect(spied.call_count).to.be(1)
   end)
 end)

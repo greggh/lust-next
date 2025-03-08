@@ -221,8 +221,23 @@ describe("Reporting Module", function()
       
       -- Clean up first in case the directory already exists
       os.remove(nested_file)
-      os.execute("rmdir " .. nested_dir .. " 2>/dev/null")
-      os.execute("rmdir " .. "/tmp/lust-next-test-nested" .. " 2>/dev/null")
+      
+      -- Check if directories exist before removing them
+      local check_nested_dir = package.config:sub(1,1) == "\\" and
+        'if exist "' .. nested_dir .. '\\*" (exit 0) else (exit 1)' or
+        'test -d "' .. nested_dir .. '"'
+      
+      local check_parent_dir = package.config:sub(1,1) == "\\" and
+        'if exist "' .. "/tmp/lust-next-test-nested" .. '\\*" (exit 0) else (exit 1)' or
+        'test -d "' .. "/tmp/lust-next-test-nested" .. '"'
+      
+      if os.execute(check_nested_dir) then
+        os.execute("rmdir " .. nested_dir .. " 2>/dev/null")
+      end
+      
+      if os.execute(check_parent_dir) then
+        os.execute("rmdir " .. "/tmp/lust-next-test-nested" .. " 2>/dev/null")
+      end
       
       -- Try to write to nested file (should create directories)
       local success, err = reporting_module.write_file(nested_file, test_content)
@@ -238,8 +253,23 @@ describe("Reporting Module", function()
       
       -- Clean up
       os.remove(nested_file)
-      os.execute("rmdir " .. nested_dir .. " 2>/dev/null")
-      os.execute("rmdir " .. "/tmp/lust-next-test-nested" .. " 2>/dev/null")
+      
+      -- Check if directories exist before removing them
+      local check_nested_dir = package.config:sub(1,1) == "\\" and
+        'if exist "' .. nested_dir .. '\\*" (exit 0) else (exit 1)' or
+        'test -d "' .. nested_dir .. '"'
+      
+      local check_parent_dir = package.config:sub(1,1) == "\\" and
+        'if exist "' .. "/tmp/lust-next-test-nested" .. '\\*" (exit 0) else (exit 1)' or
+        'test -d "' .. "/tmp/lust-next-test-nested" .. '"'
+      
+      if os.execute(check_nested_dir) then
+        os.execute("rmdir " .. nested_dir .. " 2>/dev/null")
+      end
+      
+      if os.execute(check_parent_dir) then
+        os.execute("rmdir " .. "/tmp/lust-next-test-nested" .. " 2>/dev/null")
+      end
     end)
   end)
   
@@ -253,8 +283,14 @@ describe("Reporting Module", function()
         os.remove(temp_dir .. "/coverage-report." .. format)
         os.remove(temp_dir .. "/quality-report." .. format)
       end
-      -- Try to remove directory
-      os.execute("rmdir " .. temp_dir)
+      -- Check if directory exists before removing it
+      local dir_check_cmd = package.config:sub(1,1) == "\\" and
+        'if exist "' .. temp_dir .. '\\*" (exit 0) else (exit 1)' or
+        'test -d "' .. temp_dir .. '"'
+      
+      if os.execute(dir_check_cmd) then
+        os.execute("rmdir " .. temp_dir .. " 2>/dev/null")
+      end
     end)
     
     it("should save coverage reports to file", function()
@@ -376,6 +412,169 @@ describe("Reporting Module", function()
       -- Basic validation
       assert.is_not_nil(result)
       assert.is_not_nil(result.level)
+    end)
+  end)
+  
+  describe("Test Results Reporting", function()
+    -- Mock test results data for testing
+    local mock_test_results
+    
+    before_each(function()
+      -- Create mock test results for JUnit XML generation
+      mock_test_results = {
+        name = "TestSuite",
+        timestamp = "2023-01-01T00:00:00",
+        tests = 5,
+        failures = 1,
+        errors = 1,
+        skipped = 1,
+        time = 0.245,
+        properties = {
+          lua_version = "Lua 5.3",
+          platform = "Linux",
+          framework = "lust-next"
+        },
+        test_cases = {
+          {
+            name = "should add numbers correctly",
+            classname = "MathTests",
+            time = 0.05,
+            status = "pass"
+          },
+          {
+            name = "should handle negative numbers",
+            classname = "MathTests",
+            time = 0.05,
+            status = "fail",
+            failure = {
+              message = "Expected values to be equal",
+              type = "AssertionError",
+              details = "Expected -2, got 2"
+            }
+          },
+          {
+            name = "should throw on invalid input",
+            classname = "MathTests",
+            time = 0.05,
+            status = "error",
+            error = {
+              message = "Runtime error",
+              type = "Error",
+              details = "attempt to perform arithmetic on a nil value"
+            },
+            stdout = "Processing input...",
+            stderr = "Error: nil value"
+          },
+          {
+            name = "should format results correctly",
+            classname = "StringTests",
+            time = 0.05,
+            status = "pass"
+          },
+          {
+            name = "should handle advanced calculations",
+            classname = "MathTests",
+            time = 0.04,
+            status = "skipped",
+            skip_message = "Not implemented yet"
+          }
+        }
+      }
+    end)
+    
+    it("should export test results formatting functions", function()
+      assert.is_not_nil(reporting_module.format_results)
+      assert.is_not_nil(reporting_module.save_results_report)
+    end)
+    
+    it("should format test results as JUnit XML", function()
+      local result = reporting_module.format_results(mock_test_results, "junit")
+      assert.is_not_nil(result)
+      assert.type_of(result, "string")
+      
+      -- Should contain XML structure
+      assert.is_true(result:find('<[?]xml') ~= nil, "Missing XML declaration")
+      assert.is_true(result:find('<testsuite') ~= nil, "Missing testsuite tag")
+      
+      -- Basic structure verification
+      assert.type_of(result, "string", "Result should be a string")
+      assert.is_true(#result > 100, "XML output seems too short")
+      
+      -- Simpler attribute tests
+      assert.is_true(result:find('tests=') ~= nil, "Missing tests attribute")
+      assert.is_true(result:find('failures=') ~= nil, "Missing failures attribute")
+      assert.is_true(result:find('errors=') ~= nil, "Missing errors attribute")
+      assert.is_true(result:find('skipped=') ~= nil, "Missing skipped attribute")
+      
+      -- Should have testcases with different statuses
+      assert.is_true(result:find('<testcase') ~= nil, "Missing testcase tag")
+    end)
+    
+    it("should save test results report to file", function()
+      local temp_file = "/tmp/lust-next-test-junit.xml"
+      
+      -- Clean up first in case the file exists
+      os.remove(temp_file)
+      
+      -- Save report
+      local success, err = reporting_module.save_results_report(
+        temp_file,
+        mock_test_results,
+        "junit"
+      )
+      
+      assert.is_true(success)
+      
+      -- Verify file exists
+      local file = io.open(temp_file, "r")
+      assert.is_not_nil(file)
+      local content = file:read("*all")
+      file:close()
+      
+      -- Verify content
+      assert.is_true(#content > 100, "XML file content too short")
+      assert.is_true(content:find('xml') ~= nil, "Missing XML content")
+      assert.is_true(content:find('test') ~= nil, "Missing test content")
+      
+      -- Clean up
+      os.remove(temp_file)
+    end)
+    
+    it("should include JUnit XML in auto-save reports", function()
+      local temp_dir = "/tmp/lust-next-test-reports-junit"
+      
+      -- Clean up first
+      os.remove(temp_dir .. "/test-results.xml")
+      os.execute("rmdir " .. temp_dir .. " 2>/dev/null")
+      
+      -- Auto-save reports with test results
+      local results = reporting_module.auto_save_reports(
+        nil,  -- No coverage data
+        nil,  -- No quality data
+        mock_test_results,
+        temp_dir
+      )
+      
+      -- Check we have the JUnit result
+      assert.is_not_nil(results.junit)
+      assert.is_true(results.junit.success)
+      
+      -- Verify file exists
+      local file = io.open(results.junit.path, "r")
+      assert.is_not_nil(file)
+      file:close()
+      
+      -- Clean up
+      os.remove(temp_dir .. "/test-results.xml")
+      
+      -- Check if directory exists before removing it
+      local dir_check_cmd = package.config:sub(1,1) == "\\" and
+        'if exist "' .. temp_dir .. '\\*" (exit 0) else (exit 1)' or
+        'test -d "' .. temp_dir .. '"'
+      
+      if os.execute(dir_check_cmd) then
+        os.execute("rmdir " .. temp_dir .. " 2>/dev/null")
+      end
     end)
   end)
 end)

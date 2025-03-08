@@ -13,10 +13,40 @@ local normal = string.char(27) .. '[0m'
 
 -- Run a specific test file
 function runner.run_file(file_path, lust)
+  -- Initialize counter properties if they don't exist
+  if lust.passes == nil then lust.passes = 0 end
+  if lust.errors == nil then lust.errors = 0 end
+  
   local prev_passes = lust.passes
   local prev_errors = lust.errors
   
   print("\nRunning file: " .. file_path)
+  
+  -- Count PASS/FAIL from test output
+  local pass_count = 0
+  local fail_count = 0
+  
+  -- Keep track of the original print function
+  local original_print = print
+  local output_buffer = {}
+  
+  -- Override print to count test results
+  _G.print = function(...)
+    local output = table.concat({...}, " ")
+    table.insert(output_buffer, output)
+    
+    -- Count PASS/FAIL instances in the output
+    if output:match("PASS") and not output:match("SKIP") then
+      pass_count = pass_count + 1
+    elseif output:match("FAIL") then
+      fail_count = fail_count + 1
+    end
+    
+    -- Still show output
+    original_print(...)
+  end
+  
+  -- Execute the test file
   local success, err = pcall(function()
     -- Ensure proper package path for test file
     local save_path = package.path
@@ -30,16 +60,21 @@ function runner.run_file(file_path, lust)
     package.path = save_path
   end)
   
+  -- Restore original print function
+  _G.print = original_print
+  
+  -- Use counted results if available, otherwise use lust counters
   local results = {
     success = success,
     error = err,
-    passes = lust.passes - prev_passes,
-    errors = lust.errors - prev_errors
+    passes = pass_count > 0 and pass_count or (lust.passes - prev_passes),
+    errors = fail_count > 0 and fail_count or (lust.errors - prev_errors)
   }
   
   if not success then
     print(red .. "ERROR: " .. err .. normal)
   else
+    -- Always show the completion status with test counts
     print(green .. "Completed with " .. results.passes .. " passes, " 
          .. results.errors .. " failures" .. normal)
   end
@@ -51,24 +86,34 @@ end
 function runner.run_all(files, lust)
   print(green .. "Running " .. #files .. " test files" .. normal)
   
-  local passed = 0
-  local failed = 0
+  local passed_files = 0
+  local failed_files = 0
+  local total_passes = 0
+  local total_failures = 0
   
   for _, file in ipairs(files) do
     local results = runner.run_file(file, lust)
+    
+    -- Count passed/failed files
     if results.success and results.errors == 0 then
-      passed = passed + 1
+      passed_files = passed_files + 1
     else
-      failed = failed + 1
+      failed_files = failed_files + 1
     end
+    
+    -- Count total tests
+    total_passes = total_passes + results.passes
+    total_failures = total_failures + results.errors
   end
   
   print("\n" .. string.rep("-", 60))
-  print("Test Summary: " .. green .. passed .. " passed" .. normal .. ", " .. 
-        (failed > 0 and red or green) .. failed .. " failed" .. normal)
+  print("File Summary: " .. green .. passed_files .. " passed" .. normal .. ", " .. 
+        (failed_files > 0 and red or green) .. failed_files .. " failed" .. normal)
+  print("Test Summary: " .. green .. total_passes .. " passed" .. normal .. ", " .. 
+        (total_failures > 0 and red or green) .. total_failures .. " failed" .. normal)
   print(string.rep("-", 60))
   
-  local all_passed = failed == 0
+  local all_passed = failed_files == 0
   if not all_passed then
     print(red .. "✖ Some tests failed" .. normal)
   else
