@@ -36,6 +36,7 @@ local type_checking = try_require("lib.core.type_checking")
 local async_module = try_require("lib.async")
 local interactive = try_require("lib.tools.interactive")
 local discover_module = try_require("scripts.discover")
+local parallel_module = try_require("lib.tools.parallel")
 
 local lust_next = {}
 lust_next.level = 0
@@ -81,6 +82,11 @@ end
 -- Register codefix module if available
 if codefix then
   codefix.register_with_lust(lust_next)
+end
+
+-- Register parallel execution module if available
+if parallel_module then
+  parallel_module.register_with_lust(lust_next)
 end
 
 -- Add test discovery functionality
