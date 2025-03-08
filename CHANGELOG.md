@@ -10,12 +10,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Watch mode for continuous testing:
+  - Automatic file change detection
+  - Continuous test execution
+  - Configurable directories to watch
+  - Exclusion patterns for ignoring files
+  - Debounce mechanism to prevent multiple runs on rapid changes
+  - Clear terminal interface with status indicators
+  - Support for Ctrl+C to exit watch mode
+
+### Fixed
+
+- Expect assertion system now works consistently:
+  - Fixed issues with chained assertions (to.be.truthy(), to_not.be.falsey(), etc.)
+  - Added proper test coverage for expect assertions
+  - Corrected path definitions for all assertion methods
+  - Ensured reset() function preserves assertion paths
+  - Added comprehensive documentation and examples
+  - Command-line options for configuration
+  - Example script demonstrating watch mode usage
+
 - Enhanced modular reporting architecture:
   - Centralized reporting module for all output formats
   - Standardized data interfaces between modules
   - Support for multiple report formats (HTML, JSON, LCOV, Summary)
   - Comprehensive error handling and diagnostics
   - Robust fallback mechanisms for reliable report generation
+  - Enhanced HTML reports with syntax highlighting and interactive features
 
 ### Fixed
 
@@ -24,14 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Module loading with better search paths and fallbacks
 - Report generation with better error detection and recovery
 - Cross-platform compatibility issues in file paths
+- Reset function for proper state management between test runs
 
 ### Improved
 
+- Version bumped to 0.7.5
 - Coverage tracking with better source file detection
 - Input validation throughout the reporting process
 - Directory creation with multiple fallback methods
 - Error reporting with detailed diagnostic output
 - File path normalization for better pattern matching
+- Command-line interface with more options and better help documentation
 
 ## [0.7.4] - 2025-03-18
 
