@@ -1,0 +1,66 @@
+<\!DOCTYPE html>
+<html>
+<head>
+  <title>Lust-Next Test Quality Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { color: #333; }
+    .summary { margin: 20px 0; background: #f5f5f5; padding: 10px; border-radius: 5px; }
+    .progress { background-color: #e0e0e0; border-radius: 5px; height: 20px; }
+    .progress-bar { height: 20px; border-radius: 5px; background-color: #4CAF50; }
+    .low { background-color: #f44336; }
+    .medium { background-color: #ff9800; }
+    .high { background-color: #4CAF50; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+    .issue { color: #f44336; }
+  </style>
+</head>
+<body>
+  <h1>Lust-Next Test Quality Report</h1>
+  <div class="summary">
+    <h2>Quality Summary</h2>
+    <p>Quality Level: comprehensive (Level 3 of 5)</p>
+    <div class="progress">
+      <div class="progress-bar medium" style="width: 50%;"></div>
+    </div>
+    <p>Tests Passing Quality: 1 / 2 (50.00%)</p>
+    <p>Average Assertions per Test: 4.00</p>
+  </div>
+    <h2>Quality Issues</h2>
+  <table>
+    <tr>
+      <th>Test</th>
+      <th>Issue</th>
+    </tr>
+      <tr>
+      <td>test2</td>
+      <td class="issue">Missing required assertion types: need 3 type(s), found 2</td>
+    </tr>
+    </table>
+    <h2>Test Details</h2>
+  <table>
+    <tr>
+      <th>Test</th>
+      <th>Quality Level</th>
+      <th>Assertions</th>
+      <th>Assertion Types</th>
+    </tr>
+      <tr>
+      <td>test2</td>
+      <td>standard (Level 2)</td>
+      <td>3</td>
+      <td>truth (1), equality (2)</td>
+    </tr>
+        <tr>
+      <td>test1</td>
+      <td>comprehensive (Level 3)</td>
+      <td>5</td>
+      <td>type_checking (1), truth (1), error_handling (1), equality (2)</td>
+    </tr>
+      </table>
+</body>
+</html>
+  

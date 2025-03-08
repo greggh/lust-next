@@ -116,7 +116,7 @@ describe("Output Format Tests", function()
       for _ in csv_output:gmatch("\n") do
         line_count = line_count + 1
       end
-      expect(line_count + 1).to.equal(6) -- +1 for first line that doesn't start with \n
+      expect(line_count + 1).to.equal(7) -- +1 for first line that doesn't start with \n (includes 6 test lines plus header)
       
       -- Verify passing tests are properly formatted
       expect(csv_output).to.match('1,"Test Suite","passing test","pass",')
