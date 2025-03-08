@@ -32,10 +32,11 @@ function Results.new()
   self.elapsed = 0
   self.coverage = {}
   self.files_run = {}
+  self.worker_outputs = {} -- Store the outputs from each worker
   return self
 end
 
-function Results:add_file_result(file, result)
+function Results:add_file_result(file, result, output)
   self.total = self.total + result.total
   self.passed = self.passed + result.passed
   self.failed = self.failed + result.failed
@@ -48,6 +49,11 @@ function Results:add_file_result(file, result)
   
   -- Add file to list of run files
   table.insert(self.files_run, file)
+  
+  -- Store the worker output
+  if output then
+    table.insert(self.worker_outputs, output)
+  end
   
   -- Add any errors
   if result.errors and #result.errors > 0 then
@@ -161,13 +167,38 @@ local function run_test_file(file, options)
   
   -- Extract JSON data from the output if present
   local json_data = output:match("RESULTS_JSON_BEGIN(.-)RESULTS_JSON_END")
-  if json_data then
-    local json_loaded, json_module = pcall(require, "lib.reporting.json")
-    if json_loaded then
-      local parse_ok, parsed_data = pcall(json_module.decode, json_data)
-      if parse_ok and parsed_data then
-        result = parsed_data
-        result.elapsed = elapsed -- Add elapsed time
+  
+  -- Alternative approach: Count results directly from the output
+  local clean_output = output:gsub("\027%[[^m]*m", "") -- Remove ANSI color codes
+  local pass_count = 0
+  local fail_count = 0
+  local skip_count = 0
+  
+  for line in clean_output:gmatch("[^\r\n]+") do
+    if line:match("PASS%s+should") then
+      pass_count = pass_count + 1
+    elseif line:match("FAIL%s+should") then
+      fail_count = fail_count + 1
+    elseif line:match("SKIP%s+should") or line:match("PENDING:%s+") then
+      skip_count = skip_count + 1
+    end
+  end
+  
+  -- Update result with counted data
+  result.total = pass_count + fail_count + skip_count
+  result.passed = pass_count
+  result.failed = fail_count
+  result.skipped = skip_count
+  
+  -- Also try to extract error messages
+  for line in clean_output:gmatch("[^\r\n]+") do
+    if line:match("FAIL%s+should") then
+      local error_msg = line:match("FAIL%s+(.*)")
+      if error_msg then
+        table.insert(result.errors, {
+          message = "Test failed: " .. error_msg,
+          traceback = ""
+        })
       end
     end
   end
@@ -227,7 +258,7 @@ function parallel.run_tests(files, options)
       end
       
       -- Add results to aggregated results
-      results:add_file_result(file, worker_result.result)
+      results:add_file_result(file, worker_result.result, worker_result.output)
       
       -- Check for failure
       if not worker_result.success then

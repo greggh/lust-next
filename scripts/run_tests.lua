@@ -35,7 +35,8 @@ local report_config = {
   quality_path_template = nil,
   results_path_template = nil,
   timestamp_format = "%Y-%m-%d",
-  verbose = false
+  verbose = false,
+  results_format = nil  -- Format for test results (junit, tap, csv, json)
 }
 
 -- Print usage information
@@ -61,6 +62,7 @@ local function print_usage()
   print("  --results-path PATH       Path template for test results reports")
   print("  --timestamp-format FMT    Format string for timestamps (default: \"%Y-%m-%d\")")
   print("  --verbose-reports         Enable verbose output during report generation")
+  print("  --results-format FORMAT   Format for test results (junit, tap, csv, json)")
   print("\n  Path templates support the following placeholders:")
   print("    {format}    - Output format (html, json, etc.)")
   print("    {type}      - Report type (coverage, quality, etc.)")
@@ -145,6 +147,9 @@ while i <= #arg do
   elseif arg[i] == "--verbose-reports" then
     report_config.verbose = true
     i = i + 1
+  elseif arg[i] == "--results-format" and arg[i+1] then
+    report_config.results_format = arg[i+1]
+    i = i + 2
   elseif arg[i]:match("%.lua$") then
     run_single_file = arg[i]
     i = i + 1
@@ -251,19 +256,29 @@ elseif watch_mode_enabled then
       pattern = pattern,
       exclude_patterns = exclude_patterns,
       interval = watch_interval,
-      report_config = report_config  -- Pass report config to watch mode
+      report_config = report_config,  -- Pass report config to watch mode
+      results_format = report_config.results_format, -- Pass results format
+      json_output = report_config.results_format == "json" -- Enable JSON output if needed
     }
   )
 else
   -- Normal run mode
   if run_single_file then
     -- Run a single test file
-    local results = runner.run_file(run_single_file, lust_next)
+    local runner_options = {
+      results_format = report_config.results_format,
+      json_output = report_config.results_format == "json"
+    }
+    local results = runner.run_file(run_single_file, lust_next, runner_options)
     success = results.success and results.errors == 0
   else
     -- Find and run all tests
     local files = discover.find_tests(dir, pattern)
-    success = runner.run_all(files, lust_next)
+    local runner_options = {
+      results_format = report_config.results_format,
+      json_output = report_config.results_format == "json"
+    }
+    success = runner.run_all(files, lust_next, runner_options)
   end
   
   -- Exit with appropriate status
