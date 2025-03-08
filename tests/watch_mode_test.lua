@@ -4,13 +4,13 @@ local lust = require('lust-next')
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
 -- Try to require the fix module first to ensure expect assertions work
-local fix_success = pcall(function() return require('src.fix_expect') end)
+local fix_success = pcall(function() return require('lib.core.fix_expect') end)
 if not fix_success then
   print("Warning: Failed to load fix_expect module. Some assertions may not work.")
 end
 
 -- Try to require watcher module
-local ok, watcher = pcall(function() return require('src.watcher') end)
+local ok, watcher = pcall(function() return require('lib.tools.watcher') end)
 if not ok then
   print("Watcher module not available, skipping tests")
   return

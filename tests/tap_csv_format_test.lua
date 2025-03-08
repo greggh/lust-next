@@ -4,7 +4,7 @@ local lust_next = require("lust-next")
 local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
 
 -- Import reporting module directly for testing
-local reporting = require("src.reporting")
+local reporting = require("lib.reporting")
 
 describe("Output Format Tests", function()
   -- Create test data that will be used for all format tests

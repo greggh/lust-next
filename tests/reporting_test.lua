@@ -6,9 +6,9 @@ local lust_next = require('../lust-next')
 lust_next.expose_globals()
 
 -- Load modules for testing
-local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
-local coverage_module = package.loaded["src.coverage"] or require("src.coverage")
-local quality_module = package.loaded["src.quality"] or require("src.quality")
+local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
+local coverage_module = package.loaded["lib.coverage"] or require("lib.coverage")
+local quality_module = package.loaded["lib.quality"] or require("lib.quality")
 
 describe("Reporting Module", function()
   -- Mock data for testing

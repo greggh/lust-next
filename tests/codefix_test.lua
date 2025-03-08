@@ -116,7 +116,7 @@ return test_function
   
   -- Test codefix module initialization
   it("should load and initialize", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     expect(type(codefix)).to.equal("table")
     expect(type(codefix.fix_file)).to.equal("function")
     expect(type(codefix.fix_files)).to.equal("function")
@@ -125,7 +125,7 @@ return test_function
   
   -- Test fixing unused variables
   it("should fix unused variables", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
       return lust.pending("Codefix module fix_file function not available")
     end
@@ -148,7 +148,7 @@ return test_function
   
   -- Test fixing trailing whitespace
   it("should fix trailing whitespace in multiline strings", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
       lust.pending("Codefix module fix_file function not available")
       return
@@ -169,7 +169,7 @@ return test_function
   
   -- Test string concatenation optimization
   it("should optimize string concatenation", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
       lust.pending("Codefix module fix_file function not available")
       return
@@ -190,7 +190,7 @@ return test_function
   
   -- Test StyLua integration
   it("should use StyLua for formatting if available", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
       lust.pending("Codefix module fix_file function not available")
       return
@@ -229,7 +229,7 @@ return badlyFormattedFunction
   
   -- Test backup file creation
   it("should create backup files when configured", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
       lust.pending("Codefix module fix_file function not available")
       return
@@ -254,7 +254,7 @@ return badlyFormattedFunction
   
   -- Test multiple file fixing
   it("should fix multiple files", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.fix_files then
       return lust.pending("Codefix module fix_files function not available")
     end
@@ -279,7 +279,7 @@ return badlyFormattedFunction
   
   -- Test directory-based fixing
   it("should fix files in a directory", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     local test_dir = "codefix_test_dir"
     local dir_test_files = {}
     
@@ -349,7 +349,7 @@ return multiline
   
   -- Test file finding with patterns
   it("should find files matching patterns", function()
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     
     -- Use private find_files via the run_cli function
     local cli_result = codefix.run_cli({"find", ".", "--include", "unused_vars.*%.lua$"})
@@ -367,7 +367,7 @@ return multiline
   -- Test CLI functionality via the run_cli function
   it("should support CLI arguments", function()
     -- Check if the run_cli function exists
-    local codefix = require("../src/codefix")
+    local codefix = require("../lib/tools/codefix")
     if not codefix.run_cli then
       lust.pending("run_cli function not found")
       return
