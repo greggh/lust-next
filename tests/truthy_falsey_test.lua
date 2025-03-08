@@ -1,0 +1,51 @@
+-- truthy_falsey_test.lua
+
+local lust = require("../lust-next")()  -- Call the module to expose globals
+
+describe("Truthy and Falsey Assertions", function()
+  describe("lust.assert.is_truthy", function()
+    it("correctly identifies truthy values", function()
+      lust.assert.is_truthy(true)
+      lust.assert.is_truthy(1)
+      lust.assert.is_truthy("hello")
+      lust.assert.is_truthy({})
+      lust.assert.is_truthy(0)
+      lust.assert.is_truthy("")
+    end)
+    
+    it("correctly identifies non-truthy values", function()
+      local success, err = pcall(function()
+        lust.assert.is_truthy(false)
+      end)
+      lust.assert.is_false(success)
+      lust.assert.is_true(string.match(err, "Expected value to be truthy") ~= nil)
+      
+      success, err = pcall(function()
+        lust.assert.is_truthy(nil)
+      end)
+      lust.assert.is_false(success)
+      lust.assert.is_true(string.match(err, "Expected value to be truthy") ~= nil)
+    end)
+  end)
+  
+  describe("lust.assert.is_falsey", function()
+    it("correctly identifies falsey values", function()
+      lust.assert.is_falsey(false)
+      lust.assert.is_falsey(nil)
+    end)
+    
+    it("correctly identifies non-falsey values", function()
+      local success, err = pcall(function()
+        lust.assert.is_falsey(true)
+      end)
+      lust.assert.is_false(success)
+      lust.assert.is_true(string.match(err, "Expected value to be falsey") ~= nil)
+      
+      success, err = pcall(function()
+        lust.assert.is_falsey("hello")
+      end)
+      lust.assert.is_false(success)
+      lust.assert.is_true(string.match(err, "Expected value to be falsey") ~= nil)
+    end)
+  end)
+end)
