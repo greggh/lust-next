@@ -6,7 +6,7 @@
 [![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg?style=flat-square)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
 [![GitHub License](https://img.shields.io/github/license/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/blob/main/LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/stargazers)
-[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
+[![Version](https://img.shields.io/badge/Version-0.7.5-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.5)
 [![Discussions](https://img.shields.io/github/discussions/greggh/lust-next?style=flat-square&logo=github)](https://github.com/greggh/lust-next/discussions)
 
 *A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original.*
@@ -36,6 +36,7 @@
 - 📊 **Enhanced Reporting** - Clear, colorful summaries of test results
 - 🎨 **Output Formatting** - Multiple output styles including dot notation and compact mode
 - ⏱️ **Async Support** - Test asynchronous code with parallel operations and conditions
+- 👁️ **Watch Mode** - Continuous testing with automatic file change detection
 - 🤖 **Mocking System** - Create and manage mocks for dependencies
 - 💻 **Cross-Platform** - Works in console and non-console environments
 - 📈 **Code Coverage** - Track and report code coverage with multiple output formats
