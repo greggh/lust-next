@@ -346,8 +346,8 @@ function M.init(options)
   end
   
   -- Connect to coverage module if available
-  if package.loaded["src.coverage"] then
-    M.config.coverage_data = package.loaded["src.coverage"]
+  if package.loaded["lib.coverage"] then
+    M.config.coverage_data = package.loaded["lib.coverage"]
   end
   
   M.reset()

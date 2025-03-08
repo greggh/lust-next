@@ -545,7 +545,7 @@ end
 
 -- Generate a summary report (for backward compatibility)
 function M.summary_report()
-  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
   -- Get structured data and format it as a summary report
   local data = M.get_report_data()
   
@@ -576,7 +576,7 @@ end
 
 -- Generate a JSON report (for backward compatibility)
 function M.json_report()
-  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
   local data = M.get_report_data()
   
   if reporting_module then
@@ -595,7 +595,7 @@ end
 
 -- Generate an HTML report (for backward compatibility)
 function M.html_report()
-  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
   local data = M.get_report_data()
   
   if reporting_module then
@@ -686,7 +686,7 @@ end
 
 -- Generate an LCOV report (for backward compatibility)
 function M.lcov_report()
-  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
   local data = M.get_report_data()
   
   if reporting_module then
@@ -909,7 +909,7 @@ function M.save_report(file_path, format)
   format = format or "html"
   
   -- Try to load the reporting module
-  local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
   
   if reporting_module then
     -- Get the data and use the reporting module to save it

@@ -5,7 +5,7 @@ local M = {}
 
 -- Try to load JSON module
 local json
-local ok, loaded_json = pcall(require, "src.json")
+local ok, loaded_json = pcall(require, "lib.reporting.json")
 if ok then
   json = loaded_json
 else

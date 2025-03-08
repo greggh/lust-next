@@ -4,8 +4,8 @@ local interactive = {}
 -- Try to load required modules
 local has_discovery, discover = pcall(require, "discover")
 local has_runner, runner = pcall(require, "runner")
-local has_watcher, watcher = pcall(require, "src.watcher")
-local has_codefix, codefix = pcall(require, "src.codefix")
+local has_watcher, watcher = pcall(require, "lib.tools.watcher")
+local has_codefix, codefix = pcall(require, "lib.tools.codefix")
 
 -- ANSI color codes
 local colors = {

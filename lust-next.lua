@@ -26,15 +26,15 @@ local function try_require(name)
 end
 
 -- Optional modules for advanced features
-local coverage = try_require("src.coverage")
-local quality = try_require("src.quality")
-local codefix = try_require("src.codefix")
-local reporting = try_require("src.reporting")
-local watcher = try_require("src.watcher")
-local json = try_require("src.json")
-local type_checking = try_require("src.type_checking")
-local async_module = try_require("src.async")
-local interactive = try_require("src.interactive")
+local coverage = try_require("lib.coverage")
+local quality = try_require("lib.quality")
+local codefix = try_require("lib.tools.codefix")
+local reporting = try_require("lib.reporting")
+local watcher = try_require("lib.tools.watcher")
+local json = try_require("lib.reporting.json")
+local type_checking = try_require("lib.core.type_checking")
+local async_module = try_require("lib.async")
+local interactive = try_require("lib.tools.interactive")
 local discover_module = try_require("scripts.discover")
 
 local lust_next = {}
