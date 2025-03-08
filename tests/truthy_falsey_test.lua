@@ -1,6 +1,7 @@
 -- truthy_falsey_test.lua
 
-local lust = require("../lust-next")()  -- Call the module to expose globals
+local lust = require("lust-next")
+lust.expose_globals()
 
 describe("Truthy and Falsey Assertions", function()
   describe("lust.assert.is_truthy", function()
