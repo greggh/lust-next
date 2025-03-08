@@ -1,6 +1,7 @@
 -- lust-next test quality validation module
 -- Implementation of test quality analysis with level-based validation
 
+local fs = require("lib.tools.filesystem")
 local M = {}
 
 -- Define quality level constants to meet test expectations
@@ -321,16 +322,17 @@ local function read_file(filename)
     return file_cache[filename]
   end
   
-  local file = io.open(filename, "r")
-  if not file then
+  -- Use filesystem module to read the file
+  local content = fs.read_file(filename)
+  if not content then
     return {}
   end
   
+  -- Split content into lines
   local lines = {}
-  for line in file:lines() do
+  for line in content:gmatch("[^\r\n]+") do
     table.insert(lines, line)
   end
-  file:close()
   
   file_cache[filename] = lines
   return lines
@@ -1135,20 +1137,10 @@ function M.save_report(file_path, format)
     -- Fallback to directly saving the content
     local content = M.report(format)
     
-    -- Open the file for writing
-    local file, err = io.open(file_path, "w")
-    if not file then
-      return false, "Could not open file for writing: " .. tostring(err)
-    end
-    
-    -- Write content and close
-    local write_ok, write_err = pcall(function()
-      file:write(content)
-      file:close()
-    end)
-    
-    if not write_ok then
-      return false, "Error writing to file: " .. tostring(write_err)
+    -- Use filesystem module to write the file
+    local success, err = fs.write_file(file_path, content)
+    if not success then
+      return false, "Could not write to file: " .. (err or file_path)
     end
     
     return true

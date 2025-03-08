@@ -3,46 +3,8 @@
 
 local M = {}
 
--- Convert a shell-like glob pattern to a Lua pattern
-local function glob_to_pattern(glob)
-  if not glob then return nil end
-  
-  -- Function to escape pattern special chars except the ones we're converting
-  local function escape_pattern(s)
-    return s:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", function(c)
-      if c == "*" or c == "?" then return c end
-      return "%" .. c
-    end)
-  end
-  
-  local pattern = escape_pattern(glob)
-  
-  -- Convert shell-style globs to Lua patterns
-  -- ** matches any characters across multiple directories
-  pattern = pattern:gsub("%*%*", ".-")
-  -- * matches any characters within a single directory segment
-  pattern = pattern:gsub("%*", "[^/\\]*")
-  -- ? matches a single character
-  pattern = pattern:gsub("%?", ".")
-  
-  -- Anchor to beginning and end
-  pattern = "^" .. pattern .. "$"
-  
-  return pattern
-end
-
--- Helper function to normalize paths for consistent matching
-local function normalize_path(path)
-  if not path then return nil end
-  
-  -- Convert backslashes to forward slashes for cross-platform consistency
-  path = path:gsub("\\", "/")
-  
-  -- Remove "./" from the beginning if present
-  path = path:gsub("^%./", "")
-  
-  return path
-end
+-- Import filesystem module for file operations
+local fs = require("lib.tools.filesystem")
 
 -- Helper function to check if a file matches patterns
 local function matches_pattern(file, patterns)
@@ -51,17 +13,11 @@ local function matches_pattern(file, patterns)
   end
   
   -- Normalize the file path for consistent matching
-  local normalized_file = normalize_path(file)
+  local normalized_file = fs.normalize_path(file)
   
   for _, pattern in ipairs(patterns) do
-    -- Convert glob pattern to Lua pattern
-    local lua_pattern = glob_to_pattern(pattern)
-    if lua_pattern and normalized_file:match(lua_pattern) then
-      return true
-    end
-    
-    -- Also try matching the pattern directly (for backward compatibility)
-    if normalized_file:match(pattern) then
+    -- Use filesystem module's pattern matching
+    if fs.matches_pattern(normalized_file, pattern) then
       return true
     end
   end
@@ -78,16 +34,15 @@ local function read_file(filename)
     return file_cache[filename]
   end
   
-  local file = io.open(filename, "r")
-  if not file then
+  local content = fs.read_file(filename)
+  if not content then
     return {}
   end
   
   local lines = {}
-  for line in file:lines() do
+  for line in content:gmatch("[^\r\n]+") do
     table.insert(lines, line)
   end
-  file:close()
   
   file_cache[filename] = lines
   return lines
@@ -129,26 +84,27 @@ M.stats = {
 -- Configuration
 M.config = {
   enabled = false,
+  source_dirs = {".", "src", "lib"}, -- Directories to scan for source files
+  use_default_patterns = true,       -- Whether to use default include/exclude patterns
+  discover_uncovered = true,         -- Discover files that aren't executed by tests
   -- Default include all Lua files, plus typical glob patterns
   include = {
-    ".*%.lua$",       -- Lua pattern for all Lua files (legacy)
     "*.lua",          -- Glob pattern for all Lua files
     "**/*.lua",       -- Glob pattern for all Lua files in subdirectories
-    "src/*.lua",      -- Glob pattern for Lua files in src directory
-    "./src/*.lua",    -- Glob pattern for Lua files in src directory with explicit path
+    "src/**/*.lua",   -- Glob pattern for Lua files in src directory
+    "lib/**/*.lua",   -- Glob pattern for Lua files in lib directory
   },
   -- Default exclude test files
   exclude = {
-    "test_",          -- Files starting with test_ (legacy)
-    "_spec%.lua$",    -- Files ending with _spec.lua (legacy) 
-    "_test%.lua$",    -- Files ending with _test.lua (legacy)
     "*_test.lua",     -- Glob pattern for files ending with _test.lua
     "*_spec.lua",     -- Glob pattern for files ending with _spec.lua
     "test_*.lua",     -- Glob pattern for files starting with test_
     "tests/**/*.lua", -- Glob pattern for files in tests directory
     "**/test/**/*.lua", -- Glob pattern for files in any test directory
     "**/tests/**/*.lua", -- Glob pattern for files in any tests directory
-    "**/spec/**/*.lua", -- Glob pattern for files in any spec directory
+    "**/spec/**/*.lua",  -- Glob pattern for files in any spec directory
+    "**/*.test.lua",     -- Alternative test naming pattern
+    "**/*.spec.lua",     -- Alternative spec naming pattern
   },
   threshold = 80,     -- Default coverage threshold (percentage),
   debug = false       -- Enable debug output
@@ -183,10 +139,10 @@ local function coverage_hook(event, line)
       
       -- Get the file path and normalize it
       local file = source:sub(2) -- Remove the @ prefix
-      local normalized_file = normalize_path(file)
+      local normalized_file = fs.normalize_path(file)
       
       -- Get filename for logging (shorter path)
-      local filename = normalized_file:match("([^/]+)$") or normalized_file
+      local filename = fs.get_file_name(normalized_file) or normalized_file
       
       -- Only print debug info if debug mode is enabled
       if M.debug_mode then
@@ -202,7 +158,7 @@ local function coverage_hook(event, line)
       end
       
       -- TEMPORARY: Accept all Lua files for testing
-      local is_lua_file = normalized_file:match("%.lua$") ~= nil
+      local is_lua_file = fs.get_extension(normalized_file) == "lua"
       local should_include = is_lua_file and not matches_pattern(normalized_file, M.config.exclude)
       
       -- Only check patterns if not accepting all Lua files
@@ -269,10 +225,10 @@ local function coverage_hook(event, line)
       
       -- Get the file path and normalize it
       local file = source:sub(2) -- Remove the @ prefix
-      local normalized_file = normalize_path(file)
+      local normalized_file = fs.normalize_path(file)
       
       -- TEMPORARY: Accept all Lua files for testing
-      local is_lua_file = normalized_file:match("%.lua$") ~= nil
+      local is_lua_file = fs.get_extension(normalized_file) == "lua"
       local should_include = is_lua_file and not matches_pattern(normalized_file, M.config.exclude)
       
       -- Only check patterns if not accepting all Lua files
@@ -327,6 +283,62 @@ local function coverage_hook(event, line)
   end
 end
 
+-- Discover all source files based on include/exclude patterns
+function M.discover_source_files()
+  local discovered_files = {}
+  
+  -- Get current working directory
+  local cwd = os.getenv("PWD") or io.popen("pwd"):read("*l") or "."
+  
+  if M.debug_mode then
+    print("DEBUG [Coverage] Starting source file discovery from: " .. cwd)
+    print("DEBUG [Coverage] Source directories to scan: ")
+    for _, dir in ipairs(M.config.source_dirs) do
+      print("  - " .. dir)
+    end
+  end
+  
+  -- Convert source dirs to absolute paths
+  local absolute_dirs = {}
+  for _, dir in ipairs(M.config.source_dirs) do
+    local full_dir = dir:match("^/") and dir or fs.join_paths(cwd, dir)
+    table.insert(absolute_dirs, full_dir)
+    
+    if M.debug_mode then
+      print("DEBUG [Coverage] Using absolute directory: " .. full_dir)
+    end
+  end
+  
+  -- Use filesystem module's discover_files function
+  local lua_files = fs.discover_files(
+    absolute_dirs,
+    M.config.include,
+    M.config.exclude
+  )
+  
+  -- Convert to a map for faster lookups
+  for _, file_path in ipairs(lua_files) do
+    local normalized_path = fs.normalize_path(file_path)
+    discovered_files[normalized_path] = true
+    
+    if M.debug_mode then
+      print("DEBUG [Coverage] Discovered source file: " .. normalized_path)
+    end
+  end
+  
+  -- Count discovered files
+  local count = 0
+  for _ in pairs(discovered_files) do
+    count = count + 1
+  end
+  
+  if M.debug_mode then
+    print("DEBUG [Coverage] Discovered " .. count .. " source files")
+  end
+  
+  return discovered_files
+end
+
 -- Initialize coverage module
 function M.init(options)
   options = options or {}
@@ -334,7 +346,24 @@ function M.init(options)
   -- Apply options with defaults
   if type(options) == "table" then
     for k, v in pairs(options) do
-      M.config[k] = v
+      if k == "include" or k == "exclude" then
+        -- Replace arrays entirely if configured not to use defaults
+        if options.use_default_patterns == false then
+          M.config[k] = v
+        else
+          -- Otherwise append to existing arrays
+          if type(v) == "table" then
+            for _, pattern in ipairs(v) do
+              table.insert(M.config[k], pattern)
+            end
+          end
+        end
+      elseif k == "source_dirs" and type(v) == "table" then
+        -- Replace source_dirs array
+        M.config.source_dirs = v
+      else
+        M.config[k] = v
+      end
     end
   end
   
@@ -356,6 +385,29 @@ function M.init(options)
   end
   
   M.reset()
+  
+  -- Discover all source files upfront if enabled
+  if M.config.enabled and M.config.discover_uncovered then
+    local discovered_files = M.discover_source_files()
+    for file_path in pairs(discovered_files) do
+      if not M.data.files[file_path] then
+        -- Try to count executable lines
+        local line_count = count_executable_lines(file_path)
+        
+        M.data.files[file_path] = {
+          lines = {},
+          functions = {},
+          line_count = line_count,
+          discovered = true  -- Mark as discovered, not executed
+        }
+        
+        if M.debug_mode then
+          print("DEBUG [Coverage] Added discovered file to tracking: " .. file_path .. " (" .. line_count .. " lines)")
+        end
+      end
+    end
+  end
+  
   return M
 end
 
@@ -767,68 +819,32 @@ function M.calculate_stats()
   
   if #tracked_files == 0 then
     print("  WARNING: No files tracked in coverage data")
-    print("  Checking for source files in M.config.include patterns:")
     
-    -- Try to add known source files directly if they're not being tracked
-    local potential_source_files = {
-      "/home/gregg/Projects/lust-next-testbed/src/calculator.lua",
-      "/home/gregg/Projects/lust-next-testbed/src/database.lua",
-      "/home/gregg/Projects/lust-next-testbed/src/api_client.lua"
-    }
-    
-    -- Check if these files match the include patterns
-    for _, file_path in ipairs(potential_source_files) do
-      local normalized_file = normalize_path(file_path)
-      print("  Checking file: " .. normalized_file)
+    -- If no files are tracked and discover_uncovered is enabled, discover them now
+    if M.config.discover_uncovered then
+      print("  Discovering source files based on include/exclude patterns...")
+      local discovered_files = M.discover_source_files()
       
-      -- Read the file to count lines
-      local file = io.open(file_path, "r")
-      if file then
-        local lines = {}
-        for line in file:lines() do
-          table.insert(lines, line)
-        end
-        file:close()
+      for file_path in pairs(discovered_files) do
+        local normalized_file = normalize_path(file_path)
+        print("  Checking file: " .. normalized_file)
         
-        print("  File exists with " .. #lines .. " lines")
+        local line_count = count_executable_lines(file_path)
+        print("  File exists with " .. line_count .. " executable lines")
         
-        -- Add this file to our data if it doesn't exist
+        -- Add this file to our data with zero coverage
         if not M.data.files[normalized_file] then
           print("  Adding file to coverage data: " .. normalized_file)
           M.data.files[normalized_file] = {
             lines = {},
             functions = {},
-            line_count = #lines,
+            line_count = line_count,
+            discovered = true
           }
-          
-          -- Mark some lines as covered for demonstration
-          local covered_lines = math.floor(#lines * 0.7) -- Cover 70% of lines for demo
-          for i = 1, covered_lines do
-            M.data.files[normalized_file].lines[i] = true
-          end
-          
-          -- Add standard functions for each module
-          if normalized_file:match("calculator") then
-            M.data.files[normalized_file].functions = {
-              add = true, subtract = true, multiply = true, divide = true,
-              power = true, sqrt = true, absolute = true, evaluate = true,
-              createAdder = true, asyncAdd = true
-            }
-          elseif normalized_file:match("database") then
-            M.data.files[normalized_file].functions = {
-              connect = true, disconnect = true, query = true, insert = true,
-              update = true, delete = true, status = true, async_query = true
-            }
-          elseif normalized_file:match("api_client") then
-            M.data.files[normalized_file].functions = {
-              init = true, get = true, post = true, put = true, delete = true,
-              create_resource_factory = true, async_get = true, reset = true
-            }
-          end
         end
-      else
-        print("  File does not exist or cannot be read: " .. file_path)
       end
+    else
+      print("  File discovery is disabled. Enable with M.config.discover_uncovered = true")
     end
   else
     for i, file in ipairs(tracked_files) do
@@ -847,6 +863,12 @@ function M.calculate_stats()
     file_count = file_count + 1
     print("DEBUG [Coverage] Processing file #" .. file_count .. ": " .. file)
     
+    -- Check if this is a discovered file with no coverage
+    local is_discovered_only = data.discovered and next(data.lines) == nil
+    if is_discovered_only then
+      print("  File was discovered but has no coverage")
+    end
+    
     -- Count tracked lines
     local line_keys = {}
     local covered_lines = 0
@@ -856,9 +878,11 @@ function M.calculate_stats()
     end
     
     -- Sort and print first few lines
-    table.sort(line_keys, function(a, b) return tonumber(a) < tonumber(b) end)
-    for i = 1, math.min(5, #line_keys) do
-      print("  Covered line: " .. line_keys[i])
+    if covered_lines > 0 then
+      table.sort(line_keys, function(a, b) return tonumber(a) < tonumber(b) end)
+      for i = 1, math.min(5, #line_keys) do
+        print("  Covered line: " .. line_keys[i])
+      end
     end
     print("  Total lines covered: " .. covered_lines)
     
@@ -871,8 +895,10 @@ function M.calculate_stats()
     end
     
     -- Print first few functions
-    for i = 1, math.min(5, #function_keys) do
-      print("  Covered function: " .. function_keys[i])
+    if covered_functions > 0 then
+      for i = 1, math.min(5, #function_keys) do
+        print("  Covered function: " .. function_keys[i])
+      end
     end
     print("  Total functions covered: " .. covered_functions)
     
@@ -880,8 +906,9 @@ function M.calculate_stats()
     M.stats.files[file] = {
       total_lines = data.line_count or 0,
       covered_lines = covered_lines,
-      total_functions = covered_functions, -- We only track called functions for now
+      total_functions = math.max(1, covered_functions), -- Ensure at least 1 function per file for calculation
       covered_functions = covered_functions,
+      is_discovered_only = is_discovered_only
     }
     
     print("  Line count: " .. (data.line_count or 0) .. ", Covered: " .. covered_lines)
@@ -891,7 +918,7 @@ function M.calculate_stats()
     M.stats.covered_files = M.stats.covered_files + (covered_lines > 0 and 1 or 0)
     M.stats.total_lines = M.stats.total_lines + (data.line_count or 0)
     M.stats.covered_lines = M.stats.covered_lines + covered_lines
-    M.stats.total_functions = M.stats.total_functions + covered_functions
+    M.stats.total_functions = M.stats.total_functions + math.max(1, covered_functions)
     M.stats.covered_functions = M.stats.covered_functions + covered_functions
   end
   
@@ -919,15 +946,12 @@ function M.save_report(file_path, format)
     -- Fallback to directly saving the content
     local content = M.report(format)
     
-    -- Open the file for writing
-    local file = io.open(file_path, "w")
-    if not file then
-      return false, "Could not open file for writing: " .. file_path
+    -- Use filesystem module to write the file
+    local success, err = fs.write_file(file_path, content)
+    if not success then
+      return false, "Could not write to file: " .. (err or file_path)
     end
     
-    -- Write content and close
-    file:write(content)
-    file:close()
     return true
   end
 end
