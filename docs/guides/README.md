@@ -1,6 +1,4 @@
-
 # Lust-Next Guides
-
 This directory contains guides and tutorials for using Lust-Next.
 
 ## Available Guides
@@ -17,3 +15,4 @@ This directory contains guides and tutorials for using Lust-Next.
 - [Back to Documentation](../README.md)
 - [API Reference](../api/README.md)
 - [Examples](../../examples)
+

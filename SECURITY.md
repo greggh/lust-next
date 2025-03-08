@@ -1,10 +1,7 @@
-
 # Security Policy
 
 ## Supported Versions
-
 Use this section to tell people about which versions of your project are currently being supported with security updates.
-
 | Version | Supported          |
 | ------- | ------------------ |
 | 1.0.x   | :white_check_mark: |
@@ -13,7 +10,6 @@ Use this section to tell people about which versions of your project are current
 | < 0.8   | :x:                |
 
 ## Reporting a Vulnerability
-
 We take the security of our project seriously. If you believe you've found a security vulnerability, please follow these steps:
 
 1. **Do not disclose the vulnerability publicly**
@@ -26,7 +22,6 @@ We take the security of our project seriously. If you believe you've found a sec
    - We'll keep you updated on our progress addressing the issue
 
 ## Security Response Process
-
 When a security vulnerability is reported:
 
 1. We will confirm receipt of the vulnerability report
@@ -42,7 +37,6 @@ When a security vulnerability is reported:
 - [Any other security recommendations specific to your project]
 
 ## Security Updates
-
 Security updates will be released as:
 
 - Patch versions for supported releases
@@ -50,5 +44,5 @@ Security updates will be released as:
 - Announcements in our release notes
 
 ## Past Security Advisories
-
 [List of past security advisories or link to GitHub Security Advisories]
+

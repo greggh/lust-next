@@ -1,11 +1,9 @@
-
 # Command Line Interface
-
 This document describes the command-line interface (CLI) provided by Lust-Next.
 
 ## Overview
-
 Lust-Next can be run directly from the command line to discover and run tests. This provides a convenient way to run tests without writing test runner scripts. The CLI now supports three modes of operation:
+
 1. **Standard Mode**: Run tests and exit
 2. **Watch Mode**: Continuously run tests when files change
 3. **Interactive Mode**: A full-featured interactive shell for running tests and configuring test options
@@ -13,6 +11,7 @@ Lust-Next can be run directly from the command line to discover and run tests. T
 ## Basic Usage
 
 ```bash
+
 # Run all tests in the default directory (./tests)
 lua scripts/run_tests.lua
 
@@ -27,12 +26,12 @@ lua scripts/run_tests.lua --watch
 
 # Start interactive CLI mode
 lua scripts/run_tests.lua --interactive
-```
+
+```text
 
 ## Command Line Options
 
 ### Basic Options
-
 | Option | Description |
 |--------|-------------|
 | `--dir DIRECTORY` | Directory to search for test files (default: ./tests) |
@@ -43,7 +42,6 @@ lua scripts/run_tests.lua --interactive
 | `--interactive`, `-i` | Start interactive CLI mode |
 
 ### Watch Mode Options
-
 | Option | Description |
 |--------|-------------|
 | `--watch` | Enable watch mode for continuous testing |
@@ -52,7 +50,6 @@ lua scripts/run_tests.lua --interactive
 | `--exclude PATTERN` | Pattern to exclude from watching (can specify multiple) |
 
 ### Code Quality Options
-
 | Option | Description |
 |--------|-------------|
 | `--fix [DIRECTORY]` | Run code fixing on directory (default: .) |
@@ -63,6 +60,7 @@ lua scripts/run_tests.lua --interactive
 ### Running Tests
 
 ```bash
+
 # Run all tests
 lua scripts/run_tests.lua
 
@@ -74,11 +72,13 @@ lua scripts/run_tests.lua --dir src --pattern "*_spec.lua"
 
 # Run tests with specific tags
 lua scripts/run_tests.lua --tags unit,fast
-```
+
+```text
 
 ### Using Watch Mode
 
 ```bash
+
 # Basic watch mode
 lua scripts/run_tests.lua --watch
 
@@ -93,11 +93,13 @@ lua scripts/run_tests.lua --watch --exclude "build/.*" --exclude "%.git"
 
 # Watch a specific test file
 lua scripts/run_tests.lua --watch tests/specific_test.lua
-```
+
+```text
 
 ### Code Fixing
 
 ```bash
+
 # Fix code issues in current directory
 lua scripts/run_tests.lua --fix
 
@@ -106,10 +108,10 @@ lua scripts/run_tests.lua --fix src
 
 # Check for issues without fixing
 lua scripts/run_tests.lua --check src
-```
+
+```text
 
 ## Watch Mode
-
 Watch mode is a powerful feature that continuously monitors your project files for changes and automatically re-runs tests when changes are detected. This is particularly useful during development as it provides immediate feedback.
 
 ### How Watch Mode Works
@@ -128,7 +130,6 @@ Watch mode is a powerful feature that continuously monitors your project files f
 - **Increased Confidence**: Continuous verification that your code still works
 
 ### Watch Mode Options
-
 The watch mode can be customized with several options:
 
 - **Watch Directories**: Specify which directories to monitor for changes
@@ -137,53 +138,45 @@ The watch mode can be customized with several options:
 
 ### Example Watch Mode Session
 
-```
+```text
 $ lua scripts/run_tests.lua --watch
-
 --- WATCH MODE ACTIVE ---
 Press Ctrl+C to exit
 Watching directory: .
 Watching 142 files for changes
-
 Running 5 test files
 ...
 Test Summary: 5 passed, 0 failed
 ✓ All tests passed
-
 --- WATCHING FOR CHANGES ---
-
 File changes detected:
+
   - ./src/module.lua
   - ./tests/module_test.lua
-
 --- RUNNING TESTS ---
 2025-03-07 14:23:45
-
 Running 5 test files
 ...
 Test Summary: 5 passed, 0 failed
 ✓ All tests passed
-
 --- WATCHING FOR CHANGES ---
-```
+
+```text
 
 ## Exit Codes
-
 Lust-Next sets the process exit code based on the test results:
 
 - **0**: All tests passed
 - **1**: One or more tests failed, or an error occurred during test execution
-
 This is useful for integration with CI systems.
 
 ## Environment Variables
-
 Lust-Next doesn't use environment variables directly, but you can create wrapper scripts that use environment variables to configure test runs.
-
 **Example:**
 
 ```bash
 #!/bin/bash
+
 # run_tests.sh
 
 # Get test type from environment variable, default to "unit"
@@ -191,47 +184,44 @@ TEST_TYPE=${TEST_TYPE:-unit}
 
 # Run tests with appropriate tags
 lua scripts/run_tests.lua --tags $TEST_TYPE
-```
 
+```text
 Then you can run specific test types with:
 
 ```bash
 TEST_TYPE=integration ./run_tests.sh
-```
+
+```text
 
 ## Integration with Make
-
 You can integrate Lust-Next with Make for more complex test workflows:
 
 ```makefile
 .PHONY: test test-unit test-watch
-
 test:
 	lua scripts/run_tests.lua
-
 test-unit:
 	lua scripts/run_tests.lua --tags unit
-
 test-watch:
 	lua scripts/run_tests.lua --watch
-
 test-coverage:
 	lua scripts/run_tests.lua --coverage
-```
+
+```text
 
 ## Interactive Mode
-
 Interactive mode provides a powerful command-line interface for running tests and configuring test options. It's ideal for development workflows where you need more flexibility than watch mode alone provides.
 
 ### Starting Interactive Mode
 
 ```bash
+
 # Start interactive mode
 lua scripts/run_tests.lua --interactive
-```
+
+```text
 
 ### Available Commands
-
 | Command | Description |
 |---------|-------------|
 | `help` | Show available commands |
@@ -253,9 +243,8 @@ lua scripts/run_tests.lua --interactive
 
 ### Example Interactive Session
 
-```
+```text
 $ lua scripts/run_tests.lua -i
-
 Lust-Next Interactive CLI
 Type 'help' for available commands
 ------------------------------------------------------------
@@ -270,6 +259,7 @@ Current settings:
 ------------------------------------------------------------
 > list
 Available test files:
+
   1. ./tests/assertions_test.lua
   2. ./tests/async_test.lua
   3. ./tests/discovery_test.lua
@@ -297,7 +287,8 @@ Test Summary: 1 passed, 0 failed
 Watch mode enabled
 Starting watch mode...
 Watching directories: .
-```
+
+```text
 
 ### Interactive Mode Benefits
 
@@ -308,23 +299,20 @@ Watching directories: .
 5. **Command History**: Recall previous commands using history feature
 
 ### Using Interactive Mode in Scripts
-
 You can also start interactive mode programmatically:
 
 ```lua
 local lust = require("lust-next")
 local interactive = require("src.interactive")
-
 -- Run your tests...
-
 -- Start interactive mode
 interactive.start(lust, {
   test_dir = "./tests",
   pattern = "*_test.lua",
   watch_mode = false
 })
-```
 
+```text
 See `examples/interactive_mode_example.lua` for a complete example.
 
 ## Integration with CI Systems
@@ -333,16 +321,13 @@ See `examples/interactive_mode_example.lua` for a complete example.
 
 ```yaml
 name: Tests
-
 on: [push, pull_request]
-
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
 
+    - uses: actions/checkout@v2
     - name: Set up Lua
       uses: leafo/gh-actions-lua@v8
       with:
@@ -357,10 +342,10 @@ jobs:
 
     - name: Run integration tests
       run: lua scripts/run_tests.lua --tags integration
-```
+
+```text
 
 ## Creating Custom Test Runners
-
 You can create custom test runners that use Lust-Next's API. See the `scripts/runner.lua` file for an example of how to implement a custom runner with watch mode support.
 
 ## Best Practices

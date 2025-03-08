@@ -1,6 +1,4 @@
-
 # CI/CD Integration with Lust-Next
-
 This guide explains how to set up Lust-Next in various Continuous Integration (CI) environments to automate your Lua testing workflow.
 
 ## Benefits of CI Integration
@@ -13,31 +11,25 @@ This guide explains how to set up Lust-Next in various Continuous Integration (C
 ## Common CI Systems
 
 ### GitHub Actions
-
 GitHub Actions is a CI/CD platform integrated with GitHub that allows you to automate your build, test, and deployment pipeline.
 
 #### Sample Configuration
-
 Create a file at `.github/workflows/test.yml`:
 
 ```yaml
 name: Lua Tests
-
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-
 jobs:
   test:
     name: Run Lust-Next Tests
     runs-on: ubuntu-latest
-
     steps:
 
       - uses: actions/checkout@v3
-
       - name: Install Lua
         run: |
           sudo apt-get update
@@ -63,25 +55,20 @@ jobs:
 ```text
 
 ### GitLab CI
-
 GitLab CI/CD is GitLab's built-in tool for software development using continuous integration and delivery.
 
 #### Sample Configuration
-
 Create a file at `.gitlab-ci.yml`:
 
 ```yaml
 image: ubuntu:latest
-
 stages:
 
   - test
-
 before_script:
 
   - apt-get update -qq
   - apt-get install -y lua5.3
-
 run_tests:
   stage: test
   script:
@@ -98,16 +85,13 @@ run_tests:
 ```text
 
 ### CircleCI
-
 CircleCI is a CI/CD platform that automates the build, test, and deployment process.
 
 #### Sample Configuration
-
 Create a file at `.circleci/config.yml`:
 
 ```yaml
 version: 2.1
-
 jobs:
   test:
     docker:
@@ -129,7 +113,6 @@ jobs:
 
       - store_test_results:
           path: test-results
-
 workflows:
   version: 2
   build-and-test:
@@ -140,17 +123,14 @@ workflows:
 ```text
 
 ### Jenkins
-
 Jenkins is an open-source automation server that enables developers to build, test, and deploy their software.
 
 #### Sample Jenkinsfile
-
 Create a file at `Jenkinsfile`:
 
 ```groovy
 pipeline {
     agent any
-
     stages {
         stage('Setup') {
             steps {
@@ -175,7 +155,6 @@ pipeline {
 ## Best Practices for CI Testing
 
 ### 1. Organize Tests Properly
-
 Structure your tests in a way that makes them easy to run in CI:
 
 - Place all tests in a dedicated `tests` directory
@@ -187,14 +166,12 @@ Structure your tests in a way that makes them easy to run in CI:
 ```lua
 describe("Database module", function()
   lust.tags("integration", "database")
-
   it("connects to the database", function()
     -- Test code
   end)
 end)
 
 ```text
-
 In your CI configuration, you can run specific test groups:
 
 ```bash
@@ -204,7 +181,6 @@ lua lust-next.lua --tags integration  # Run only integration tests
 ```text
 
 ### 3. Manage Test Environments
-
 For tests that require specific environment setup:
 
 ```yaml
@@ -225,7 +201,6 @@ steps:
 ```text
 
 ### 4. Configure Test Timeouts
-
 For long-running tests, set appropriate timeouts:
 
 ```yaml
@@ -241,7 +216,6 @@ steps:
 ```text
 
 ### 5. Parallel Test Execution
-
 For large test suites, consider running tests in parallel:
 
 ```yaml
@@ -261,11 +235,9 @@ jobs:
 ```text
 
 ## Interpreting Test Results
-
 Lust-Next provides different output formats to help you interpret test results in CI environments.
 
 ### Standard Output
-
 By default, Lust-Next outputs test results to the console:
 
 ```text
@@ -278,18 +250,15 @@ Math operations
 ```text
 
 ### JUnit XML Format (For CI Systems)
-
 For better CI integration, use the JUnit XML reporter:
 
 ```bash
 lua lust-next.lua --dir ./tests --reporter junit > test-results.xml
 
 ```text
-
 This generates an XML file that most CI systems can parse and display as test reports.
 
 ### JSON Format (For Custom Processing)
-
 For custom processing of test results:
 
 ```bash
@@ -300,22 +269,16 @@ lua lust-next.lua --dir ./tests --reporter json > test-results.json
 ## Tips for Effective CI Configuration
 
 1. **Cache dependencies**: Speed up CI runs by caching Lua modules and dependencies.
-
 1. **Fail fast**: Configure your tests to fail as soon as any test fails to get faster feedback.
-
 1. **Notifications**: Set up notifications for test failures to relevant team members.
-
 1. **Branch protection**: Require passing tests before merging pull requests.
-
 1. **Scheduled runs**: Set up scheduled test runs for nightly builds or integration tests.
 
 ## Complete Example: GitHub Actions Workflow
-
 This comprehensive example shows a complete GitHub Actions workflow for testing a Lua project with Lust-Next:
 
 ```yaml
 name: Lua Testing
-
 on:
   push:
     branches: [ main, master ]
@@ -325,7 +288,6 @@ on:
     # Run nightly at midnight UTC
 
     - cron: '0 0 * * *'
-
 jobs:
   test:
     name: Lua ${{ matrix.lua-version }} on ${{ matrix.os }}
@@ -335,11 +297,9 @@ jobs:
       matrix:
         lua-version: ['5.1', '5.2', '5.3', '5.4', 'luajit']
         os: [ubuntu-latest, macos-latest, windows-latest]
-
     steps:
 
       - uses: actions/checkout@v3
-
       - name: Setup Lua
         uses: xpol/setup-lua@v0.3
         with:
@@ -373,6 +333,5 @@ jobs:
 - [GitLab CI/CD Documentation](https://docs.gitlab.com/ee/ci/)
 - [CircleCI Documentation](https://circleci.com/docs/)
 - [Jenkins Documentation](https://www.jenkins.io/doc/)
-
 For more information on testing strategies, see the [Testing Patterns](testing-patterns.md) guide.
 

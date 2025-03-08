@@ -108,7 +108,7 @@ function M.format_coverage(coverage_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>lust-next Coverage Report</title>
+  <title>Lust-Next Coverage Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -125,7 +125,7 @@ function M.format_coverage(coverage_data)
 </head>
 <body>
   <div class="container">
-    <h1>lust-next Coverage Report</h1>
+    <h1>Lust-Next Coverage Report</h1>
     <div class="summary">
       <h2>Summary</h2>
       <p>Overall Coverage: 80.00%</p>
@@ -230,14 +230,14 @@ function M.format_coverage(coverage_data)
 </head>
 <body>
   <div class="container">
-    <h1>lust-next Coverage Report</h1>
+    <h1>Lust-Next Coverage Report</h1>
     
     <div class="summary">
       <h2>Summary</h2>
       
       <div class="summary-row">
         <span class="summary-label">Files:</span>
-        <span>]].. report.covered_files .. "/" .. report.total_files .. " (" .. string.format("%.1f", report.files_pct) .. "%)</span>
+        <span>]].. report.covered_files .. "/" .. report.total_files .. " (" .. string.format("%.1f", report.files_pct) .. [[%)</span>
       </div>
       <div class="progress-bar">
         <div class="progress-fill" style="width: ]] .. report.files_pct .. [[%;"></div>
@@ -245,7 +245,7 @@ function M.format_coverage(coverage_data)
       
       <div class="summary-row">
         <span class="summary-label">Lines:</span>
-        <span>]] .. report.covered_lines .. "/" .. report.total_lines .. " (" .. string.format("%.1f", report.lines_pct) .. "%)</span>
+        <span>]] .. report.covered_lines .. "/" .. report.total_lines .. " (" .. string.format("%.1f", report.lines_pct) .. [[%)</span>
       </div>
       <div class="progress-bar">
         <div class="progress-fill" style="width: ]] .. report.lines_pct .. [[%;"></div>
@@ -253,7 +253,7 @@ function M.format_coverage(coverage_data)
       
       <div class="summary-row">
         <span class="summary-label">Functions:</span>
-        <span>]] .. report.covered_functions .. "/" .. report.total_functions .. " (" .. string.format("%.1f", report.functions_pct) .. "%)</span>
+        <span>]] .. report.covered_functions .. "/" .. report.total_functions .. " (" .. string.format("%.1f", report.functions_pct) .. [[%)</span>
       </div>
       <div class="progress-bar">
         <div class="progress-fill" style="width: ]] .. report.functions_pct .. [[%;"></div>
@@ -341,7 +341,7 @@ function M.format_quality(quality_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>lust-next Test Quality Report</title>
+  <title>Lust-Next Test Quality Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -353,7 +353,7 @@ function M.format_quality(quality_data)
 </head>
 <body>
   <div class="container">
-    <h1>lust-next Test Quality Report</h1>
+    <h1>Lust-Next Test Quality Report</h1>
     <div class="summary">
       <h2>Summary</h2>
       <p>Quality Level: 3 - comprehensive</p>
@@ -396,7 +396,7 @@ function M.format_quality(quality_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>lust-next Quality Report</title>
+  <title>lust-next Test Quality Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -412,7 +412,7 @@ function M.format_quality(quality_data)
 </head>
 <body>
   <div class="container">
-    <h1>lust-next Quality Report</h1>
+    <h1>lust-next Test Quality Report</h1>
     
     <div class="summary">
       <h2>Summary</h2>
@@ -430,7 +430,7 @@ function M.format_quality(quality_data)
       <div class="summary-row">
         <span class="summary-label">Tests Passing Quality:</span>
         <span>]] .. report.tests_passing .. "/" .. report.tests_analyzed .. 
-        " (" .. string.format("%.1f", report.quality_pct) .. "%)</span>
+        " (" .. string.format("%.1f", report.quality_pct) .. [[%)</span>
       </div>
       <div class="progress-bar">
         <div class="progress-fill" style="width: ]] .. report.quality_pct .. [[%;"></div>

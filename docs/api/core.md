@@ -1,21 +1,15 @@
-
 # Core Functions
-
 This document describes the core functions provided by Lust-Next for defining and organizing tests.
 
 ## Test Structure Functions
 
 ### describe(name, fn)
-
 Creates a group of tests with a descriptive name.
-
 **Parameters:**
 
 - `name` (string): Name of the test group
 - `fn` (function): Function containing the test definitions
-
 **Returns:** None
-
 **Example:**
 
 ```lua
@@ -24,7 +18,6 @@ describe("Math operations", function()
 end)
 
 ```text
-
 **Notes:**
 
 - `describe` blocks can be nested to create a hierarchical structure
@@ -32,16 +25,12 @@ end)
 - Test names should be descriptive of the functionality being tested
 
 ### it(name, fn)
-
 Defines an individual test case.
-
 **Parameters:**
 
 - `name` (string): Name of the test
 - `fn` (function): Function containing the test code
-
 **Returns:** None
-
 **Example:**
 
 ```lua
@@ -50,7 +39,6 @@ it("adds two numbers correctly", function()
 end)
 
 ```text
-
 **Notes:**
 
 - Test names should describe the expected behavior, not the implementation
@@ -60,15 +48,11 @@ end)
 ## Setup and Teardown
 
 ### before(fn)
-
 Registers a function to run before each test in the current describe block.
-
 **Parameters:**
 
 - `fn` (function): Function to run before each test
-
 **Returns:** None
-
 **Example:**
 
 ```lua
@@ -77,14 +61,12 @@ describe("Database tests", function()
     -- Set up database connection
     db = Database.connect()
   end)
-
   it("queries records", function()
     -- Test using the db connection
   end)
 end)
 
 ```text
-
 **Notes:**
 
 - `before` hooks run in the order they are defined
@@ -92,15 +74,11 @@ end)
 - `before` hooks are scoped to their describe block and nested describe blocks
 
 ### after(fn)
-
 Registers a function to run after each test in the current describe block.
-
 **Parameters:**
 
 - `fn` (function): Function to run after each test
-
 **Returns:** None
-
 **Example:**
 
 ```lua
@@ -109,14 +87,12 @@ describe("File operations", function()
     -- Clean up temporary files
     os.remove("temp.txt")
   end)
-
   it("writes to a file", function()
     -- Test that creates temp.txt
   end)
 end)
 
 ```text
-
 **Notes:**
 
 - `after` hooks run in the order they are defined
@@ -125,7 +101,6 @@ end)
 - `after` hooks run even if the test fails
 
 ## Aliases
-
 The following aliases are provided for convenience:
 
 - `lust.test` - Alias for `lust.it`
@@ -137,27 +112,22 @@ The following aliases are provided for convenience:
 ```lua
 describe("Calculator", function()
   local calc
-
   before(function()
     calc = Calculator.new()
   end)
-
   describe("Addition", function()
     it("adds positive numbers", function()
       expect(calc:add(2, 3)).to.equal(5)
     end)
-
     it("adds negative numbers", function()
       expect(calc:add(-2, -3)).to.equal(-5)
     end)
   end)
-
   describe("Subtraction", function()
     it("subtracts numbers", function()
       expect(calc:subtract(5, 2)).to.equal(3)
     end)
   end)
-
   after(function()
     calc:shutdown()
   end)

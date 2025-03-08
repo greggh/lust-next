@@ -1284,6 +1284,35 @@ function M.register_with_lust(lust)
     end)
   end
   
+  -- Register a custom fixer with codefix
+  function M.register_custom_fixer(name, options)
+    if not options or not options.fix or not options.name then
+      log_error("Custom fixer requires a name and fix function")
+      return false
+    end
+    
+    -- Add to custom fixers table
+    if type(options.fix) == "function" then
+      -- Register as a named function
+      M.config.custom_fixers[name] = options.fix
+    else
+      -- Register as an object with metadata
+      M.config.custom_fixers[name] = options
+    end
+    
+    log_info("Registered custom fixer: " .. options.name)
+    return true
+  end
+  
+  -- Try to load and register the markdown module
+  local ok, markdown = pcall(require, "lib.tools.markdown")
+  if ok and markdown then
+    markdown.register_with_codefix(M)
+    if M.config.verbose then
+      print("Registered markdown fixing capabilities")
+    end
+  end
+
   return M
 end
 

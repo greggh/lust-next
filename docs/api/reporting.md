@@ -1,10 +1,7 @@
-
 # Reporting Module API
-
 The reporting module in lust-next provides a centralized system for generating and saving reports from test data.
 
 ## Overview
-
 The reporting module handles report formatting and file operations, providing a clean separation of concerns between data collection and output generation. It supports multiple output formats, robust file operations, and fallback mechanisms to ensure reliable report generation.
 
 ## Basic Usage
@@ -12,23 +9,18 @@ The reporting module handles report formatting and file operations, providing a 
 ```lua
 local lust = require('lust-next')
 local reporting = require('src.reporting')
-
 -- Get coverage data
 local coverage_data = lust.get_coverage_data()
-
 -- Format coverage data as HTML
 local html_report = reporting.format_coverage(coverage_data, "html")
-
 -- Save the report to a file
 reporting.write_file("./coverage-report.html", html_report)
-
 -- Or use the auto-save function for multiple formats
 reporting.auto_save_reports(coverage_data, nil, "./reports")
 
 ```text
 
 ## Configuration
-
 The reporting module doesn't require explicit configuration, as it receives its configuration from the modules that call it.
 
 ## API Reference
@@ -36,7 +28,6 @@ The reporting module doesn't require explicit configuration, as it receives its 
 ### Report Formatting Functions
 
 #### `reporting.format_coverage(coverage_data, format)`
-
 Format coverage data into the specified output format:
 
 ```lua
@@ -44,18 +35,15 @@ local coverage_data = lust.get_coverage_data()
 local html_report = reporting.format_coverage(coverage_data, "html")
 
 ```text
-
 Parameters:
 
 - `coverage_data` (table): Coverage data structure from the coverage module
 - `format` (string): Output format (html, json, lcov, summary)
-
 Returns:
 
 - The formatted report content (string)
 
 #### `reporting.format_quality(quality_data, format)`
-
 Format quality data into the specified output format:
 
 ```lua
@@ -63,12 +51,10 @@ local quality_data = lust.get_quality_data()
 local html_report = reporting.format_quality(quality_data, "html")
 
 ```text
-
 Parameters:
 
 - `quality_data` (table): Quality data structure from the quality module
 - `format` (string): Output format (html, json, summary)
-
 Returns:
 
 - The formatted report content (string)
@@ -76,26 +62,22 @@ Returns:
 ### File I/O Functions
 
 #### `reporting.write_file(file_path, content)`
-
 Write content to a file, creating directories as needed:
 
 ```lua
 reporting.write_file("./reports/coverage-report.html", html_report)
 
 ```text
-
 Parameters:
 
 - `file_path` (string): Path to the file to write
 - `content` (string): Content to write to the file
-
 Returns:
 
 - `success` (boolean): True if the file was written successfully
 - `error` (string, optional): Error message if the operation failed
 
 #### `reporting.save_coverage_report(file_path, coverage_data, format)`
-
 Format and save a coverage report:
 
 ```lua
@@ -103,20 +85,17 @@ local coverage_data = lust.get_coverage_data()
 reporting.save_coverage_report("./coverage-report.html", coverage_data, "html")
 
 ```text
-
 Parameters:
 
 - `file_path` (string): Path to save the report
 - `coverage_data` (table): Coverage data structure
 - `format` (string): Output format (html, json, lcov, summary)
-
 Returns:
 
 - `success` (boolean): True if the report was saved successfully
 - `error` (string, optional): Error message if the operation failed
 
 #### `reporting.save_quality_report(file_path, quality_data, format)`
-
 Format and save a quality report:
 
 ```lua
@@ -124,29 +103,24 @@ local quality_data = lust.get_quality_data()
 reporting.save_quality_report("./quality-report.html", quality_data, "html")
 
 ```text
-
 Parameters:
 
 - `file_path` (string): Path to save the report
 - `quality_data` (table): Quality data structure
 - `format` (string): Output format (html, json, summary)
-
 Returns:
 
 - `success` (boolean): True if the report was saved successfully
 - `error` (string, optional): Error message if the operation failed
 
 #### `reporting.auto_save_reports(coverage_data, quality_data, results_data, options)`
-
 Automatically save multiple report formats to a directory with configurable paths:
 
 ```lua
 -- Simple usage (backward compatible)
 reporting.auto_save_reports(coverage_data, nil, nil, "./reports")
-
 -- Save both coverage and quality reports
 reporting.auto_save_reports(coverage_data, quality_data, nil, "./reports")
-
 -- Advanced usage with path templates
 reporting.auto_save_reports(coverage_data, quality_data, results_data, {
   report_dir = "./reports",
@@ -157,8 +131,8 @@ reporting.auto_save_reports(coverage_data, quality_data, results_data, {
   timestamp_format = "%Y-%m-%d",
   verbose = true
 })
-```
 
+```text
 Parameters:
 
 - `coverage_data` (table, optional): Coverage data structure
@@ -174,34 +148,29 @@ Parameters:
     - `results_path_template` (string, optional): Path template for test results reports
     - `timestamp_format` (string, optional): Format string for timestamps (default: "%Y-%m-%d")
     - `verbose` (boolean, optional): Enable verbose debugging output
-
 Path templates support the following placeholders:
+
 - `{format}`: Output format (html, json, lcov, etc.)
 - `{type}`: Report type (coverage, quality, results)
 - `{date}`: Current date using timestamp format
 - `{datetime}`: Current date and time (%Y-%m-%d_%H-%M-%S)
 - `{suffix}`: The report suffix if specified
-
 Returns:
 
 - `results` (table): Table of results for each saved report with success/error information
 
 ## Robust Fallback Mechanisms
-
 The reporting module includes several fallback mechanisms to ensure reliable operation:
 
 ### Directory Creation
-
 The module employs multiple approaches to ensure directories exist:
 
 ```lua
 -- First attempt with Lua's standard functions
 local success, err = ensure_directory(path)
-
 if not success then
   -- Fallback with direct operating system command
   os.execute('mkdir -p "' .. path .. '"')
-
   -- Verify creation
   local test_cmd = 'test -d "' .. path .. '"'
   local exists = os.execute(test_cmd)
@@ -210,7 +179,6 @@ end
 ```text
 
 ### Input Validation
-
 The module validates input data and provides defaults:
 
 ```lua
@@ -229,7 +197,6 @@ end
 ```text
 
 ### File Writing
-
 The module uses protected calls for file writing:
 
 ```lua
@@ -238,7 +205,6 @@ local write_ok, write_err = pcall(function()
   file:write(content)
   file:close()
 end)
-
 if not write_ok then
   return false, "Error writing to file: " .. tostring(write_err)
 end
@@ -271,10 +237,10 @@ end
 - **Summary**: Text-based quality evaluation
 
 ## Command-Line Configuration
-
 The reporting functionality can be configured through command-line options:
 
 ```bash
+
 # Set the output directory for all reports
 lua run_tests.lua --output-dir ./reports
 
@@ -295,13 +261,14 @@ lua run_tests.lua --timestamp-format "%Y%m%d"
 
 # Enable verbose output during report generation
 lua run_tests.lua --verbose-reports
-```
 
+```text
 These options can be combined with other lust-next options:
 
 ```bash
 lua run_tests.lua --coverage --output-dir ./reports --report-suffix "-$(date +%Y%m%d)" tests/coverage_test.lua
-```
+
+```text
 
 ## Examples
 
@@ -310,29 +277,22 @@ lua run_tests.lua --coverage --output-dir ./reports --report-suffix "-$(date +%Y
 ```lua
 local lust = require('lust-next')
 local reporting = require('src.reporting')
-
 -- Run tests
 lust.run_discovered('./tests')
-
 -- Get test results data
 local results_data = lust.get_test_results()
-
 -- Generate different report formats
 local junit_report = reporting.format_results(results_data, "junit")
 local tap_report = reporting.format_results(results_data, "tap")
 local csv_report = reporting.format_results(results_data, "csv")
-
 -- Save reports to files
 reporting.write_file("./reports/test-results.xml", junit_report)
 reporting.write_file("./reports/test-results.tap", tap_report)
 reporting.write_file("./reports/test-results.csv", csv_report)
-
 -- Or save a specific format
 reporting.save_results_report("./reports/test-results.tap", results_data, "tap")
-
 -- Or use the auto-save function for all formats (includes JUnit XML, TAP, and CSV)
 reporting.auto_save_reports(nil, nil, results_data, "./reports")
-
 -- Or use the advanced configuration features
 reporting.auto_save_reports(nil, nil, results_data, {
   report_dir = "./reports",
@@ -340,32 +300,28 @@ reporting.auto_save_reports(nil, nil, results_data, {
   results_path_template = "junit/results-{date}.{format}",
   verbose = true
 })
-```
+
+```text
 
 ### Coverage Report Generation
 
 ```lua
 local lust = require('lust-next')
 local reporting = require('src.reporting')
-
 -- Run tests with coverage
 lust.coverage_options.enabled = true
 lust.run_discovered('./tests')
-
 -- Get coverage data
 local coverage_data = lust.get_coverage_data()
-
 -- Generate different report formats
 local html_report = reporting.format_coverage(coverage_data, "html")
 local json_report = reporting.format_coverage(coverage_data, "json")
 local lcov_report = reporting.format_coverage(coverage_data, "lcov")
 local summary_report = reporting.format_coverage(coverage_data, "summary")
-
 -- Save reports to files
 reporting.write_file("./reports/coverage.html", html_report)
 reporting.write_file("./reports/coverage.json", json_report)
 reporting.write_file("./reports/coverage.lcov", lcov_report)
-
 -- Or use the auto-save function for all formats
 reporting.auto_save_reports(coverage_data, nil, "./reports")
 
@@ -376,19 +332,15 @@ reporting.auto_save_reports(coverage_data, nil, "./reports")
 ```lua
 local lust = require('lust-next')
 local reporting = require('src.reporting')
-
 -- Enable both coverage and quality
 lust.coverage_options.enabled = true
 lust.quality_options.enabled = true
 lust.quality_options.level = 3
-
 -- Run tests
 lust.run_discovered('./tests')
-
 -- Get both data sets
 local coverage_data = lust.get_coverage_data()
 local quality_data = lust.get_quality_data()
-
 -- Save all reports
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 
@@ -399,14 +351,11 @@ reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 ```lua
 local lust = require('lust-next')
 local reporting = require('src.reporting')
-
 -- Run tests with coverage
 lust.coverage_options.enabled = true
 lust.run_discovered('./tests')
-
 -- Get coverage data
 local coverage_data = lust.get_coverage_data()
-
 -- Create custom directory structure
 reporting.write_file("./reports/coverage/html/index.html", 
                     reporting.format_coverage(coverage_data, "html"))

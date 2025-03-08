@@ -1,10 +1,7 @@
-
 # Support
-
 This document explains where and how to get help with lust.
 
 ## Asking Questions
-
 The GitHub Discussions are the primary place for questions about lust. You can start a new discussion in the following categories:
 
 - **Q&A**: For specific questions about how to use lust
@@ -13,9 +10,7 @@ The GitHub Discussions are the primary place for questions about lust. You can s
 - **Help Wanted**: If you're stuck with a test and need broader assistance
 
 ## Reporting Issues
-
 If you've found a bug or have a feature request, please create an issue on our [GitHub issue tracker](https://github.com/greggh/lust/issues).
-
 When reporting bugs, please include:
 
 - A clear description of the problem
@@ -29,5 +24,5 @@ When reporting bugs, please include:
 - **Lua Discord**: Many Lua users can be found on various Lua-related Discord servers
 
 ## Paid Support
-
 At this time, no paid support options are available for lust.
+

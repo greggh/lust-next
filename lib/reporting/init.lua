@@ -138,7 +138,10 @@ if ok then
   formatter_registry.register_all(formatters)
 else
   print("WARNING: Failed to load formatter registry. Using fallback formatters.")
-  -- Fallback formatter for coverage reports
+end
+
+-- Fallback formatters if registry failed to load
+if not formatters.coverage.summary then
   formatters.coverage.summary = function(coverage_data)
     return {
       files = coverage_data and coverage_data.files or {},

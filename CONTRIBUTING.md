@@ -1,17 +1,13 @@
-
 # Contributing Guidelines
-
 Thank you for considering contributing to this project! We welcome contributions from everyone, whether you're fixing a typo, adding new features, or improving documentation.
 
 ## Code of Conduct
-
 This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to [maintainer-email].
 
 ## Getting Started
 
 1. Fork the repository
 2. Clone your fork and create a new branch:
-
    ```bash
    git clone https://github.com/username/project-name.git
    cd project-name
@@ -24,7 +20,6 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating
 4. Push to your fork and submit a pull request
 
 ## Development Process
-
 Please see [DEVELOPMENT.md](DEVELOPMENT.md) for details on setting up your development environment and the development workflow.
 
 ## Pull Request Process
@@ -48,9 +43,8 @@ Please see [DEVELOPMENT.md](DEVELOPMENT.md) for details on setting up your devel
 - Reference issues and pull requests where appropriate
 
 ## License
-
 By contributing to this project, you agree that your contributions will be licensed under the project's license.
 
 ## Questions?
-
 If you have any questions, please open an issue or refer to our [SUPPORT.md](SUPPORT.md) file for more information on how to get help.
+

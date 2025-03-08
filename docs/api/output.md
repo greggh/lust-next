@@ -1,28 +1,20 @@
-
 # Output Formatting API
-
 This document describes the output formatting capabilities provided by Lust-Next, allowing you to customize how test results are displayed.
 
 ## Overview
-
 Lust-Next provides a flexible output formatting system that allows you to customize how test results are presented. This includes options for colors, indentation, verbosity levels, and specialized output formats.
-
 The output formatting options can dramatically improve the readability of your test output, especially when running large test suites.
 
 ## Formatting Functions
 
 ### lust.format(options)
-
 Configures the output formatting options.
-
 **Parameters:**
 
 - `options` (table): A table of formatting options (see formatting options table below)
-
 **Returns:**
 
 - The lust object (for chaining)
-
 **Example:**
 
 ```lua
@@ -37,13 +29,10 @@ lust.format({
 ```text
 
 ### lust.nocolor()
-
 Disables colored output. This is a shorthand for `lust.format({ use_color = false })`.
-
 **Returns:**
 
 - The lust object (for chaining)
-
 **Example:**
 
 ```lua
@@ -53,7 +42,6 @@ lust.nocolor()
 ```text
 
 ## Formatting Options
-
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `use_color` | boolean | `true` | Whether to use ANSI color codes in output |
@@ -71,7 +59,6 @@ lust.nocolor()
 
 ```lua
 local lust = require('lust-next')
-
 -- Set up formatting before running tests
 lust.format({
   use_color = true,
@@ -79,7 +66,6 @@ lust.format({
   indent_size = 2,
   show_trace = true
 })
-
 -- Your tests here
 describe("My feature", function()
   it("works correctly", function()
@@ -101,7 +87,6 @@ lust.format({
 })
 
 ```text
-
 This produces verbose output with colors:
 
 ```text
@@ -119,7 +104,6 @@ lust.format({
 })
 
 ```text
-
 This produces less verbose output:
 
 ```text
@@ -136,7 +120,6 @@ lust.format({
 })
 
 ```text
-
 This produces minimal output with dots for passing tests and 'F' for failing tests:
 
 ```text
@@ -152,7 +135,6 @@ lust.format({
 })
 
 ```text
-
 This only shows the final summary:
 
 ```text
@@ -168,14 +150,12 @@ lust.format({
 })
 
 ```text
-
 or simply:
 
 ```lua
 lust.nocolor()
 
 ```text
-
 This disables ANSI color codes, useful for environments that don't support them.
 
 ### Custom Indentation
@@ -186,7 +166,6 @@ lust.format({
   indent_char = ' ',
   indent_size = 2
 })
-
 -- Using tabs for indentation
 lust.format({
   indent_char = '\t',
@@ -203,7 +182,6 @@ lust.format({
 })
 
 ```text
-
 This shows full stack traces for errors:
 
 ```text
@@ -216,7 +194,6 @@ FAIL Test that will fail
 ```text
 
 ## Command Line Integration
-
 When running tests via the command line, you can use the `--format` option to specify a predefined format.
 
 ```bash
@@ -237,7 +214,6 @@ lua lust-next.lua --format detailed
 lua lust-next.lua --format plain
 
 ```text
-
 You can also customize indentation from the command line:
 
 ```bash
@@ -259,19 +235,15 @@ lua lust-next.lua --indent tabs
    - Use detailed output during development for clarity
    - Use dot mode or compact mode for large test suites
    - Use summary only for CI systems
-
 1. **Consider the environment**:
    - Disable colors for environments that don't support ANSI color codes
    - Use plain text output for logs that will be stored
-
 1. **Adjust verbosity for test size**:
    - For large test suites, use compact or dot mode
    - For focused testing, use detailed output with stack traces
-
 1. **Consistent configuration**:
    - Set up standard formatting in project init files
    - Document formatting conventions for your team
-
 1. **Configure for maximum readability**:
    - Use indentation that matches your code style
    - Use colors when supported to highlight important information
@@ -279,7 +251,6 @@ lua lust-next.lua --indent tabs
 ## Examples in Context
 
 ### Error Handling
-
 With detailed error output:
 
 ```lua
@@ -288,13 +259,11 @@ lust.format({
   show_trace = true,
   show_success_detail = true
 })
-
 describe("Error handling", function()
   it("provides helpful error messages", function()
     local function will_error()
       error("Something went wrong")
     end
-
     -- This will fail and show detailed error information
     will_error()
   end)
@@ -303,13 +272,11 @@ end)
 ```text
 
 ### CI Integration
-
 For CI environments, you might want summary-only output for logs:
 
 ```lua
 -- Check if we're running in a CI environment
 local in_ci = os.getenv("CI") == "true"
-
 if in_ci then
   -- Use summary only mode for CI
   lust.format({
@@ -327,14 +294,12 @@ end
 ```text
 
 ### Large Test Suites
-
 For large test suites, dot mode can provide a compact overview:
 
 ```lua
 lust.format({
   dot_mode = true
 })
-
 -- When many tests run, you'll see something like:
 -- .........................F...........
 -- 

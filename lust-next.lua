@@ -37,6 +37,8 @@ local async_module = try_require("lib.async")
 local interactive = try_require("lib.tools.interactive")
 local discover_module = try_require("scripts.discover")
 local parallel_module = try_require("lib.tools.parallel")
+local config_module = try_require("lib.core.config")
+local module_reset_module = try_require("lib.core.module_reset")
 
 local lust_next = {}
 lust_next.level = 0
@@ -87,6 +89,16 @@ end
 -- Register parallel execution module if available
 if parallel_module then
   parallel_module.register_with_lust(lust_next)
+end
+
+-- Register configuration module if available
+if config_module then
+  config_module.register_with_lust(lust_next)
+end
+
+-- Register module reset functionality if available
+if module_reset_module then
+  module_reset_module.register_with_lust(lust_next)
 end
 
 -- Add test discovery functionality
@@ -1038,11 +1050,44 @@ local paths = {
   truthy = { test = function(v) return v and true or false, 'expected ' .. tostring(v) .. ' to be truthy', 'expected ' .. tostring(v) .. ' to not be truthy' end },
   falsy = { test = function(v) return not v, 'expected ' .. tostring(v) .. ' to be falsy', 'expected ' .. tostring(v) .. ' to not be falsy' end },
   falsey = { test = function(v) return not v, 'expected ' .. tostring(v) .. ' to be falsey', 'expected ' .. tostring(v) .. ' to not be falsey' end },
-  be = { 'a', 'an', 'truthy', 'falsy', 'falsey', 'nil', 'type',
+  be = { 'a', 'an', 'truthy', 'falsy', 'falsey', 'nil', 'type', 'at_least', 'greater_than', 'less_than',
     test = function(v, x)
       return v == x,
         'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to be the same',
         'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to not be the same'
+    end
+  },
+  
+  at_least = {
+    test = function(v, x)
+      if type(v) ~= 'number' or type(x) ~= 'number' then
+        error('expected both values to be numbers for at_least comparison')
+      end
+      return v >= x,
+        'expected ' .. tostring(v) .. ' to be at least ' .. tostring(x),
+        'expected ' .. tostring(v) .. ' to not be at least ' .. tostring(x)
+    end
+  },
+  
+  greater_than = {
+    test = function(v, x)
+      if type(v) ~= 'number' or type(x) ~= 'number' then
+        error('expected both values to be numbers for greater_than comparison')
+      end
+      return v > x,
+        'expected ' .. tostring(v) .. ' to be greater than ' .. tostring(x),
+        'expected ' .. tostring(v) .. ' to not be greater than ' .. tostring(x)
+    end
+  },
+  
+  less_than = {
+    test = function(v, x)
+      if type(v) ~= 'number' or type(x) ~= 'number' then
+        error('expected both values to be numbers for less_than comparison')
+      end
+      return v < x,
+        'expected ' .. tostring(v) .. ' to be less than ' .. tostring(x),
+        'expected ' .. tostring(v) .. ' to not be less than ' .. tostring(x)
     end
   },
   exist = {

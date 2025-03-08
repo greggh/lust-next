@@ -80,8 +80,59 @@ describe("Example module coverage demo", function()
   -- This will show up as a completely uncovered function
 end)
 
+-- Enable coverage with comprehensive options
+lust_next.coverage_options = {
+  enabled = true,                   -- Enable coverage tracking
+  source_dirs = {".", "examples"}, -- Directories to scan for source files
+  discover_uncovered = true,        -- Find files that aren't executed by tests
+  debug = true,                     -- Enable verbose debug output
+  threshold = 70,                   -- Set coverage threshold to 70%
+  
+  -- Override default patterns to focus just on example files
+  use_default_patterns = false,     -- Don't use default patterns
+  include = {
+    "examples/*.lua",              -- Include just files in examples directory
+  },
+  exclude = {
+    "examples/*_test.lua",         -- Exclude test files
+  }
+}
+
+-- Start coverage tracking 
+if lust_next.start_coverage then
+  lust_next.start_coverage()
+end
+
+-- Run all the tests
+lust_next.run() -- This will run all the tests defined above
+
+-- Stop coverage tracking
+if lust_next.stop_coverage then
+  lust_next.stop_coverage()
+end
+
+-- Generate and display a coverage report
+if lust_next.generate_coverage_report then
+  print("\nCoverage Report:")
+  local report = lust_next.generate_coverage_report("summary")
+  print(report)
+  
+  -- Check if we meet the coverage threshold
+  if lust_next.coverage_meets_threshold(70) then
+    print("\nCoverage meets the threshold!")
+  else
+    print("\nWarning: Coverage is below the threshold!")
+  end
+  
+  -- Generate an HTML report
+  local success = lust_next.save_coverage_report("./coverage-reports/enhanced-example.html", "html")
+  if success then
+    print("\nHTML coverage report saved to: ./coverage-reports/enhanced-example.html")
+  end
+end
+
 -- Run this example with coverage enabled:
--- lua lust-next.lua --coverage examples/coverage_example.lua
+-- lua examples/coverage_example.lua
 -- 
--- Or with specific coverage options:
--- lua lust-next.lua --coverage --coverage-threshold=80 examples/coverage_example.lua
+-- Or from command line:
+-- lua lust-next.lua --coverage --discover-uncovered=true --source-dirs=".,examples" examples/coverage_example.lua

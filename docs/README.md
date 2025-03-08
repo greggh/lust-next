@@ -1,8 +1,5 @@
-
 # Lust-Next Documentation
-
 [![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
-
 Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful testing library for Lua projects, offering a rich set of features while maintaining simplicity and ease of use.
 
 ## Latest Updates
@@ -21,7 +18,6 @@ Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful tes
 - **Module Reset Utilities**: New functions for ensuring clean test state:
   - `reset_module()`: Reset and reload modules between tests
   - `with_fresh_module()`: Run tests with a freshly loaded module instance
-
 - **Enhanced Async Testing**:
   - New `parallel_async()` function for running multiple operations concurrently
   - Improved error handling in `wait_until()` for timeout scenarios
@@ -41,7 +37,6 @@ Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful tes
   - [Test Filtering](api/filtering.md): Running specific test subsets
   - [CLI](api/cli.md): Command-line interface usage
   - [Test Discovery](api/discovery.md): Finding and running tests
-
 - [**Guides**](guides/README.md): How-to guides for common tasks
   - [Getting Started](guides/getting-started.md): Your first tests with Lust-Next
   - [Reporting](guides/reporting.md): Using coverage, quality, and reporting
@@ -72,13 +67,11 @@ git submodule add https://github.com/greggh/lust-next.git deps/lust-next
 -- Import and expose globals for convenience
 local lust_next = require('lust-next')
 lust_next.expose_globals()
-
 -- Write your tests
 describe("Calculator", function()
   it("adds numbers correctly", function()
     assert.equal(5, 2 + 3)
   end)
-
   it("subtracts numbers correctly", function()
     assert.equal(5, 8 - 3)
   end)
@@ -87,6 +80,5 @@ end)
 ```text
 
 ## Contributing
-
 Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/lust-next/blob/main/CONTRIBUTING.md) for details on how to get involved.
 

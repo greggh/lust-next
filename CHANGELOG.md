@@ -1,8 +1,5 @@
-
 # Changelog
-
 All notable changes to this project will be documented in this file.
-
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -20,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sequence reset functionality
   - Comprehensive documentation and examples
   - Auto-restoration when tests complete
-
 - Enhanced reporting system:
   - Standardized data structures for all report types
   - JUnit XML output format for CI/CD integration
@@ -30,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Robust error handling and cross-platform support
   - Auto-save functionality for multiple report formats at once
   - Comprehensive diagnostics for report generation
-
 - Interactive CLI mode for running tests:
   - Full-featured interactive command-line interface
   - Live configuration of test options (tags, filters, focus)
@@ -42,7 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive help system with command reference
   - Clear, colorized output for better readability
   - Example script demonstrating interactive mode usage
-
 - Watch mode for continuous testing:
   - Automatic file change detection
   - Continuous test execution
@@ -63,7 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added comprehensive documentation and examples
   - Command-line options for configuration
   - Example script demonstrating watch mode usage
-
 - Enhanced modular reporting architecture:
   - Centralized reporting module for all output formats
   - Standardized data interfaces between modules
@@ -252,7 +245,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Code examples for common use cases
 
 ## [0.2.0] - Original lust
-
 This is where the fork begins. Original [lust project](https://github.com/bjornbytes/lust) features:
 
 ### Features
@@ -262,6 +254,6 @@ This is where the fork begins. Original [lust project](https://github.com/bjornb
 - Expect-style assertions
 - Function spies
 - Support for console and non-console environments
-
 [Unreleased]: https://github.com/greggh/lust/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/bjornbytes/lust/tree/master
+
