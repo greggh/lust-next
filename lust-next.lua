@@ -1,4 +1,4 @@
--- lust-next v0.7.1 - Enhanced Lua test framework
+-- lust-next v0.7.5 - Enhanced Lua test framework
 -- https://github.com/greggh/lust-next
 -- MIT LICENSE
 -- Based on lust by Bjorn Swenson (https://github.com/bjornbytes/lust)
@@ -13,6 +13,7 @@
 -- * Skip mode for excluding tests (xdescribe/xit)
 -- * Asynchronous testing support
 -- * Code coverage analysis and reporting
+-- * Watch mode for continuous testing
 
 -- Try to require optional modules
 local function try_require(name)
@@ -28,6 +29,8 @@ end
 local coverage = try_require("src.coverage")
 local quality = try_require("src.quality")
 local codefix = try_require("src.codefix")
+local reporting = try_require("src.reporting")
+local watcher = try_require("src.watcher")
 local json = try_require("src.json")
 
 local lust_next = {}
@@ -36,13 +39,43 @@ lust_next.passes = 0
 lust_next.errors = 0
 lust_next.befores = {}
 lust_next.afters = {}
-lust_next.version = "0.7.4"
+lust_next.version = "0.7.5"
 lust_next.active_tags = {}
 lust_next.current_tags = {}
 lust_next.filter_pattern = nil
 lust_next.running_async = false
 lust_next.async_timeout = 5000 -- Default timeout in ms
 lust_next.focus_mode = false -- Tracks if any focused tests are present
+
+-- Reset function to clear state between test runs
+function lust_next.reset()
+  -- Reset test state variables
+  lust_next.level = 0
+  lust_next.passes = 0
+  lust_next.errors = 0
+  lust_next.befores = {}
+  lust_next.afters = {}
+  lust_next.active_tags = {}
+  lust_next.current_tags = {}
+  lust_next.focus_mode = false
+  
+  -- Reset assertion count if tracking is enabled
+  lust_next.assertion_count = 0
+  
+  -- Make sure all hooks for the next test run are cleaned up
+  if lust_next.running_async then
+    lust_next.running_async = false
+  end
+  
+  -- Preserve the paths table because it's essential for expect assertions
+  -- DO NOT reset or clear the paths table
+  
+  -- Free memory
+  collectgarbage()
+  
+  -- Return lust_next to allow for chaining
+  return lust_next
+end
 
 -- Coverage options
 lust_next.coverage_options = {
@@ -611,11 +644,11 @@ end
 
 local paths = {
   [''] = { 'to', 'to_not' },
-  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw' },
-  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', chain = function(a) a.negate = not a.negate end },
+  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy' },
+  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy', chain = function(a) a.negate = not a.negate end },
   a = { test = isa },
   an = { test = isa },
-  be = { 'a', 'an', 'truthy',
+  be = { 'a', 'an', 'truthy', 'falsey',
     test = function(v, x)
       return v == x,
         'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to be the same',
@@ -631,9 +664,17 @@ local paths = {
   },
   truthy = {
     test = function(v)
-      return v,
+      return v ~= false and v ~= nil,
         'expected ' .. tostring(v) .. ' to be truthy',
         'expected ' .. tostring(v) .. ' to not be truthy'
+    end
+  },
+  
+  falsey = {
+    test = function(v)
+      return v == false or v == nil,
+        'expected ' .. tostring(v) .. ' to be falsey',
+        'expected ' .. tostring(v) .. ' to not be falsey'
     end
   },
   equal = {
@@ -655,6 +696,22 @@ local paths = {
       return equal,
         'Values are not equal: ' .. comparison,
         'expected ' .. stringify(v) .. ' and ' .. stringify(x) .. ' to not be equal'
+    end
+  },
+  
+  be_truthy = {
+    test = function(v)
+      return v ~= false and v ~= nil,
+        'expected ' .. tostring(v) .. ' to be truthy',
+        'expected ' .. tostring(v) .. ' to not be truthy'
+    end
+  },
+  
+  be_falsey = {
+    test = function(v)
+      return v == false or v == nil,
+        'expected ' .. tostring(v) .. ' to be falsey',
+        'expected ' .. tostring(v) .. ' to not be falsey'
     end
   },
   have = {
@@ -699,17 +756,31 @@ local paths = {
     end
   },
   
-  -- New table assertions
+  -- Enhanced contain assertion for both tables and strings
   contain = { 'keys', 'values', 'key', 'value', 'subset', 'exactly',
     test = function(v, x)
-      if type(v) ~= 'table' then
-        error('expected ' .. tostring(v) .. ' to be a table')
+      -- Handle strings - check for substring
+      if type(v) == 'string' then
+        if type(x) ~= 'string' then
+          x = tostring(x)
+        end
+        
+        local found = string.find(v, x, 1, true) ~= nil
+        return found,
+          'expected string "' .. v .. '" to contain "' .. x .. '"',
+          'expected string "' .. v .. '" to not contain "' .. x .. '"'
       end
       
-      -- Default behavior is to check if the value is in the table (similar to have)
-      return has(v, x),
-        'expected ' .. tostring(v) .. ' to contain ' .. tostring(x),
-        'expected ' .. tostring(v) .. ' to not contain ' .. tostring(x)
+      -- Handle tables
+      if type(v) == 'table' then
+        -- Default behavior is to check if the value is in the table (similar to have)
+        return has(v, x),
+          'expected table to contain ' .. tostring(x),
+          'expected table not to contain ' .. tostring(x)
+      end
+      
+      -- If we get here, v is neither a table nor a string
+      error('expected ' .. tostring(v) .. ' to be a table or a string')
     end
   },
   
@@ -901,7 +972,7 @@ local paths = {
   },
   
   -- Type checking assertions beyond the basic types
-  be_type = { 'callable', 'comparable', 'iterable',
+  be_type = { 'callable', 'comparable', 'iterable', 'exact', 'instance_of', 'implementing',
     test = function(v, expected_type)
       if expected_type == 'callable' then
         local is_callable = type(v) == 'function' or 
@@ -924,6 +995,84 @@ local paths = {
       else
         error('unknown type check: ' .. tostring(expected_type))
       end
+    end
+  },
+
+  -- Enhanced type checking with distinct assertions
+  is_exact_type = {
+    test = function(v, expected_type)
+      local actual_type = type(v)
+      
+      return actual_type == expected_type,
+        'expected value to be exactly of type \'' .. expected_type .. '\', but got \'' .. actual_type .. '\'',
+        'expected value not to be of type \'' .. expected_type .. '\''
+    end
+  },
+  
+  is_instance_of = {
+    test = function(v, expected_class)
+      if type(v) ~= 'table' or type(expected_class) ~= 'table' then
+        return false,
+          'expected a table instance and class, but got ' .. type(v) .. ' and ' .. type(expected_class),
+          'expected value not to be an instance of the given class'
+      end
+      
+      -- Check if value is an instance of expected_class
+      local is_instance = false
+      local mt = getmetatable(v)
+      while mt do
+        if mt == expected_class or mt.__index == expected_class then
+          is_instance = true
+          break
+        end
+        mt = getmetatable(mt) and getmetatable(mt).__index
+      end
+      
+      local class_name = expected_class.__name or tostring(expected_class)
+      return is_instance,
+        'expected value to be an instance of \'' .. class_name .. '\', but it isn\'t',
+        'expected value not to be an instance of \'' .. class_name .. '\''
+    end
+  },
+  
+  implements = {
+    test = function(v, interface)
+      if type(v) ~= 'table' or type(interface) ~= 'table' then
+        return false,
+          'expected a table implementing interface, but got ' .. type(v) .. ' and ' .. type(interface),
+          'expected value not to implement the given interface'
+      end
+      
+      -- Check if value implements all methods and properties in interface
+      local missing_keys = {}
+      local wrong_types = {}
+      
+      for key, expected in pairs(interface) do
+        local actual = v[key]
+        
+        if actual == nil then
+          table.insert(missing_keys, key)
+        elseif type(expected) == 'function' and type(actual) ~= 'function' then
+          table.insert(wrong_types, key .. ' (expected function, got ' .. type(actual) .. ')')
+        end
+      end
+      
+      if #missing_keys > 0 or #wrong_types > 0 then
+        local msg = 'expected object to implement interface, but: '
+        if #missing_keys > 0 then
+          msg = msg .. 'missing: ' .. table.concat(missing_keys, ', ')
+        end
+        if #wrong_types > 0 then
+          if #missing_keys > 0 then msg = msg .. '; ' end
+          msg = msg .. 'wrong types: ' .. table.concat(wrong_types, ', ')
+        end
+        
+        return false, msg, 'expected object not to implement interface'
+      end
+      
+      return true,
+        'expected object to implement interface',
+        'expected object not to implement interface'
     end
   },
   
@@ -991,6 +1140,24 @@ local paths = {
       return math.abs(v - x) <= delta,
         'expected ' .. tostring(v) .. ' to be approximately ' .. tostring(x) .. ' (±' .. tostring(delta) .. ')',
         'expected ' .. tostring(v) .. ' to not be approximately ' .. tostring(x) .. ' (±' .. tostring(delta) .. ')'
+    end
+  },
+  
+  -- Satisfy assertion for custom predicates
+  satisfy = {
+    test = function(v, predicate)
+      if type(predicate) ~= 'function' then
+        error('expected predicate to be a function, got ' .. type(predicate))
+      end
+      
+      local success, result = pcall(predicate, v)
+      if not success then
+        error('predicate function failed with error: ' .. tostring(result))
+      end
+      
+      return result,
+        'expected value to satisfy the given predicate function',
+        'expected value to not satisfy the given predicate function'
     end
   },
   
@@ -3232,6 +3399,24 @@ function lust_next.assert.is_false(value, message)
   return true
 end
 
+function lust_next.assert.is_truthy(value, message)
+  if value == false or value == nil then
+    local msg = message or string.format("Expected value to be truthy but got %s", 
+      tostring(value))
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.is_falsey(value, message)
+  if value ~= false and value ~= nil then
+    local msg = message or string.format("Expected value to be falsey but got %s", 
+      tostring(value))
+    error(msg, 2)
+  end
+  return true
+end
+
 function lust_next.assert.is_nil(value, message)
   if value ~= nil then
     local msg = message or string.format("Expected value to be nil but got %s", 
@@ -3282,20 +3467,145 @@ function lust_next.assert.type_of(value, expected_type, message)
   return true
 end
 
-function lust_next.assert.contains(table_value, expected_item, message)
-  if type(table_value) ~= "table" then
-    error("assert.contains expects a table as its first argument", 2)
+-- Enhanced type checking assertions
+function lust_next.assert.is_exact_type(value, expected_type, message)
+  local actual_type = type(value)
+  
+  if actual_type ~= expected_type then
+    local msg = message or string.format("Expected value to be exactly of type '%s', but got '%s'", 
+      expected_type, actual_type)
+    error(msg, 2)
+  end
+  return true
+end
+
+function lust_next.assert.is_instance_of(value, expected_class, message)
+  if type(value) ~= "table" or type(expected_class) ~= "table" then
+    local msg = message or string.format("Expected a table instance and class, but got %s and %s", 
+      type(value), type(expected_class))
+    error(msg, 2)
   end
   
-  for _, v in pairs(table_value) do
-    if v == expected_item then
-      return true
+  -- Check if value is an instance of expected_class
+  local is_instance = false
+  local mt = getmetatable(value)
+  while mt do
+    if mt == expected_class or mt.__index == expected_class then
+      is_instance = true
+      break
+    end
+    mt = getmetatable(mt) and getmetatable(mt).__index
+  end
+  
+  if not is_instance then
+    local class_name = expected_class.__name or tostring(expected_class)
+    local msg = message or string.format("Expected value to be an instance of '%s', but it isn't", 
+      class_name)
+    error(msg, 2)
+  end
+  
+  return true
+end
+
+function lust_next.assert.implements(value, interface, message)
+  if type(value) ~= "table" or type(interface) ~= "table" then
+    local msg = message or string.format("Expected a table implementing interface, but got %s and %s", 
+      type(value), type(interface))
+    error(msg, 2)
+  end
+  
+  -- Check if value implements all methods and properties in interface
+  local missing_keys = {}
+  local wrong_types = {}
+  
+  for key, expected in pairs(interface) do
+    local actual = value[key]
+    
+    if actual == nil then
+      table.insert(missing_keys, key)
+    elseif type(expected) == "function" and type(actual) ~= "function" then
+      table.insert(wrong_types, key .. " (expected function, got " .. type(actual) .. ")")
     end
   end
   
-  local msg = message or string.format("Expected table to contain %s but it wasn't found", 
-    tostring(expected_item))
-  error(msg, 2)
+  if #missing_keys > 0 or #wrong_types > 0 then
+    local msg = "Expected object to implement interface, but: "
+    if #missing_keys > 0 then
+      msg = msg .. "missing: " .. table.concat(missing_keys, ", ")
+    end
+    if #wrong_types > 0 then
+      if #missing_keys > 0 then msg = msg .. "; " end
+      msg = msg .. "wrong types: " .. table.concat(wrong_types, ", ")
+    end
+    
+    error(message or msg, 2)
+  end
+  
+  return true
+end
+
+function lust_next.assert.is_callable(value, message)
+  local is_callable = type(value) == "function" or 
+                     (type(value) == "table" and getmetatable(value) and getmetatable(value).__call)
+  
+  if not is_callable then
+    local msg = message or string.format("Expected value to be callable, but got %s", type(value))
+    error(msg, 2)
+  end
+  
+  return true
+end
+
+function lust_next.assert.satisfies(value, predicate, message)
+  if type(predicate) ~= "function" then
+    error("assert.satisfies expects a function as its second argument", 2)
+  end
+  
+  local success, result = pcall(function() return predicate(value) end)
+  
+  if not success then
+    error("Predicate function raised an error: " .. result, 2)
+  end
+  
+  if not result then
+    local msg = message or "Expected value to satisfy the given predicate"
+    error(msg, 2)
+  end
+  
+  return true
+end
+
+function lust_next.assert.contains(value, expected_item, message)
+  -- Handle strings - check for substring
+  if type(value) == "string" then
+    if type(expected_item) ~= "string" then
+      expected_item = tostring(expected_item)
+    end
+    
+    if string.find(value, expected_item, 1, true) then
+      return true
+    end
+    
+    local msg = message or string.format("Expected string '%s' to contain '%s' but it wasn't found", 
+      value, expected_item)
+    error(msg, 2)
+  end
+  
+  -- Handle tables - check for element
+  if type(value) == "table" then
+    for _, v in pairs(value) do
+      if v == expected_item then
+        return true
+      end
+    end
+    
+    local msg = message or string.format("Expected table to contain %s but it wasn't found", 
+      tostring(expected_item))
+    error(msg, 2)
+  end
+  
+  -- Otherwise, error with type information
+  error("assert.contains expects a string or table as its first argument, got " .. type(value), 2)
 end
 
 -- Enhanced spy, mock, and stub functionality
@@ -4014,11 +4324,192 @@ local lust = setmetatable({}, {
   end
 })
 
+-- Fix for the expect assertion system
+-- Redefine the entire expect function to address all issues
+
+-- Clear expect-related paths to ensure we rebuild them correctly
+lust_next.paths = {
+  [''] = { 'to', 'to_not' },
+  
+  to = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 
+        'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 
+        'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy' },
+        
+  to_not = { 'have', 'equal', 'be', 'exist', 'fail', 'match', 'contain', 'start_with', 
+            'end_with', 'be_type', 'be_greater_than', 'be_less_than', 'be_between', 
+            'be_approximately', 'throw', 'be_truthy', 'be_falsey', 'satisfy', 
+            chain = function(a) a.negate = not a.negate end },
+  
+  a = { test = isa },
+  an = { test = isa },
+  
+  be = { 'a', 'an', 'truthy', 'falsey',
+    test = function(v, x)
+      return v == x,
+        'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to be the same',
+        'expected ' .. tostring(v) .. ' and ' .. tostring(x) .. ' to not be the same'
+    end
+  },
+  
+  exist = {
+    test = function(v)
+      return v ~= nil,
+        'expected ' .. tostring(v) .. ' to exist',
+        'expected ' .. tostring(v) .. ' to not exist'
+    end
+  },
+  
+  truthy = {
+    test = function(v)
+      return v ~= false and v ~= nil,
+        'expected ' .. tostring(v) .. ' to be truthy',
+        'expected ' .. tostring(v) .. ' to not be truthy'
+    end
+  },
+  
+  falsey = {
+    test = function(v)
+      return v == false or v == nil,
+        'expected ' .. tostring(v) .. ' to be falsey',
+        'expected ' .. tostring(v) .. ' to not be falsey'
+    end
+  },
+  
+  be_truthy = {
+    test = function(v)
+      return v ~= false and v ~= nil,
+        'expected ' .. tostring(v) .. ' to be truthy',
+        'expected ' .. tostring(v) .. ' to not be truthy'
+    end
+  },
+  
+  be_falsey = {
+    test = function(v)
+      return v == false or v == nil,
+        'expected ' .. tostring(v) .. ' to be falsey',
+        'expected ' .. tostring(v) .. ' to not be falsey'
+    end
+  },
+  
+  equal = {
+    test = function(v, x, eps)
+      local equal = eq(v, x, eps)
+      local comparison = ''
+      
+      if not equal then
+        if type(v) == 'table' or type(x) == 'table' then
+          -- For tables, generate a detailed diff
+          comparison = '\n' .. indent(lust_next.level + 1) .. diff_values(v, x)
+        else
+          -- For primitive types, show a simple comparison
+          comparison = '\n' .. indent(lust_next.level + 1) .. 'Expected: ' .. stringify(x) 
+                     .. '\n' .. indent(lust_next.level + 1) .. 'Got:      ' .. stringify(v)
+        end
+      end
+
+      return equal,
+        'Values are not equal: ' .. comparison,
+        'expected ' .. stringify(v) .. ' and ' .. stringify(x) .. ' to not be equal'
+    end
+  },
+  
+  have = {
+    test = function(v, x)
+      if type(v) ~= 'table' then
+        error('expected ' .. stringify(v) .. ' to be a table')
+      end
+
+      -- Create a formatted table representation for better error messages
+      local table_str = stringify(v)
+      local content_preview = #table_str > 70 
+          and table_str:sub(1, 67) .. "..." 
+          or table_str
+
+      return has(v, x),
+        'expected table to contain ' .. stringify(x) .. '\nTable contents: ' .. content_preview,
+        'expected table not to contain ' .. stringify(x) .. ' but it was found\nTable contents: ' .. content_preview
+    end
+  },
+  
+  fail = { 'with',
+    test = function(v)
+      return not pcall(v),
+        'expected ' .. tostring(v) .. ' to fail',
+        'expected ' .. tostring(v) .. ' to not fail'
+    end
+  },
+  
+  with = {
+    test = function(v, pattern)
+      local ok, message = pcall(v)
+      return not ok and message:match(pattern),
+        'expected ' .. tostring(v) .. ' to fail with error matching "' .. pattern .. '"',
+        'expected ' .. tostring(v) .. ' to not fail with error matching "' .. pattern .. '"'
+    end
+  },
+  
+  match = {
+    test = function(v, p)
+      if type(v) ~= 'string' then v = tostring(v) end
+      local result = string.find(v, p)
+      return result ~= nil,
+        'expected ' .. v .. ' to match pattern [[' .. p .. ']]',
+        'expected ' .. v .. ' to not match pattern [[' .. p .. ']]'
+    end
+  }
+}
+
+-- Completely rewrite the expect function to fix all issues
+function lust_next.expect(v)
+  -- Count assertion
+  lust_next.assertion_count = (lust_next.assertion_count or 0) + 1
+  
+  -- Track assertion in quality module if enabled
+  if lust_next.quality_options and lust_next.quality_options.enabled and quality then
+    quality.track_assertion("expect", debug.getinfo(2, "n").name)
+  end
+  
+  local assertion = {}
+  assertion.val = v
+  assertion.action = ''
+  assertion.negate = false
+
+  setmetatable(assertion, {
+    __index = function(t, k)
+      if has(lust_next.paths[rawget(t, 'action')], k) then
+        rawset(t, 'action', k)
+        local chain = lust_next.paths[rawget(t, 'action')].chain
+        if chain then chain(t) end
+        return t
+      end
+      return rawget(t, k)
+    end,
+    __call = function(t, ...)
+      if lust_next.paths[t.action].test then
+        local res, err, nerr = lust_next.paths[t.action].test(t.val, ...)
+        if assertion.negate then
+          res = not res
+          err = nerr or err
+        end
+        if not res then
+          error(err or 'unknown failure', 2)
+        end
+      end
+    end
+  })
+
+  return assertion
+end
+
 -- Make module loading easier by offering multiple options
 local module = setmetatable({}, {
   __call = function(_, ...)
     -- If called as a function, expose globals and return the module
     lust_next.expose_globals()
+    
+    -- Ensure the expect assertion system works even when exposed as globals
+    validate_expect_assertions()
+    
     return lust_next
   end,
   __index = lust_next
