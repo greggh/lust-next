@@ -1596,9 +1596,9 @@ function lust_next.expect(v)
   return assertion
 end
 
--- Load the mocking system
+-- Load the mocking system directly from lib/mocking
 package.path = "./lib/?.lua;./lib/?/init.lua;" .. package.path
-local mocking_ok, mocking = pcall(require, "mocking")
+local mocking_ok, mocking = pcall(require, "lib.mocking")
 
 -- If the mocking module is available, use it
 if mocking_ok and mocking then

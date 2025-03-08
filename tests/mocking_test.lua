@@ -1,12 +1,11 @@
 -- Tests for the mocking functionality
 package.path = "../?.lua;../lib/?.lua;../lib/?/init.lua;" .. package.path
 
--- Load lust-next and the mocking system separately
+-- Load lust-next, which already has the mocking system loaded
 local lust_next = require("lust-next")
-local mocking = require("lust-next-mocking")
 
--- Register the mocking system with lust-next
-mocking.register_with_lust_next(lust_next)
+-- Get direct access to the mocking library for testing
+local mocking = require("lib.mocking")
 
 local describe, it, expect, pending = lust_next.describe, lust_next.it, lust_next.expect, lust_next.pending
 
