@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Interactive CLI mode for running tests:
+  - Full-featured interactive command-line interface
+  - Live configuration of test options (tags, filters, focus)
+  - Command history and navigation
+  - Dynamic test discovery and execution
+  - Status display showing current configuration
+  - Toggle watch mode from within the interface
+  - Integration with codefix module for code quality checks
+  - Comprehensive help system with command reference
+  - Clear, colorized output for better readability
+  - Example script demonstrating interactive mode usage
+
 - Watch mode for continuous testing:
   - Automatic file change detection
   - Continuous test execution
@@ -18,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Debounce mechanism to prevent multiple runs on rapid changes
   - Clear terminal interface with status indicators
   - Support for Ctrl+C to exit watch mode
+  - Integration with interactive CLI mode
 
 ### Fixed
 

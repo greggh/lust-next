@@ -25,6 +25,7 @@ local watch_mode_enabled = false
 local watch_dirs = {"."}
 local watch_interval = 1.0
 local exclude_patterns = {"node_modules", "%.git"}
+local interactive_mode_enabled = false
 
 -- Print usage information
 local function print_usage()
@@ -38,11 +39,13 @@ local function print_usage()
   print("  --watch-dir <directory>   Directory to watch for changes (can be multiple)")
   print("  --watch-interval <secs>   Interval between file checks (default: 1.0)")
   print("  --exclude <pattern>       Pattern to exclude from watching (can be multiple)")
+  print("  --interactive, -i         Start interactive CLI mode")
   print("  --help                    Show this help message")
   print("Examples:")
   print("  run_tests.lua                     Run all tests in ./tests")
   print("  run_tests.lua specific_test.lua   Run a specific test file")
   print("  run_tests.lua --watch             Run all tests and watch for changes")
+  print("  run_tests.lua --interactive       Start interactive CLI mode")
   os.exit(0)
 end
 
@@ -88,6 +91,9 @@ while i <= #arg do
   elseif arg[i] == "--exclude" and arg[i+1] then
     table.insert(exclude_patterns, arg[i+1])
     i = i + 2
+  elseif arg[i] == "--interactive" or arg[i] == "-i" then
+    interactive_mode_enabled = true
+    i = i + 1
   elseif arg[i]:match("%.lua$") then
     run_single_file = arg[i]
     i = i + 1
@@ -125,24 +131,47 @@ if codefix_enabled then
   os.exit(success and 0 or 1)
 end
 
+-- Add reset method to lust if not present
+if not lust_next.reset then
+  lust_next.reset = function()
+    lust_next.level = 0
+    lust_next.passes = 0
+    lust_next.errors = 0
+    lust_next.befores = {}
+    lust_next.afters = {}
+    lust_next.focus_mode = false
+    collectgarbage()
+  end
+end
+
 -- Run tests
 local success = false
 
--- Check for watch mode
-if watch_mode_enabled then
-  -- Add reset method to lust if not present
-  if not lust_next.reset then
-    lust_next.reset = function()
-      lust_next.level = 0
-      lust_next.passes = 0
-      lust_next.errors = 0
-      lust_next.befores = {}
-      lust_next.afters = {}
-      lust_next.focus_mode = false
-      collectgarbage()
-    end
+-- Check for interactive mode first
+if interactive_mode_enabled then
+  -- Try to load interactive module
+  local interactive, err
+  local ok, loaded = pcall(function() interactive = require("src.interactive") end)
+  
+  if not ok or not interactive then
+    print("Error: Interactive module not found: " .. (err or "unknown error"))
+    os.exit(1)
   end
   
+  -- Start interactive mode
+  local options = {
+    test_dir = dir,
+    pattern = pattern,
+    watch_mode = watch_mode_enabled,
+    watch_dirs = watch_dirs,
+    watch_interval = watch_interval,
+    exclude_patterns = exclude_patterns
+  }
+  
+  success = interactive.start(lust_next, options)
+  os.exit(success and 0 or 1)
+-- Check for watch mode  
+elseif watch_mode_enabled then
   -- Determine test directories
   local test_dirs = {dir}
   

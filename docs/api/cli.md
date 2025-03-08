@@ -5,7 +5,10 @@ This document describes the command-line interface (CLI) provided by Lust-Next.
 
 ## Overview
 
-Lust-Next can be run directly from the command line to discover and run tests. This provides a convenient way to run tests without writing test runner scripts.
+Lust-Next can be run directly from the command line to discover and run tests. This provides a convenient way to run tests without writing test runner scripts. The CLI now supports three modes of operation:
+1. **Standard Mode**: Run tests and exit
+2. **Watch Mode**: Continuously run tests when files change
+3. **Interactive Mode**: A full-featured interactive shell for running tests and configuring test options
 
 ## Basic Usage
 
@@ -21,6 +24,9 @@ lua scripts/run_tests.lua path/to/test_file.lua
 
 # Run tests in watch mode (continuous testing)
 lua scripts/run_tests.lua --watch
+
+# Start interactive CLI mode
+lua scripts/run_tests.lua --interactive
 ```
 
 ## Command Line Options
@@ -34,6 +40,7 @@ lua scripts/run_tests.lua --watch
 | `--tags TAG1,TAG2,...` | Run only tests with specific tags |
 | `--filter PATTERN` | Run only tests with names matching pattern |
 | `--help`, `-h` | Show help message |
+| `--interactive`, `-i` | Start interactive CLI mode |
 
 ### Watch Mode Options
 
@@ -212,6 +219,114 @@ test-coverage:
 	lua scripts/run_tests.lua --coverage
 ```
 
+## Interactive Mode
+
+Interactive mode provides a powerful command-line interface for running tests and configuring test options. It's ideal for development workflows where you need more flexibility than watch mode alone provides.
+
+### Starting Interactive Mode
+
+```bash
+# Start interactive mode
+lua scripts/run_tests.lua --interactive
+```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `help` | Show available commands |
+| `run [file]` | Run all tests or a specific test file |
+| `list` | List available test files |
+| `filter <pattern>` | Filter tests by name pattern |
+| `focus <name>` | Focus on specific test (partial name match) |
+| `tags <tag1,tag2>` | Run tests with specific tags |
+| `watch <on|off>` | Toggle watch mode |
+| `watch-dir <path>` | Add directory to watch |
+| `watch-exclude <pat>` | Add exclusion pattern for watch |
+| `codefix <cmd> <dir>` | Run codefix (check|fix) on directory |
+| `dir <path>` | Set test directory |
+| `pattern <pat>` | Set test file pattern |
+| `clear` | Clear the screen |
+| `status` | Show current settings |
+| `history` | Show command history |
+| `exit` | Exit the interactive CLI |
+
+### Example Interactive Session
+
+```
+$ lua scripts/run_tests.lua -i
+
+Lust-Next Interactive CLI
+Type 'help' for available commands
+------------------------------------------------------------
+Current settings:
+  Test directory:     ./tests
+  Test pattern:       *_test.lua
+  Focus filter:       none
+  Tag filter:         none
+  Watch mode:         disabled
+  Codefix:            disabled
+  Available tests:    12
+------------------------------------------------------------
+> list
+Available test files:
+  1. ./tests/assertions_test.lua
+  2. ./tests/async_test.lua
+  3. ./tests/discovery_test.lua
+  4. ./tests/expect_assertions_test.lua
+  5. ./tests/lust_test.lua
+  6. ./tests/mocking_test.lua
+  7. ./tests/tagging_test.lua
+  8. ./tests/truthy_falsey_test.lua
+  9. ./tests/type_checking_test.lua
+  10. ./tests/watch_mode_test.lua
+------------------------------------------------------------
+> tags unit,fast
+Tag filter set to: unit,fast
+> run
+Running 3 test files...
+Test Summary: 3 passed, 0 failed
+✓ All tests passed
+> focus "should handle nested"
+Test focus set to: should handle nested
+> run
+Running 3 test files...
+Test Summary: 1 passed, 0 failed
+✓ All tests passed
+> watch on
+Watch mode enabled
+Starting watch mode...
+Watching directories: .
+```
+
+### Interactive Mode Benefits
+
+1. **Live Configuration**: Change test filters, tags, and watch settings without restarting
+2. **Workflow Flexibility**: Combine watch mode with dynamic test filtering for focused development
+3. **Quick Navigation**: Easily run specific tests or groups of tests with minimal typing
+4. **Clear Status**: Get immediate feedback on current settings and available tests
+5. **Command History**: Recall previous commands using history feature
+
+### Using Interactive Mode in Scripts
+
+You can also start interactive mode programmatically:
+
+```lua
+local lust = require("lust-next")
+local interactive = require("src.interactive")
+
+-- Run your tests...
+
+-- Start interactive mode
+interactive.start(lust, {
+  test_dir = "./tests",
+  pattern = "*_test.lua",
+  watch_mode = false
+})
+```
+
+See `examples/interactive_mode_example.lua` for a complete example.
+
 ## Integration with CI Systems
 
 ### GitHub Actions Example
@@ -250,10 +365,11 @@ You can create custom test runners that use Lust-Next's API. See the `scripts/ru
 
 ## Best Practices
 
-1. **Use Watch Mode for Development**: Use watch mode during development to get immediate feedback
-2. **Use Tags Consistently**: Establish a convention for tag names (e.g., "unit", "integration", "slow") 
-3. **Group Related Options**: When running tests, group related command-line options together
-4. **CI Integration**: Set up your CI system to run different test subsets using tags
-5. **Exit Codes**: Use exit codes in scripts to indicate test success or failure
-6. **Custom Runners**: For complex requirements, create custom test runners using the Lust-Next API
+1. **Use Interactive Mode for Development**: Use interactive mode during development for maximum flexibility
+2. **Use Watch Mode for Continuous Feedback**: Enable watch mode when focusing on specific test areas
+3. **Use Tags Consistently**: Establish a convention for tag names (e.g., "unit", "integration", "slow") 
+4. **Group Related Options**: When running tests, group related command-line options together
+5. **CI Integration**: Set up your CI system to run different test subsets using tags
+6. **Exit Codes**: Use exit codes in scripts to indicate test success or failure
+7. **Custom Runners**: For complex requirements, create custom test runners using the Lust-Next API
 
