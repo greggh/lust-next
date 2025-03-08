@@ -50,6 +50,10 @@ M.config = {
 
 -- Helper function to execute shell commands
 local function execute_command(command)
+  if M.config.debug then
+    print(string.format("[DEBUG] Executing command: %s", command))
+  end
+
   local handle = io.popen(command .. " 2>&1", "r")
   if not handle then
     return nil, false, -1, "Failed to execute command: " .. command
@@ -57,14 +61,15 @@ local function execute_command(command)
   
   local result = handle:read("*a")
   local success, reason, code = handle:close()
+  code = code or 0
   
   if M.config.debug then
     print(string.format("[DEBUG] Command: %s", command))
-    print(string.format("[DEBUG] Exit code: %s", code or "unknown"))
+    print(string.format("[DEBUG] Exit code: %s", code))
     print(string.format("[DEBUG] Output: %s", result or ""))
   end
   
-  return result, success, code or -1, reason
+  return result, success, code, reason
 end
 
 -- Get the operating system name

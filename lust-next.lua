@@ -4034,6 +4034,22 @@ lust_next.expect = function(fn_or_obj)
   return expect_obj
 end
 
+-- Function to mark tests as pending (skipped)
+function lust_next.pending(message)
+  message = message or "Test marked as pending"
+  lust_next.skipped = lust_next.skipped + 1
+  
+  if not lust_next.format_options.summary_only and not lust_next.format_options.dot_mode then
+    print(indent() .. yellow .. 'PENDING' .. normal .. ' ' .. message)
+  elseif lust_next.format_options.dot_mode then
+    -- In dot mode, print an 'S' for skipped/pending
+    io.write(yellow .. "S" .. normal)
+  end
+  
+  -- Return a truthy value so the test passes but is marked as pending
+  return true
+end
+
 -- Aliases and exports
 lust_next.test = lust_next.it
 lust_next.test_async = lust_next.it_async
@@ -4459,6 +4475,32 @@ lust_next.paths = {
   }
 }
 
+-- Validate that the expect assertion system is properly initialized
+local function validate_expect_assertions()
+  -- Ensure to/to_not methods are available for chaining
+  if not lust_next.paths.to or not lust_next.paths.to_not then
+    lust_next.paths.to = { chain = function(t) end }
+    lust_next.paths.to_not = { chain = function(t) t.negate = true end }
+  end
+  
+  -- Make sure .be and other chainable properties work correctly
+  if not lust_next.paths.be then
+    lust_next.paths.be = {
+      chain = function(t) end,
+      truthy = lust_next.paths.truthy,
+      falsey = lust_next.paths.falsey,
+      a = lust_next.paths.a
+    }
+  end
+  
+  -- Ensure all paths are properly set up for chaining
+  for k, v in pairs(lust_next.paths) do
+    if type(v) == "table" and v.test and not v.chain then
+      v.chain = function(t) end
+    end
+  end
+end
+
 -- Completely rewrite the expect function to fix all issues
 function lust_next.expect(v)
   -- Count assertion
@@ -4498,6 +4540,9 @@ function lust_next.expect(v)
     end
   })
 
+  -- Ensure expect assertions work properly
+  validate_expect_assertions()
+  
   return assertion
 end
 
