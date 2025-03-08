@@ -10,96 +10,155 @@ Lust-Next can be run directly from the command line to discover and run tests. T
 ## Basic Usage
 
 ```bash
-
 # Run all tests in the default directory (./tests)
-lua lust-next.lua
+lua scripts/run_tests.lua
 
 # Run tests in a specific directory
-lua lust-next.lua --dir path/to/tests
+lua scripts/run_tests.lua --dir path/to/tests
 
 # Run a specific test file
-lua lust-next.lua path/to/test_file.lua
+lua scripts/run_tests.lua path/to/test_file.lua
 
-```text
+# Run tests in watch mode (continuous testing)
+lua scripts/run_tests.lua --watch
+```
 
 ## Command Line Options
 
-### --dir DIRECTORY
+### Basic Options
 
-Specifies the directory to search for test files.
+| Option | Description |
+|--------|-------------|
+| `--dir DIRECTORY` | Directory to search for test files (default: ./tests) |
+| `--pattern PATTERN` | Pattern to match test files (default: *_test.lua) |
+| `--tags TAG1,TAG2,...` | Run only tests with specific tags |
+| `--filter PATTERN` | Run only tests with names matching pattern |
+| `--help`, `-h` | Show help message |
 
-**Default:** `./tests`
+### Watch Mode Options
 
-**Example:**
+| Option | Description |
+|--------|-------------|
+| `--watch` | Enable watch mode for continuous testing |
+| `--watch-dir DIRECTORY` | Directory to watch for changes (can specify multiple) |
+| `--watch-interval SECONDS` | Interval between file checks (default: 1.0) |
+| `--exclude PATTERN` | Pattern to exclude from watching (can specify multiple) |
 
-```bash
-lua lust-next.lua --dir ./src/tests
+### Code Quality Options
 
-```text
+| Option | Description |
+|--------|-------------|
+| `--fix [DIRECTORY]` | Run code fixing on directory (default: .) |
+| `--check DIRECTORY` | Check for code issues without fixing |
 
-### --tags TAG1,TAG2,...
+## Examples
 
-Filters tests to only run those with the specified tags. Multiple tags can be specified as a comma-separated list.
-
-**Example:**
-
-```bash
-
-# Run only tests tagged with "unit"
-lua lust-next.lua --tags unit
-
-# Run tests tagged with either "fast" or "critical"
-lua lust-next.lua --tags fast,critical
-
-```text
-
-### --filter PATTERN
-
-Filters tests to only run those with names matching the specified pattern.
-
-**Example:**
+### Running Tests
 
 ```bash
+# Run all tests
+lua scripts/run_tests.lua
 
-# Run only tests with "validation" in their name
-lua lust-next.lua --filter validation
+# Run a specific test file
+lua scripts/run_tests.lua tests/specific_test.lua
 
-```text
+# Run tests with custom pattern
+lua scripts/run_tests.lua --dir src --pattern "*_spec.lua"
 
-### --help, -h
+# Run tests with specific tags
+lua scripts/run_tests.lua --tags unit,fast
+```
 
-Shows the help message with available options.
-
-**Example:**
-
-```bash
-lua lust-next.lua --help
-
-```text
-
-## Running a Specific Test File
-
-You can run a specific test file by providing its path as an argument.
-
-**Example:**
+### Using Watch Mode
 
 ```bash
-lua lust-next.lua ./tests/user_test.lua
+# Basic watch mode
+lua scripts/run_tests.lua --watch
 
-```text
+# Watch specific directories
+lua scripts/run_tests.lua --watch --watch-dir src --watch-dir lib
 
-## Combining Options
+# Watch with faster check interval
+lua scripts/run_tests.lua --watch --watch-interval 0.5
 
-You can combine multiple options to customize the test run.
+# Watch with exclusions
+lua scripts/run_tests.lua --watch --exclude "build/.*" --exclude "%.git"
 
-**Example:**
+# Watch a specific test file
+lua scripts/run_tests.lua --watch tests/specific_test.lua
+```
+
+### Code Fixing
 
 ```bash
+# Fix code issues in current directory
+lua scripts/run_tests.lua --fix
 
-# Run unit tests with "validation" in their name from a specific directory
-lua lust-next.lua --dir ./src/tests --tags unit --filter validation
+# Fix code issues in specific directory
+lua scripts/run_tests.lua --fix src
 
-```text
+# Check for issues without fixing
+lua scripts/run_tests.lua --check src
+```
+
+## Watch Mode
+
+Watch mode is a powerful feature that continuously monitors your project files for changes and automatically re-runs tests when changes are detected. This is particularly useful during development as it provides immediate feedback.
+
+### How Watch Mode Works
+
+1. Tests are run initially to establish baseline
+2. File system is monitored for changes to relevant files
+3. When changes are detected, tests are automatically re-run
+4. Results are displayed, and monitoring continues
+5. Process repeats until terminated (Ctrl+C)
+
+### Benefits of Watch Mode
+
+- **Immediate Feedback**: See test results as soon as you save files
+- **Focused Development**: Keep your focus on code, not on running tests
+- **Faster Development Cycles**: Shortens the feedback loop in test-driven development
+- **Increased Confidence**: Continuous verification that your code still works
+
+### Watch Mode Options
+
+The watch mode can be customized with several options:
+
+- **Watch Directories**: Specify which directories to monitor for changes
+- **Check Interval**: Adjust how frequently to check for changes
+- **Exclusion Patterns**: Ignore changes in specific files or directories
+
+### Example Watch Mode Session
+
+```
+$ lua scripts/run_tests.lua --watch
+
+--- WATCH MODE ACTIVE ---
+Press Ctrl+C to exit
+Watching directory: .
+Watching 142 files for changes
+
+Running 5 test files
+...
+Test Summary: 5 passed, 0 failed
+✓ All tests passed
+
+--- WATCHING FOR CHANGES ---
+
+File changes detected:
+  - ./src/module.lua
+  - ./tests/module_test.lua
+
+--- RUNNING TESTS ---
+2025-03-07 14:23:45
+
+Running 5 test files
+...
+Test Summary: 5 passed, 0 failed
+✓ All tests passed
+
+--- WATCHING FOR CHANGES ---
+```
 
 ## Exit Codes
 
@@ -118,88 +177,40 @@ Lust-Next doesn't use environment variables directly, but you can create wrapper
 
 ```bash
 #!/bin/bash
-
 # run_tests.sh
 
 # Get test type from environment variable, default to "unit"
 TEST_TYPE=${TEST_TYPE:-unit}
 
 # Run tests with appropriate tags
-lua lust-next.lua --tags $TEST_TYPE
-
-```text
+lua scripts/run_tests.lua --tags $TEST_TYPE
+```
 
 Then you can run specific test types with:
 
 ```bash
 TEST_TYPE=integration ./run_tests.sh
-
-```text
-
-## Examples
-
-### Running All Tests
-
-```bash
-lua lust-next.lua
-
-```text
-
-### Running Only Unit Tests
-
-```bash
-lua lust-next.lua --tags unit
-
-```text
-
-### Running Tests in a Specific Module
-
-```bash
-lua lust-next.lua --filter user
-
-```text
-
-### Combining Tag and Pattern Filters
-
-```bash
-lua lust-next.lua --tags unit --filter validation
-
-```text
-
-### Running a Specific Test File
-
-```bash
-lua lust-next.lua ./tests/user_test.lua
-
-```text
-
-### Running Tests with Custom Directory
-
-```bash
-lua lust-next.lua --dir ./integration_tests
-
-```text
+```
 
 ## Integration with Make
 
 You can integrate Lust-Next with Make for more complex test workflows:
 
 ```makefile
-.PHONY: test test-unit test-integration
+.PHONY: test test-unit test-watch
 
 test:
- lua lust-next.lua
+	lua scripts/run_tests.lua
 
 test-unit:
- lua lust-next.lua --tags unit
+	lua scripts/run_tests.lua --tags unit
 
-test-integration:
- lua lust-next.lua --tags integration
+test-watch:
+	lua scripts/run_tests.lua --watch
 
 test-coverage:
- luacov && lua lust-next.lua && luacov-console
-
-```text
+	lua scripts/run_tests.lua --coverage
+```
 
 ## Integration with CI Systems
 
@@ -215,7 +226,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
     - uses: actions/checkout@v2
 
     - name: Set up Lua
@@ -228,82 +238,22 @@ jobs:
         luarocks install luafilesystem
 
     - name: Run unit tests
-      run: lua lust-next.lua --tags unit
+      run: lua scripts/run_tests.lua --tags unit
 
     - name: Run integration tests
-      run: lua lust-next.lua --tags integration
-
-```text
+      run: lua scripts/run_tests.lua --tags integration
+```
 
 ## Creating Custom Test Runners
 
-You can create custom test runners that use Lust-Next's API:
-
-```lua
--- runner.lua
-local lust = require("lust-next")
-
--- Parse command line arguments
-local tags, filter, dir = nil, nil, "./tests"
-
-for i = 1, #arg do
-  if arg[i] == "--tags" and arg[i+1] then
-    tags = {}
-    for tag in arg[i+1]:gmatch("[^,]+") do
-      table.insert(tags, tag)
-    end
-    i = i + 1
-  elseif arg[i] == "--filter" and arg[i+1] then
-    filter = arg[i+1]
-    i = i + 1
-  elseif arg[i] == "--dir" and arg[i+1] then
-    dir = arg[i+1]
-    i = i + 1
-  end
-end
-
--- Apply filters
-if tags then
-  lust.only_tags(unpack(tags))
-end
-
-if filter then
-  lust.filter(filter)
-end
-
--- Run tests
-local results = lust.run_discovered(dir)
-
--- Print custom summary
-print("\n========== TEST SUMMARY ==========")
-print("Files:  " .. results.passed_files .. "/" .. results.total_files .. " passed")
-print("Tests:  " .. results.passed_tests .. "/" .. results.total_tests .. " passed")
-if results.skipped_tests > 0 then
-  print("Skipped: " .. results.skipped_tests)
-end
-print("===================================")
-
--- Exit with appropriate code
-os.exit(results.failed_tests == 0 and 0 or 1)
-
-```text
-
-You can then run this custom runner:
-
-```bash
-lua runner.lua --tags unit --filter validation
-
-```text
+You can create custom test runners that use Lust-Next's API. See the `scripts/runner.lua` file for an example of how to implement a custom runner with watch mode support.
 
 ## Best Practices
 
-1. **Use Tags Consistently**: Establish a convention for tag names (e.g., "unit", "integration", "slow") and use them consistently.
-
-1. **Group Related Options**: When running tests, group related command-line options together for clarity.
-
-1. **CI Integration**: Set up your CI system to run different test subsets using tags.
-
-1. **Exit Codes**: Use exit codes in scripts to indicate test success or failure.
-
-1. **Custom Runners**: For complex requirements, create custom test runners using the Lust-Next API.
+1. **Use Watch Mode for Development**: Use watch mode during development to get immediate feedback
+2. **Use Tags Consistently**: Establish a convention for tag names (e.g., "unit", "integration", "slow") 
+3. **Group Related Options**: When running tests, group related command-line options together
+4. **CI Integration**: Set up your CI system to run different test subsets using tags
+5. **Exit Codes**: Use exit codes in scripts to indicate test success or failure
+6. **Custom Runners**: For complex requirements, create custom test runners using the Lust-Next API
 
