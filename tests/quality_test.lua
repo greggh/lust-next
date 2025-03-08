@@ -128,7 +128,7 @@ describe("Quality Module", function()
   
   -- Test quality module initialization
   it("should load the quality module", function()
-    local quality = require("../src/quality")
+    local quality = require("lib.quality")
     expect(type(quality)).to.equal("table")
     expect(type(quality.validate_test_quality)).to.equal("function")
     expect(type(quality.check_file)).to.equal("function")
@@ -136,7 +136,7 @@ describe("Quality Module", function()
   
   -- Test quality level validation
   it("should validate test quality levels correctly", function()
-    local quality = require("../src/quality")
+    local quality = require("lib.quality")
     
     -- Test basic functionality if the module is available
     if not quality.check_file then
@@ -166,7 +166,7 @@ describe("Quality Module", function()
   
   -- Test quality constants
   it("should define quality level constants", function()
-    local quality = require("../src/quality")
+    local quality = require("lib.quality")
     
     expect(type(quality.LEVEL_BASIC)).to.equal("number")
     expect(type(quality.LEVEL_STRUCTURED)).to.equal("number")
@@ -177,7 +177,7 @@ describe("Quality Module", function()
   
   -- Test getting quality level names
   it("should provide quality level names", function()
-    local quality = require("../src/quality")
+    local quality = require("lib.quality")
     
     if quality.get_level_name then
       for i = 1, 5 do

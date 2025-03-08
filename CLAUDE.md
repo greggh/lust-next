@@ -15,7 +15,15 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 
 ## Project Structure
 
-- `/src`: Core modules (coverage.lua, quality.lua, codefix.lua, reporting.lua)
+- `/lib`: Modular codebase with logical subdirectories
+  - `/lib/core`: Core utilities (type checking, fix_expect, version)
+  - `/lib/async`: Asynchronous testing functionality 
+  - `/lib/coverage`: Code coverage tracking
+  - `/lib/quality`: Quality validation
+  - `/lib/reporting`: Test reporting system
+    - `/lib/reporting/formatters`: Individual formatter implementations
+  - `/lib/tools`: Utilities (codefix, watcher, interactive CLI)
+  - `/lib/mocking`: Mocking system (spy, stub, mock)
 - `/tests`: Test files for framework functionality
 - `/examples`: Example scripts demonstrating usage
 - `/scripts`: Utility scripts for running tests
@@ -23,9 +31,9 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 - `lust.lua`: Compatibility layer for original lust
 - `run_all_tests.lua`: Improved test runner for proper test state isolation
 
-## Current Focus - Configuration and Performance Optimization
+## Current Focus - Architecture Modernization and Performance Optimization
 
-With all major planned features now implemented, including modular mocking, enhanced type checking, async testing with parallel operations, and multiple output formats (JUnit XML, TAP, and CSV), our focus is shifting to command-line configuration and performance optimization:
+With the successful reorganization of the codebase into a modular architecture and all major planned features now implemented, including modular mocking, enhanced type checking, async testing with parallel operations, multiple output formats (JUnit XML, TAP, and CSV), and a comprehensive formatter registry system, our focus is shifting to performance optimization for large projects and test suite isolation:
 
 - Mocking System Implementation: ✅
   - [x] Create modular structure in lib/mocking directory

@@ -69,15 +69,15 @@ Got: 2","2023-01-01T12:00:00"
     -- Format and add the row
     local row = {}
     table.insert(row, _)
-    table.insert(row, csv_escape(test_case.classname or "Test Suite"))
-    table.insert(row, csv_escape(test_case.name))
-    table.insert(row, csv_escape(status))
-    table.insert(row, csv_escape(test_case.time))
-    table.insert(row, csv_escape(message))
-    table.insert(row, csv_escape((status == "fail" and test_case.failure and test_case.failure.type) or 
+    table.insert(row, escape_csv(test_case.classname or "Test Suite"))
+    table.insert(row, escape_csv(test_case.name))
+    table.insert(row, escape_csv(status))
+    table.insert(row, escape_csv(test_case.time))
+    table.insert(row, escape_csv(message))
+    table.insert(row, escape_csv((status == "fail" and test_case.failure and test_case.failure.type) or 
                               (status == "error" and test_case.error and test_case.error.type) or ""))
-    table.insert(row, csv_escape(details))
-    table.insert(row, csv_escape(results_data.timestamp or os.date("%Y-%m-%dT%H:%M:%S")))
+    table.insert(row, escape_csv(details))
+    table.insert(row, escape_csv(results_data.timestamp or os.date("%Y-%m-%dT%H:%M:%S")))
     
     table.insert(lines, table.concat(row, ","))
   end

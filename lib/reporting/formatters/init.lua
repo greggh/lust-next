@@ -2,7 +2,7 @@
 local M = {
   -- Export a list of built-in formatters for documentation
   built_in = {
-    coverage = {"summary", "json", "html", "lcov"},
+    coverage = {"summary", "json", "html", "lcov", "cobertura"},
     quality = {"summary", "json", "html"},
     results = {"junit", "tap", "csv"}
   }
@@ -18,7 +18,8 @@ function M.register_all(formatters)
     "lcov",
     "tap",
     "csv",
-    "junit"
+    "junit",
+    "cobertura"
   }
   
   for _, module_name in ipairs(formatter_modules) do

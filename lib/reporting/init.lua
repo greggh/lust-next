@@ -411,6 +411,16 @@ function M.write_file(file_path, content)
   -- Write content and close
   print("DEBUG [Reporting] Writing content...")
   local write_ok, write_err = pcall(function()
+    -- Make sure content is a string
+    if type(content) == "table" then
+      content = json_module.encode(content)
+    end
+    
+    -- If still not a string, convert to string
+    if type(content) ~= "string" then
+      content = tostring(content)
+    end
+    
     file:write(content)
     file:close()
   end)
@@ -589,10 +599,10 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
     print("DEBUG [Reporting] Directory exists or was created: " .. base_dir)
   end
   
-  -- Always save both HTML and LCOV reports if coverage data is provided
+  -- Always save coverage reports in multiple formats if coverage data is provided
   if coverage_data then
     -- Save reports in multiple formats
-    local formats = {"html", "json", "lcov"}
+    local formats = {"html", "json", "lcov", "cobertura"}
     
     for _, format in ipairs(formats) do
       local path = process_template(config.coverage_path_template, format, "coverage")
