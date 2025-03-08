@@ -7,7 +7,12 @@ This document describes the module management utilities provided by Lust-Next to
 
 Lust-Next provides utilities for resetting and reloading modules between tests. These utilities help ensure that each test runs with a fresh module state, eliminating test cross-contamination.
 
-## Module Reset Functions
+There are two approaches to module reset in lust-next:
+
+1. **Individual Module Reset**: Reset specific modules manually within tests
+2. **Automatic Test Suite Isolation**: Automatically reset all modules between test files
+
+## Individual Module Reset Functions
 
 ### lust.reset_module(module_name)
 
@@ -43,8 +48,7 @@ describe("Database tests", function()
     expect(db.query("SELECT * FROM users")).to.exist()
   end)
 end)
-
-```text
+```
 
 ### lust.with_fresh_module(module_name, test_fn)
 
@@ -76,8 +80,118 @@ it("executes a test with a fresh module", function()
 
   -- Any changes to the module are isolated to the with_fresh_module call
 end)
+```
 
-```text
+## Automatic Test Suite Isolation
+
+Lust-Next provides an enhanced module reset system that automatically resets all modules between test files, ensuring complete isolation. This system is built into the run_all_tests.lua runner.
+
+### Using the Module Reset System
+
+The module reset system is automatically used by the run_all_tests.lua script when available. You can also use it directly:
+
+```lua
+local lust = require("lust-next")
+local module_reset = require("lib.core.module_reset")
+
+-- Register with lust-next
+module_reset.register_with_lust(lust)
+
+-- Configure isolation options
+module_reset.configure({
+  reset_modules = true,  -- Enable/disable module reset
+  verbose = false        -- Show detailed output about reset modules
+})
+```
+
+### Module Reset API
+
+#### `module_reset.init()`
+
+Initializes the module reset system by taking a snapshot of the current module state.
+
+#### `module_reset.register_with_lust(lust_next)`
+
+Registers the module reset system with lust-next, enhancing the `reset()` method.
+
+#### `module_reset.configure(options)`
+
+Configures the module reset system:
+
+```lua
+module_reset.configure({
+  reset_modules = true,  -- Enable/disable module reset
+  verbose = false        -- Show detailed output about reset modules
+})
+```
+
+#### `module_reset.reset_all(options)`
+
+Resets all non-protected modules:
+
+```lua
+local reset_count = module_reset.reset_all({
+  verbose = false  -- Show detailed output about reset modules
+})
+```
+
+#### `module_reset.reset_pattern(pattern, options)`
+
+Resets modules matching the given pattern:
+
+```lua
+local reset_count = module_reset.reset_pattern("my_module.*", {
+  verbose = false
+})
+```
+
+#### `module_reset.protect(modules)`
+
+Protects specified modules from being reset:
+
+```lua
+-- Protect a single module
+module_reset.protect("important_module")
+
+-- Protect multiple modules
+module_reset.protect({"module1", "module2", "module3"})
+```
+
+#### `module_reset.get_loaded_modules()`
+
+Returns a list of currently loaded modules that are not protected.
+
+#### `module_reset.get_memory_usage()`
+
+Returns information about memory usage.
+
+#### `module_reset.analyze_memory_usage(options)`
+
+Analyzes memory usage by modules and returns a sorted list of modules by memory consumption.
+
+### Running Tests with Module Reset
+
+The built-in test runner automatically uses module reset if available:
+
+```bash
+lua run_all_tests.lua
+```
+
+You can add flags to customize the runner:
+
+```bash
+# Verbose output including module resets
+lua run_all_tests.lua --verbose
+
+# Track memory usage during tests
+lua run_all_tests.lua --memory
+
+# Show performance statistics
+lua run_all_tests.lua --performance
+
+# Filter tests by pattern
+lua run_all_tests.lua --filter "database_*"
+```
 
 ## Best Practices
 
@@ -85,11 +199,11 @@ end)
 
 1. **Tests that modify global module state**: If your tests change the state of a module in ways that could affect other tests
 
-1. **Database or resource tests**: When testing modules that connect to databases or external resources
+2. **Database or resource tests**: When testing modules that connect to databases or external resources
 
-1. **Configuration-dependent tests**: When testing with different configurations
+3. **Configuration-dependent tests**: When testing with different configurations
 
-1. **Before/After hooks**: Use reset_module in before_each for thorough isolation
+4. **Before/After hooks**: Use reset_module in before_each for thorough isolation
 
 ### Example: Database Testing Pattern
 
@@ -136,8 +250,7 @@ describe("User database operations", function()
     expect(found.name).to.equal("New User")
   end)
 end)
-
-```text
+```
 
 ### Handling Complex Dependencies
 
@@ -157,16 +270,41 @@ describe("Authentication service", function()
     expect(auth_service.authenticate("user", "password")).to.be.truthy()
   end)
 end)
+```
 
-```text
+### Using Both Approaches Together
+
+For maximum isolation, you can use both approaches:
+
+1. Use the automatic test suite isolation to reset modules between test files
+2. Use individual module reset within tests for modules that need to be reset between test cases
+
+```lua
+-- In your test runner, enable automatic test suite isolation
+local module_reset = require("lib.core.module_reset")
+module_reset.register_with_lust(lust)
+module_reset.configure({ reset_modules = true })
+
+-- In your tests, reset specific modules that need per-test isolation
+describe("User service tests", function()
+  local user_service
+
+  before_each(function()
+    -- Reset for each test case
+    user_service = lust.reset_module("app.services.user")
+  end)
+  
+  -- Tests...
+end)
+```
 
 ## Implementation Notes
 
-The module reset utilities work by:
+The basic module reset utilities work by:
 
 1. Clearing the module from Lua's `package.loaded` table
 2. Calling `require()` to reload the module
 3. Returning the freshly loaded module instance
 
-This ensures all state within the module is reset to its initial values.
+The enhanced automatic module reset system extends this functionality to track all loaded modules and provide more powerful reset capabilities, memory tracking, and performance analysis.
 
