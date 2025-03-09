@@ -1,4 +1,7 @@
 -- Formatter registry initialization
+-- Import filesystem module for path normalization
+local fs = require("lib.tools.filesystem")
+
 local M = {
   -- Export a list of built-in formatters for documentation
   built_in = {
@@ -23,13 +26,17 @@ function M.register_all(formatters)
   }
   
   for _, module_name in ipairs(formatter_modules) do
+    -- Get the current module path to use as a base
+    local current_module_dir = debug.getinfo(1).source:match("@(.+)/[^/]+$") or ""
+    current_module_dir = fs.normalize_path(current_module_dir)
+    
     -- Try multiple possible paths to load the formatter
     local formatter_paths = {
       "lib.reporting.formatters." .. module_name,
       "../lib/reporting/formatters/" .. module_name,
       "./lib/reporting/formatters/" .. module_name,
-      -- Get the current module path and use it as a base
-      (debug.getinfo(1).source:match("@(.+)/[^/]+$") or "") .. "/" .. module_name,
+      -- Use filesystem module to join paths properly
+      fs.join_paths(current_module_dir, module_name),
     }
     
     local loaded = false

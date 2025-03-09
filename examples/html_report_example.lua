@@ -8,7 +8,10 @@
 package.path = "../?.lua;" .. package.path
 local lust_next = require("lust-next")
 local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
-local reporting = require("src.reporting")
+
+-- Import the filesystem module
+local fs = require("lib.tools.filesystem")
+local reporting = require("lib.reporting")
 
 -- Mock test results data
 local test_results = {
@@ -82,15 +85,19 @@ local test_results = {
   }
 }
 
+-- Create a reports directory using the filesystem module
+local reports_base_dir = "html-report-examples"
+fs.ensure_directory_exists(reports_base_dir)
+
 -- Run a simple test for demonstration
 describe("HTML Report Generator", function()
   it("generates JUnit XML for test results", function()
     -- Generate JUnit XML
     local junit_xml = reporting.format_results(test_results, "junit")
     
-    -- Save the generated JUnit XML to a file
-    local xml_file_path = "test-results.xml"
-    reporting.write_file(xml_file_path, junit_xml)
+    -- Save the generated JUnit XML to a file using filesystem module
+    local xml_file_path = fs.join_paths(reports_base_dir, "test-results.xml")
+    fs.write_file(xml_file_path, junit_xml)
     
     -- Display a preview of the XML
     print("\n=== JUnit XML Preview ===\n")
@@ -108,9 +115,9 @@ describe("HTML Report Generator", function()
     -- Generate TAP output
     local tap_output = reporting.format_results(test_results, "tap")
     
-    -- Save the TAP output to a file
-    local tap_file_path = "test-results.tap"
-    reporting.write_file(tap_file_path, tap_output)
+    -- Save the TAP output to a file using filesystem module
+    local tap_file_path = fs.join_paths(reports_base_dir, "test-results.tap")
+    fs.write_file(tap_file_path, tap_output)
     
     -- Display a preview of the TAP output
     print("\n=== TAP Output Preview ===\n")
@@ -128,9 +135,9 @@ describe("HTML Report Generator", function()
     -- Generate CSV output
     local csv_output = reporting.format_results(test_results, "csv")
     
-    -- Save the CSV output to a file
-    local csv_file_path = "test-results.csv"
-    reporting.write_file(csv_file_path, csv_output)
+    -- Save the CSV output to a file using filesystem module
+    local csv_file_path = fs.join_paths(reports_base_dir, "test-results.csv")
+    fs.write_file(csv_file_path, csv_output)
     
     -- Display a preview of the CSV output
     print("\n=== CSV Output Preview ===\n")
@@ -143,18 +150,56 @@ describe("HTML Report Generator", function()
     print("CSV report saved to: " .. csv_file_path)
   end)
   
-  it("demonstrates auto_save_reports for all formats", function()
+  it("demonstrates auto_save_reports with filesystem integration", function()
+    -- Create a structured reports directory using filesystem module
+    local reports_dir = fs.join_paths(reports_base_dir, "auto-generated")
+    fs.ensure_directory_exists(reports_dir)
+    
+    -- Create a timestamp directory for better organization
+    local timestamp = os.date("%Y-%m-%d_%H-%M-%S")
+    local timestamped_dir = fs.join_paths(reports_dir, timestamp)
+    fs.ensure_directory_exists(timestamped_dir)
+    
+    -- Advanced configuration with templates
+    local config = {
+      report_dir = timestamped_dir,
+      report_suffix = "-v1.0",
+      timestamp_format = "%Y-%m-%d",
+      results_path_template = "results-{format}{suffix}",
+      verbose = true
+    }
+    
     -- Save all report formats using auto_save_reports
-    local reports_dir = "test-reports"
-    local results = reporting.auto_save_reports(nil, nil, test_results, reports_dir)
+    local results = reporting.auto_save_reports(nil, nil, test_results, config)
     
     -- Verify that all the reports were created successfully
     expect(results.junit.success).to.be.truthy()
     expect(results.tap.success).to.be.truthy()
     expect(results.csv.success).to.be.truthy()
     
-    print("\n=== All Reports Generated ===")
-    print("Reports saved to directory: " .. reports_dir)
+    print("\n=== All Reports Generated Using Filesystem Module ===")
+    print("Reports saved to directory: " .. timestamped_dir)
     print("Reports generated: JUnit XML, TAP, CSV")
+    
+    -- Print the normalized paths to demonstrate filesystem module usage
+    print("Normalized path example: " .. fs.normalize_path(timestamped_dir))
+  end)
+  
+  it("demonstrates HTML report generation with stylesheet customization", function()
+    -- Generate HTML output for test results
+    -- HTML formatter is coming from lib/reporting/formatters/html.lua and uses the filesystem module internally
+    local html_results = reporting.format_results(test_results, "html")
+    
+    -- Create a directory for HTML reports using filesystem module
+    local html_dir = fs.join_paths(reports_base_dir, "html")
+    fs.ensure_directory_exists(html_dir)
+    
+    -- Save the HTML output to a file
+    local html_file_path = fs.join_paths(html_dir, "test-results.html")
+    fs.write_file(html_file_path, html_results)
+    
+    print("\n=== HTML Report Generated ===")
+    print("HTML report saved to: " .. html_file_path)
+    print("HTML length: " .. #html_results .. " bytes")
   end)
 end)

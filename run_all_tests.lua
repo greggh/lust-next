@@ -29,6 +29,46 @@ if benchmark_loaded then
   benchmark.register_with_lust(lust_next)
 end
 
+-- Get command-line arguments
+local args = {...}
+local options = {
+  verbose = false,    -- Verbose output
+  memory = false,     -- Track memory usage
+  performance = false,-- Show performance stats
+  order = "name",     -- Test file order (name, natural, none)
+  filter = nil,       -- Filter pattern for test files
+  coverage = false,   -- Enable coverage tracking
+  coverage_debug = false, -- Enable debug output for coverage
+  discover_uncovered = true, -- Discover files that aren't executed by tests
+  quality = false,    -- Enable quality validation
+  quality_level = 3   -- Quality validation level
+}
+
+-- Parse command-line arguments
+for i, arg in ipairs(args) do
+  if arg == "--verbose" or arg == "-v" then
+    options.verbose = true
+  elseif arg == "--memory" or arg == "-m" then
+    options.memory = true
+  elseif arg == "--performance" or arg == "-p" then
+    options.performance = true
+  elseif arg == "--order" and args[i+1] then
+    options.order = args[i+1]
+  elseif arg == "--filter" and args[i+1] then
+    options.filter = args[i+1]
+  elseif arg == "--coverage" or arg == "-c" then
+    options.coverage = true
+  elseif arg == "--coverage-debug" then
+    options.coverage_debug = true
+  elseif arg == "--discover-uncovered" and args[i+1] then
+    options.discover_uncovered = (args[i+1] == "true" or args[i+1] == "1")
+  elseif arg == "--quality" or arg == "-q" then
+    options.quality = true
+  elseif arg == "--quality-level" and args[i+1] then
+    options.quality_level = tonumber(args[i+1]) or 3
+  end
+end
+
 -- Try to load coverage module
 local coverage_loaded, coverage = pcall(require, "lib.coverage")
 if coverage_loaded and options.coverage then
@@ -205,46 +245,6 @@ end
 
 -- Enable debug mode
 local DEBUG = false
-
--- Get command-line arguments
-local args = {...}
-local options = {
-  verbose = false,    -- Verbose output
-  memory = false,     -- Track memory usage
-  performance = false,-- Show performance stats
-  order = "name",     -- Test file order (name, natural, none)
-  filter = nil,       -- Filter pattern for test files
-  coverage = false,   -- Enable coverage tracking
-  coverage_debug = false, -- Enable debug output for coverage
-  discover_uncovered = true, -- Discover files that aren't executed by tests
-  quality = false,    -- Enable quality validation
-  quality_level = 3   -- Quality validation level
-}
-
--- Parse command-line arguments
-for i, arg in ipairs(args) do
-  if arg == "--verbose" or arg == "-v" then
-    options.verbose = true
-  elseif arg == "--memory" or arg == "-m" then
-    options.memory = true
-  elseif arg == "--performance" or arg == "-p" then
-    options.performance = true
-  elseif arg == "--order" and args[i+1] then
-    options.order = args[i+1]
-  elseif arg == "--filter" and args[i+1] then
-    options.filter = args[i+1]
-  elseif arg == "--coverage" or arg == "-c" then
-    options.coverage = true
-  elseif arg == "--coverage-debug" then
-    options.coverage_debug = true
-  elseif arg == "--discover-uncovered" and args[i+1] then
-    options.discover_uncovered = (args[i+1] == "true" or args[i+1] == "1")
-  elseif arg == "--quality" or arg == "-q" then
-    options.quality = true
-  elseif arg == "--quality-level" and args[i+1] then
-    options.quality_level = tonumber(args[i+1]) or 3
-  end
-end
 
 -- Run a single test file with isolated environment
 local function run_test_file(file_path)

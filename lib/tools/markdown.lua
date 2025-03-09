@@ -2,6 +2,9 @@
 -- Provides functions to fix common markdown issues
 -- This is a Lua implementation of the shell scripts in scripts/markdown/
 
+-- Import filesystem module for file operations
+local fs = require("lib.tools.filesystem")
+
 local markdown = {}
 
 -- Find all markdown files in a directory
@@ -9,32 +12,15 @@ function markdown.find_markdown_files(dir)
   dir = dir or "."
   local files = {}
   
-  -- Normalize the directory path
-  dir = dir:gsub("/$", "") -- Remove trailing slash if present
+  -- Normalize the directory path using filesystem module
+  dir = fs.normalize_path(dir)
   
-  -- Platform-specific command to find markdown files
-  local command
-  if package.config:sub(1,1) == '\\' then
-    -- Windows
-    command = 'dir /b /s "' .. dir .. '\\*.md" 2>nul'
-  else
-    -- Unix - ensure we properly search recursively and with consistent paths
-    -- Using a more robust find command that works with nested directories
-    command = 'find "' .. dir .. '" -name "*.md" -type f -print 2>/dev/null || echo "NO_FILES_FOUND"'
-  end
+  -- Use filesystem module to discover files
+  local patterns = {"*.md", "**/*.md"}
+  local exclude_patterns = {}
   
-  -- Execute the command and capture output
-  local file_list = io.popen(command)
-  if file_list then
-    for file in file_list:lines() do
-      -- Make path absolute if it's not already
-      if not file:match("^/") and not file:match("^%a:") then
-        file = dir .. "/" .. file
-      end
-      table.insert(files, file)
-    end
-    file_list:close()
-  end
+  -- Find all markdown files using filesystem discovery
+  files = fs.discover_files({dir}, patterns, exclude_patterns)
   
   -- Debug output for tests
   print("DEBUG [find_markdown_files] Found " .. #files .. " files for dir: " .. dir)

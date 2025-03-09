@@ -1,6 +1,9 @@
 -- Configuration management module for lust-next
 -- Handles loading configuration from .lust-next-config.lua and applying it to the framework
 
+-- Import filesystem module for file operations
+local fs = require("lib.tools.filesystem")
+
 local config = {}
 
 -- Default configuration file path
@@ -25,11 +28,10 @@ end
 function config.load_from_file(path)
   path = path or config.default_config_path
   
-  local file_stat, err = io.open(path, "r")
-  if not file_stat then
+  -- Check if the config file exists using filesystem module
+  if not fs.file_exists(path) then
     return nil, "Config file not found: " .. path
   end
-  file_stat:close()
   
   -- Try to load the configuration file
   local ok, user_config = pcall(dofile, path)
@@ -396,16 +398,21 @@ end
 function config.create_default_config()
   -- Try to find the template file
   local template_path = ".lust-next-config.lua.template"
-  local template_file = io.open(template_path, "r")
+  local template_content = nil
   
-  if not template_file then
+  -- First try to read from the current directory
+  if fs.file_exists(template_path) then
+    template_content, err = fs.read_file(template_path)
+    if not template_content then
+      print("Error reading template file: " .. (err or "unknown error"))
+      return false
+    end
+  else
     -- Try to find the template in the package path
     local function find_in_path(path)
       for dir in string.gmatch(package.path, "[^;]+") do
         local file_path = dir:gsub("?", path)
-        local file = io.open(file_path, "r")
-        if file then
-          file:close()
+        if fs.file_exists(file_path) then
           return file_path
         end
       end
@@ -413,27 +420,26 @@ function config.create_default_config()
     end
     
     template_path = find_in_path("lust-next-config.lua.template")
-    template_file = template_path and io.open(template_path, "r")
+    if template_path then
+      template_content, err = fs.read_file(template_path)
+      if not template_content then
+        print("Error reading template file: " .. (err or "unknown error"))
+        return false
+      end
+    end
   end
   
-  if not template_file then
+  if not template_content then
     print("Error: Config template file not found")
     return false
   end
   
-  -- Read the template content
-  local content = template_file:read("*a")
-  template_file:close()
-  
-  -- Write to the config file
-  local config_file = io.open(config.default_config_path, "w")
-  if not config_file then
-    print("Error: Could not create config file at " .. config.default_config_path)
+  -- Write to the config file using filesystem module
+  local success, err = fs.write_file(config.default_config_path, template_content)
+  if not success then
+    print("Error: Could not create config file at " .. config.default_config_path .. ": " .. (err or "unknown error"))
     return false
   end
-  
-  config_file:write(content)
-  config_file:close()
   
   print("Default configuration file created at " .. config.default_config_path)
   return true

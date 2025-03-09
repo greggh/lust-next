@@ -193,12 +193,13 @@ describe("Reporting Module", function()
   end)
   
   describe("File Operations", function()
+    local fs = require("lib.tools.filesystem")
     local temp_file = "/tmp/lust-next-test-report.txt"
     local test_content = "Test content for file operations"
     
     after_each(function()
       -- Clean up test file
-      os.remove(temp_file)
+      fs.delete_file(temp_file)
     end)
     
     it("should write content to a file", function()
@@ -206,11 +207,8 @@ describe("Reporting Module", function()
       assert.is_true(success)
       
       -- Verify content was written
-      local file = io.open(temp_file, "r")
-      assert.is_not_nil(file)
-      local content = file:read("*all")
-      file:close()
-      
+      local content = fs.read_file(temp_file)
+      assert.is_not_nil(content)
       assert.equal(test_content, content)
     end)
     
@@ -220,77 +218,39 @@ describe("Reporting Module", function()
       local test_content = "Test content for nested directory test"
       
       -- Clean up first in case the directory already exists
-      os.remove(nested_file)
-      
-      -- Check if directories exist before removing them
-      local check_nested_dir = package.config:sub(1,1) == "\\" and
-        'if exist "' .. nested_dir .. '\\*" (exit 0) else (exit 1)' or
-        'test -d "' .. nested_dir .. '"'
-      
-      local check_parent_dir = package.config:sub(1,1) == "\\" and
-        'if exist "' .. "/tmp/lust-next-test-nested" .. '\\*" (exit 0) else (exit 1)' or
-        'test -d "' .. "/tmp/lust-next-test-nested" .. '"'
-      
-      if os.execute(check_nested_dir) then
-        os.execute("rmdir " .. nested_dir .. " 2>/dev/null")
-      end
-      
-      if os.execute(check_parent_dir) then
-        os.execute("rmdir " .. "/tmp/lust-next-test-nested" .. " 2>/dev/null")
-      end
+      fs.delete_file(nested_file)
+      fs.delete_directory(nested_dir, true)
+      fs.delete_directory("/tmp/lust-next-test-nested", true)
       
       -- Try to write to nested file (should create directories)
       local success, err = reporting_module.write_file(nested_file, test_content)
       assert.is_true(success)
       
       -- Verify content was written
-      local file = io.open(nested_file, "r")
-      assert.is_not_nil(file)
-      local content = file:read("*all")
-      file:close()
-      
+      local content = fs.read_file(nested_file)
+      assert.is_not_nil(content)
       assert.equal(test_content, content)
       
       -- Clean up
-      os.remove(nested_file)
-      
-      -- Check if directories exist before removing them
-      local check_nested_dir = package.config:sub(1,1) == "\\" and
-        'if exist "' .. nested_dir .. '\\*" (exit 0) else (exit 1)' or
-        'test -d "' .. nested_dir .. '"'
-      
-      local check_parent_dir = package.config:sub(1,1) == "\\" and
-        'if exist "' .. "/tmp/lust-next-test-nested" .. '\\*" (exit 0) else (exit 1)' or
-        'test -d "' .. "/tmp/lust-next-test-nested" .. '"'
-      
-      if os.execute(check_nested_dir) then
-        os.execute("rmdir " .. nested_dir .. " 2>/dev/null")
-      end
-      
-      if os.execute(check_parent_dir) then
-        os.execute("rmdir " .. "/tmp/lust-next-test-nested" .. " 2>/dev/null")
-      end
+      fs.delete_file(nested_file)
+      fs.delete_directory(nested_dir, true)
+      fs.delete_directory("/tmp/lust-next-test-nested", true)
     end)
   end)
   
   describe("Report Saving", function()
+    local fs = require("lib.tools.filesystem")
     local temp_dir = "/tmp/lust-next-test-reports"
     local formats = {"html", "json", "lcov"}
     
     after_each(function()
       -- Clean up test files
       for _, format in ipairs(formats) do
-        os.remove(temp_dir .. "/coverage-report." .. format)
-        os.remove(temp_dir .. "/quality-report." .. format)
+        fs.delete_file(temp_dir .. "/coverage-report." .. format)
+        fs.delete_file(temp_dir .. "/quality-report." .. format)
       end
-      -- Check if directory exists before removing it
-      local dir_check_cmd = package.config:sub(1,1) == "\\" and
-        'if exist "' .. temp_dir .. '\\*" (exit 0) else (exit 1)' or
-        'test -d "' .. temp_dir .. '"'
-      
-      if os.execute(dir_check_cmd) then
-        os.execute("rmdir " .. temp_dir .. " 2>/dev/null")
-      end
+      -- Remove the directory
+      fs.delete_directory(temp_dir, true)
     end)
     
     it("should save coverage reports to file", function()
@@ -305,9 +265,7 @@ describe("Reporting Module", function()
         assert.is_true(success)
         
         -- Verify file exists
-        local file = io.open(file_path, "r")
-        assert.is_not_nil(file)
-        file:close()
+        assert.is_true(fs.file_exists(file_path))
       end
     end)
     
@@ -323,9 +281,7 @@ describe("Reporting Module", function()
         assert.is_true(success)
         
         -- Verify file exists
-        local file = io.open(file_path, "r")
-        assert.is_not_nil(file)
-        file:close()
+        assert.is_true(fs.file_exists(file_path))
       end
     end)
     
@@ -353,9 +309,7 @@ describe("Reporting Module", function()
       -- Verify files exist
       for _, result in pairs(results) do
         if result.success then
-          local file = io.open(result.path, "r")
-          assert.is_not_nil(file)
-          file:close()
+          assert.is_true(fs.file_exists(result.path))
         end
       end
     end)
@@ -511,10 +465,11 @@ describe("Reporting Module", function()
     end)
     
     it("should save test results report to file", function()
+      local fs = require("lib.tools.filesystem")
       local temp_file = "/tmp/lust-next-test-junit.xml"
       
       -- Clean up first in case the file exists
-      os.remove(temp_file)
+      fs.delete_file(temp_file)
       
       -- Save report
       local success, err = reporting_module.save_results_report(
@@ -526,10 +481,11 @@ describe("Reporting Module", function()
       assert.is_true(success)
       
       -- Verify file exists
-      local file = io.open(temp_file, "r")
-      assert.is_not_nil(file)
-      local content = file:read("*all")
-      file:close()
+      assert.is_true(fs.file_exists(temp_file))
+      
+      -- Read content
+      local content = fs.read_file(temp_file)
+      assert.is_not_nil(content)
       
       -- Verify content
       assert.is_true(#content > 100, "XML file content too short")
@@ -537,15 +493,15 @@ describe("Reporting Module", function()
       assert.is_true(content:find('test') ~= nil, "Missing test content")
       
       -- Clean up
-      os.remove(temp_file)
+      fs.delete_file(temp_file)
     end)
     
     it("should include JUnit XML in auto-save reports", function()
+      local fs = require("lib.tools.filesystem")
       local temp_dir = "/tmp/lust-next-test-reports-junit"
       
       -- Clean up first
-      os.remove(temp_dir .. "/test-results.xml")
-      os.execute("rmdir " .. temp_dir .. " 2>/dev/null")
+      fs.delete_directory(temp_dir, true)
       
       -- Auto-save reports with test results
       local results = reporting_module.auto_save_reports(
@@ -560,21 +516,10 @@ describe("Reporting Module", function()
       assert.is_true(results.junit.success)
       
       -- Verify file exists
-      local file = io.open(results.junit.path, "r")
-      assert.is_not_nil(file)
-      file:close()
+      assert.is_true(fs.file_exists(results.junit.path))
       
       -- Clean up
-      os.remove(temp_dir .. "/test-results.xml")
-      
-      -- Check if directory exists before removing it
-      local dir_check_cmd = package.config:sub(1,1) == "\\" and
-        'if exist "' .. temp_dir .. '\\*" (exit 0) else (exit 1)' or
-        'test -d "' .. temp_dir .. '"'
-      
-      if os.execute(dir_check_cmd) then
-        os.execute("rmdir " .. temp_dir .. " 2>/dev/null")
-      end
+      fs.delete_directory(temp_dir, true)
     end)
   end)
 end)

@@ -10,35 +10,25 @@ _G.expect = lust.expect
 _G.before = lust.before
 _G.after = lust.after
 
--- Create test files and directories
+-- Create test files and directories using the filesystem module
+local fs = require("lib.tools.filesystem")
 local test_dir = os.tmpname() .. "_markdown_test_dir"
-os.execute("mkdir -p " .. test_dir)
+fs.create_directory(test_dir)
 
 -- Function to create a test file with specific content
 local function create_test_file(filename, content)
-  local file = io.open(test_dir .. "/" .. filename, "w")
-  if file then
-    file:write(content)
-    file:close()
-    return true
-  end
-  return false
+  local file_path = fs.join_paths(test_dir, filename)
+  return fs.write_file(file_path, content)
 end
 
 -- Function to read a file's content
 local function read_file(filepath)
-  local file = io.open(filepath, "r")
-  if file then
-    local content = file:read("*all")
-    file:close()
-    return content
-  end
-  return nil
+  return fs.read_file(filepath)
 end
 
 -- Clean up after tests
 local function cleanup()
-  os.execute("rm -rf " .. test_dir)
+  fs.delete_directory(test_dir, true)
 end
 
 -- Register the cleanup function to run after all tests
@@ -144,20 +134,16 @@ More text]]
       
       -- Create a special test file that works with our test cases
       local test_dir = os.tmpname() .. "_blank_lines_test"
-      os.execute("mkdir -p " .. test_dir)
-      local test_file = test_dir .. "/test.md"
+      fs.create_directory(test_dir)
+      local test_file = fs.join_paths(test_dir, "test.md")
       
-      local file = io.open(test_file, "w")
-      if file then
-        file:write(test_content)
-        file:close()
-      end
+      fs.write_file(test_file, test_content)
       
       -- Apply the fix and read it back
       local fixed = markdown.fix_comprehensive(test_content)
       
       -- Cleanup
-      os.execute("rm -rf " .. test_dir)
+      fs.delete_directory(test_dir, true)
       
       -- Check for blank lines around list
       expect(fixed:match("Some text\n\n%* List item 1")).to.exist()
@@ -325,23 +311,15 @@ Some text
 * List item 2
 More text]]
       
-      local test_file = test_dir .. "/test_markdown.md"
-      local file = io.open(test_file, "w")
-      if file then
-        file:write(test_content)
-        file:close()
-      end
+      local test_file = fs.join_paths(test_dir, "test_markdown.md")
+      fs.write_file(test_file, test_content)
       
       -- Directly apply the fix rather than using codefix which has external dependencies
       local fixed_content = markdown.fix_comprehensive(test_content)
-      file = io.open(test_file, "w")
-      if file then
-        file:write(fixed_content)
-        file:close()
-      end
+      fs.write_file(test_file, fixed_content)
       
       -- Read the fixed file
-      local result = read_file(test_file)
+      local result = fs.read_file(test_file)
       
       -- Check for proper formatting with blank lines
       expect(result:match("Some text\n\n%* List item 1")).to.exist()
@@ -361,9 +339,9 @@ More text]]
       expect(fixed_count).to.be.at_least(3)
       
       -- Check if files were fixed properly
-      local test1 = read_file(test_dir .. "/test1.md")
-      local test2 = read_file(test_dir .. "/test2.md")
-      local test3 = read_file(test_dir .. "/test3.md")
+      local test1 = fs.read_file(fs.join_paths(test_dir, "test1.md"))
+      local test2 = fs.read_file(fs.join_paths(test_dir, "test2.md"))
+      local test3 = fs.read_file(fs.join_paths(test_dir, "test3.md"))
       
       -- More flexible checks that verify content preservation
       expect(test1:match("# Test 1")).to.exist()
@@ -387,13 +365,8 @@ More text]]
     it("should have a fix_markdown.lua script", function()
       -- Check if the script exists
       local script_path = "./scripts/fix_markdown.lua"
-      local exists = io.open(script_path, "r")
-      if exists then
-        exists:close()
-        expect(true).to.be(true)
-      else
-        expect(false).to.be(true, "fix_markdown.lua script not found")
-      end
+      local exists = fs.file_exists(script_path)
+      expect(exists).to.be(true, "fix_markdown.lua script not found")
     end)
     
     it("should contain command-line argument parsing", function()

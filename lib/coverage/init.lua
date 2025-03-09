@@ -826,7 +826,7 @@ function M.calculate_stats()
       local discovered_files = M.discover_source_files()
       
       for file_path in pairs(discovered_files) do
-        local normalized_file = normalize_path(file_path)
+        local normalized_file = fs.normalize_path(file_path)
         print("  Checking file: " .. normalized_file)
         
         local line_count = count_executable_lines(file_path)

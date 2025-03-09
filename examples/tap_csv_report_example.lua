@@ -10,6 +10,9 @@ package.path = "../?.lua;" .. package.path
 local lust_next = require("lust-next")
 local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
 
+-- Import the filesystem module
+local fs = require("lib.tools.filesystem")
+
 -- Run a simple test suite with mixed results
 describe("TAP and CSV Output Example", function()
   -- Create a group of passing tests
@@ -49,7 +52,7 @@ describe("TAP and CSV Output Example", function()
 end)
 
 -- After running the tests, generate the reports
-local reporting = require("src.reporting")
+local reporting = require("lib.reporting")
 
 -- Create a test results data structure based on test execution
 local test_results = {
@@ -121,11 +124,15 @@ print("\n=== CSV Output ===\n")
 local csv_output = reporting.format_results(test_results, "csv")
 print(csv_output)
 
--- Save reports to files
+-- Save reports to files using filesystem module
 print("\n=== Saving Reports ===\n")
 
+-- Create reports directory using filesystem module
+local reports_dir = "report-examples"
+fs.ensure_directory_exists(reports_dir)
+
 -- Save TAP report
-local tap_file = "output-example.tap"
+local tap_file = fs.join_paths(reports_dir, "output-example.tap")
 local tap_ok, tap_err = reporting.save_results_report(tap_file, test_results, "tap")
 if tap_ok then
   print("TAP report saved to: " .. tap_file)
@@ -134,7 +141,7 @@ else
 end
 
 -- Save CSV report
-local csv_file = "output-example.csv"
+local csv_file = fs.join_paths(reports_dir, "output-example.csv")
 local csv_ok, csv_err = reporting.save_results_report(csv_file, test_results, "csv")
 if csv_ok then
   print("CSV report saved to: " .. csv_file)
@@ -142,8 +149,29 @@ else
   print("Failed to save CSV report: " .. tostring(csv_err))
 end
 
--- Generate multiple reports using auto_save feature
+-- Generate multiple reports using auto_save feature with advanced configuration
 print("\n=== Auto-Saving Multiple Formats ===\n")
-local results = reporting.auto_save_reports(nil, nil, test_results, "output-reports")
-print("Reports saved to directory: output-reports")
+
+-- Create organized directory structure for reports
+local output_dir = "output-reports"
+fs.ensure_directory_exists(output_dir)
+
+-- Create subdirectories for different report types
+fs.ensure_directory_exists(fs.join_paths(output_dir, "tap"))
+fs.ensure_directory_exists(fs.join_paths(output_dir, "csv"))
+fs.ensure_directory_exists(fs.join_paths(output_dir, "xml"))
+
+-- Configuration with templates using filesystem paths
+local config = {
+  report_dir = output_dir,
+  report_suffix = "-" .. os.date("%Y%m%d"),
+  timestamp_format = "%Y-%m-%d",
+  results_path_template = "{type}/{format}/results{suffix}.{format}",
+  verbose = true
+}
+
+-- Save reports with advanced configuration
+local results = reporting.auto_save_reports(nil, nil, test_results, config)
+print("Reports saved to directory: " .. output_dir)
 print("Formats generated: TAP, CSV, JUnit XML")
+print("Example complete")
