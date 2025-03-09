@@ -274,7 +274,7 @@ M.levels = {
         require_before_after = true,
         require_context_nesting = true,
         require_mock_verification = true,
-        require_coverage_threshold = 95,
+        require_coverage_threshold = 90, -- Match our new standard threshold
         require_performance_tests = true,
         require_security_tests = true
       },

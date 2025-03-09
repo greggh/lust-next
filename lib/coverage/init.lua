@@ -106,7 +106,7 @@ M.config = {
     "**/*.test.lua",     -- Alternative test naming pattern
     "**/*.spec.lua",     -- Alternative spec naming pattern
   },
-  threshold = 80,     -- Default coverage threshold (percentage),
+  threshold = 90,     -- Default coverage threshold (percentage),
   debug = false       -- Enable debug output
 }
 

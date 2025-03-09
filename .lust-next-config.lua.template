@@ -60,7 +60,7 @@ return {
       "test_*.lua",                   -- Test files with prefix
       "tests/**/*.lua",               -- All files in tests directory
     },
-    threshold = 80,                   -- Coverage threshold percentage
+    threshold = 90,                   -- Coverage threshold percentage
     format = "summary",               -- Default report format (summary, json, html, lcov)
     output = nil,                     -- Custom output file path (nil=auto-generated)
     debug = false,                    -- Enable debug output for coverage module

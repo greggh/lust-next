@@ -10,5 +10,14 @@ return {
   },
   async = {
     timeout = 2000
+  },
+  coverage = {
+    threshold = 90,
+    discover_uncovered = true,
+    debug = false
+  },
+  quality = {
+    level = 3,
+    strict = true
   }
 }

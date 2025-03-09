@@ -164,6 +164,17 @@ describe("Quality Module", function()
     end
   end)
   
+  -- Test coverage threshold requirement
+  it("should use 90% as the coverage threshold requirement", function()
+    local quality = require("lib.quality")
+    
+    -- Get level requirements for the highest quality level
+    local level5_requirements = quality.get_level_requirements(5)
+    
+    -- Check that the coverage threshold is 90%
+    expect(level5_requirements.test_organization.require_coverage_threshold).to.equal(90)
+  end)
+  
   -- Test quality constants
   it("should define quality level constants", function()
     local quality = require("lib.quality")
