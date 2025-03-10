@@ -39,7 +39,7 @@ if not ok then
   -- Try alternative paths
   ok, markdown = pcall(require, "tools.markdown")
   if not ok then
-    logger.error("Could not load markdown module")
+    logger.error("Failed to load module", {module = "markdown"})
     os.exit(1)
   end
 end
@@ -93,7 +93,7 @@ local function fix_markdown_file(file_path, fix_mode)
   
   local file = io.open(file_path, "r")
   if not file then
-    logger.error("Could not open file for reading: " .. file_path)
+    logger.error("Failed to open file for reading", {file_path = file_path})
     return false
   end
   
@@ -124,7 +124,7 @@ local function fix_markdown_file(file_path, fix_mode)
   if fixed ~= content then
     file = io.open(file_path, "w")
     if not file then
-      logger.error("Could not open file for writing (permission error): " .. file_path)
+      logger.error("Failed to open file for writing", {file_path = file_path, reason = "permission error"})
       return false
     end
     
@@ -134,11 +134,14 @@ local function fix_markdown_file(file_path, fix_mode)
     end)
     
     if not success then
-      logger.error("Error writing to file: " .. file_path .. " - " .. (err or "unknown error"))
+      logger.error("Error writing to file", {
+        file_path = file_path, 
+        error = err or "unknown error"
+      })
       return false
     end
     
-    logger.info("Fixed: " .. file_path)
+    logger.info("Fixed markdown file", {file_path = file_path})
     return true
   end
   
@@ -171,7 +174,7 @@ while i <= #arg do
     table.insert(paths, arg[i])
     i = i + 1
   else
-    logger.error("Unknown option: " .. arg[i])
+    logger.error("Unknown option", {option = arg[i]})
     logger.error("Use --help to see available options")
     os.exit(1)
   end
@@ -211,9 +214,9 @@ for _, path in ipairs(paths) do
     end
     
     if #normalized_files == 0 then
-      logger.warn("No markdown files found in " .. path)
+      logger.warn("No markdown files found", {directory = path})
     else
-      logger.info("Found " .. #normalized_files .. " markdown files in " .. path)
+      logger.info("Found markdown files", {count = #normalized_files, directory = path})
       
       -- Process all found files in this directory
       for _, file_path in ipairs(normalized_files) do
@@ -224,28 +227,30 @@ for _, path in ipairs(paths) do
       end
     end
   else
-    logger.warn("Path not found or not a markdown file: " .. path)
+    logger.warn("Invalid path", {path = path, reason = "not found or not a markdown file"})
   end
 end
 
 -- Show summary statistics
 if total_files_processed == 0 then
-  logger.info("\nNo markdown files processed.")
+  logger.info("No markdown files processed")
 else
-  logger.info("\nMarkdown fixing complete.")
-  logger.info("Fixed " .. total_files_fixed .. " of " .. total_files_processed .. " files processed.")
+  logger.info("Markdown fixing complete", {
+    fixed_count = total_files_fixed,
+    total_count = total_files_processed
+  })
   
   -- Debug output for tests - helpful for diagnosing issues
   local debug_mode = os.getenv("LUST_NEXT_DEBUG")
   if debug_mode == "1" then
-    logger.debug("Processed path details:")
+    -- Log each path with proper categorization
     for i, path in ipairs(paths) do
       if is_file(path) and path:match("%.md$") then
-        logger.debug("  - File: " .. path)
+        logger.debug("Processed path", {type = "file", path = path})
       elseif is_directory(path) then  
-        logger.debug("  - Directory: " .. path)
+        logger.debug("Processed path", {type = "directory", path = path})
       else
-        logger.debug("  - Other/Not found: " .. path)
+        logger.debug("Processed path", {type = "unknown", path = path})
       end
     end
   end

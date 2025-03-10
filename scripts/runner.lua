@@ -47,7 +47,7 @@ function runner.run_file(file_path, lust, options)
   local prev_errors = lust.errors
   local prev_skipped = lust.skipped
   
-  logger.info("\nRunning file: " .. file_path)
+  logger.info("Running file", {file_path = file_path})
   
   -- Count PASS/FAIL from test output
   local pass_count = 0
@@ -128,7 +128,7 @@ function runner.run_file(file_path, lust, options)
   end
   
   if not success then
-    logger.error(red .. "ERROR: " .. err .. normal)
+    logger.error("Execution error", {error = err})
     table.insert(results.test_errors, {
       message = tostring(err),
       file = file_path,
@@ -136,9 +136,11 @@ function runner.run_file(file_path, lust, options)
     })
   else
     -- Always show the completion status with test counts
-    logger.info(green .. "Completed with " .. results.passes .. " passes, " 
-         .. results.errors .. " failures, "
-         .. results.skipped .. " skipped" .. normal)
+    logger.info("Test completed", {
+      passes = results.passes,
+      failures = results.errors,
+      skipped = results.skipped
+    })
   end
   
   -- Output JSON results if requested
@@ -219,7 +221,7 @@ function runner.run_file(file_path, lust, options)
       
       -- Format as JSON with markers for parallel execution
       local json_results = json_module.encode(test_results)
-      logger.info("\nRESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END")
+      logger.info("JSON results", {results = "RESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END"})
     end
   end
   
@@ -230,7 +232,7 @@ end
 function runner.run_all(files, lust, options)
   options = options or {}
   
-  logger.info(green .. "Running " .. #files .. " test files" .. normal)
+  logger.info("Running test files", {count = #files})
   
   local passed_files = 0
   local failed_files = 0
@@ -257,20 +259,20 @@ function runner.run_all(files, lust, options)
   
   local elapsed_time = os.clock() - start_time
   
-  logger.info("\n" .. string.rep("-", 60))
-  logger.info("File Summary: " .. green .. passed_files .. " passed" .. normal .. ", " .. 
-        (failed_files > 0 and red or green) .. failed_files .. " failed" .. normal)
-  logger.info("Test Summary: " .. green .. total_passes .. " passed" .. normal .. ", " .. 
-        (total_failures > 0 and red or green) .. total_failures .. " failed" .. normal .. 
-        ", " .. yellow .. total_skipped .. " skipped" .. normal)
-  logger.info("Total time: " .. string.format("%.2f", elapsed_time) .. " seconds")
-  logger.info(string.rep("-", 60))
+  logger.info("Test run summary", {
+    files_passed = passed_files,
+    files_failed = failed_files,
+    tests_passed = total_passes,
+    tests_failed = total_failures,
+    tests_skipped = total_skipped,
+    elapsed_time_seconds = string.format("%.2f", elapsed_time)
+  })
   
   local all_passed = failed_files == 0
   if not all_passed then
-    logger.error(red .. "✖ Some tests failed" .. normal)
+    logger.error("Test run failed", {failed_files = failed_files})
   else
-    logger.info(green .. "✓ All tests passed" .. normal)
+    logger.info("Test run successful", {all_passed = true})
   end
   
   -- Output overall JSON results if requested
@@ -302,7 +304,7 @@ function runner.run_all(files, lust, options)
       
       -- Format as JSON with markers for parallel execution
       local json_results = json_module.encode(test_results)
-      logger.info("\nRESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END")
+      logger.info("Overall JSON results", {results = "RESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END"})
     end
   end
   
@@ -312,7 +314,7 @@ end
 -- Watch mode for continuous testing
 function runner.watch_mode(directories, test_dirs, lust, options)
   if not has_watcher then
-    logger.error(red .. "Error: Watch mode requires the watcher module" .. normal)
+    logger.error("Watch mode unavailable", {reason = "Watcher module not found"})
     return false
   end
   
@@ -321,7 +323,7 @@ function runner.watch_mode(directories, test_dirs, lust, options)
   local watch_interval = options.interval or 1.0
   
   -- Initialize the file watcher
-  logger.info(cyan .. "\n--- WATCH MODE ACTIVE ---" .. normal)
+  logger.info("Watch mode activated")
   logger.info("Press Ctrl+C to exit")
   
   watcher.set_check_interval(watch_interval)
@@ -360,16 +362,15 @@ function runner.watch_mode(directories, test_dirs, lust, options)
       last_change_time = current_time
       need_to_run = true
       
-      logger.info(yellow .. "\nFile changes detected:" .. normal)
+      logger.info("File changes detected", {files = #changed_files})
       for _, file in ipairs(changed_files) do
-        logger.info("  - " .. file)
+        logger.info("Changed file", {path = file})
       end
     end
     
     -- Run tests if needed and after debounce period
     if need_to_run and current_time - last_change_time >= debounce_time then
-      logger.info(cyan .. "\n--- RUNNING TESTS ---" .. normal)
-      logger.info(os.date("%Y-%m-%d %H:%M:%S"))
+      logger.info("Running tests", {timestamp = os.date("%Y-%m-%d %H:%M:%S")})
       
       -- Clear terminal
       io.write("\027[2J\027[H")
@@ -379,7 +380,7 @@ function runner.watch_mode(directories, test_dirs, lust, options)
       last_run_time = current_time
       need_to_run = false
       
-      logger.info(cyan .. "\n--- WATCHING FOR CHANGES ---" .. normal)
+      logger.info("Watching for changes")
     end
     
     -- Small sleep to prevent CPU hogging
