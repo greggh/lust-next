@@ -52,7 +52,7 @@ function M.init(options)
   end
   
   -- Configure module logging level
-  logging.configure_from_options("StaticAnalyzer", config)
+  logging.configure_from_config("StaticAnalyzer")
   
   return M
 end

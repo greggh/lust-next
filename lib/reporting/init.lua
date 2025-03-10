@@ -77,7 +77,7 @@ function M.configure(options)
   end
   
   -- Configure module logging level
-  logging.configure_from_options("Reporting", config)
+  logging.configure_from_config("Reporting")
   
   -- Return the module for chaining
   return M

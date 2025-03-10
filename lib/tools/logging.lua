@@ -232,7 +232,7 @@ function M.set_level(level)
   return M
 end
 
--- Configure module level based on debug/verbose settings
+-- Configure module level based on debug/verbose settings from options object
 function M.configure_from_options(module_name, options)
   local log_level = M.LEVELS.INFO
   if options.debug then
@@ -240,6 +240,37 @@ function M.configure_from_options(module_name, options)
   elseif options.verbose then
     log_level = M.LEVELS.VERBOSE
   end
+  M.set_module_level(module_name, log_level)
+  return log_level
+end
+
+-- Configure logging for a module using the global config system
+-- This method directly accesses the core config module if available
+function M.configure_from_config(module_name)
+  -- First try to load the global config
+  local log_level = M.LEVELS.INFO
+  local config
+  
+  -- Try to load config module and get config
+  local success, core_config = pcall(require, "lib.core.config")
+  if success and core_config then
+    config = core_config.get()
+    
+    -- Set log level based on global debug/verbose settings
+    if config and config.debug then
+      log_level = M.LEVELS.DEBUG
+    elseif config and config.verbose then
+      log_level = M.LEVELS.VERBOSE
+    end
+    
+    -- Check for module-specific log levels in config
+    if config and config.logging and config.logging.modules and 
+       config.logging.modules[module_name] then
+      log_level = config.logging.modules[module_name]
+    end
+  end
+  
+  -- Apply the log level
   M.set_module_level(module_name, log_level)
   return log_level
 end

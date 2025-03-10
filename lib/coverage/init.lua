@@ -156,7 +156,7 @@ function M.init(options)
   end
   
   -- Configure module logging level
-  logging.configure_from_options("Coverage", config)
+  logging.configure_from_config("Coverage")
   
   -- Reset coverage
   M.reset()
@@ -1447,7 +1447,7 @@ function M.report(format)
   })
   
   -- Set up logging for the reporting module
-  logging.configure_from_options("Reporting", config)
+  logging.configure_from_config("Reporting")
   
   local data = M.get_report_data()
   return reporting.format_coverage(data, format or "summary")
@@ -1464,7 +1464,7 @@ function M.save_report(file_path, format)
   })
   
   -- Set up logging for the reporting module
-  logging.configure_from_options("Reporting", config)
+  logging.configure_from_config("Reporting")
   
   local data = M.get_report_data()
   return reporting.save_coverage_report(file_path, data, format or "html")

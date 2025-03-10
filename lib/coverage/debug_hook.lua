@@ -739,7 +739,7 @@ function M.set_config(new_config)
   tracked_files = {}  -- Reset cached decisions
   
   -- Configure module logging level
-  logging.configure_from_options("CoverageHook", config)
+  logging.configure_from_config("CoverageHook")
   
   return M
 end
