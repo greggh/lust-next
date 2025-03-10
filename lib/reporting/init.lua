@@ -175,7 +175,7 @@ local ok, formatter_registry = pcall(require, "lib.reporting.formatters.init")
 if ok then
   formatter_registry.register_all(formatters)
 else
-  print("WARNING: Failed to load formatter registry. Using fallback formatters.")
+  logger.warn("Failed to load formatter registry. Using fallback formatters.")
 end
 
 -- Fallback formatters if registry failed to load
@@ -388,7 +388,7 @@ function M.write_file(file_path, content)
   local success, err = fs.write_file(file_path, content)
   
   if not success then
-    print("ERROR [Reporting] Error writing to file: " .. tostring(err))
+    logger.error("Error writing to file: " .. tostring(err))
     return false, "Error writing to file: " .. tostring(err)
   end
   
@@ -493,11 +493,11 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
   -- Debug output for troubleshooting
   if config.verbose then
     logger.debug("auto_save_reports called with:")
-    print("  base_dir: " .. base_dir)
-    print("  coverage_data: " .. (coverage_data and "present" or "nil"))
+    logger.verbose("  base_dir: " .. base_dir)
+    logger.verbose("  coverage_data: " .. (coverage_data and "present" or "nil"))
     if coverage_data then
-      print("    total_files: " .. (coverage_data.summary and coverage_data.summary.total_files or "unknown"))
-      print("    total_lines: " .. (coverage_data.summary and coverage_data.summary.total_lines or "unknown"))
+      logger.verbose("    total_files: " .. (coverage_data.summary and coverage_data.summary.total_files or "unknown"))
+      logger.verbose("    total_lines: " .. (coverage_data.summary and coverage_data.summary.total_lines or "unknown"))
       
       -- Print file count to help diagnose data flow issues
       local file_count = 0
@@ -505,22 +505,22 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
         for file, _ in pairs(coverage_data.files) do
           file_count = file_count + 1
           if file_count <= 5 then -- Just print first 5 files for brevity
-            print("    - File: " .. file)
+            logger.verbose("    - File: " .. file)
           end
         end
-        print("    Total files tracked: " .. file_count)
+        logger.verbose("    Total files tracked: " .. file_count)
       else
-        print("    No files tracked in coverage data")
+        logger.verbose("    No files tracked in coverage data")
       end
     end
-    print("  quality_data: " .. (quality_data and "present" or "nil"))
+    logger.verbose("  quality_data: " .. (quality_data and "present" or "nil"))
     if quality_data then
-      print("    tests_analyzed: " .. (quality_data.summary and quality_data.summary.tests_analyzed or "unknown"))
+      logger.verbose("    tests_analyzed: " .. (quality_data.summary and quality_data.summary.tests_analyzed or "unknown"))
     end
-    print("  results_data: " .. (results_data and "present" or "nil"))
+    logger.verbose("  results_data: " .. (results_data and "present" or "nil"))
     if results_data then
-      print("    tests: " .. (results_data.tests or "unknown"))
-      print("    failures: " .. (results_data.failures or "unknown"))
+      logger.verbose("    tests: " .. (results_data.tests or "unknown"))
+      logger.verbose("    failures: " .. (results_data.failures or "unknown"))
     end
   end
   
@@ -534,7 +534,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
   
   if not dir_ok then
     if config.verbose then
-      print("ERROR [Reporting] Failed to create directory: " .. tostring(dir_err))
+      logger.error("Failed to create directory: " .. tostring(dir_err))
     end
   elseif config.verbose then
     logger.debug("Directory exists or was created: " .. base_dir)

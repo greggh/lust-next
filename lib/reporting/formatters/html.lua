@@ -1,6 +1,14 @@
 -- HTML formatter for reports
 local M = {}
 
+local logging = require("lib.tools.logging")
+
+-- Create a logger for this module
+local logger = logging.get_logger("Reporting:HTML")
+
+-- Configure module logging
+logging.configure_from_config("Reporting:HTML")
+
 -- Helper function to escape HTML special characters
 local function escape_html(str)
   if type(str) ~= "string" then
@@ -32,8 +40,8 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
     class = "executed-not-covered"
     
     -- Debug output for diagnostic
-    print(string.format("INFO: Found executed-but-not-covered line %d (content: %s)", 
-                       line_num, content and content:sub(1, 40) or "nil"))
+    logger.info(string.format("Found executed-but-not-covered line %d (content: %s)", 
+                             line_num, content and content:sub(1, 40) or "nil"))
   else
     -- Executable but not executed at all
     class = "uncovered"

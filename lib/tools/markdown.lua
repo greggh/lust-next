@@ -4,6 +4,13 @@
 
 -- Import filesystem module for file operations
 local fs = require("lib.tools.filesystem")
+local logging = require("lib.tools.logging")
+
+-- Create a logger for this module
+local logger = logging.get_logger("Markdown")
+
+-- Configure module logging
+logging.configure_from_config("Markdown")
 
 local markdown = {}
 
@@ -23,9 +30,11 @@ function markdown.find_markdown_files(dir)
   files = fs.discover_files({dir}, patterns, exclude_patterns)
   
   -- Debug output for tests
-  print("DEBUG [find_markdown_files] Found " .. #files .. " files for dir: " .. dir)
-  for i, file in ipairs(files) do
-    print("DEBUG [find_markdown_files]   " .. i .. ": " .. file)
+  logger.debug("Found " .. #files .. " files for dir: " .. dir)
+  if logger.is_verbose_enabled() then
+    for i, file in ipairs(files) do
+      logger.verbose("  " .. i .. ": " .. file)
+    end
   end
   
   return files

@@ -892,8 +892,8 @@ function M.get_report_data()
     multiline_fixed = multiline_fixed + process_multiline_comments(file_path, file_data)
   end
   
-  if config.debug and multiline_fixed > 0 then
-    print("DEBUG [Coverage Report] Fixed " .. multiline_fixed .. " lines in multiline comments")
+  if multiline_fixed > 0 then
+    logger.debug("Fixed " .. multiline_fixed .. " lines in multiline comments")
   end
   
   -- Fix any incorrectly marked lines before generating report
@@ -920,8 +920,8 @@ function M.get_report_data()
     end
   end
   
-  if config.debug and fixed_lines > 0 then
-    print("DEBUG [Coverage Report] Fixed " .. fixed_lines .. " incorrectly marked executable lines")
+  if fixed_lines > 0 then
+    logger.debug("Fixed " .. fixed_lines .. " incorrectly marked executable lines")
   end
   
   -- Calculate statistics
@@ -1314,12 +1314,12 @@ function M.get_report_data()
     stats.covered_functions = stats.covered_functions + covered_functions
     
     if debug_this_file then
-      print(string.format("DEBUG [Coverage] Global stats update for file %s:", file_path))
-      print(string.format("  - Covered: %s", tostring(is_covered)))
-      print(string.format("  - Added %d to total_lines", total_executable_lines))
-      print(string.format("  - Added %d to covered_lines", covered_lines))
-      print(string.format("  - Added %d to total_functions", total_functions))
-      print(string.format("  - Added %d to covered_functions", covered_functions))
+      logger.verbose("Global stats update for file " .. file_path .. ":")
+      logger.verbose("  - Covered: " .. tostring(is_covered))
+      logger.verbose("  - Added " .. total_executable_lines .. " to total_lines")
+      logger.verbose("  - Added " .. covered_lines .. " to covered_lines")
+      logger.verbose("  - Added " .. total_functions .. " to total_functions")
+      logger.verbose("  - Added " .. covered_functions .. " to covered_functions")
     end
   end
   
@@ -1647,44 +1647,53 @@ function M.debug_dump()
   local data = debug_hook.get_coverage_data()
   local stats = M.get_report_data().summary
   
-  print("=== COVERAGE MODULE DEBUG DUMP ===")
-  print("Mode: " .. (enhanced_mode and "Enhanced (C extensions)" or "Standard (Pure Lua)"))
-  print("Active: " .. tostring(active))
-  print("Configuration:")
+  -- Since this is a user-facing debug output, we'll use print statements for consistent formatting
+  -- but wrap them in a function that could later be modified to use the logger if needed
+  local function debug_out(msg, level)
+    local level = level or "info"
+    -- For now we'll use print to maintain the exact formatting
+    print(msg)
+    -- Later this could be changed to: logger[level](msg)
+  end
+  
+  debug_out("=== COVERAGE MODULE DEBUG DUMP ===")
+  debug_out("Mode: " .. (enhanced_mode and "Enhanced (C extensions)" or "Standard (Pure Lua)"))
+  debug_out("Active: " .. tostring(active))
+  debug_out("Configuration:")
   for k, v in pairs(config) do
     if type(v) == "table" then
-      print("  " .. k .. ": " .. #v .. " items")
+      debug_out("  " .. k .. ": " .. #v .. " items")
     else
-      print("  " .. k .. ": " .. tostring(v))
+      debug_out("  " .. k .. ": " .. tostring(v))
     end
   end
   
-  print("\nCoverage Stats:")
-  print("  Files: " .. stats.covered_files .. "/" .. stats.total_files .. 
+  debug_out("\nCoverage Stats:")
+  debug_out("  Files: " .. stats.covered_files .. "/" .. stats.total_files .. 
         " (" .. string.format("%.2f%%", stats.file_coverage_percent) .. ")")
-  print("  Lines: " .. stats.covered_lines .. "/" .. stats.total_lines .. 
+  debug_out("  Lines: " .. stats.covered_lines .. "/" .. stats.total_lines .. 
         " (" .. string.format("%.2f%%", stats.line_coverage_percent) .. ")")
-  print("  Functions: " .. stats.covered_functions .. "/" .. stats.total_functions .. 
+  debug_out("  Functions: " .. stats.covered_functions .. "/" .. stats.total_functions .. 
         " (" .. string.format("%.2f%%", stats.function_coverage_percent) .. ")")
   
   -- Show block coverage if available
   if stats.total_blocks > 0 then
-    print("  Blocks: " .. stats.covered_blocks .. "/" .. stats.total_blocks .. 
+    debug_out("  Blocks: " .. stats.covered_blocks .. "/" .. stats.total_blocks .. 
           " (" .. string.format("%.2f%%", stats.block_coverage_percent) .. ")")
   end
   
-  print("  Overall: " .. string.format("%.2f%%", stats.overall_percent))
+  debug_out("  Overall: " .. string.format("%.2f%%", stats.overall_percent))
   
-  print("\nTracked Files (first 5):")
+  debug_out("\nTracked Files (first 5):")
   local count = 0
   for file_path, file_data in pairs(data.files) do
     if count < 5 then
       local covered = 0
       for _ in pairs(file_data.lines) do covered = covered + 1 end
       
-      print("  " .. file_path)
-      print("    Lines: " .. covered .. "/" .. (file_data.line_count or 0))
-      print("    Discovered: " .. tostring(file_data.discovered or false))
+      debug_out("  " .. file_path)
+      debug_out("    Lines: " .. covered .. "/" .. (file_data.line_count or 0))
+      debug_out("    Discovered: " .. tostring(file_data.discovered or false))
       
       count = count + 1
     else
@@ -1693,10 +1702,10 @@ function M.debug_dump()
   end
   
   if count == 5 and stats.total_files > 5 then
-    print("  ... and " .. (stats.total_files - 5) .. " more files")
+    debug_out("  ... and " .. (stats.total_files - 5) .. " more files")
   end
   
-  print("=== END DEBUG DUMP ===")
+  debug_out("=== END DEBUG DUMP ===")
   return M
 end
 

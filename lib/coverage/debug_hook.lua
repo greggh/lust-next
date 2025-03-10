@@ -206,8 +206,8 @@ function M.debug_hook(event, line)
           coverage_data.files[normalized_path].executable_lines[line] = true
           
           -- Debug output for specific self-coverage files if debug is enabled
-          if config.debug and file_path:match("examples/execution_vs_coverage") then
-            print(string.format("DEBUG [Coverage Self-tracking] Line %d execution in %s", 
+          if file_path:match("examples/execution_vs_coverage") then
+            logger.debug(string.format("Self-tracking: Line %d execution in %s", 
                                 line, normalized_path:match("([^/]+)$") or normalized_path))
           end
         end
