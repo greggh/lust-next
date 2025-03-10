@@ -8,6 +8,14 @@ local patchup = require("lib.coverage.patchup")
 local static_analyzer = require("lib.coverage.static_analyzer")
 local fs = require("lib.tools.filesystem")
 
+-- Helper function for debug logging
+local function log_debug(message)
+  -- Only print if debug is enabled in config
+  if config and config.debug then
+    print(message)
+  end
+end
+
 -- Default configuration
 local DEFAULT_CONFIG = {
   enabled = false,
@@ -24,14 +32,17 @@ local DEFAULT_CONFIG = {
   debug = false,
   
   -- Execution vs coverage distinction
-  track_self_coverage = true,  -- Record execution of coverage module files themselves
+  track_self_coverage = true,         -- Record execution of coverage module files themselves
+  should_track_example_files = true,  -- Always track example files
+  verbose = false,                    -- Enable verbose debugging output
   
   -- Static analysis options
-  use_static_analysis = true,  -- Use static analysis when available
+  use_static_analysis = true,   -- Use static analysis when available
   branch_coverage = false,      -- Track branch coverage (not just line coverage)
   cache_parsed_files = true,    -- Cache parsed ASTs for better performance
   track_blocks = true,          -- Track code blocks (not just lines)
-  pre_analyze_files = false     -- Pre-analyze all files before test execution
+  pre_analyze_files = false,    -- Pre-analyze all files before test execution
+  control_flow_keywords_executable = true  -- Treat control flow keywords like 'end', 'else' as executable
 }
 
 -- Module state
@@ -44,6 +55,7 @@ local enhanced_mode = false
 M.config = DEFAULT_CONFIG
 
 -- Track line coverage through instrumentation
+-- This tracks actual test coverage (validation) rather than just execution
 function M.track_line(file_path, line_num)
   if not active or not config.enabled then
     return
@@ -51,28 +63,65 @@ function M.track_line(file_path, line_num)
   
   local normalized_path = fs.normalize_path(file_path)
   
+  -- Ensure coverage_data is properly initialized
+  local coverage_data = debug_hook.get_coverage_data()
+  
+  -- Create files table if it doesn't exist
+  if not coverage_data.files then
+    coverage_data.files = {}
+  end
+  
+  -- Create lines table if it doesn't exist
+  if not coverage_data.lines then
+    coverage_data.lines = {}
+  end
+  
   -- Initialize file data if needed
-  if not debug_hook.get_coverage_data().files[normalized_path] then
+  if not coverage_data.files[normalized_path] then
     -- Initialize file data
     local line_count = 0
-    local source = fs.read_file(file_path)
-    if source then
-      for _ in source:gmatch("[^\r\n]+") do
+    local source_lines = {}
+    local source_text = fs.read_file(file_path)
+    
+    if source_text then
+      for line in (source_text .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
         line_count = line_count + 1
+        source_lines[line_count] = line
       end
     end
     
-    debug_hook.get_coverage_data().files[normalized_path] = {
-      lines = {},
+    coverage_data.files[normalized_path] = {
+      lines = {},             -- Lines that are covered (validated by tests)
+      _executed_lines = {},   -- Lines that were executed (not necessarily validated)
       functions = {},
       line_count = line_count,
-      source = source
+      source = source_lines,
+      source_text = source_text,
+      executable_lines = {}
     }
   end
   
-  -- Track line
-  debug_hook.get_coverage_data().files[normalized_path].lines[line_num] = true
-  debug_hook.get_coverage_data().lines[normalized_path .. ":" .. line_num] = true
+  -- Ensure lines table exists
+  if not coverage_data.files[normalized_path].lines then
+    coverage_data.files[normalized_path].lines = {}
+  end
+  
+  -- Track line as COVERED (validated by test assertions)
+  -- This is separate from execution tracking which is handled by debug_hook
+  coverage_data.files[normalized_path].lines[line_num] = true
+  coverage_data.lines[normalized_path .. ":" .. line_num] = true
+  
+  -- Also track as executed (for consistency)
+  if not coverage_data.files[normalized_path]._executed_lines then
+    coverage_data.files[normalized_path]._executed_lines = {}
+  end
+  coverage_data.files[normalized_path]._executed_lines[line_num] = true
+  
+  -- Mark as executable
+  if not coverage_data.files[normalized_path].executable_lines then
+    coverage_data.files[normalized_path].executable_lines = {}
+  end
+  coverage_data.files[normalized_path].executable_lines[line_num] = true
 end
 
 -- Apply configuration with defaults
@@ -110,7 +159,8 @@ function M.init(options)
   -- Initialize static analyzer if enabled
   if config.use_static_analysis then
     static_analyzer.init({
-      cache_files = config.cache_parsed_files
+      cache_files = config.cache_parsed_files,
+      control_flow_keywords_executable = config.control_flow_keywords_executable
     })
     
     -- Pre-analyze files if configured
@@ -138,9 +188,7 @@ function M.init(options)
       end
       
       -- Pre-analyze all discovered files
-      if config.debug then
-        print("DEBUG [Coverage] Pre-analyzing " .. #found_files .. " files")
-      end
+      log_debug("DEBUG [Coverage] Pre-analyzing " .. #found_files .. " files")
       
       for _, file_path in ipairs(found_files) do
         static_analyzer.parse_file(file_path)
@@ -151,12 +199,6 @@ function M.init(options)
   -- Try to load enhanced C extensions
   local has_cluacov = pcall(require, "lib.coverage.vendor.cluacov_hook")
   enhanced_mode = has_cluacov
-  
-  if config.debug then
-    print("DEBUG [Coverage] Initialized with " .. 
-          (enhanced_mode and "enhanced C extensions" or "pure Lua implementation") ..
-          (config.use_static_analysis and " and static analysis" or ""))
-  end
   
   return M
 end
@@ -694,17 +736,52 @@ local function process_multiline_comments(file_path, file_data)
   end
   
   local fixed = 0
-  local in_comment = false
   
   -- Ensure executable_lines table exists
   if not file_data.executable_lines then
     file_data.executable_lines = {}
   end
   
-  -- More sophisticated multiline comment handling
-  -- Process each line to identify multiline comments
+  -- Step 1: First pass to identify all comment lines (including single-line comments)
+  local comment_lines = {}
+  local in_multiline_comment = false
+  
   for i = 1, file_data.line_count or #file_data.source do
     local line = file_data.source[i] or ""
+    local trimmed = line:match("^%s*(.-)%s*$") or ""
+    
+    -- Detect single-line comments
+    if trimmed:match("^%-%-") then
+      comment_lines[i] = true
+    -- Detect multiline comment start --[[
+    elseif trimmed:match("^%-%-%[%[") and not trimmed:match("%]%]") then
+      in_multiline_comment = true
+      comment_lines[i] = true
+    -- Detect multiline comment end
+    elseif in_multiline_comment then
+      comment_lines[i] = true
+      if trimmed:match("%]%]") then
+        in_multiline_comment = false
+      end
+    end
+  end
+  
+  -- Step 2: Second pass with more sophisticated multiline comment detection
+  in_multiline_comment = false
+  local state_stack = {}
+  
+  for i = 1, file_data.line_count or #file_data.source do
+    local line = file_data.source[i] or ""
+    
+    -- Skip lines already marked as comments
+    if comment_lines[i] then
+      file_data.executable_lines[i] = false
+      if file_data.lines and file_data.lines[i] then
+        file_data.lines[i] = nil
+        fixed = fixed + 1
+      end
+      goto continue
+    end
     
     -- Track both --[[ and [[ style multiline comments
     local ml_comment_markers = {}
@@ -738,27 +815,63 @@ local function process_multiline_comments(file_path, file_data)
     -- Sort markers by position
     table.sort(ml_comment_markers, function(a, b) return a.pos < b.pos end)
     
-    -- Process markers in order
-    local was_in_comment = in_comment
+    -- Process markers in order with a state stack for proper nesting
+    local was_in_comment = in_multiline_comment
     local changed_in_this_line = false
     
     for _, marker in ipairs(ml_comment_markers) do
-      if marker.type == "start" and not in_comment then
-        in_comment = true
+      if marker.type == "start" and not in_multiline_comment then
+        in_multiline_comment = true
+        table.insert(state_stack, marker.style) -- Push style onto stack
         changed_in_this_line = true
-      elseif marker.type == "end" and in_comment then
-        in_comment = false
+      elseif marker.type == "end" and in_multiline_comment then
+        -- Only pop if we have items on the stack
+        if #state_stack > 0 then
+          table.remove(state_stack) -- Pop the stack
+          
+          -- Only clear in_multiline_comment if stack is empty
+          if #state_stack == 0 then
+            in_multiline_comment = false
+          end
+        else
+          -- Unmatched end marker, could be end of a string
+          -- Do nothing
+        end
         changed_in_this_line = true
       end
     end
     
     -- Handle line based on its comment state
-    if was_in_comment or in_comment or changed_in_this_line then
+    if was_in_comment or in_multiline_comment or changed_in_this_line then
       -- This line is part of or contains a multiline comment
+      file_data.executable_lines[i] = false
+      comment_lines[i] = true
+      
+      -- Only remove coverage marking if it wasn't actually executed
+      if file_data.lines and file_data.lines[i] then
+        file_data.lines[i] = nil
+        fixed = fixed + 1
+      end
+    end
+    
+    ::continue::
+  end
+  
+  -- Step 3: Post-processing to catch any remaining comment lines that might be misclassified
+  for i = 1, file_data.line_count or #file_data.source do
+    local line = file_data.source[i] or ""
+    local trimmed = line:match("^%s*(.-)%s*$") or ""
+    
+    -- Aggressive check for lines that look like comments 
+    if not comment_lines[i] and (
+       trimmed:match("^%-%-") or -- Single line comment
+       trimmed:match("^%s*$") or -- Empty line
+       trimmed:match("^%-%-%[%[.*%]%]") -- Single-line multiline comment
+    ) then
       file_data.executable_lines[i] = false
       
       -- Only remove coverage marking if it wasn't actually executed
-      if file_data.lines[i] then
+      if file_data.lines and file_data.lines[i] then
         file_data.lines[i] = nil
         fixed = fixed + 1
       end
@@ -766,6 +879,21 @@ local function process_multiline_comments(file_path, file_data)
   end
   
   return fixed
+end
+
+-- Additional comment line detection function
+local function is_comment_line(line)
+  if not line then return false end
+  
+  local trimmed = line:match("^%s*(.-)%s*$") or ""
+  
+  -- Check for various comment patterns
+  return trimmed:match("^%-%-") or                -- Single line comment
+         trimmed:match("^%-%-%[%[") or           -- Multiline comment start
+         trimmed:match("%]%]$") or               -- Multiline comment end
+         trimmed:match("^%s*$") or               -- Empty line
+         trimmed:match("^%-%-%[%[.*%]%]") or     -- Single-line multiline comment
+         trimmed:match("^%[%[.*%]%]$")           -- Multi-line string on a single line
 end
 
 -- Get coverage report data
@@ -788,12 +916,17 @@ function M.get_report_data()
   for file_path, file_data in pairs(coverage_data.files) do
     -- Check each line
     for line_num, is_covered in pairs(file_data.lines) do
-      -- If it's marked covered but it's an executable line and wasn't actually executed
-      -- Get actual line execution info from debug_hook, not just the coverage data
-      if is_covered and 
-         file_data.executable_lines and 
-         file_data.executable_lines[line_num] and 
-         not debug_hook.was_line_executed(file_path, line_num) then
+      -- Get the source line for comment checking
+      local source_line = file_data.source and file_data.source[line_num]
+      
+      -- Fix cases where:
+      -- 1. It's marked covered but it's an executable line and wasn't actually executed, OR
+      -- 2. It's a comment line that was incorrectly marked as covered
+      if (is_covered and 
+          file_data.executable_lines and 
+          file_data.executable_lines[line_num] and 
+          not debug_hook.was_line_executed(file_path, line_num)) or
+         (is_covered and source_line and is_comment_line(source_line)) then
         -- Fix incorrect coverage
         file_data.lines[line_num] = false
         fixed_lines = fixed_lines + 1
@@ -899,22 +1032,11 @@ function M.get_report_data()
       end
     end
     
-    -- CRITICAL FIX: Now count only properly covered executable lines AND
-    -- consider execution tracking for a more accurate representation
+    -- CRITICAL FIX: Now count properly covered executable lines
+    -- while maintaining the distinction between execution and coverage
     
-    -- First update lines based on execution tracking
-    if file_data._executed_lines then
-      for line_num, was_executed in pairs(file_data._executed_lines) do
-        if was_executed and file_data.executable_lines and file_data.executable_lines[line_num] == true then
-          -- If the line was executed AND is executable, mark it as covered
-          file_data.lines[line_num] = true
-          
-          if debug_this_file then
-            print(string.format("DEBUG [Coverage] Marked line %d as covered from execution tracking", line_num))
-          end
-        end
-      end
-    else
+    -- First ensure we have an _executed_lines table if it doesn't exist
+    if not file_data._executed_lines then
       -- If we don't have _executed_lines, create it and add executed lines from lines table
       -- This is a fallback for compatibility with older runs
       file_data._executed_lines = {}
@@ -929,10 +1051,20 @@ function M.get_report_data()
       end
     end
     
+    -- CRITICAL CHANGE: We do NOT automatically mark executed lines as covered
+    -- This is what preserves the distinction between "executed" and "covered"
+    -- Lines must be explicitly marked as covered through test assertions
+    -- The HTML formatter will use both data points to determine the 
+    -- correct state (executed-but-not-covered vs fully covered)
+    
     -- Now process all marked lines
     for line_num, is_covered in pairs(file_data.lines or {}) do
-      -- CRITICAL FIX: Only count lines that are both covered AND executable
-      if is_covered and file_data.executable_lines and file_data.executable_lines[line_num] == true then
+      -- Get the source line for additional comment checking
+      local source_line = file_data.source and file_data.source[line_num]
+      local is_comment = source_line and is_comment_line(source_line)
+      
+      -- CRITICAL FIX: Only count lines that are both covered AND executable AND not a comment
+      if is_covered and file_data.executable_lines and file_data.executable_lines[line_num] == true and not is_comment then
         -- This is a valid executable and covered line - count it
         covered_lines = covered_lines + 1
         
@@ -940,11 +1072,12 @@ function M.get_report_data()
           print(string.format("DEBUG [Coverage] Counted covered line %d", line_num))
         end
       else
-        -- CRITICAL FIX: Remove coverage marking from any non-executable line
-        if file_data.executable_lines == nil or file_data.executable_lines[line_num] ~= true then
-          -- This line isn't marked as executable but has coverage - remove it
+        -- CRITICAL FIX: Remove coverage marking from any non-executable line or comment
+        if file_data.executable_lines == nil or file_data.executable_lines[line_num] ~= true or is_comment then
+          -- This line isn't marked as executable or is a comment but has coverage - remove it
           if debug_this_file then
-            print(string.format("DEBUG [Coverage] Removed invalid coverage for line %d", line_num))
+            print(string.format("DEBUG [Coverage] Removed invalid coverage for line %d%s", 
+                              line_num, is_comment and " (comment line)" or ""))
           end
           file_data.lines[line_num] = nil
         end
@@ -1300,7 +1433,15 @@ function M.get_report_data()
     end
   end
   
+  -- Add debug flag to stats for HTML formatter
+  stats.summary.debug = config.debug
+  
   return stats
+end
+
+-- Access to raw coverage data for debugging
+function M.get_raw_data()
+  return debug_hook.get_coverage_data()
 end
 
 -- Generate coverage report
@@ -1321,6 +1462,190 @@ function M.save_report(file_path, format)
 end
 
 -- Debug dump
+-- Check if a specific line was executed (not necessarily covered by tests)
+function M.was_line_executed(file_path, line_num)
+  return debug_hook.was_line_executed(file_path, line_num)
+end
+
+-- Check if a specific line was covered (validated by test assertions)
+function M.was_line_covered(file_path, line_num)
+  return debug_hook.was_line_covered(file_path, line_num)
+end
+
+-- Track line execution only (without marking as covered)
+-- This is for manual instrumentation in cases where debug.sethook misses events
+function M.track_execution(file_path, line_num)
+  if not active or not config.enabled then
+    return
+  end
+  
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Ensure coverage_data is properly initialized
+  local coverage_data = debug_hook.get_coverage_data()
+  
+  -- Create files table if it doesn't exist
+  if not coverage_data.files then
+    coverage_data.files = {}
+  end
+  
+  -- Initialize file data if needed
+  if not coverage_data.files[normalized_path] then
+    -- Initialize file data
+    local line_count = 0
+    local source_lines = {}
+    local source_text = fs.read_file(file_path)
+    
+    if source_text then
+      for line in (source_text .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+        line_count = line_count + 1
+        source_lines[line_count] = line
+      end
+    end
+    
+    coverage_data.files[normalized_path] = {
+      lines = {},                 -- Lines validated by tests (covered)
+      _executed_lines = {},       -- All executed lines (execution tracking)
+      functions = {},             -- Function execution tracking
+      line_count = line_count,
+      source = source_lines,
+      source_text = source_text,
+      executable_lines = {}       -- Whether each line is executable
+    }
+    
+    -- Try to get a code map using the static analyzer during initialization
+    if config.use_static_analysis and source_text then
+      -- Lazy load the static analyzer
+      local static_analyzer = require("lib.coverage.static_analyzer")
+      
+      -- Try to parse the file and generate a code map
+      local ast, code_map = static_analyzer.parse_content(source_text, file_path)
+      
+      -- If successful, store the AST and code map for later use
+      if ast and code_map then
+        coverage_data.files[normalized_path].code_map = code_map
+        coverage_data.files[normalized_path].ast = ast
+        coverage_data.files[normalized_path].code_map_attempted = true
+        
+        -- Get executable lines map
+        coverage_data.files[normalized_path].executable_lines = 
+          static_analyzer.get_executable_lines(code_map)
+        
+        if config.debug then
+          print("DEBUG [Coverage Static Analysis] Generated code map for " .. normalized_path .. 
+                " during track_execution call")
+        end
+      end
+    end
+  end
+  
+  -- Ensure _executed_lines table exists
+  if not coverage_data.files[normalized_path]._executed_lines then
+    coverage_data.files[normalized_path]._executed_lines = {}
+  end
+  
+  -- Mark as executed
+  coverage_data.files[normalized_path]._executed_lines[line_num] = true
+  
+  -- Enhance block tracking - try to find which blocks this line belongs to
+  if config.track_blocks and coverage_data.files[normalized_path].code_map then
+    -- Lazily load the static analyzer
+    local static_analyzer = require("lib.coverage.static_analyzer")
+    
+    -- Use the static analyzer to find which blocks contain this line
+    local blocks_for_line = static_analyzer.get_blocks_for_line(
+      coverage_data.files[normalized_path].code_map, 
+      line_num
+    )
+    
+    -- Initialize logical_chunks if it doesn't exist
+    if not coverage_data.files[normalized_path].logical_chunks then
+      coverage_data.files[normalized_path].logical_chunks = {}
+    end
+    
+    -- Mark each block as executed
+    for _, block in ipairs(blocks_for_line) do
+      -- Get or create block record
+      local block_copy = coverage_data.files[normalized_path].logical_chunks[block.id]
+      
+      if not block_copy then
+        -- Create a new deep copy if this is the first time we've seen this block
+        block_copy = {
+          id = block.id,
+          type = block.type,
+          start_line = block.start_line,
+          end_line = block.end_line,
+          parent_id = block.parent_id,
+          branches = {},
+          executed = true, -- Mark as executed immediately
+          execution_count = 1 -- Track execution count
+        }
+        
+        -- Copy branches array if it exists
+        if block.branches then
+          for _, branch_id in ipairs(block.branches) do
+            table.insert(block_copy.branches, branch_id)
+          end
+        end
+      else
+        -- Update existing block record
+        block_copy.executed = true
+        block_copy.execution_count = (block_copy.execution_count or 0) + 1
+      end
+      
+      -- Store the block in our logical_chunks
+      coverage_data.files[normalized_path].logical_chunks[block.id] = block_copy
+      
+      -- Also track the block in the global blocks table for reference
+      coverage_data.blocks[normalized_path .. ":" .. block.id] = true
+      
+      -- Debug output
+      if config.debug and config.verbose then
+        print("DEBUG [Manual Block Tracking] Tracked block " .. block.id .. 
+              " (" .. block.type .. ") at line " .. line_num .. 
+              " in " .. normalized_path)
+      end
+    end
+  end
+  
+  -- Check if this line is executable and mark it accordingly
+  local is_executable = false
+  
+  -- Check if we have static analysis data to determine executability
+  if coverage_data.files[normalized_path].code_map then
+    -- Lazily load the static analyzer
+    local static_analyzer = require("lib.coverage.static_analyzer")
+    
+    -- Use static analysis to determine if line is executable
+    is_executable = static_analyzer.is_line_executable(
+      coverage_data.files[normalized_path].code_map, 
+      line_num
+    )
+  else
+    -- Basic check - is this a comment?
+    if coverage_data.files[normalized_path].source and 
+       coverage_data.files[normalized_path].source[line_num] then
+      local line_text = coverage_data.files[normalized_path].source[line_num]
+      is_executable = line_text:match("^%s*%-%-") == nil -- Not a comment line
+    else
+      -- If no data available, assume executable (cautious approach)
+      is_executable = true
+    end
+  end
+  
+  -- Mark as executable or non-executable
+  if not coverage_data.files[normalized_path].executable_lines then
+    coverage_data.files[normalized_path].executable_lines = {}
+  end
+  coverage_data.files[normalized_path].executable_lines[line_num] = is_executable
+  
+  -- Debug output
+  if config.debug and config.verbose then
+    print(string.format("DEBUG [Manual Execution Tracking] Tracked line %d in %s (executable=%s)", 
+                      line_num, normalized_path, tostring(is_executable)))
+  end
+end
+
 function M.debug_dump()
   local data = debug_hook.get_coverage_data()
   local stats = M.get_report_data().summary

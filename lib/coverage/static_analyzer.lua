@@ -21,10 +21,21 @@ M.LINE_TYPES = {
   END_BLOCK = "end_block" -- Line contains an end keyword for a block
 }
 
+-- Module configuration
+local config = {
+  control_flow_keywords_executable = true -- Default to strict coverage
+}
+
 -- Initializes the static analyzer
 function M.init(options)
   options = options or {}
   file_cache = {}
+  
+  -- Update config from options
+  if options.control_flow_keywords_executable ~= nil then
+    config.control_flow_keywords_executable = options.control_flow_keywords_executable
+  end
+  
   return M
 end
 
@@ -244,6 +255,31 @@ local NON_EXECUTABLE_TAGS = {
 -- Determine if a line is executable based on AST nodes that intersect with it
 -- With optimized lookup tables and time limit
 local function is_line_executable(nodes, line_num, content)
+  -- First check if this is a control flow keyword that should be executable
+  if config.control_flow_keywords_executable and content then
+    local line = content:match("[^\n]*", line_num) or ""
+    local line_text = line:match("^%s*(.-)%s*$") or ""
+    
+    -- Check if this line matches a control flow keyword pattern
+    for _, pattern in ipairs({
+      "^%s*end%s*$",      -- Standalone end keyword
+      "^%s*end[,%)]",     -- End followed by comma or closing parenthesis
+      "^%s*end.*%-%-%s+", -- End followed by comment
+      "^%s*else%s*$",     -- Standalone else keyword
+      "^%s*until%s",      -- until lines (the condition is executable, not the keyword)
+      "^%s*[%]}]%s*$",    -- Closing brackets/braces
+      "^%s*then%s*$",     -- Standalone then keyword
+      "^%s*do%s*$",       -- Standalone do keyword
+      "^%s*repeat%s*$",   -- Standalone repeat keyword
+      "^%s*elseif%s*$"    -- Standalone elseif keyword
+    }) do
+      if line_text:match(pattern) then
+        -- This is a control flow keyword and config says they're executable
+        return true
+      end
+    end
+  end
+  
   -- Add time limit protection
   local start_time = os.clock()
   local MAX_ANALYSIS_TIME = 0.5 -- 500ms max for this function
@@ -284,6 +320,17 @@ local function is_line_executable(nodes, line_num, content)
         return true
       end
       goto continue
+    end
+    
+    -- Function declarations (local function name() or function name()) are executable
+    if node.tag == "Localrec" or node.tag == "Set" then
+      local node_start_line = get_line_for_position(content, node.pos)
+      if node_start_line == line_num then
+        -- Check if this is a function assignment
+        if node[2] and node[2].tag == "Function" then
+          return true
+        end
+      end
     end
 
     -- Check if this node spans the line
@@ -823,11 +870,9 @@ end
 
 -- Generate a code map from the AST and content with timing protection
 function M.generate_code_map(ast, content)
-  -- Start timing - SIGNIFICANTLY INCREASED timeout to 120 seconds
+  -- Start timing with reasonable timeout
   local start_time = os.clock()
-  local MAX_CODEMAP_TIME = 120.0 -- 120 second time limit for code map generation (increased from 60 seconds)
-  
-  print("DEBUG [generate_code_map] Starting code map generation")
+  local MAX_CODEMAP_TIME = 120.0 -- 120 second time limit for code map generation
   
   local code_map = {
     lines = {},           -- Information about each line
@@ -837,8 +882,6 @@ function M.generate_code_map(ast, content)
     conditions = {},      -- Conditional expressions for condition coverage
     line_count = count_lines(content)
   }
-  
-  print(string.format("DEBUG [generate_code_map] Line count: %d", code_map.line_count))
   
   -- Set a reasonable upper limit for line count to prevent DOS
   if code_map.line_count > 10000 then
@@ -1070,16 +1113,13 @@ function M.generate_code_map(ast, content)
   end
   
   -- Process lines in larger batches for better performance
-  local BATCH_SIZE = 250 -- INCREASED batch size to reduce the number of timeout checks
+  local BATCH_SIZE = 250 -- Larger batch size to reduce the number of timeout checks
   local executable_count = 0
   local non_executable_count = 0
-  
-  print("DEBUG [line processing] Starting line classification")
   
   for batch_start = 1, line_count, BATCH_SIZE do
     -- Check time only once per batch
     if os.clock() - start_time > MAX_CODEMAP_TIME then
-      print("DEBUG [line processing] Time limit exceeded during batch starting at " .. batch_start)
       break
     end
     
@@ -1092,11 +1132,6 @@ function M.generate_code_map(ast, content)
       -- Default to non-executable
       local is_exec = false
       local line_type = M.LINE_TYPES.NON_EXECUTABLE
-      
-      -- Debug output for first few lines to see what's happening
-      if line_num <= 10 then
-        print(string.format("DEBUG [line %d] Processing line: %s", line_num, line_text:sub(1, 40)))
-      end
       
       -- Initialize multiline comment tracking if needed
       if not code_map._in_multiline_comment then
@@ -1133,10 +1168,18 @@ function M.generate_code_map(ast, content)
         -- Trim whitespace
         line_text = line_text:match("^%s*(.-)%s*$") or ""
         
-        -- Non-executable patterns that should be explicitly marked
-        local non_executable_patterns = {
+        -- Always non-executable patterns regardless of config
+        local always_non_executable_patterns = {
           "^%s*%-%-",         -- Single-line comments with optional leading whitespace
           "^%s*$",            -- Blank lines
+          "^%[%[",            -- Start of multi-line string
+          "^%]%]",            -- End of multi-line string
+          "^.*%[%[.-$",       -- Line containing multi-line string start
+          "^.*%]%]$"          -- Line containing multi-line string end
+        }
+        
+        -- Control flow keywords patterns - only non-executable if config says so
+        local control_flow_keywords_patterns = {
           "^%s*end%s*$",      -- Standalone end keyword
           "^%s*end[,%)]",     -- End followed by comma or closing parenthesis
           "^%s*end.*%-%-%s+", -- End followed by comment
@@ -1146,11 +1189,23 @@ function M.generate_code_map(ast, content)
           "^%s*then%s*$",     -- Standalone then keyword
           "^%s*do%s*$",       -- Standalone do keyword
           "^%s*repeat%s*$",   -- Standalone repeat keyword
-          "^%[%[",            -- Start of multi-line string
-          "^%]%]",            -- End of multi-line string
-          "^.*%[%[.-$",       -- Line containing multi-line string start
-          "^.*%]%]$"          -- Line containing multi-line string end
+          "^%s*elseif%s*$"    -- Standalone elseif keyword
         }
+        
+        -- Start with empty non_executable_patterns
+        local non_executable_patterns = {}
+        
+        -- Add always non-executable patterns
+        for _, pattern in ipairs(always_non_executable_patterns) do
+          table.insert(non_executable_patterns, pattern)
+        end
+        
+        -- Add control flow keywords if config says they're non-executable
+        if not config.control_flow_keywords_executable then
+          for _, pattern in ipairs(control_flow_keywords_patterns) do
+            table.insert(non_executable_patterns, pattern)
+          end
+        end
         
         -- Check for non-executable patterns
         local is_non_executable = false
@@ -1160,6 +1215,19 @@ function M.generate_code_map(ast, content)
             line_type = M.LINE_TYPES.NON_EXECUTABLE
             is_non_executable = true
             break
+          end
+        end
+        
+        -- If control flow keywords are executable, check if this is a control flow keyword
+        -- and override is_non_executable if needed
+        if is_non_executable and config.control_flow_keywords_executable then
+          for _, pattern in ipairs(control_flow_keywords_patterns) do
+            if line_text:match(pattern) then
+              is_exec = true
+              line_type = M.LINE_TYPES.EXECUTABLE
+              is_non_executable = false
+              break
+            end
           end
         end
         
@@ -1279,16 +1347,11 @@ function M.generate_code_map(ast, content)
     code_map.line_count or 0, 
     #all_nodes or 0))
   
-  -- Print executed vs non-executed stats
-  print(string.format("DEBUG [code_map] Found %d executable lines and %d non-executable lines",
-    executable_count, non_executable_count))
-    
   -- Verify we have executable lines
   if executable_count == 0 then
     print("WARNING: No executable lines found in file! This will cause incorrect coverage reporting.")
     
-    -- CRITICAL FIX: Apply emergency fallback for important files that timed out
-    -- This ensures we at least have SOME executable lines rather than none
+    -- Apply emergency fallback for important coverage module files
     if file_path and (file_path:match("lib/coverage/init.lua") or file_path:match("lib/coverage/debug_hook.lua")) then
       print("FALLBACK: Applying emergency fallback for critical file: " .. file_path)
       
@@ -1334,25 +1397,17 @@ end
 -- Get the executable lines from a code map
 function M.get_executable_lines(code_map)
   if not code_map or not code_map.lines then
-    print("DEBUG [get_executable_lines] code_map or code_map.lines is nil")
     return {}
   end
   
   local executable_lines = {}
-  local count = 0
   
   for line_num, line_info in pairs(code_map.lines) do
     if line_info.executable then
-      executable_lines[line_num] = true  -- Changed to table to make lookups O(1)
-      count = count + 1
+      executable_lines[line_num] = true  -- Use hash table for O(1) lookups
     end
   end
   
-  print(string.format("DEBUG [get_executable_lines] Found %d executable lines", count))
-  
-  -- CRITICAL FIX: This function should return a hash table for O(1) lookup
-  -- The original implementation returned an array which is inefficient and
-  -- was not being used correctly in the rest of the codebase
   return executable_lines
 end
 
@@ -1412,12 +1467,54 @@ function M.get_code_map_for_ast(ast, file_path)
 end
 
 -- Fast lookup table for checking if a line is executable according to the code map
--- Much more efficient than the previous implementation
 function M.is_line_executable(code_map, line_num)
   -- Quick safety checks
   if not code_map then 
-    print("DEBUG [is_line_executable] No code_map provided")
     return false 
+  end
+  
+  -- Export config value for external use
+  M.config = config
+  
+  -- If the line is already marked executable in lookup table, return true
+  if code_map._executable_lines_lookup and code_map._executable_lines_lookup[line_num] == true then
+    return true
+  end
+  
+  -- Special check for control flow keywords
+  if config.control_flow_keywords_executable and code_map.source then
+    local line_text = code_map.source[line_num] or ""
+    line_text = line_text:match("^%s*(.-)%s*$") or ""
+    
+    -- Check if this line matches a control flow keyword pattern
+    for _, pattern in ipairs({
+      "^%s*end%s*$",      -- Standalone end keyword
+      "^%s*end[,%)]",     -- End followed by comma or closing parenthesis
+      "^%s*end.*%-%-%s+", -- End followed by comment
+      "^%s*else%s*$",     -- Standalone else keyword
+      "^%s*until%s",      -- until lines (the condition is executable, not the keyword)
+      "^%s*[%]}]%s*$",    -- Closing brackets/braces
+      "^%s*then%s*$",     -- Standalone then keyword
+      "^%s*do%s*$",       -- Standalone do keyword
+      "^%s*repeat%s*$",   -- Standalone repeat keyword
+      "^%s*elseif%s*$"    -- Standalone elseif keyword
+    }) do
+      if line_text:match(pattern) then
+        -- Only check for comment patterns
+        for _, comment_pattern in ipairs({
+          "^%s*%-%-",      -- Single line comment
+          "^%s*$",         -- Empty line
+          "^%[%[",         -- Start of multi-line string
+          "^%]%]",         -- End of multi-line string
+        }) do
+          if line_text:match(comment_pattern) then
+            return false   -- It's a comment or empty line, not executable
+          end
+        end
+        -- This is a control flow keyword and config says they're executable
+        return true
+      end
+    end
   end
   
   -- Check if we have a precomputed executable_lines_lookup table
@@ -1425,10 +1522,6 @@ function M.is_line_executable(code_map, line_num)
     -- If code_map.lines is available, create a lookup table for O(1) access
     if code_map.lines then
       code_map._executable_lines_lookup = {}
-      
-      -- Debug output for first few entries
-      print("DEBUG [is_line_executable] Creating lookup table from code_map.lines")
-      local debug_count = 0
       
       -- Build lookup table with a reasonable upper limit
       local processed = 0
@@ -1439,19 +1532,9 @@ function M.is_line_executable(code_map, line_num)
           break
         end
         code_map._executable_lines_lookup[ln] = line_info.executable or false
-        
-        -- Debug output for first 10 items
-        if debug_count < 10 then
-          print(string.format("DEBUG [lookup] Line %d: executable=%s, type=%s", 
-                           ln, tostring(line_info.executable), line_info.type or "unknown"))
-          debug_count = debug_count + 1
-        end
       end
-      
-      print(string.format("DEBUG [is_line_executable] Created lookup table with %d entries", processed))
     else
       -- If no lines data, create empty lookup
-      print("DEBUG [is_line_executable] No code_map.lines available!")
       code_map._executable_lines_lookup = {}
     end
   end
