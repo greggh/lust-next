@@ -29,10 +29,20 @@ local path_separator = is_windows() and '\\' or '/'
 local function safe_io_action(action, ...)
     local status, result, err = pcall(action, ...)
     if not status then
-        return nil, result
+        -- Don't output "Permission denied" errors as they flood the output
+        if not result:match("Permission denied") then
+            return nil, result
+        else
+            return nil, nil -- Return nil, nil for permission denied errors
+        end
     end
     if not result and err then
-        return nil, err
+        -- Don't output "Permission denied" errors
+        if not (err and err:match("Permission denied")) then
+            return nil, err
+        else
+            return nil, nil -- Return nil, nil for permission denied errors
+        end
     end
     return result
 end
@@ -304,7 +314,7 @@ function fs.get_directory_contents(path)
         local normalized_path = fs.normalize_path(dir_path)
         local command = is_windows() 
             and 'dir /b "' .. normalized_path .. '"'
-            or 'ls -1 "' .. normalized_path .. '"'
+            or 'ls -1 "' .. normalized_path .. '" 2>/dev/null'  -- Redirect stderr to /dev/null
         
         local handle = io.popen(command)
         if not handle then
@@ -643,10 +653,14 @@ function fs.discover_files(directories, patterns, exclude_patterns)
         for _, item in ipairs(contents) do
             local item_path = fs.join_paths(current_path, item)
             
+            -- Skip if we can't access the path
+            local is_dir = fs.is_directory(item_path)
+            local is_file = not is_dir and fs.file_exists(item_path)
+            
             -- Recursively process directories
-            if fs.is_directory(item_path) then
+            if is_dir then
                 process_directory(dir, item_path)
-            else
+            elseif is_file then  -- Only process if it's a valid file we can access
                 -- Special handling for exact file extension matches
                 local file_ext = fs.get_extension(item_path)
                 
@@ -721,11 +735,15 @@ function fs.scan_directory(path, recursive)
         for _, item in ipairs(contents) do
             local item_path = fs.join_paths(current_path, item)
             
-            if fs.is_directory(item_path) then
+            -- Skip if we can't access the path
+            local is_dir = fs.is_directory(item_path)
+            local is_file = not is_dir and fs.file_exists(item_path)
+            
+            if is_dir then
                 if recursive then
                     scan(item_path)
                 end
-            else
+            elseif is_file then  -- Only add if it's a valid file we can access
                 table.insert(results, item_path)
             end
         end

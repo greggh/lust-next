@@ -60,7 +60,7 @@ end
 local function fix_expect_system()
   print("Fixing lust-next expect assertion system...")
   
-  -- Debug info
+  -- Make sure the has function exists
   local has_fn = lust_next.has
   if not has_fn then
     print("ERROR: has function not found in lust_next")
@@ -76,16 +76,16 @@ local function fix_expect_system()
     print("has function exists in lust_next")
   end
   
-  -- Make sure paths are correctly set up
+  -- Ensure paths table exists
   if not lust_next.paths then
-    print("ERROR: paths table not found in lust_next")
-    return false
+    print("ERROR: paths table not found in lust_next, creating it")
+    lust_next.paths = {}
   end
   
   -- Make sure the be path is properly set up with truthy
   if not lust_next.paths.be then
     print("Creating be path")
-    lust_next.paths.be = { 'a', 'an', 'truthy', 'falsey' }
+    lust_next.paths.be = { 'a', 'an', 'truthy', 'falsey', 'greater', 'less' }
   else
     -- Make sure truthy is in the be path
     if not lust_next.has(lust_next.paths.be, 'truthy') then
@@ -97,6 +97,18 @@ local function fix_expect_system()
     if not lust_next.has(lust_next.paths.be, 'falsey') then
       print("Adding falsey to be path")
       table.insert(lust_next.paths.be, 'falsey')
+    end
+    
+    -- Make sure greater is in the be path
+    if not lust_next.has(lust_next.paths.be, 'greater') then
+      print("Adding greater to be path")
+      table.insert(lust_next.paths.be, 'greater')
+    end
+    
+    -- Make sure less is in the be path
+    if not lust_next.has(lust_next.paths.be, 'less') then
+      print("Adding less to be path")
+      table.insert(lust_next.paths.be, 'less')
     end
   end
   
@@ -120,6 +132,30 @@ local function fix_expect_system()
         return v == false or v == nil,
           'expected ' .. tostring(v) .. ' to be falsey',
           'expected ' .. tostring(v) .. ' to not be falsey'
+      end
+    }
+  end
+  
+  -- Make sure be_greater is defined
+  if not lust_next.paths.be_greater then
+    print("Adding be_greater path")
+    lust_next.paths.be_greater = {
+      than = function(a, b)
+        return a > b,
+          'expected ' .. tostring(a) .. ' to be greater than ' .. tostring(b),
+          'expected ' .. tostring(a) .. ' to not be greater than ' .. tostring(b)
+      end
+    }
+  end
+  
+  -- Make sure be_less is defined
+  if not lust_next.paths.be_less then
+    print("Adding be_less path")
+    lust_next.paths.be_less = {
+      than = function(a, b)
+        return a < b,
+          'expected ' .. tostring(a) .. ' to be less than ' .. tostring(b),
+          'expected ' .. tostring(a) .. ' to not be less than ' .. tostring(b)
       end
     }
   end

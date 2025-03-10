@@ -1,960 +1,1349 @@
--- lust-next test coverage module
--- Implementation of code coverage tracking using Lua's debug hooks
-
+-- lust-next code coverage module
 local M = {}
 
--- Import filesystem module for file operations
+-- Import submodules
+local debug_hook = require("lib.coverage.debug_hook")
+local file_manager = require("lib.coverage.file_manager")
+local patchup = require("lib.coverage.patchup")
+local static_analyzer = require("lib.coverage.static_analyzer")
 local fs = require("lib.tools.filesystem")
 
--- Helper function to check if a file matches patterns
-local function matches_pattern(file, patterns)
-  if not patterns or #patterns == 0 then
-    return false
-  end
-  
-  -- Normalize the file path for consistent matching
-  local normalized_file = fs.normalize_path(file)
-  
-  for _, pattern in ipairs(patterns) do
-    -- Use filesystem module's pattern matching
-    if fs.matches_pattern(normalized_file, pattern) then
-      return true
-    end
-  end
-  
-  return false
-end
-
--- File cache for source code analysis
-local file_cache = {}
-
--- Read a file and return its contents as an array of lines
-local function read_file(filename)
-  if file_cache[filename] then
-    return file_cache[filename]
-  end
-  
-  local content = fs.read_file(filename)
-  if not content then
-    return {}
-  end
-  
-  local lines = {}
-  for line in content:gmatch("[^\r\n]+") do
-    table.insert(lines, line)
-  end
-  
-  file_cache[filename] = lines
-  return lines
-end
-
--- Count the number of executable lines in a file
-local function count_executable_lines(filename)
-  local lines = read_file(filename)
-  local count = 0
-  
-  for i, line in ipairs(lines) do
-    -- Skip comments and empty lines
-    if not line:match("^%s*%-%-") and not line:match("^%s*$") then
-      count = count + 1
-    end
-  end
-  
-  return count
-end
-
--- Coverage data structure
-M.data = {
-  files = {}, -- Coverage data per file
-  lines = {}, -- Lines executed across all files
-  functions = {}, -- Functions called
-}
-
--- Coverage statistics
-M.stats = {
-  files = {}, -- Stats per file
-  total_files = 0,
-  covered_files = 0,
-  total_lines = 0,
-  covered_lines = 0,
-  total_functions = 0,
-  covered_functions = 0,
-}
-
--- Configuration
-M.config = {
+-- Default configuration
+local DEFAULT_CONFIG = {
   enabled = false,
-  source_dirs = {".", "src", "lib"}, -- Directories to scan for source files
-  use_default_patterns = true,       -- Whether to use default include/exclude patterns
-  discover_uncovered = true,         -- Discover files that aren't executed by tests
-  -- Default include all Lua files, plus typical glob patterns
-  include = {
-    "*.lua",          -- Glob pattern for all Lua files
-    "**/*.lua",       -- Glob pattern for all Lua files in subdirectories
-    "src/**/*.lua",   -- Glob pattern for Lua files in src directory
-    "lib/**/*.lua",   -- Glob pattern for Lua files in lib directory
-  },
-  -- Default exclude test files
+  source_dirs = {".", "lib"},
+  include = {"*.lua", "**/*.lua"},
   exclude = {
-    "*_test.lua",     -- Glob pattern for files ending with _test.lua
-    "*_spec.lua",     -- Glob pattern for files ending with _spec.lua
-    "test_*.lua",     -- Glob pattern for files starting with test_
-    "tests/**/*.lua", -- Glob pattern for files in tests directory
-    "**/test/**/*.lua", -- Glob pattern for files in any test directory
-    "**/tests/**/*.lua", -- Glob pattern for files in any tests directory
-    "**/spec/**/*.lua",  -- Glob pattern for files in any spec directory
-    "**/*.test.lua",     -- Alternative test naming pattern
-    "**/*.spec.lua",     -- Alternative spec naming pattern
+    "*_test.lua", "*_spec.lua", "test_*.lua",
+    "tests/**/*.lua", "**/test/**/*.lua", "**/tests/**/*.lua",
+    "**/spec/**/*.lua", "**/*.test.lua", "**/*.spec.lua",
+    "**/*.min.lua", "**/vendor/**", "**/deps/**", "**/node_modules/**"
   },
-  threshold = 90,     -- Default coverage threshold (percentage),
-  debug = false       -- Enable debug output
+  discover_uncovered = true,
+  threshold = 90,
+  debug = false,
+  
+  -- Static analysis options
+  use_static_analysis = true,  -- Use static analysis when available
+  branch_coverage = false,      -- Track branch coverage (not just line coverage)
+  cache_parsed_files = true,    -- Cache parsed ASTs for better performance
+  track_blocks = true,          -- Track code blocks (not just lines)
+  pre_analyze_files = false     -- Pre-analyze all files before test execution
 }
 
--- State tracking
-local coverage_active = false
+-- Module state
+local config = {}
+local active = false
 local original_hook = nil
-M.debug_mode = false -- Debug output flag
+local enhanced_mode = false
 
--- Debug hook function to track line execution
-local function coverage_hook(event, line)
-  -- Track hook calls for debugging
-  M.hook_calls = (M.hook_calls or 0) + 1
-  if M.debug_mode and M.hook_calls % 1000 == 0 then
-    print("DEBUG [Coverage] Hook called " .. M.hook_calls .. " times")
+-- Expose configuration for external access (needed for config_test.lua)
+M.config = DEFAULT_CONFIG
+
+-- Track line coverage through instrumentation
+function M.track_line(file_path, line_num)
+  if not active or not config.enabled then
+    return
   end
   
-  -- Add error handling to prevent silent failures
-  local success, err = pcall(function()
-    if event == "line" then
-      local info = debug.getinfo(2, "S")
-      local source = info.source
-      
-      -- Skip files that don't have a source name
-      if not source or source:sub(1, 1) ~= "@" then
-        if M.debug_mode and source then
-          print("DEBUG [Coverage] Skipping non-file source: " .. source)
-        end
-        return
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Initialize file data if needed
+  if not debug_hook.get_coverage_data().files[normalized_path] then
+    -- Initialize file data
+    local line_count = 0
+    local source = fs.read_file(file_path)
+    if source then
+      for _ in source:gmatch("[^\r\n]+") do
+        line_count = line_count + 1
       end
-      
-      -- Get the file path and normalize it
-      local file = source:sub(2) -- Remove the @ prefix
-      local normalized_file = fs.normalize_path(file)
-      
-      -- Get filename for logging (shorter path)
-      local filename = fs.get_file_name(normalized_file) or normalized_file
-      
-      -- Only print debug info if debug mode is enabled
-      if M.debug_mode then
-        print("DEBUG [Coverage] Checking line in file: " .. normalized_file)
-        
-        print("DEBUG [Coverage] Checking if matches include patterns:")
-        for i, pattern in ipairs(M.config.include) do
-          -- Convert glob pattern to Lua pattern for debugging
-          local lua_pattern = glob_to_pattern(pattern)
-          local matches = normalized_file:match(lua_pattern) ~= nil
-          print("  Pattern " .. i .. ": " .. pattern .. " -> " .. tostring(lua_pattern) .. " (Match: " .. tostring(matches) .. ")")
-        end
-      end
-      
-      -- TEMPORARY: Accept all Lua files for testing
-      local is_lua_file = fs.get_extension(normalized_file) == "lua"
-      local should_include = is_lua_file and not matches_pattern(normalized_file, M.config.exclude)
-      
-      -- Only check patterns if not accepting all Lua files
-      if not should_include then
-        -- Skip files that don't match include patterns
-        if not matches_pattern(normalized_file, M.config.include) then
-          if M.debug_mode then
-            print("DEBUG [Coverage] File does not match include patterns: " .. normalized_file)
-          end
-          return
-        end
-        
-        -- Skip files that match exclude patterns
-        if matches_pattern(normalized_file, M.config.exclude) then
-          if M.debug_mode then
-            print("DEBUG [Coverage] File matches exclude patterns: " .. normalized_file)
-          end
-          return
-        end
-      end
-      
-      -- If we got here, the file should be tracked
-      if M.debug_mode then
-        print("DEBUG [Coverage] TRACKING line " .. line .. " in file: " .. normalized_file)
-        
-        -- Print this file's source if present, limited to first few lines
-        M.already_printed_files = M.already_printed_files or {}
-        if not M.already_printed_files[normalized_file] then
-          M.already_printed_files[normalized_file] = true
-          local lines = read_file(file)
-          print("DEBUG [Coverage] First 5 lines of source:")
-          for i = 1, math.min(5, #lines) do
-            print("  " .. i .. ": " .. lines[i])
-          end
-        end
-      end
-      
-      -- Use consistent file path as key for data storage
-      if not M.data.files[normalized_file] then
-        M.data.files[normalized_file] = {
-          lines = {},
-          functions = {},
-          line_count = count_executable_lines(file), -- Use original path for reading file
-        }
-      end
-      
-      -- Track line execution
-      M.data.files[normalized_file].lines[line] = true
-      
-      -- Track global line execution
-      local global_key = normalized_file .. ":" .. line
-      M.data.lines[global_key] = true
-    elseif event == "call" then
-      local info = debug.getinfo(2, "Sn")
-      local source = info.source
-      
-      -- Skip files that don't have a source name
-      if not source or source:sub(1, 1) ~= "@" then
-        if M.debug_mode and source then
-          print("DEBUG [Coverage] Skipping non-file source in call: " .. source)
-        end
-        return
-      end
-      
-      -- Get the file path and normalize it
-      local file = source:sub(2) -- Remove the @ prefix
-      local normalized_file = fs.normalize_path(file)
-      
-      -- TEMPORARY: Accept all Lua files for testing
-      local is_lua_file = fs.get_extension(normalized_file) == "lua"
-      local should_include = is_lua_file and not matches_pattern(normalized_file, M.config.exclude)
-      
-      -- Only check patterns if not accepting all Lua files
-      if not should_include then
-        -- Skip files that don't match include patterns
-        if not matches_pattern(normalized_file, M.config.include) then
-          if M.debug_mode then
-            print("DEBUG [Coverage] File does not match include patterns for call: " .. normalized_file)
-          end
-          return
-        end
-        
-        -- Skip files that match exclude patterns
-        if matches_pattern(normalized_file, M.config.exclude) then
-          if M.debug_mode then
-            print("DEBUG [Coverage] File matches exclude patterns for call: " .. normalized_file)
-          end
-          return
-        end
-      end
-      
-      -- Use consistent file path as key for data storage
-      if not M.data.files[normalized_file] then
-        M.data.files[normalized_file] = {
-          lines = {},
-          functions = {},
-          line_count = count_executable_lines(file), -- Use original path for reading file
-        }
-      end
-      
-      -- Function name or line number if name is not available
-      local func_name = info.name or ("line_" .. info.linedefined)
-      if M.debug_mode then
-        print("DEBUG [Coverage] TRACKING function " .. func_name .. " in file: " .. normalized_file)
-      end
-      
-      -- Track function execution
-      M.data.files[normalized_file].functions[func_name] = true
-      local func_key = normalized_file .. ":" .. func_name
-      M.data.functions[func_key] = true
     end
-  end)
-  
-  -- Report any errors in the debug hook without breaking execution
-  if not success then
-    print("ERROR [Coverage] Error in debug hook: " .. tostring(err))
+    
+    debug_hook.get_coverage_data().files[normalized_path] = {
+      lines = {},
+      functions = {},
+      line_count = line_count,
+      source = source
+    }
   end
   
-  -- Call the original hook if it exists
-  if original_hook then
-    original_hook(event, line)
-  end
+  -- Track line
+  debug_hook.get_coverage_data().files[normalized_path].lines[line_num] = true
+  debug_hook.get_coverage_data().lines[normalized_path .. ":" .. line_num] = true
 end
 
--- Discover all source files based on include/exclude patterns
-function M.discover_source_files()
-  local discovered_files = {}
-  
-  -- Get current working directory
-  local cwd = os.getenv("PWD") or io.popen("pwd"):read("*l") or "."
-  
-  if M.debug_mode then
-    print("DEBUG [Coverage] Starting source file discovery from: " .. cwd)
-    print("DEBUG [Coverage] Source directories to scan: ")
-    for _, dir in ipairs(M.config.source_dirs) do
-      print("  - " .. dir)
-    end
-  end
-  
-  -- Convert source dirs to absolute paths
-  local absolute_dirs = {}
-  for _, dir in ipairs(M.config.source_dirs) do
-    local full_dir = dir:match("^/") and dir or fs.join_paths(cwd, dir)
-    table.insert(absolute_dirs, full_dir)
-    
-    if M.debug_mode then
-      print("DEBUG [Coverage] Using absolute directory: " .. full_dir)
-    end
-  end
-  
-  -- Use filesystem module's discover_files function
-  local lua_files = fs.discover_files(
-    absolute_dirs,
-    M.config.include,
-    M.config.exclude
-  )
-  
-  -- Convert to a map for faster lookups
-  for _, file_path in ipairs(lua_files) do
-    local normalized_path = fs.normalize_path(file_path)
-    discovered_files[normalized_path] = true
-    
-    if M.debug_mode then
-      print("DEBUG [Coverage] Discovered source file: " .. normalized_path)
-    end
-  end
-  
-  -- Count discovered files
-  local count = 0
-  for _ in pairs(discovered_files) do
-    count = count + 1
-  end
-  
-  if M.debug_mode then
-    print("DEBUG [Coverage] Discovered " .. count .. " source files")
-  end
-  
-  return discovered_files
-end
-
--- Initialize coverage module
+-- Apply configuration with defaults
 function M.init(options)
-  options = options or {}
+  -- Start with defaults
+  config = {}
+  for k, v in pairs(DEFAULT_CONFIG) do
+    config[k] = v
+  end
   
-  -- Apply options with defaults
-  if type(options) == "table" then
+  -- Apply user options
+  if options then
     for k, v in pairs(options) do
       if k == "include" or k == "exclude" then
-        -- Replace arrays entirely if configured not to use defaults
-        if options.use_default_patterns == false then
-          M.config[k] = v
-        else
-          -- Otherwise append to existing arrays
-          if type(v) == "table" then
-            for _, pattern in ipairs(v) do
-              table.insert(M.config[k], pattern)
+        if type(v) == "table" then
+          config[k] = v
+        end
+      else
+        config[k] = v
+      end
+    end
+  end
+  
+  -- Update the publicly exposed config
+  for k, v in pairs(config) do
+    M.config[k] = v
+  end
+  
+  -- Reset coverage
+  M.reset()
+  
+  -- Configure debug hook
+  debug_hook.set_config(config)
+  
+  -- Initialize static analyzer if enabled
+  if config.use_static_analysis then
+    static_analyzer.init({
+      cache_files = config.cache_parsed_files
+    })
+    
+    -- Pre-analyze files if configured
+    if config.pre_analyze_files then
+      local found_files = {}
+      -- Discover Lua files
+      for _, dir in ipairs(config.source_dirs) do
+        for _, include_pattern in ipairs(config.include) do
+          local matches = fs.glob(dir, include_pattern)
+          for _, file_path in ipairs(matches) do
+            -- Check if file should be excluded
+            local excluded = false
+            for _, exclude_pattern in ipairs(config.exclude) do
+              if fs.matches_pattern(file_path, exclude_pattern) then
+                excluded = true
+                break
+              end
+            end
+            
+            if not excluded then
+              table.insert(found_files, file_path)
             end
           end
         end
-      elseif k == "source_dirs" and type(v) == "table" then
-        -- Replace source_dirs array
-        M.config.source_dirs = v
-      else
-        M.config[k] = v
+      end
+      
+      -- Pre-analyze all discovered files
+      if config.debug then
+        print("DEBUG [Coverage] Pre-analyzing " .. #found_files .. " files")
+      end
+      
+      for _, file_path in ipairs(found_files) do
+        static_analyzer.parse_file(file_path)
       end
     end
   end
   
-  -- Set debug mode from config
-  M.debug_mode = M.config.debug or false
+  -- Try to load enhanced C extensions
+  local has_cluacov = pcall(require, "lib.coverage.vendor.cluacov_hook")
+  enhanced_mode = has_cluacov
   
-  if M.debug_mode then
-    print("DEBUG [Coverage] Initializing coverage module with options:")
-    for k, v in pairs(M.config) do
-      if type(v) == "table" then
-        print("  " .. k .. ":")
-        for i, pattern in ipairs(v) do
-          print("    " .. i .. ": " .. pattern)
+  if config.debug then
+    print("DEBUG [Coverage] Initialized with " .. 
+          (enhanced_mode and "enhanced C extensions" or "pure Lua implementation") ..
+          (config.use_static_analysis and " and static analysis" or ""))
+  end
+  
+  return M
+end
+
+-- Start coverage collection
+function M.start(options)
+  if not config.enabled then
+    return M
+  end
+  
+  if active then
+    return M  -- Already running
+  end
+  
+  -- Save original hook
+  original_hook = debug.gethook()
+  
+  -- Set debug hook
+  debug.sethook(debug_hook.debug_hook, "cl")
+  
+  active = true
+  
+  -- Instead of marking arbitrary initial lines, we'll analyze the code structure
+  -- and mark logically connected lines to ensure consistent coverage highlighting
+  
+  -- Process loaded modules to ensure their module.lua files are tracked
+  if package.loaded then
+    for module_name, _ in pairs(package.loaded) do
+      -- Try to find the module's file path
+      local paths_to_check = {}
+      
+      -- Common module path patterns
+      local patterns = {
+        module_name:gsub("%.", "/") .. ".lua",                 -- module/name.lua
+        module_name:gsub("%.", "/") .. "/init.lua",            -- module/name/init.lua
+        "lib/" .. module_name:gsub("%.", "/") .. ".lua",       -- lib/module/name.lua
+        "lib/" .. module_name:gsub("%.", "/") .. "/init.lua",  -- lib/module/name/init.lua
+      }
+      
+      for _, pattern in ipairs(patterns) do
+        table.insert(paths_to_check, pattern)
+      end
+      
+      -- Try each potential path
+      for _, potential_path in ipairs(paths_to_check) do
+        if fs.file_exists(potential_path) and debug_hook.should_track_file(potential_path) then
+          -- Module file found, process its structure
+          process_module_structure(potential_path)
+        end
+      end
+    end
+  end
+  
+  -- Process the currently executing file
+  local current_source
+  for i = 1, 10 do -- Check several stack levels
+    local info = debug.getinfo(i, "S")
+    if info and info.source and info.source:sub(1, 1) == "@" then
+      current_source = info.source:sub(2)
+      if debug_hook.should_track_file(current_source) then
+        process_module_structure(current_source)
+      end
+    end
+  end
+  
+  return M
+end
+
+-- Process a module's code structure to mark logical execution paths
+function process_module_structure(file_path)
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Initialize file data in coverage tracking
+  if not debug_hook.get_coverage_data().files[normalized_path] then
+    local source = fs.read_file(file_path)
+    if not source then return end
+    
+    -- Split source into lines for analysis
+    local lines = {}
+    for line in (source .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+      table.insert(lines, line)
+    end
+    
+    -- Initialize file data with basic information
+    debug_hook.get_coverage_data().files[normalized_path] = {
+      lines = {},
+      functions = {},
+      line_count = #lines,
+      source = lines,
+      source_text = source,
+      executable_lines = {},
+      logical_chunks = {} -- Store related code blocks
+    }
+    
+    -- Apply static analysis immediately if enabled
+    if config.use_static_analysis then
+      local ast, code_map = static_analyzer.parse_file(file_path)
+      
+      if ast and code_map then
+        if config.debug then
+          print("DEBUG [Coverage] Using static analysis for " .. file_path)
+        end
+        
+        -- Store static analysis information
+        debug_hook.get_coverage_data().files[normalized_path].code_map = code_map
+        debug_hook.get_coverage_data().files[normalized_path].ast = ast
+        debug_hook.get_coverage_data().files[normalized_path].executable_lines = 
+          static_analyzer.get_executable_lines(code_map)
+        
+        -- Register functions from static analysis
+        for _, func in ipairs(code_map.functions) do
+          local start_line = func.start_line
+          local func_key = start_line .. ":" .. (func.name or "anonymous_function")
+          
+          debug_hook.get_coverage_data().files[normalized_path].functions[func_key] = {
+            name = func.name or ("function_" .. start_line),
+            line = start_line,
+            end_line = func.end_line,
+            params = func.params or {},
+            executed = false
+          }
+        end
+        
+        -- CRITICAL FIX: Do NOT mark non-executable lines as covered at initialization
+        -- This was causing all comments and non-executable lines to appear covered
+        -- Just mark them as non-executable in the executable_lines table
+        for line_num = 1, code_map.line_count do
+          if not static_analyzer.is_line_executable(code_map, line_num) then
+            if debug_hook.get_coverage_data().files[normalized_path].executable_lines then
+              debug_hook.get_coverage_data().files[normalized_path].executable_lines[line_num] = false
+            end
+          end
         end
       else
-        print("  " .. k .. " = " .. tostring(v))
+        -- Static analysis failed, use basic heuristics
+        if config.debug then
+          print("DEBUG [Coverage] Static analysis failed for " .. file_path .. ", using heuristics")
+        end
+        fallback_heuristic_analysis(file_path, normalized_path, lines)
       end
+    else
+      -- Static analysis disabled, use basic heuristics
+      fallback_heuristic_analysis(file_path, normalized_path, lines)
+    end
+  end
+end
+
+-- Fallback to basic heuristic analysis when static analysis is not available
+function fallback_heuristic_analysis(file_path, normalized_path, lines)
+  -- Mark basic imports and requires to ensure some coverage
+  local import_section_end = 0
+  for i, line in ipairs(lines) do
+    local trimmed = line:match("^%s*(.-)%s*$")
+    if trimmed:match("^require") or 
+       trimmed:match("^local%s+[%w_]+%s*=%s*require") or
+       trimmed:match("^import") then
+      -- This is an import/require line
+      M.track_line(file_path, i)
+      import_section_end = i
+    elseif i > 1 and i <= import_section_end + 2 and 
+           (trimmed:match("^local%s+[%w_]+") or trimmed == "") then
+      -- Variable declarations or blank lines right after imports
+      M.track_line(file_path, i)
+    elseif i > import_section_end + 2 and trimmed ~= "" and 
+           not trimmed:match("^%-%-") then
+      -- First non-comment, non-blank line after imports section
+      break
     end
   end
   
-  M.reset()
+  -- Simple function detection
+  for i, line in ipairs(lines) do
+    local trimmed = line:match("^%s*(.-)%s*$")
+    -- Detect function declarations
+    local func_name = trimmed:match("^function%s+([%w_:%.]+)%s*%(")
+    if func_name then
+      debug_hook.get_coverage_data().files[normalized_path].functions[i .. ":" .. func_name] = {
+        name = func_name,
+        line = i,
+        executed = false
+      }
+    end
+    
+    -- Detect local function declarations
+    local local_func_name = trimmed:match("^local%s+function%s+([%w_:%.]+)%s*%(")
+    if local_func_name then
+      debug_hook.get_coverage_data().files[normalized_path].functions[i .. ":" .. local_func_name] = {
+        name = local_func_name,
+        line = i,
+        executed = false
+      }
+    end
+  end
+end
+
+-- Apply static analysis to a file with improved protection and timeout handling
+local function apply_static_analysis(file_path, file_data)
+  if not file_data.needs_static_analysis then
+    return 0
+  end
   
-  -- Discover all source files upfront if enabled
-  if M.config.enabled and M.config.discover_uncovered then
-    local discovered_files = M.discover_source_files()
-    for file_path in pairs(discovered_files) do
-      if not M.data.files[file_path] then
-        -- Try to count executable lines
-        local line_count = count_executable_lines(file_path)
+  -- Skip if the file doesn't exist or can't be read
+  if not fs.file_exists(file_path) then
+    if config.debug then
+      print("DEBUG [Coverage] Skipping static analysis for non-existent file: " .. file_path)
+    end
+    return 0
+  end
+  
+  -- Skip files over 250KB for performance (INCREASED from 100KB)
+  local file_size = fs.get_file_size(file_path)
+  if file_size and file_size > 250000 then
+    if config.debug then
+      print("DEBUG [Coverage] Skipping static analysis for large file: " .. file_path .. 
+            " (" .. math.floor(file_size/1024) .. "KB)")
+    end
+    return 0
+  end
+  
+  -- Skip test files that don't need detailed analysis
+  if file_path:match("_test%.lua$") or 
+     file_path:match("_spec%.lua$") or
+     file_path:match("/tests/") or
+     file_path:match("/test/") then
+    if config.debug then
+      print("DEBUG [Coverage] Skipping static analysis for test file: " .. file_path)
+    end
+    return 0
+  end
+  
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Set up timing with more generous timeout
+  local timeout_reached = false
+  local start_time = os.clock()
+  local MAX_ANALYSIS_TIME = 3.0 -- 3 second timeout (INCREASED from 500ms)
+  
+  -- Variables for results
+  local ast, code_map, improved_lines = nil, nil, 0
+  
+  -- PHASE 1: Parse file with static analyzer (with protection)
+  local phase1_success, phase1_result = pcall(function()
+    -- Short-circuit if we're already exceeding time
+    if os.clock() - start_time > MAX_ANALYSIS_TIME then
+      timeout_reached = true
+      return nil, "Initial timeout"
+    end
+    
+    -- Run the parser with all our protection mechanisms
+    ast, err = static_analyzer.parse_file(file_path)
+    if not ast then
+      return nil, "Parse failed: " .. (err or "unknown error")
+    end
+    
+    -- Check for timeout again before code_map access
+    if os.clock() - start_time > MAX_ANALYSIS_TIME then
+      timeout_reached = true
+      return nil, "Timeout after parse"
+    end
+    
+    -- Access code_map safely
+    if type(ast) ~= "table" then
+      return nil, "Invalid AST (not a table)"
+    end
+    
+    -- Get the code_map from the result
+    return ast, nil
+  end)
+  
+  -- Handle errors from phase 1
+  if not phase1_success then
+    if config.debug then
+      print("DEBUG [Coverage] Static analysis phase 1 error: " .. tostring(phase1_result) .. 
+           " for file: " .. file_path)
+    end
+    return 0
+  end
+  
+  -- Check for timeout or missing AST
+  if timeout_reached or not ast then
+    if config.debug then
+      print("DEBUG [Coverage] Static analysis " .. 
+            (timeout_reached and "timed out" or "failed") .. 
+            " in phase 1 for file: " .. file_path)
+    end
+    return 0
+  end
+  
+  -- PHASE 2: Get code map and apply it to our data (with protection)
+  local phase2_success, phase2_result = pcall(function()
+    -- First check if analysis is still within time limit
+    if os.clock() - start_time > MAX_ANALYSIS_TIME then
+      timeout_reached = true
+      return 0, "Phase 2 initial timeout"
+    end
+    
+    -- Try to get the code map from the companion cache
+    code_map = ast._code_map -- This may have been attached by parse_file
+    
+    if not code_map then
+      -- If no attached code map, we need to generate one
+      local err
+      code_map, err = static_analyzer.get_code_map_for_ast(ast, file_path)
+      if not code_map then
+        return 0, "Failed to get code map: " .. (err or "unknown error")
+      end
+    end
+    
+    -- Periodic timeout check
+    if os.clock() - start_time > MAX_ANALYSIS_TIME then
+      timeout_reached = true
+      return 0, "Timeout after code map generation"
+    end
+    
+    -- Apply the code map data to our file_data safely
+    file_data.code_map = code_map
+    
+    -- Get executable lines safely with timeout protection
+    local exec_lines_success, exec_lines_result = pcall(function()
+      return static_analyzer.get_executable_lines(code_map)
+    end)
+    
+    if not exec_lines_success then
+      return 0, "Error getting executable lines: " .. tostring(exec_lines_result)
+    end
+    
+    file_data.executable_lines = exec_lines_result
+    file_data.functions_info = code_map.functions or {}
+    file_data.branches = code_map.branches or {}
+    
+    return 1, nil -- Success
+  end)
+  
+  -- Handle errors from phase 2
+  if not phase2_success or timeout_reached then
+    if config.debug then
+      print("DEBUG [Coverage] Static analysis " .. 
+            (timeout_reached and "timed out" or "failed") .. 
+            " in phase 2 for file: " .. file_path ..
+            (not phase2_success and (": " .. tostring(phase2_result)) or ""))
+    end
+    return 0
+  end
+  
+  -- PHASE 3: Mark non-executable lines (this is the most expensive operation)
+  local phase3_success, phase3_result = pcall(function()
+    -- Final time check before heavy processing
+    if os.clock() - start_time > MAX_ANALYSIS_TIME then
+      timeout_reached = true
+      return 0, "Phase 3 initial timeout"
+    end
+    
+    local line_improved_count = 0
+    local BATCH_SIZE = 100 -- Process in batches for better interrupt handling
+    
+    -- Process lines in batches to allow for timeout checks
+    for batch_start = 1, file_data.line_count, BATCH_SIZE do
+      -- Check timeout at the start of each batch
+      if os.clock() - start_time > MAX_ANALYSIS_TIME then
+        timeout_reached = true
+        return line_improved_count, "Timeout during batch processing at line " .. batch_start
+      end
+      
+      local batch_end = math.min(batch_start + BATCH_SIZE - 1, file_data.line_count)
+      
+      -- Process current batch
+      for line_num = batch_start, batch_end do
+        -- Use safe function to check if line is executable
+        local is_exec_success, is_executable = pcall(function()
+          return static_analyzer.is_line_executable(code_map, line_num)
+        end)
         
-        M.data.files[file_path] = {
-          lines = {},
-          functions = {},
-          line_count = line_count,
-          discovered = true  -- Mark as discovered, not executed
-        }
-        
-        if M.debug_mode then
-          print("DEBUG [Coverage] Added discovered file to tracking: " .. file_path .. " (" .. line_count .. " lines)")
+        -- If not executable, mark it in executable_lines table
+        if (is_exec_success and not is_executable) then
+          -- Store that this line is non-executable in the executable_lines table
+          file_data.executable_lines[line_num] = false
+          
+          -- IMPORTANT: If a non-executable line was incorrectly marked as covered, remove it
+          if file_data.lines[line_num] then
+            file_data.lines[line_num] = nil
+            line_improved_count = line_improved_count + 1
+          end
         end
       end
     end
+    
+    -- Mark functions based on static analysis (quick operation)
+    if os.clock() - start_time <= MAX_ANALYSIS_TIME and code_map.functions then
+      for _, func in ipairs(code_map.functions) do
+        local start_line = func.start_line
+        if start_line and start_line > 0 then
+          local func_key = start_line .. ":function"
+          
+          if not file_data.functions[func_key] then
+            -- Function is defined but wasn't called during test
+            file_data.functions[func_key] = {
+              name = func.name or ("function_" .. start_line),
+              line = start_line,
+              executed = false,
+              params = func.params or {}
+            }
+          end
+        end
+      end
+    end
+    
+    return line_improved_count, nil
+  end)
+  
+  -- Handle errors from phase 3
+  if not phase3_success then
+    if config.debug then
+      print("DEBUG [Coverage] Static analysis phase 3 error: " .. tostring(phase3_result) .. 
+           " for file: " .. file_path)
+    end
+    return 0
   end
   
+  -- If timeout occurred during phase 3, we still return any improvements we made
+  if timeout_reached and config.debug then
+    print("DEBUG [Coverage] Static analysis timed out in phase 3 for file: " .. file_path ..
+          " - partial results used")
+  end
+  
+  -- Return the number of improved lines
+  improved_lines = type(phase3_result) == "number" and phase3_result or 0
+  
+  return improved_lines
+end
+
+-- Stop coverage collection
+function M.stop()
+  if not active then
+    return M
+  end
+  
+  -- Restore original hook
+  debug.sethook(original_hook)
+  
+  -- Process coverage data
+  if config.discover_uncovered then
+    local added = file_manager.add_uncovered_files(
+      debug_hook.get_coverage_data(),
+      config
+    )
+    
+    if config.debug then
+      print("DEBUG [Coverage] Added " .. added .. " discovered files")
+    end
+  end
+  
+  -- Apply static analysis if configured
+  if config.use_static_analysis then
+    local improved_files = 0
+    local improved_lines = 0
+    
+    for file_path, file_data in pairs(debug_hook.get_coverage_data().files) do
+      if file_data.needs_static_analysis then
+        local lines = apply_static_analysis(file_path, file_data)
+        if lines > 0 then
+          improved_files = improved_files + 1
+          improved_lines = improved_lines + lines
+        end
+      end
+    end
+    
+    if config.debug then
+      print("DEBUG [Coverage] Applied static analysis to " .. improved_files .. 
+            " files, improving " .. improved_lines .. " lines")
+    end
+  end
+  
+  -- Patch coverage data for non-executable lines, ensuring we're not
+  -- incorrectly marking executable lines as covered
+  local coverage_data = debug_hook.get_coverage_data()
+  
+  -- Very important pre-processing step: initialize executable_lines for all files if not present
+  for file_path, file_data in pairs(coverage_data.files) do
+    if not file_data.executable_lines then
+      file_data.executable_lines = {}
+    end
+  end
+  
+  -- Now patch with our enhanced logic
+  local patched = patchup.patch_all(coverage_data)
+  
+  -- Post-processing: verify we haven't incorrectly marked executable lines as covered
+  local fixed_files = 0
+  local fixed_lines = 0
+  for file_path, file_data in pairs(coverage_data.files) do
+    local file_fixed = false
+    -- Check each line
+    for line_num, is_covered in pairs(file_data.lines) do
+      -- If it's marked covered but it's an executable line and wasn't actually executed
+      if is_covered and file_data.executable_lines[line_num] and not debug_hook.was_line_executed(file_path, line_num) then
+        -- Fix incorrect coverage
+        file_data.lines[line_num] = false
+        fixed_lines = fixed_lines + 1
+        file_fixed = true
+      end
+    end
+    if file_fixed then
+      fixed_files = fixed_files + 1
+    end
+  end
+  
+  if config.debug then
+    print("DEBUG [Coverage] Patched " .. patched .. " non-executable lines")
+    if fixed_lines > 0 then
+      print("DEBUG [Coverage] Fixed " .. fixed_lines .. " incorrectly marked executable lines in " .. fixed_files .. " files")
+    end
+  end
+  
+  active = false
   return M
 end
 
 -- Reset coverage data
 function M.reset()
-  -- Clear data
-  M.data = {
-    files = {},
-    lines = {},
-    functions = {},
-  }
-  
-  -- Clear statistics
-  M.stats = {
-    files = {},
-    total_files = 0,
-    covered_files = 0,
-    total_lines = 0,
-    covered_lines = 0,
-    total_functions = 0,
-    covered_functions = 0,
-  }
-  
-  -- Clear file cache
-  file_cache = {}
-  
-  -- Track which files we've already printed for debugging
-  M.already_printed_files = {}
-  
+  debug_hook.reset()
   return M
 end
 
--- Start collecting coverage data
-function M.start()
-  if not M.config.enabled then
-    print("DEBUG [Coverage] Not starting coverage - disabled in config")
-    return M
-  end
-  
-  if coverage_active then
-    print("DEBUG [Coverage] Not starting coverage - already running")
-    return M -- Already running
-  end
-  
-  -- Print configuration for debugging
-  print("DEBUG [Coverage] Starting coverage with configuration:")
-  print("  Debug mode: " .. tostring(M.debug_mode))
-  print("  Include patterns: ")
-  for i, pattern in ipairs(M.config.include) do
-    print("    " .. i .. ": " .. pattern)
-  end
-  print("  Exclude patterns: ")
-  for i, pattern in ipairs(M.config.exclude) do
-    print("    " .. i .. ": " .. pattern)
-  end
-  
-  -- Save the original hook
-  original_hook = debug.gethook()
-  
-  -- Set the coverage hook
-  debug.sethook(coverage_hook, "cl") -- Track calls and lines
-  print("DEBUG [Coverage] Successfully set debug hook")
-  
-  coverage_active = true
+-- Full reset (clears all data)
+function M.full_reset()
+  debug_hook.reset()
   return M
 end
 
--- Stop collecting coverage data
-function M.stop()
-  if not coverage_active then
-    print("DEBUG [Coverage] Not stopping coverage - not running")
-    return M -- Not running
+-- Process multiline comments in a file
+local function process_multiline_comments(file_path, file_data)
+  -- Skip if no source code available
+  if not file_data.source or type(file_data.source) ~= "table" then
+    return 0
   end
   
-  print("DEBUG [Coverage] Stopping coverage collection")
+  local fixed = 0
+  local in_comment = false
   
-  -- Restore the original hook
-  debug.sethook(original_hook)
+  -- Ensure executable_lines table exists
+  if not file_data.executable_lines then
+    file_data.executable_lines = {}
+  end
   
-  -- Print summary of what was collected
-  print("DEBUG [Coverage] Coverage data collected:")
-  print("  Number of files tracked: " .. (function()
-    local count = 0
-    for _ in pairs(M.data.files) do
-      count = count + 1
+  -- More sophisticated multiline comment handling
+  -- Process each line to identify multiline comments
+  for i = 1, file_data.line_count or #file_data.source do
+    local line = file_data.source[i] or ""
+    
+    -- Track both --[[ and [[ style multiline comments
+    local ml_comment_markers = {}
+    
+    -- Find all multiline comment markers in this line
+    local pos = 1
+    while pos <= #line do
+      local start_pos_dash = line:find("%-%-%[%[", pos)
+      local start_pos_bracket = line:find("%[%[", pos)
+      local end_pos = line:find("%]%]", pos)
+      
+      -- Store each marker with its position
+      if start_pos_dash and (not start_pos_bracket or start_pos_dash < start_pos_bracket) and 
+         (not end_pos or start_pos_dash < end_pos) then
+        table.insert(ml_comment_markers, {pos = start_pos_dash, type = "start", style = "dash"})
+        pos = start_pos_dash + 4
+      elseif start_pos_bracket and (not start_pos_dash or start_pos_bracket < start_pos_dash) and
+             (not end_pos or start_pos_bracket < end_pos) and
+             -- Only count [[ as comment start if not in a string
+             not line:sub(1, start_pos_bracket-1):match("['\"]%s*$") then
+        table.insert(ml_comment_markers, {pos = start_pos_bracket, type = "start", style = "bracket"})
+        pos = start_pos_bracket + 2
+      elseif end_pos then
+        table.insert(ml_comment_markers, {pos = end_pos, type = "end"})
+        pos = end_pos + 2
+      else
+        break -- No more markers in this line
+      end
     end
-    return count
-  end)())
-  
-  print("  Number of lines tracked: " .. (function()
-    local count = 0
-    for _ in pairs(M.data.lines) do
-      count = count + 1
+    
+    -- Sort markers by position
+    table.sort(ml_comment_markers, function(a, b) return a.pos < b.pos end)
+    
+    -- Process markers in order
+    local was_in_comment = in_comment
+    local changed_in_this_line = false
+    
+    for _, marker in ipairs(ml_comment_markers) do
+      if marker.type == "start" and not in_comment then
+        in_comment = true
+        changed_in_this_line = true
+      elseif marker.type == "end" and in_comment then
+        in_comment = false
+        changed_in_this_line = true
+      end
     end
-    return count
-  end)())
-  
-  print("  Number of functions tracked: " .. (function()
-    local count = 0
-    for _ in pairs(M.data.functions) do
-      count = count + 1
+    
+    -- Handle line based on its comment state
+    if was_in_comment or in_comment or changed_in_this_line then
+      -- This line is part of or contains a multiline comment
+      file_data.executable_lines[i] = false
+      
+      -- Only remove coverage marking if it wasn't actually executed
+      if file_data.lines[i] then
+        file_data.lines[i] = nil
+        fixed = fixed + 1
+      end
     end
-    return count
-  end)())
+  end
   
-  coverage_active = false
-  return M
+  return fixed
 end
 
--- Get coverage report
-function M.report(format)
-  format = format or "summary" -- summary, json, html, lcov
-  
-  -- Calculate statistics from data
-  M.calculate_stats()
-  
-  -- Print debugging info for statistics
-  print("DEBUG [Coverage] Statistics calculated:")
-  print("  Files tracked: " .. M.stats.total_files)
-  print("  Files with coverage: " .. M.stats.covered_files)
-  print("  Lines tracked: " .. M.stats.total_lines)
-  print("  Lines covered: " .. M.stats.covered_lines)
-  print("  Functions tracked: " .. M.stats.total_functions)
-  print("  Functions covered: " .. M.stats.covered_functions)
-  
-  -- Print all files tracked
-  print("DEBUG [Coverage] Files being tracked:")
-  for file, _ in pairs(M.data.files) do
-    print("  " .. file)
-  end
-  
-  if format == "summary" then
-    return M.summary_report()
-  elseif format == "json" then
-    return M.json_report()
-  elseif format == "html" then
-    return M.html_report()
-  elseif format == "lcov" then
-    return M.lcov_report()
-  else
-    return M.summary_report()
-  end
-end
-
--- Generate data for a summary report
+-- Get coverage report data
 function M.get_report_data()
-  -- Make sure stats are calculated before generating report data
-  M.calculate_stats()
+  local coverage_data = debug_hook.get_coverage_data()
   
-  -- Generate structured data for reporting module
-  local structured_data = {
-    files = M.stats.files,
-    summary = {
-      total_files = M.stats.total_files,
-      covered_files = M.stats.covered_files,
-      total_lines = M.stats.total_lines,
-      covered_lines = M.stats.covered_lines,
-      total_functions = M.stats.total_functions,
-      covered_functions = M.stats.covered_functions,
-      line_coverage_percent = M.stats.total_lines > 0 and 
-                         (M.stats.covered_lines / M.stats.total_lines * 100) or 0,
-      function_coverage_percent = M.stats.total_functions > 0 and 
-                             (M.stats.covered_functions / M.stats.total_functions * 100) or 0,
-    }
-  }
-  
-  -- Calculate overall percentage as weighted average of lines and functions
-  structured_data.summary.overall_percent = (structured_data.summary.line_coverage_percent * 0.8) + 
-                                          (structured_data.summary.function_coverage_percent * 0.2)
-  
-  -- Debug output for troubleshooting
-  print("DEBUG [Coverage] get_report_data returning data with:")
-  print("  Total files: " .. structured_data.summary.total_files)
-  print("  Total lines: " .. structured_data.summary.total_lines)
-  print("  Covered lines: " .. structured_data.summary.covered_lines)
-  print("  Coverage percent: " .. string.format("%.2f%%", structured_data.summary.line_coverage_percent))
-  
-  -- Dump the files structure to debug data flow
-  print("DEBUG [Coverage] Files in report data:")
-  for file, stats in pairs(structured_data.files) do
-    print("  - " .. file .. ": " .. stats.covered_lines .. "/" .. stats.total_lines .. " lines, " .. 
-          stats.covered_functions .. "/" .. stats.total_functions .. " functions")
+  -- Process multiline comments in all files
+  local multiline_fixed = 0
+  for file_path, file_data in pairs(coverage_data.files) do
+    multiline_fixed = multiline_fixed + process_multiline_comments(file_path, file_data)
   end
   
-  return structured_data
-end
-
--- Generate a summary report (for backward compatibility)
-function M.summary_report()
-  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
-  -- Get structured data and format it as a summary report
-  local data = M.get_report_data()
-  
-  if reporting_module then
-    return reporting_module.format_coverage(data, "summary")
-  else
-    -- Fallback summary report format for backward compatibility
-    local report = {
-      files = M.stats.files,
-      total_files = M.stats.total_files,
-      covered_files = M.stats.covered_files,
-      files_pct = M.stats.covered_files / math.max(1, M.stats.total_files) * 100,
-      
-      total_lines = M.stats.total_lines,
-      covered_lines = M.stats.covered_lines,
-      lines_pct = M.stats.covered_lines / math.max(1, M.stats.total_lines) * 100,
-      
-      total_functions = M.stats.total_functions,
-      covered_functions = M.stats.covered_functions,
-      functions_pct = M.stats.covered_functions / math.max(1, M.stats.total_functions) * 100,
-      
-      overall_pct = data.summary.overall_percent,
-    }
-    
-    return report
+  if config.debug and multiline_fixed > 0 then
+    print("DEBUG [Coverage Report] Fixed " .. multiline_fixed .. " lines in multiline comments")
   end
-end
-
--- Generate a JSON report (for backward compatibility)
-function M.json_report()
-  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
-  local data = M.get_report_data()
   
-  if reporting_module then
-    return reporting_module.format_coverage(data, "json")
-  else
-    -- Fallback if reporting module isn't available
-    -- Try to load JSON module 
-    local json_module = package.loaded["src.json"] or require("src.json")
-    -- Fallback if JSON module isn't available
-    if not json_module then
-      json_module = { encode = function(t) return "{}" end }
-    end
-    return json_module.encode(M.summary_report())
-  end
-end
-
--- Generate an HTML report (for backward compatibility)
-function M.html_report()
-  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
-  local data = M.get_report_data()
-  
-  if reporting_module then
-    return reporting_module.format_coverage(data, "html")
-  else
-    -- Fallback to legacy HTML formatting if reporting module isn't available
-    local report = M.summary_report()
-    
-    -- Generate HTML header
-    local html = [[
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Lust-Next Coverage Report</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { color: #333; }
-    .summary { margin: 20px 0; background: #f5f5f5; padding: 10px; border-radius: 5px; }
-    .progress { background-color: #e0e0e0; border-radius: 5px; height: 20px; }
-    .progress-bar { height: 20px; border-radius: 5px; background-color: #4CAF50; }
-    .low { background-color: #f44336; }
-    .medium { background-color: #ff9800; }
-    .high { background-color: #4CAF50; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    tr:nth-child(even) { background-color: #f9f9f9; }
-  </style>
-</head>
-<body>
-  <h1>Lust-Next Coverage Report</h1>
-  <div class="summary">
-    <h2>Summary</h2>
-    <p>Overall Coverage: ]].. string.format("%.2f%%", report.overall_pct) ..[[</p>
-    <div class="progress">
-      <div class="progress-bar ]].. (report.overall_pct < 50 and "low" or (report.overall_pct < 80 and "medium" or "high")) ..[[" style="width: ]].. math.min(100, report.overall_pct) ..[[%;"></div>
-    </div>
-    <p>Lines: ]].. report.covered_lines ..[[ / ]].. report.total_lines ..[[ (]].. string.format("%.2f%%", report.lines_pct) ..[[)</p>
-    <p>Functions: ]].. report.covered_functions ..[[ / ]].. report.total_functions ..[[ (]].. string.format("%.2f%%", report.functions_pct) ..[[)</p>
-    <p>Files: ]].. report.covered_files ..[[ / ]].. report.total_files ..[[ (]].. string.format("%.2f%%", report.files_pct) ..[[)</p>
-  </div>
-  <table>
-    <tr>
-      <th>File</th>
-      <th>Lines</th>
-      <th>Line Coverage</th>
-      <th>Functions</th>
-      <th>Function Coverage</th>
-    </tr>
-  ]]
-    
-    -- Add file rows
-    for file, stats in pairs(report.files) do
-      local line_pct = stats.covered_lines / math.max(1, stats.total_lines) * 100
-      local func_pct = stats.covered_functions / math.max(1, stats.total_functions) * 100
-      
-      html = html .. [[
-    <tr>
-      <td>]].. file ..[[</td>
-      <td>]].. stats.covered_lines ..[[ / ]].. stats.total_lines ..[[</td>
-      <td>
-        <div class="progress">
-          <div class="progress-bar ]].. (line_pct < 50 and "low" or (line_pct < 80 and "medium" or "high")) ..[[" style="width: ]].. math.min(100, line_pct) ..[[%;"></div>
-        </div>
-        ]].. string.format("%.2f%%", line_pct) ..[[
-      </td>
-      <td>]].. stats.covered_functions ..[[ / ]].. stats.total_functions ..[[</td>
-      <td>
-        <div class="progress">
-          <div class="progress-bar ]].. (func_pct < 50 and "low" or (func_pct < 80 and "medium" or "high")) ..[[" style="width: ]].. math.min(100, func_pct) ..[[%;"></div>
-        </div>
-        ]].. string.format("%.2f%%", func_pct) ..[[
-      </td>
-    </tr>
-    ]]
-    end
-    
-    -- Close HTML
-    html = html .. [[
-  </table>
-</body>
-</html>
-  ]]
-    
-    return html
-  end
-end
-
--- Generate an LCOV report (for backward compatibility)
-function M.lcov_report()
-  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
-  local data = M.get_report_data()
-  
-  if reporting_module then
-    return reporting_module.format_coverage(data, "lcov")
-  else
-    -- Fallback to legacy LCOV formatting if reporting module isn't available
-    local lcov = ""
-    
-    for file, data in pairs(M.data.files) do
-      lcov = lcov .. "SF:" .. file .. "\n"
-      
-      -- Add function coverage
-      local func_count = 0
-      for func_name, _ in pairs(data.functions) do
-        func_count = func_count + 1
-        -- If function name is a line number, use that
-        if func_name:match("^line_(%d+)$") then
-          local line = func_name:match("^line_(%d+)$")
-          lcov = lcov .. "FN:" .. line .. "," .. func_name .. "\n"
-        else
-          -- We don't have line information for named functions in this simple implementation
-          lcov = lcov .. "FN:1," .. func_name .. "\n"
-        end
-        lcov = lcov .. "FNDA:1," .. func_name .. "\n"
+  -- Fix any incorrectly marked lines before generating report
+  -- This is a critical final check to ensure we don't over-report coverage
+  local fixed_lines = 0
+  for file_path, file_data in pairs(coverage_data.files) do
+    -- Check each line
+    for line_num, is_covered in pairs(file_data.lines) do
+      -- If it's marked covered but it's an executable line and wasn't actually executed
+      -- Get actual line execution info from debug_hook, not just the coverage data
+      if is_covered and 
+         file_data.executable_lines and 
+         file_data.executable_lines[line_num] and 
+         not debug_hook.was_line_executed(file_path, line_num) then
+        -- Fix incorrect coverage
+        file_data.lines[line_num] = false
+        fixed_lines = fixed_lines + 1
       end
-      
-      lcov = lcov .. "FNF:" .. func_count .. "\n"
-      lcov = lcov .. "FNH:" .. func_count .. "\n"
-      
-      -- Add line coverage
-      local lines_data = {}
-      for line, _ in pairs(data.lines) do
-        table.insert(lines_data, line)
-      end
-      table.sort(lines_data)
-      
-      for _, line in ipairs(lines_data) do
-        lcov = lcov .. "DA:" .. line .. ",1\n"
-      end
-      
-      lcov = lcov .. "LF:" .. data.line_count .. "\n"
-      lcov = lcov .. "LH:" .. #lines_data .. "\n"
-      lcov = lcov .. "end_of_record\n"
     end
-    
-    return lcov
   end
-end
-
--- Check if coverage meets threshold
-function M.meets_threshold(threshold)
-  threshold = threshold or M.config.threshold
-  local report = M.summary_report()
-  return report.overall_pct >= threshold
-end
-
--- Calculate coverage statistics
-function M.calculate_stats()
-  print("DEBUG [Coverage] Calculating coverage statistics...")
   
-  -- Reset statistics
-  M.stats = {
-    files = {},
+  if config.debug and fixed_lines > 0 then
+    print("DEBUG [Coverage Report] Fixed " .. fixed_lines .. " incorrectly marked executable lines")
+  end
+  
+  -- Calculate statistics
+  local stats = {
     total_files = 0,
     covered_files = 0,
     total_lines = 0,
     covered_lines = 0,
     total_functions = 0,
     covered_functions = 0,
+    total_blocks = 0,
+    covered_blocks = 0,
+    files = {}
   }
   
-  -- Print the file data we've collected
-  print("DEBUG [Coverage] Files tracked in M.data.files:")
-  local tracked_files = {}
-  for file, _ in pairs(M.data.files) do
-    table.insert(tracked_files, file)
-  end
-  
-  if #tracked_files == 0 then
-    print("  WARNING: No files tracked in coverage data")
+  for file_path, file_data in pairs(coverage_data.files) do
+    -- Count covered lines - BUT ONLY COUNT EXECUTABLE LINES!
+    local covered_lines = 0
+    local total_executable_lines = 0
     
-    -- If no files are tracked and discover_uncovered is enabled, discover them now
-    if M.config.discover_uncovered then
-      print("  Discovering source files based on include/exclude patterns...")
-      local discovered_files = M.discover_source_files()
+    -- Debug output when processing our minimal_coverage.lua file
+    local debug_this_file = config.debug and file_path:match("examples/minimal_coverage.lua")
+    
+    if debug_this_file then
+      print(string.format("DEBUG [Coverage] Counting lines for file: %s", file_path))
       
-      for file_path in pairs(discovered_files) do
-        local normalized_file = fs.normalize_path(file_path)
-        print("  Checking file: " .. normalized_file)
+      -- Print lines data
+      print("  - file_data.lines table: " .. tostring(file_data.lines ~= nil))
+      print("  - file_data.executable_lines table: " .. tostring(file_data.executable_lines ~= nil))
+      
+      -- Check some line examples
+      for i = 1, 20 do
+        local line_covered = file_data.lines and file_data.lines[i]
+        local line_executable = file_data.executable_lines and file_data.executable_lines[i]
+        print(string.format("  - Line %d: covered=%s, executable=%s", 
+          i, tostring(line_covered), tostring(line_executable)))
+      end
+    end
+    
+    -- Do a thorough pass to ensure multiline comments are properly handled
+    process_multiline_comments(file_path, file_data)
+    
+    -- Use a special counter for executable lines that accounts for multiline comments
+    total_executable_lines = 0
+    
+    -- Make sure we have at least the basic line classifications
+    if not file_data.executable_lines then
+      file_data.executable_lines = {}
+    end
+    
+    -- Mark all executable lines from actual execution
+    for line_num, is_covered in pairs(file_data.lines or {}) do
+      if is_covered then
+        file_data.executable_lines[line_num] = true
+      end
+    end
+    
+    -- Create a list of executable lines accounting for multiline comments
+    local in_multiline_comment = false
+    
+    -- First pass: count executable lines correctly
+    if file_data.source then
+      for line_num = 1, #file_data.source do
+        local line = file_data.source[line_num]
         
-        local line_count = count_executable_lines(file_path)
-        print("  File exists with " .. line_count .. " executable lines")
+        -- Check for multiline comment markers (with nil check)
+        local starts_comment = line and line:match("^%s*%-%-%[%[") or false
+        local ends_comment = line and line:match("%]%]") or false
         
-        -- Add this file to our data with zero coverage
-        if not M.data.files[normalized_file] then
-          print("  Adding file to coverage data: " .. normalized_file)
-          M.data.files[normalized_file] = {
-            lines = {},
-            functions = {},
-            line_count = line_count,
-            discovered = true
-          }
+        -- Update multiline comment state
+        if starts_comment and not ends_comment then
+          in_multiline_comment = true
+        elseif ends_comment and in_multiline_comment then
+          in_multiline_comment = false
+        end
+        
+        -- Handle the line based on whether it's in a comment
+        if not in_multiline_comment then
+          -- CRITICAL FIX: Only count as executable if it's been marked executable by static analysis
+          -- and NOT just because it was executed (avoid circular logic)
+          if file_data.executable_lines and file_data.executable_lines[line_num] == true then
+            total_executable_lines = total_executable_lines + 1
+          end
+        else
+          -- For lines inside multiline comments:
+          -- Always mark as non-executable and CRITICAL FIX: Definitely remove any coverage marking
+          if file_data.executable_lines then
+            file_data.executable_lines[line_num] = false
+          end
+          if file_data.lines then
+            file_data.lines[line_num] = nil
+          end
+        end
+      end
+    end
+    
+    -- CRITICAL FIX: Now count only properly covered executable lines AND
+    -- consider execution tracking for a more accurate representation
+    
+    -- First update lines based on execution tracking
+    if file_data._executed_lines then
+      for line_num, was_executed in pairs(file_data._executed_lines) do
+        if was_executed and file_data.executable_lines and file_data.executable_lines[line_num] == true then
+          -- If the line was executed AND is executable, mark it as covered
+          file_data.lines[line_num] = true
+          
+          if debug_this_file then
+            print(string.format("DEBUG [Coverage] Marked line %d as covered from execution tracking", line_num))
+          end
         end
       end
     else
-      print("  File discovery is disabled. Enable with M.config.discover_uncovered = true")
-    end
-  else
-    for i, file in ipairs(tracked_files) do
-      if i <= 10 then -- Just show the first 10 files
-        print("  " .. i .. ": " .. file)
+      -- If we don't have _executed_lines, create it and add executed lines from lines table
+      -- This is a fallback for compatibility with older runs
+      file_data._executed_lines = {}
+      for line_num, is_covered in pairs(file_data.lines or {}) do
+        if is_covered then
+          file_data._executed_lines[line_num] = true
+        end
+      end
+      
+      if debug_this_file then
+        print("DEBUG [Coverage] Created missing _executed_lines table from existing covered lines")
       end
     end
-    if #tracked_files > 10 then
-      print("  ... and " .. (#tracked_files - 10) .. " more files")
-    end
-  end
-  
-  -- Process each file
-  local file_count = 0
-  for file, data in pairs(M.data.files) do
-    file_count = file_count + 1
-    print("DEBUG [Coverage] Processing file #" .. file_count .. ": " .. file)
     
-    -- Check if this is a discovered file with no coverage
-    local is_discovered_only = data.discovered and next(data.lines) == nil
-    if is_discovered_only then
-      print("  File was discovered but has no coverage")
-    end
-    
-    -- Count tracked lines
-    local line_keys = {}
-    local covered_lines = 0
-    for line, _ in pairs(data.lines) do
-      covered_lines = covered_lines + 1
-      table.insert(line_keys, line)
-    end
-    
-    -- Sort and print first few lines
-    if covered_lines > 0 then
-      table.sort(line_keys, function(a, b) return tonumber(a) < tonumber(b) end)
-      for i = 1, math.min(5, #line_keys) do
-        print("  Covered line: " .. line_keys[i])
+    -- Now process all marked lines
+    for line_num, is_covered in pairs(file_data.lines or {}) do
+      -- CRITICAL FIX: Only count lines that are both covered AND executable
+      if is_covered and file_data.executable_lines and file_data.executable_lines[line_num] == true then
+        -- This is a valid executable and covered line - count it
+        covered_lines = covered_lines + 1
+        
+        if debug_this_file then
+          print(string.format("DEBUG [Coverage] Counted covered line %d", line_num))
+        end
+      else
+        -- CRITICAL FIX: Remove coverage marking from any non-executable line
+        if file_data.executable_lines == nil or file_data.executable_lines[line_num] ~= true then
+          -- This line isn't marked as executable but has coverage - remove it
+          if debug_this_file then
+            print(string.format("DEBUG [Coverage] Removed invalid coverage for line %d", line_num))
+          end
+          file_data.lines[line_num] = nil
+        end
       end
     end
-    print("  Total lines covered: " .. covered_lines)
     
-    -- Count tracked functions
-    local function_keys = {}
+    -- Count functions (total and covered)
+    local total_functions = 0
     local covered_functions = 0
-    for func_name, _ in pairs(data.functions) do
-      covered_functions = covered_functions + 1
-      table.insert(function_keys, func_name)
-    end
+    local functions_info = {}
     
-    -- Print first few functions
-    if covered_functions > 0 then
-      for i = 1, math.min(5, #function_keys) do
-        print("  Covered function: " .. function_keys[i])
+    -- Debug the functions table
+    if debug_this_file then
+      print("Functions table in file_data:", tostring(file_data.functions ~= nil))
+      
+      -- More detailed debugging for functions table
+      local function_count = 0
+      for _, _ in pairs(file_data.functions or {}) do
+        function_count = function_count + 1
+      end
+      print("Function count:", function_count)
+      
+      for func_key, func_data in pairs(file_data.functions or {}) do
+        print(string.format("  Function %s at line %d: executed=%s, key=%s", 
+          func_data.name or "anonymous", 
+          func_data.line or 0, 
+          tostring(func_data.executed),
+          func_key))
       end
     end
-    print("  Total functions covered: " .. covered_functions)
     
-    -- Update file statistics
-    M.stats.files[file] = {
-      total_lines = data.line_count or 0,
+    -- Fix to properly count and track functions
+    -- Using iteration that doesn't depend on numeric indexing
+    for func_key, func_data in pairs(file_data.functions or {}) do
+      -- Verify this is a valid function entry with required data
+      if type(func_data) == "table" and func_data.line and func_data.line > 0 then
+        total_functions = total_functions + 1
+        
+        -- Enhanced debugging for function tracking
+        if debug_this_file then
+          print(string.format("DEBUG [Function Tracking] Processing function: %s at line %d", 
+            func_data.name or "anonymous", func_data.line))
+          print(string.format("  - executed: %s, calls: %d", 
+            tostring(func_data.executed), func_data.calls or 0))
+        end
+        
+        -- Fix function execution check by verifying coverage of function's lines
+        -- If any line in the function body is covered, the function was executed
+        if not func_data.executed and func_data.line > 0 then
+          local start_line = func_data.line
+          local end_line = func_data.end_line or (start_line + 20) -- Reasonable default
+          
+          -- Look for any executed line in the function body
+          for i = start_line, end_line do
+            if file_data.lines and file_data.lines[i] then
+              func_data.executed = true
+              if debug_this_file then
+                print(string.format("  - Function marked as executed based on line %d", i))
+              end
+              break
+            end
+          end
+        end
+        
+        -- Add to functions info list
+        functions_info[#functions_info + 1] = {
+          name = func_data.name or "anonymous",
+          line = func_data.line,
+          end_line = func_data.end_line,
+          calls = func_data.calls or 0,
+          executed = func_data.executed == true, -- Ensure boolean value
+          params = func_data.params or {}
+        }
+        
+        -- Additional debug for key functions
+        if debug_this_file then
+          print(string.format("  Added function %s to report, executed=%s", 
+            func_data.name or "anonymous",
+            tostring(func_data.executed == true)))
+        end
+        
+        if func_data.executed == true then
+          covered_functions = covered_functions + 1
+        end
+      end
+    end
+    
+    -- If code has no detected functions (which is rare), assume at least one global chunk
+    if total_functions == 0 then
+      total_functions = 1
+      
+      -- Add an implicit "main" function
+      functions_info[1] = {
+        name = "main",
+        line = 1,
+        end_line = file_data.line_count,
+        calls = covered_lines > 0 and 1 or 0,
+        executed = covered_lines > 0,
+        params = {}
+      }
+      
+      if covered_lines > 0 then
+        covered_functions = 1
+      end
+    end
+    
+    -- Process block coverage information
+    local total_blocks = 0
+    local covered_blocks = 0
+    local blocks_info = {}
+    
+    -- Check if we have logical chunks (blocks) from static analysis
+    if file_data.logical_chunks then
+      for block_id, block_data in pairs(file_data.logical_chunks) do
+        total_blocks = total_blocks + 1
+        
+        -- Add to blocks info list
+        table.insert(blocks_info, {
+          id = block_id,
+          type = block_data.type,
+          start_line = block_data.start_line,
+          end_line = block_data.end_line,
+          executed = block_data.executed or false,
+          parent_id = block_data.parent_id,
+          branches = block_data.branches or {}
+        })
+        
+        if block_data.executed then
+          covered_blocks = covered_blocks + 1
+        end
+      end
+    end
+    
+    -- If we have code_map from static analysis but no blocks processed yet,
+    -- we need to get block data from the code_map
+    if file_data.code_map and file_data.code_map.blocks and 
+       (not file_data.logical_chunks or next(file_data.logical_chunks) == nil) then
+      -- Ensure static analyzer is loaded
+      if not static_analyzer then
+        static_analyzer = require("lib.coverage.static_analyzer")
+      end
+      
+      -- Get block data from static analyzer
+      local blocks = file_data.code_map.blocks
+      total_blocks = #blocks
+      
+      for _, block in ipairs(blocks) do
+        -- Determine if block is executed based on line coverage
+        local executed = false
+        for line_num = block.start_line, block.end_line do
+          if file_data.lines[line_num] then
+            executed = true
+            break
+          end
+        end
+        
+        -- Add to blocks info
+        table.insert(blocks_info, {
+          id = block.id,
+          type = block.type,
+          start_line = block.start_line,
+          end_line = block.end_line,
+          executed = executed,
+          parent_id = block.parent_id,
+          branches = block.branches or {}
+        })
+        
+        if executed then
+          covered_blocks = covered_blocks + 1
+        end
+      end
+    end
+    
+    -- Calculate percentages - USING EXECUTABLE LINE COUNT, NOT TOTAL LINES
+    local line_pct = total_executable_lines > 0 
+                     and (covered_lines / total_executable_lines * 100) 
+                     or 0
+    
+    local func_pct = total_functions > 0
+                    and (covered_functions / total_functions * 100)
+                    or 0
+                    
+    local block_pct = total_blocks > 0
+                    and (covered_blocks / total_blocks * 100)
+                    or 0
+    
+    -- Sort functions and blocks by line number for consistent reporting
+    table.sort(functions_info, function(a, b) return a.line < b.line end)
+    table.sort(blocks_info, function(a, b) return a.start_line < b.start_line end)
+    
+    -- Add debug output to diagnose the coverage statistics
+    if config.debug and file_path:match("examples/minimal_coverage.lua") then
+      print(string.format("DEBUG [Coverage] File %s stats:", file_path))
+      print(string.format("  - Executable lines: %d", total_executable_lines))
+      print(string.format("  - Covered lines: %d", covered_lines))
+      print(string.format("  - Line coverage: %.1f%%", line_pct))
+      print(string.format("  - File data line_count: %s", tostring(file_data.line_count)))
+      
+      -- Print first 10 covered lines
+      local covered_count = 0
+      print("  - First 10 covered lines:")
+      for line_num, is_covered in pairs(file_data.lines) do
+        if is_covered and covered_count < 10 then
+          covered_count = covered_count + 1
+          print(string.format("    Line %d: covered", line_num))
+        end
+      end
+      
+      if covered_count == 0 then
+        print("    No covered lines found!")
+      end
+    end
+    
+    -- Update file stats - using executable line count, not total line count
+    stats.files[file_path] = {
+      total_lines = total_executable_lines, -- Use executable line count, not total lines
       covered_lines = covered_lines,
-      total_functions = math.max(1, covered_functions), -- Ensure at least 1 function per file for calculation
+      total_functions = total_functions,
       covered_functions = covered_functions,
-      is_discovered_only = is_discovered_only
+      total_blocks = total_blocks,
+      covered_blocks = covered_blocks,
+      functions = functions_info,
+      blocks = blocks_info,
+      discovered = file_data.discovered or false,
+      line_coverage_percent = line_pct,
+      function_coverage_percent = func_pct,
+      block_coverage_percent = block_pct,
+      passes_threshold = line_pct >= config.threshold,
+      uses_static_analysis = file_data.code_map ~= nil
     }
     
-    print("  Line count: " .. (data.line_count or 0) .. ", Covered: " .. covered_lines)
+    -- Update global block totals
+    stats.total_blocks = stats.total_blocks + total_blocks
+    stats.covered_blocks = stats.covered_blocks + covered_blocks
     
-    -- Update global statistics
-    M.stats.total_files = M.stats.total_files + 1
-    M.stats.covered_files = M.stats.covered_files + (covered_lines > 0 and 1 or 0)
-    M.stats.total_lines = M.stats.total_lines + (data.line_count or 0)
-    M.stats.covered_lines = M.stats.covered_lines + covered_lines
-    M.stats.total_functions = M.stats.total_functions + math.max(1, covered_functions)
-    M.stats.covered_functions = M.stats.covered_functions + covered_functions
+    -- Update global stats
+    stats.total_files = stats.total_files + 1
+    local is_covered = covered_lines > 0
+    stats.covered_files = stats.covered_files + (is_covered and 1 or 0)
+    stats.total_lines = stats.total_lines + total_executable_lines  -- Use executable lines count, not total
+    stats.covered_lines = stats.covered_lines + covered_lines
+    stats.total_functions = stats.total_functions + total_functions
+    stats.covered_functions = stats.covered_functions + covered_functions
+    
+    if debug_this_file then
+      print(string.format("DEBUG [Coverage] Global stats update for file %s:", file_path))
+      print(string.format("  - Covered: %s", tostring(is_covered)))
+      print(string.format("  - Added %d to total_lines", total_executable_lines))
+      print(string.format("  - Added %d to covered_lines", covered_lines))
+      print(string.format("  - Added %d to total_functions", total_functions))
+      print(string.format("  - Added %d to covered_functions", covered_functions))
+    end
   end
   
-  print("DEBUG [Coverage] Statistics calculation completed:")
-  print("  Total files: " .. M.stats.total_files)
-  print("  Covered files: " .. M.stats.covered_files)
-  print("  Total lines: " .. M.stats.total_lines)
-  print("  Covered lines: " .. M.stats.covered_lines)
+  -- Calculate overall percentages
   
+  -- For line coverage, count only executable lines for more accurate metrics
+  local executable_lines = 0
+  for file_path, file_data in pairs(coverage_data.files) do
+    if file_data.code_map then
+      for line_num = 1, file_data.line_count or 0 do
+        if static_analyzer.is_line_executable(file_data.code_map, line_num) then
+          executable_lines = executable_lines + 1
+        end
+      end
+    else
+      -- If no code map, use the total lines as a fallback
+      executable_lines = executable_lines + (file_data.line_count or 0)
+    end
+  end
+  
+  -- Use executable lines as denominator for more accurate percentage
+  local total_lines_for_coverage = executable_lines > 0 and executable_lines or stats.total_lines
+  local line_coverage_percent = total_lines_for_coverage > 0 
+                              and (stats.covered_lines / total_lines_for_coverage * 100)
+                              or 0
+                               
+  local function_coverage_percent = stats.total_functions > 0
+                                   and (stats.covered_functions / stats.total_functions * 100)
+                                   or 0
+                                   
+  local file_coverage_percent = stats.total_files > 0
+                               and (stats.covered_files / stats.total_files * 100)
+                               or 0
+                               
+  local block_coverage_percent = stats.total_blocks > 0
+                                and (stats.covered_blocks / stats.total_blocks * 100)
+                                or 0
+  
+  -- Calculate overall percentage (weighted) - include block coverage if available
+  local overall_percent
+  if stats.total_blocks > 0 and config.track_blocks then
+    -- If blocks are tracked, give them equal weight with line coverage
+    -- This emphasizes conditional execution paths for more accurate coverage metrics
+    overall_percent = (line_coverage_percent * 0.35) + 
+                      (function_coverage_percent * 0.15) +
+                      (block_coverage_percent * 0.5)  -- Give blocks higher weight (50%)
+  else
+    -- Traditional weighting without block coverage
+    overall_percent = (line_coverage_percent * 0.8) + (function_coverage_percent * 0.2)
+  end
+  
+  -- Add summary to stats
+  stats.summary = {
+    total_files = stats.total_files,
+    covered_files = stats.covered_files,
+    total_lines = stats.total_lines,
+    covered_lines = stats.covered_lines,
+    total_functions = stats.total_functions,
+    covered_functions = stats.covered_functions,
+    total_blocks = stats.total_blocks,
+    covered_blocks = stats.covered_blocks,
+    line_coverage_percent = line_coverage_percent,
+    function_coverage_percent = function_coverage_percent,
+    file_coverage_percent = file_coverage_percent,
+    block_coverage_percent = block_coverage_percent,
+    overall_percent = overall_percent,
+    threshold = config.threshold,
+    passes_threshold = overall_percent >= (config.threshold or 0),
+    using_static_analysis = config.use_static_analysis,
+    tracking_blocks = config.track_blocks
+  }
+  
+  -- Pass the original file data for source code display
+  stats.original_files = coverage_data.files
+  
+  return stats
+end
+
+-- Generate coverage report
+function M.report(format)
+  -- Use reporting module for formatting
+  local reporting = require("lib.reporting")
+  local data = M.get_report_data()
+  
+  return reporting.format_coverage(data, format or "summary")
+end
+
+-- Save coverage report
+function M.save_report(file_path, format)
+  local reporting = require("lib.reporting")
+  local data = M.get_report_data()
+  
+  return reporting.save_coverage_report(file_path, data, format or "html")
+end
+
+-- Debug dump
+function M.debug_dump()
+  local data = debug_hook.get_coverage_data()
+  local stats = M.get_report_data().summary
+  
+  print("=== COVERAGE MODULE DEBUG DUMP ===")
+  print("Mode: " .. (enhanced_mode and "Enhanced (C extensions)" or "Standard (Pure Lua)"))
+  print("Active: " .. tostring(active))
+  print("Configuration:")
+  for k, v in pairs(config) do
+    if type(v) == "table" then
+      print("  " .. k .. ": " .. #v .. " items")
+    else
+      print("  " .. k .. ": " .. tostring(v))
+    end
+  end
+  
+  print("\nCoverage Stats:")
+  print("  Files: " .. stats.covered_files .. "/" .. stats.total_files .. 
+        " (" .. string.format("%.2f%%", stats.file_coverage_percent) .. ")")
+  print("  Lines: " .. stats.covered_lines .. "/" .. stats.total_lines .. 
+        " (" .. string.format("%.2f%%", stats.line_coverage_percent) .. ")")
+  print("  Functions: " .. stats.covered_functions .. "/" .. stats.total_functions .. 
+        " (" .. string.format("%.2f%%", stats.function_coverage_percent) .. ")")
+  
+  -- Show block coverage if available
+  if stats.total_blocks > 0 then
+    print("  Blocks: " .. stats.covered_blocks .. "/" .. stats.total_blocks .. 
+          " (" .. string.format("%.2f%%", stats.block_coverage_percent) .. ")")
+  end
+  
+  print("  Overall: " .. string.format("%.2f%%", stats.overall_percent))
+  
+  print("\nTracked Files (first 5):")
+  local count = 0
+  for file_path, file_data in pairs(data.files) do
+    if count < 5 then
+      local covered = 0
+      for _ in pairs(file_data.lines) do covered = covered + 1 end
+      
+      print("  " .. file_path)
+      print("    Lines: " .. covered .. "/" .. (file_data.line_count or 0))
+      print("    Discovered: " .. tostring(file_data.discovered or false))
+      
+      count = count + 1
+    else
+      break
+    end
+  end
+  
+  if count == 5 and stats.total_files > 5 then
+    print("  ... and " .. (stats.total_files - 5) .. " more files")
+  end
+  
+  print("=== END DEBUG DUMP ===")
   return M
 end
 
--- Save a coverage report to a file
-function M.save_report(file_path, format)
-  format = format or "html"
-  
-  -- Try to load the reporting module
-  local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
-  
-  if reporting_module then
-    -- Get the data and use the reporting module to save it
-    local data = M.get_report_data()
-    return reporting_module.save_coverage_report(file_path, data, format)
-  else
-    -- Fallback to directly saving the content
-    local content = M.report(format)
-    
-    -- Use filesystem module to write the file
-    local success, err = fs.write_file(file_path, content)
-    if not success then
-      return false, "Could not write to file: " .. (err or file_path)
-    end
-    
-    return true
-  end
-end
-
--- Return the module
 return M

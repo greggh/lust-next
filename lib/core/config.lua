@@ -167,6 +167,11 @@ function config.apply_to_lust(lust_next)
         lust_next.coverage_options[k] = v
       end
     end
+    
+    -- Update coverage module if available
+    if lust_next.coverage_module and lust_next.coverage_module.init then
+      lust_next.coverage_module.init(lust_next.coverage_options)
+    end
   end
   
   -- Apply quality configuration

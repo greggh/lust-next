@@ -1,5 +1,5 @@
--- Basic usage example for lust
-local lust = require("../lust")
+-- Basic usage example for lust-next
+local lust = require("lust-next")
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
 -- A simple calculator module to test

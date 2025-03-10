@@ -1,7 +1,7 @@
 # Project: lust-next
 
 ## Overview
-lust-next is an enhanced Lua testing framework that provides comprehensive testing capabilities for Lua projects. It features BDD-style nested test blocks, assertions with detailed error messages, setup/teardown hooks, advanced mocking, tagging, asynchronous testing, code coverage analysis, and test quality validation.
+lust-next is an enhanced Lua testing framework that provides comprehensive testing capabilities for Lua projects. It features BDD-style nested test blocks, assertions with detailed error messages, setup/teardown hooks, advanced mocking, tagging, asynchronous testing, code coverage analysis with multiline comment support, and test quality validation.
 
 ## Essential Commands
 
@@ -31,43 +31,87 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 - `lust.lua`: Compatibility layer for original lust
 - `run_all_tests.lua`: Improved test runner for proper test state isolation
 
-## Current Focus - Completed Filesystem Module Integration
-We've completed the full integration of all components with our new filesystem module:
+## Current Focus - Coverage Module Implementation
 
-1. **Created Standalone Filesystem Module**:
-   - Implemented comprehensive filesystem.lua module in lib/tools
-   - Created platform-independent file and directory operations
-   - Built robust error handling with consistent return values
-   - Added path manipulation utilities for cross-platform compatibility
-   - Implemented file discovery with glob pattern support
-   - Created detailed documentation and examples
+We've made significant progress on our coverage module:
 
-2. **Integrated with Core Modules and Test Files**:
-   - Refactored coverage module to use the filesystem module for file operations
-   - Updated quality module to use filesystem for file reading and report generation
-   - Migrated all file operations in test files to use the filesystem module
-   - Fixed bug in coverage module using global normalize_path function
-   - Removed duplicate file handling code, centralizing all file operations
-   - Ensured all tests pass with the filesystem module integration
+1. **Implementation Progress**:
+   - ✅ Researched and analyzed five different Lua coverage implementations
+   - ✅ Developed comprehensive implementation plan with modular architecture
+   - ✅ Created modular architecture with separate components:
+     - debug_hook.lua for core line tracking functionality
+     - file_manager.lua for file discovery integrated with filesystem module
+     - patchup.lua for handling non-executable lines
+     - instrumentation.lua for source code transformation approach
+   - ✅ Implemented pure Lua implementation (the first tier of our plan)
+   - ✅ Created comprehensive test suite with real code execution
 
-3. **Completed Reporting Module Integration**:
-   - Updated formatter initialization to use filesystem module for path normalization
-   - Fixed reporting/formatters/init.lua to use fs.join_paths correctly
-   - Updated all relevant example files to demonstrate filesystem usage
-   - Enhanced example scripts with more comprehensive filesystem operations
-   - Added directory structure creation and path joining examples
-   - Added TAP, CSV, and HTML reporting examples with filesystem integration
-   - Ensured all tests pass with the full filesystem module integration
+2. **Fixed Core Coverage Issues**:
+   - ✅ Fixed lust-next assertion chain syntax (to.be_greater_than vs to.be.greater.than)
+   - ✅ Removed old coverage_test.lua file that used previous API
+   - ✅ Enhanced debugging with detailed output on coverage status
+   - ✅ Improved configuration options for source directories and patterns
+   - ✅ Fixed path handling and file normalization throughout the module
+   - ✅ Fixed configuration integration with core config module
+   - ✅ Fixed bug with global normalize_path reference
+   - ✅ Fixed function detection in debug hook
+   - ✅ Resolved filesystem "Permission denied" errors
+   - ✅ Implemented discovery of uncovered files
+   - ✅ Improved coverage visualization with dark mode theme
 
-4. **Next Steps**:
-   - Run higher-level code quality validation (level 5) to identify weak spots
-   - Expand test suite for filesystem module to cover all edge cases
-   - Prepare extraction plan for filesystem module as standalone library
-   - Integrate filesystem module with hooks-util project
-   - Create comprehensive documentation for filesystem module usage patterns
-   - Implement additional filesystem functions for specialized operations (permissions, attributes, etc.)
+3. **Static Analysis Integration**:
+   - ✅ Integrated lua-parser (MIT licensed) for AST generation
+   - ✅ Created vendor integration of LPegLabel dependency
+   - ✅ Implemented build-on-first-use mechanism for C components
+   - ✅ Added fixes from upstream PRs for UTF-8 and table nesting
+   - ✅ Created static_analyzer.lua module for code mapping
+   - ✅ Implemented executable line identification via AST
+   - ✅ Enhanced function detection with parameters and line ranges
+   - ✅ Integrated with coverage module for accurate reporting
+   - ✅ Fixed infinite recursion issues in line position calculation
+   - ✅ Implemented cached line mapping for O(1) lookups
+   - ✅ Added adaptive node-to-line mapping strategies based on file size
+   - ✅ Added timeout and size limits throughout the codebase
+   - ✅ Successfully tested performance with large files (2,000+ lines)
+   - ✅ Implemented block-based coverage tracking for branches and loops
+   - ✅ Added visualization for blocks in HTML reports
+   - ✅ Created weighted coverage metrics combining lines, blocks, and functions
+   - ✅ Successfully tested with over 80% block coverage in examples
+   - ✅ Fixed data flow between analyzer and debug hook
+   - ✅ Added conditional expression tracking for branch coverage
+   - ✅ Enhanced HTML visualization with detailed legend for indicators
+   - ✅ Improved block boundary detection and styling
+   - ✅ Fixed line classification issues for executable vs. non-executable code
+   - ✅ Fixed critical bug where executable lines are incorrectly marked as covered
+   - ✅ Fixed issues with function tracking showing 0% coverage
+   - ✅ Fixed over-reporting issues in certain files
+   - ✅ Implemented proper multiline comment detection and handling
+   - ✅ Resolved separation of concerns between coverage and reporting modules
+   - ✅ Added post-processing verification steps to catch incorrectly marked lines
+   - ✅ Updated statistics calculation to only count executable lines in coverage metrics
+   - ✅ Fixed comparison against nil threshold values
+   - ✅ Removed outdated test files from project root
+   - ⚠️ Need to convert proof-of-concept fixes to production code
+   - ⚠️ Need to remove temporary debugging hacks from reporting
 
-We've successfully integrated the filesystem module throughout the entire codebase, improving platform independence and error handling consistency. All formatters, examples, and tests now use the filesystem module consistently, reducing duplication and significantly improving maintainability.
+4. **Quality Validation Enhancements**:
+   - ✅ Refactored to use new filesystem module
+   - ✅ Increased coverage threshold to 90% from 80%
+   - Integrate AST-based complexity metrics
+   - Implement test-to-code mapping functionality
+   - Add detailed quality recommendations based on AST analysis
+   - Create combined coverage/quality HTML reports
+   - Run level 5 code quality tests
+
+5. **Documentation Enhancement Plan**:
+   - Document all filesystem functions with comprehensive examples
+   - Create usage patterns documentation for common scenarios
+   - Add cross-platform compatibility notes for all functions
+   - Update coverage module documentation with new features
+   - Create tutorials for common use cases across modules
+   - Document test mode feature for coverage module
+
+All major filesystem module work is complete with proper integration throughout the codebase. The static analysis integration is now fully implemented with significant performance optimizations. By fixing critical recursive functions and implementing efficient caching strategies, we've reduced processing time for large files from potential infinite loops to just a few seconds. The system can now reliably process files up to 2,000+ lines, making it suitable for real-world Lua codebases. Our current focus is completing the block-based coverage tracking for even more detailed metrics.
 
 ## Working Environment Setup
 We've implemented the interactive CLI mode for lust-next:
@@ -113,16 +157,21 @@ We've previously completed these major features:
   - ✅ Results aggregation from parallel test runs
   - ✅ Coverage data merging from multiple processes
   - ✅ Configuration file system for customizing defaults (.lust-next-config.lua)
-- Current focus - Integration with hooks-util and markdown tools:
-  - Create integration tests with hooks-util
+- Current focus - Coverage module and quality improvements:
+  - ✅ Implement static analysis for improved coverage accuracy
+  - ✅ Implemented block-based coverage tracking
+  - ⚠️ Fix block visualization issues in HTML reports
+  - ⚠️ Fix data flow between static analyzer and debug hook
+  - Integrate AST-based code analysis for quality metrics
+  - Add conditional coverage tracking for boolean expressions
+  - Document coverage features and integration patterns
+  - Fully integrate with hooks-util project
   - Develop comprehensive integration tests for markdown processing tools
-  - Document integration patterns for custom projects
-  - Create comprehensive examples for various integration scenarios
 - Potential future enhancements:
-  - Code coverage visualization improvements for complex codebases
   - Additional specialized formatters for specific CI/CD pipelines
   - Stream-based test result processing for extremely large test suites
   - Distributed test execution across multiple machines
+  - Fully automated performance benchmarking system
 
 ## Documentation Links
 

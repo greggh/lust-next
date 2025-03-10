@@ -79,11 +79,16 @@ if coverage_loaded and options.coverage then
     discover_uncovered = options.discover_uncovered,
     debug = options.coverage_debug,
     source_dirs = {".", "lib", "src"},
-    threshold = 80
+    threshold = 80,
+    full_reset = true  -- Start with a clean slate
   })
   
   -- Start coverage tracking
-  coverage.start()
+  if coverage.start then
+    coverage.start()
+  else
+    print("ERROR: coverage.start function not found!")
+  end
 end
 
 -- Try to load quality module
@@ -297,12 +302,23 @@ local function run_test_file(file_path)
     original_print(...)
   end
   
+  -- Track if this file is coverage-related
+  local is_coverage_test = file_path:match("coverage_test%.lua$") ~= nil
+  
+  -- Special handling for coverage tests
+  if is_coverage_test and coverage_loaded and options.coverage then
+    if options.coverage_debug then
+      original_print("DEBUG: Running coverage test file - preserving state")
+    end
+  end
+  
   -- Time the test execution
   local start_time = get_time()
   
   -- Run the test in isolated environment
   local success, result = pcall(function()
-    -- Reset lust_next state before each test file
+    -- Reset lust_next state before each test file, but preserve coverage data
+    -- Only reset lust-next framework state, not coverage data
     lust_next.reset()
     
     -- Load and execute the test file
@@ -611,32 +627,91 @@ if failed_files > 0 then
   -- Generate coverage/quality reports even if tests failed
   -- Stop coverage tracking and generate report
   if coverage_loaded and options.coverage then
-    coverage.stop()
+    if coverage.stop then
+      coverage.stop()
+    else
+      print("ERROR: coverage.stop function not found!")
+    end
     
     -- Calculate and save coverage reports
     print("\n=== Coverage Report ===")
-    coverage.calculate_stats()
+    
+    if coverage.calculate_stats then
+      coverage.calculate_stats()
+    else
+      print("ERROR: coverage.calculate_stats function not found!")
+    end
+    
+    -- Print coverage data status before generating reports
+    if options.coverage_debug then
+      -- Count how many files we're tracking
+      local tracked_files = 0
+      for _ in pairs(coverage.data.files) do
+        tracked_files = tracked_files + 1
+      end
+      
+      print("DEBUG: Coverage file tracking status:")
+      print("  Tracked files: " .. tracked_files)
+      
+      -- Show first few tracked files for debugging
+      local file_count = 0
+      for file, data in pairs(coverage.data.files) do
+        if file_count < 5 or options.coverage_debug == "verbose" then
+          -- Count covered lines
+          local covered_lines = 0
+          for _ in pairs(data.lines) do
+            covered_lines = covered_lines + 1
+          end
+          
+          local line_count = data.line_count or 0
+          local cov_pct = line_count > 0 and (covered_lines / line_count * 100) or 0
+          
+          print("  File: " .. file)
+          print("    Lines: " .. covered_lines .. "/" .. line_count .. " (" .. string.format("%.1f%%", cov_pct) .. ")")
+        end
+        file_count = file_count + 1
+      end
+      
+      if file_count > 5 and options.coverage_debug ~= "verbose" then
+        print("  ... and " .. (file_count - 5) .. " more files")
+      end
+      
+      if file_count == 0 then
+        print("  WARNING: No files are being tracked for coverage!")
+      end
+    end
     
     -- Generate reports in different formats
     local formats = {"html", "json", "lcov", "cobertura"}
     for _, format in ipairs(formats) do
-      local success = coverage.save_report("./coverage-reports/coverage-report." .. format, format)
-      if success then
-        print("Generated " .. format .. " coverage report")
+      if coverage.save_report then
+        local success = coverage.save_report("./coverage-reports/coverage-report." .. format, format)
+        if success then
+          print("Generated " .. format .. " coverage report")
+        else
+          print("Failed to generate " .. format .. " coverage report")
+        end
+      else
+        print("ERROR: coverage.save_report function not found!")
+        break
       end
     end
     
     -- Print coverage summary
-    local report = coverage.summary_report()
-    print("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
-    print("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
-    print("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
-    
-    -- Check if coverage meets threshold
-    if coverage.meets_threshold() then
-      print("✅ Coverage meets the threshold")
+    if coverage.summary_report then
+      local report = coverage.summary_report()
+      print("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
+      print("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
+      print("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
+      
+      -- Check if coverage meets threshold
+      if coverage.meets_threshold and coverage.meets_threshold() then
+        print("✅ Coverage meets the threshold")
+      else
+        print("❌ Coverage is below the threshold")
+      end
     else
-      print("❌ Coverage is below the threshold")
+      print("ERROR: coverage.summary_report function not found!")
     end
   end
   
@@ -671,32 +746,91 @@ else
   -- Generate coverage/quality reports for passing tests
   -- Stop coverage tracking and generate report
   if coverage_loaded and options.coverage then
-    coverage.stop()
+    if coverage.stop then
+      coverage.stop()
+    else
+      print("ERROR: coverage.stop function not found!")
+    end
     
     -- Calculate and save coverage reports
     print("\n=== Coverage Report ===")
-    coverage.calculate_stats()
+    
+    if coverage.calculate_stats then
+      coverage.calculate_stats()
+    else
+      print("ERROR: coverage.calculate_stats function not found!")
+    end
+    
+    -- Print coverage data status before generating reports
+    if options.coverage_debug then
+      -- Count how many files we're tracking
+      local tracked_files = 0
+      for _ in pairs(coverage.data.files) do
+        tracked_files = tracked_files + 1
+      end
+      
+      print("DEBUG: Coverage file tracking status:")
+      print("  Tracked files: " .. tracked_files)
+      
+      -- Show first few tracked files for debugging
+      local file_count = 0
+      for file, data in pairs(coverage.data.files) do
+        if file_count < 5 or options.coverage_debug == "verbose" then
+          -- Count covered lines
+          local covered_lines = 0
+          for _ in pairs(data.lines) do
+            covered_lines = covered_lines + 1
+          end
+          
+          local line_count = data.line_count or 0
+          local cov_pct = line_count > 0 and (covered_lines / line_count * 100) or 0
+          
+          print("  File: " .. file)
+          print("    Lines: " .. covered_lines .. "/" .. line_count .. " (" .. string.format("%.1f%%", cov_pct) .. ")")
+        end
+        file_count = file_count + 1
+      end
+      
+      if file_count > 5 and options.coverage_debug ~= "verbose" then
+        print("  ... and " .. (file_count - 5) .. " more files")
+      end
+      
+      if file_count == 0 then
+        print("  WARNING: No files are being tracked for coverage!")
+      end
+    end
     
     -- Generate reports in different formats
     local formats = {"html", "json", "lcov", "cobertura"}
     for _, format in ipairs(formats) do
-      local success = coverage.save_report("./coverage-reports/coverage-report." .. format, format)
-      if success then
-        print("Generated " .. format .. " coverage report")
+      if coverage.save_report then
+        local success = coverage.save_report("./coverage-reports/coverage-report." .. format, format)
+        if success then
+          print("Generated " .. format .. " coverage report")
+        else
+          print("Failed to generate " .. format .. " coverage report")
+        end
+      else
+        print("ERROR: coverage.save_report function not found!")
+        break
       end
     end
     
     -- Print coverage summary
-    local report = coverage.summary_report()
-    print("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
-    print("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
-    print("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
-    
-    -- Check if coverage meets threshold
-    if coverage.meets_threshold() then
-      print("✅ Coverage meets the threshold")
+    if coverage.summary_report then
+      local report = coverage.summary_report()
+      print("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
+      print("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
+      print("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
+      
+      -- Check if coverage meets threshold
+      if coverage.meets_threshold and coverage.meets_threshold() then
+        print("✅ Coverage meets the threshold")
+      else
+        print("❌ Coverage is below the threshold")
+      end
     else
-      print("❌ Coverage is below the threshold")
+      print("ERROR: coverage.summary_report function not found!")
     end
   end
   

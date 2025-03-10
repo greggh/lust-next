@@ -1,236 +1,306 @@
--- Comprehensive coverage example 
--- Demonstrates advanced configuration and usage of the coverage module
-local lust_next = require('lust-next')
-
-print("Comprehensive Coverage Example")
-print("-----------------------------")
-
--- Mock project structure - in a real project, these would be actual files
-local project_files = {
-  ["calculator.lua"] = [[
-    local calculator = {}
-    function calculator.add(a, b) return a + b end
-    function calculator.subtract(a, b) return a - b end
-    function calculator.multiply(a, b) return a * b end
-    function calculator.divide(a, b) 
-      if b == 0 then error("Division by zero") end
-      return a / b 
-    end
-    function calculator.power(a, b) return a ^ b end
-    function calculator.factorial(n)
-      if n < 0 then error("Factorial of negative number") end
-      if n == 0 then return 1 end
-      return n * calculator.factorial(n - 1)
-    end
-    return calculator
-  ]],
+--[[
+  comprehensive_coverage_example.lua
   
-  ["string_utils.lua"] = [[
-    local utils = {}
-    function utils.trim(s) return s:match("^%s*(.-)%s*$") end
-    function utils.split(s, sep)
-      local result = {}
-      for part in string.gmatch(s, "([^"..sep.."]+)") do
-        table.insert(result, part)
-      end
-      return result
-    end
-    function utils.join(t, sep) return table.concat(t, sep) end
-    function utils.capitalize(s) return s:sub(1,1):upper() .. s:sub(2) end
-    function utils.reverse(s) return s:reverse() end
-    return utils
-  ]],
-  
-  ["data_processor.lua"] = [[
-    local processor = {}
-    processor.calculator = require("calculator")
-    processor.string_utils = require("string_utils")
-    
-    function processor.process_numbers(numbers, operation)
-      if #numbers == 0 then return 0 end
-      local result = numbers[1]
-      for i=2, #numbers do
-        if operation == "add" then
-          result = processor.calculator.add(result, numbers[i])
-        elseif operation == "multiply" then
-          result = processor.calculator.multiply(result, numbers[i])
-        else
-          error("Unknown operation: " .. operation)
-        end
-      end
-      return result
-    end
-    
-    function processor.format_result(result, format)
-      if format == "scientific" then
-        return string.format("%.2e", result)
-      elseif format == "percent" then
-        return string.format("%.2f%%", result * 100)
+  A comprehensive example demonstrating proper integration between the coverage
+  module and the reporting module for generating HTML reports with block visualization.
+]]
+
+-- Import the coverage module
+local coverage = require("lib.coverage")
+local fs = require("lib.tools.filesystem")
+
+-- Create a test module with various control structures to test coverage
+local test_module = {}
+
+-- Function with conditional branching
+function test_module.analyze_value(value)
+  -- Type checking branch
+  if type(value) ~= "number" then
+    if type(value) == "string" then
+      -- Try to convert string to number
+      local num = tonumber(value)
+      if num then
+        return test_module.analyze_value(num)
       else
-        return tostring(result)
+        return "non-numeric string"
+      end
+    elseif type(value) == "boolean" then
+      return value and "true" or "false"
+    else
+      return "unsupported type"
+    end
+  end
+
+  -- Number classification branch
+  if value < 0 then
+    -- Negative numbers
+    if value < -100 then
+      return "very small"
+    elseif value < -10 then
+      return "small"
+    else
+      return "negative"
+    end
+  elseif value == 0 then
+    return "zero"
+  else
+    -- Positive numbers
+    if value <= 10 then
+      return "small positive"
+    elseif value <= 100 then
+      return "medium positive"
+    else
+      return "large positive"
+    end
+  end
+end
+
+-- Function with loops
+function test_module.process_data(data, mode)
+  local result = {}
+  local sum = 0
+
+  -- For loop with conditional branches
+  for i, value in ipairs(data) do
+    if mode == "filter" then
+      -- Filter mode branch
+      if type(value) == "number" and value > 0 then
+        table.insert(result, value)
+      end
+    elseif mode == "transform" then
+      -- Transform mode branch
+      if type(value) == "number" then
+        table.insert(result, value * 2)
+      elseif type(value) == "string" then
+        table.insert(result, value:upper())
+      else
+        -- This branch will be uncovered
+        table.insert(result, value)
+      end
+    elseif mode == "analyze" then
+      -- Analyze mode branch
+      table.insert(result, test_module.analyze_value(value))
+    end
+    
+    -- Accumulate sum if possible
+    if type(value) == "number" then
+      sum = sum + value
+    end
+  end
+  
+  -- While loop example
+  local i = 1
+  while i <= #result do
+    -- Add index metadata for debugging
+    if mode == "debug" then
+      if type(result[i]) == "string" then
+        result[i] = i .. ":" .. result[i]
+      elseif type(result[i]) == "number" then
+        result[i] = i .. ":" .. tostring(result[i])
       end
     end
-    
-    function processor.unused_function()
-      -- This function will show up as uncovered
-      return "I'm never called"
+    i = i + 1
+  end
+  
+  -- Repeat loop example - will not be executed in our tests
+  local has_modified = false
+  repeat
+    if mode == "strict" and #result > 5 then
+      -- Only keep first 5 elements
+      while #result > 5 do
+        table.remove(result)
+      end
+      has_modified = true
     end
-    
-    return processor
-  ]]
-}
-
--- Simulate reading files by loading strings
-for file_name, content in pairs(project_files) do
-  -- In a real project, these would be real files, not loadstring
-  package.loaded[file_name:gsub("%.lua$", "")] = loadstring(content)()
+  until has_modified or mode ~= "strict"
+  
+  return result, sum
 end
 
--- Get the modules we created
-local calculator = require("calculator")
-local string_utils = require("string_utils")
-local processor = require("data_processor")
-
--- Define tests that will have incomplete coverage
-describe("Comprehensive Coverage Tests", function()
-  describe("Calculator", function()
-    it("should add numbers correctly", function()
-      assert.equal(calculator.add(2, 3), 5)
-      assert.equal(calculator.add(-1, 1), 0)
-    end)
-    
-    it("should subtract numbers correctly", function()
-      assert.equal(calculator.subtract(5, 3), 2)
-      assert.equal(calculator.subtract(3, 5), -2)
-    end)
-    
-    it("should multiply numbers correctly", function()
-      assert.equal(calculator.multiply(2, 3), 6)
-      assert.equal(calculator.multiply(-2, -3), 6)
-    end)
-    
-    -- Note: We don't test divide, power, or factorial
-    -- This will show up as incomplete coverage
-  end)
+-- Function with nested function definitions
+function test_module.create_calculator()
+  local calculator = {}
   
-  describe("String Utils", function()
-    it("should trim strings correctly", function()
-      assert.equal(string_utils.trim("  hello  "), "hello")
-      assert.equal(string_utils.trim("\t\nhello\n\t"), "hello")
-    end)
-    
-    it("should split strings correctly", function()
-      local result = string_utils.split("a,b,c", ",")
-      assert.equal(#result, 3)
-      assert.equal(result[1], "a")
-      assert.equal(result[2], "b")
-      assert.equal(result[3], "c")
-    end)
-    
-    -- Note: We don't test join, capitalize, or reverse
-    -- This will show up as incomplete coverage
-  end)
+  -- Inner function 1
+  function calculator.add(a, b)
+    return a + b
+  end
   
-  describe("Data Processor", function()
-    it("should process numbers with addition", function()
-      assert.equal(processor.process_numbers({1, 2, 3}, "add"), 6)
-      assert.equal(processor.process_numbers({5}, "add"), 5)
-      assert.equal(processor.process_numbers({}, "add"), 0)
-    end)
-    
-    -- Note: We don't test multiplication or format_result
-    -- This will show up as incomplete coverage
-  end)
-end)
-
--- Configure coverage with advanced options
-lust_next.coverage_options = {
-  enabled = true,                      -- Enable coverage tracking
-  source_dirs = {"."},                 -- Look in current directory for source files
-  discover_uncovered = true,           -- Include files not touched by tests
-  debug = true,                        -- Show detailed debug output
-  use_default_patterns = false,        -- Don't use default include/exclude patterns
+  -- Inner function 2
+  function calculator.subtract(a, b)
+    return a - b
+  end
   
-  -- Include our simulated modules
-  include = {
-    "calculator",
-    "string_utils",
-    "data_processor"
-  },
+  -- Inner function 3 - will not be called
+  function calculator.multiply(a, b)
+    return a * b
+  end
   
-  -- No excludes needed for this example
-  exclude = {},
-  
-  -- Set a moderate threshold
-  threshold = 60
-}
-
--- Initialize coverage with custom configuration
-if lust_next.start_coverage then
-  print("\nStarting coverage with advanced configuration...")
-  lust_next.start_coverage(lust_next.coverage_options)
+  return calculator
 end
 
--- Run all tests
-print("\nRunning tests...")
-lust_next.run()
+-- First, write this example file to a temporary location for isolated testing
+local temp_file_path = os.tmpname() .. ".lua"
+fs.write_file(temp_file_path, fs.read_file("examples/comprehensive_coverage_example.lua"))
+print("Created temporary file at: " .. temp_file_path)
+
+-- Initialize coverage
+print("Initializing coverage with block tracking...")
+coverage.init({
+  enabled = true,
+  track_blocks = true,                -- Enable block tracking
+  use_static_analysis = true,         -- Use static analysis for accurate block tracking
+  debug = true,                       -- Output extra debugging information
+  discover_uncovered = false,         -- Don't discover unrelated files
+  use_default_patterns = false,       -- Don't use default include patterns
+  include = {temp_file_path},         -- Only track our temporary file
+  source_dirs = {"/tmp"}              -- Look in /tmp for source files
+})
+
+-- Start tracking coverage
+print("Starting coverage tracking...")
+coverage.start()
+
+-- Enable detailed debug output for function tracking
+local old_debug = coverage.debug
+coverage.debug_functions = function()
+  print("\nDEBUG: Function Coverage Information:")
+  local data = coverage.get_report_data()
+  local count = 0
+  
+  for file_path, file_data in pairs(data.files) do
+    if file_path:match("/tmp/") then
+      print("  File: " .. file_path)
+      print("  Functions tracked: " .. file_data.total_functions)
+      
+      if file_data.functions then
+        for _, func in ipairs(file_data.functions) do
+          print(string.format("    %s (line %d): executed=%s, calls=%d",
+            func.name, func.line, tostring(func.executed), func.calls or 0))
+        end
+      else
+        print("    No function data available")
+      end
+      count = count + 1
+    end
+  end
+  
+  if count == 0 then
+    print("  No function data found for the test file!")
+  end
+end
+
+-- Execute test code that covers most but not all blocks
+print("\nExecuting test code...")
+
+-- Test analyze_value with different types
+print("Testing analyze_value:")
+print("  String: " .. test_module.analyze_value("hello"))
+print("  Numeric string: " .. test_module.analyze_value("123"))
+print("  Boolean: " .. test_module.analyze_value(true))
+print("  Number (negative small): " .. test_module.analyze_value(-5))
+print("  Number (zero): " .. test_module.analyze_value(0))
+print("  Number (positive large): " .. test_module.analyze_value(200))
+-- Note: We're deliberately not testing all branches
+
+-- Test process_data with different modes
+print("\nTesting process_data:")
+local data = {1, -2, "hello", 10, "test"}  -- Changed true to "test" to avoid table.concat issue
+local result1, sum1 = test_module.process_data(data, "filter")
+print("  Filter mode: " .. table.concat(result1, ", ") .. " (sum: " .. sum1 .. ")")
+
+local result2, sum2 = test_module.process_data(data, "transform")
+print("  Transform mode: " .. table.concat(result2, ", ") .. " (sum: " .. sum2 .. ")")
+
+-- Test calculator
+print("\nTesting calculator:")
+local calc = test_module.create_calculator()
+print("  Addition: " .. calc.add(5, 3))
+print("  Subtraction: " .. calc.subtract(10, 4))
+-- Note: We're deliberately not testing the multiply function
 
 -- Stop coverage tracking
-if lust_next.stop_coverage then
-  print("\nStopping coverage tracking...")
-  lust_next.stop_coverage()
+print("\nStopping coverage tracking...")
+coverage.stop()
+
+-- Debug function information
+if coverage.debug_functions then
+  coverage.debug_functions()
 end
 
--- Generate and display multiple report formats
-if lust_next.generate_coverage_report then
-  print("\nGenerating coverage reports...")
-  
-  -- Summary report
-  print("\n=== Summary Coverage Report ===")
-  local summary = lust_next.generate_coverage_report("summary")
-  print(summary)
-  
-  -- Save reports in different formats
-  local formats = {"html", "json", "lcov"}
-  for _, format in ipairs(formats) do
-    local output_path = "./coverage-reports/comprehensive-report." .. format
-    local success = lust_next.save_coverage_report(output_path, format)
-    if success then
-      print("Saved " .. format .. " report to: " .. output_path)
-    else
-      print("Failed to save " .. format .. " report!")
-    end
-  end
-  
-  -- Report specific statistics
-  local report_data = lust_next.get_coverage_data()
-  if report_data then
-    print("\n=== Coverage Statistics ===")
-    print("Overall coverage: " .. string.format("%.2f%%", report_data.summary.overall_percent))
-    print("Line coverage: " .. string.format("%.2f%%", report_data.summary.line_coverage_percent))
-    print("Function coverage: " .. string.format("%.2f%%", report_data.summary.function_coverage_percent))
-    
-    -- Display file-specific stats
-    print("\n=== Coverage by File ===")
-    for file_name, file_stats in pairs(report_data.files) do
-      local line_pct = file_stats.covered_lines / math.max(1, file_stats.total_lines) * 100
-      print(string.format("%s: %.2f%% (%d/%d lines)", 
-        file_name, line_pct, file_stats.covered_lines, file_stats.total_lines))
-    end
-  end
-  
-  -- Check against threshold
-  print("\n=== Threshold Check ===")
-  if lust_next.coverage_meets_threshold(60) then
-    print("✓ Coverage meets the threshold of 60%!")
-  else
-    print("✗ Coverage is below the threshold of 60%!")
+-- Get coverage report data
+local report_data = coverage.get_report_data()
+
+-- Clean up temporary file at the end
+local function cleanup()
+  fs.delete_file(temp_file_path)
+  print("Cleaned up temporary file")
+end
+
+-- Register cleanup on script exit
+local old_exit = os.exit
+os.exit = function(code)
+  cleanup()
+  old_exit(code)
+end
+
+-- Generate and save different report formats
+print("\nGenerating reports...")
+
+-- 1. Save HTML report directly using the coverage module
+local html_path = "/tmp/comprehensive-coverage.html"
+local success = coverage.save_report(html_path, "html")
+if success then
+  print("HTML report saved to: " .. html_path)
+else
+  print("Failed to save HTML report")
+end
+
+-- 2. Try using the reporting module directly
+local reporting_module = require("lib.reporting")
+local report_dir = "/tmp/coverage-reports"
+
+-- Ensure directory exists
+fs.ensure_directory_exists(report_dir)
+
+-- Save reports using the reporting module's auto_save_reports function
+local reports = reporting_module.auto_save_reports(
+  report_data,         -- coverage data
+  nil,                 -- quality data (none for this example)
+  nil,                 -- test results data (none for this example)
+  {                    -- configuration options
+    report_dir = report_dir,
+    report_suffix = "-" .. os.date("%Y%m%d"),
+    verbose = true
+  }
+)
+
+-- Print coverage statistics
+print("\nCoverage Statistics:")
+print("  Files: " .. report_data.summary.covered_files .. "/" .. report_data.summary.total_files)
+print("  Lines: " .. report_data.summary.covered_lines .. "/" .. report_data.summary.total_lines .. 
+     " (" .. string.format("%.1f%%", report_data.summary.line_coverage_percent) .. ")")
+print("  Functions: " .. report_data.summary.covered_functions .. "/" .. report_data.summary.total_functions .. 
+     " (" .. string.format("%.1f%%", report_data.summary.function_coverage_percent) .. ")")
+
+-- Print block coverage statistics if available
+if report_data.summary.total_blocks and report_data.summary.total_blocks > 0 then
+  print("  Blocks: " .. report_data.summary.covered_blocks .. "/" .. report_data.summary.total_blocks .. 
+       " (" .. string.format("%.1f%%", report_data.summary.block_coverage_percent) .. ")")
+end
+
+print("  Overall Coverage: " .. string.format("%.1f%%", report_data.summary.overall_percent))
+
+-- Print report locations
+print("\nReports saved to:")
+print("  - " .. html_path .. " (primary HTML report)")
+for format, result in pairs(reports) do
+  if result.success then
+    print("  - " .. result.path .. " (" .. format .. ")")
   end
 end
 
--- Clean up (remove our mock modules from package.loaded)
-package.loaded["calculator"] = nil
-package.loaded["string_utils"] = nil
-package.loaded["data_processor"] = nil
+print("\nOpen the HTML report in a browser to view the visualization with block highlighting.")
+os.execute("xdg-open " .. html_path .. " &>/dev/null")
 
 print("\nComprehensive coverage example complete!")

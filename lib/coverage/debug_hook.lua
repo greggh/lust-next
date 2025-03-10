@@ -1,0 +1,622 @@
+-- Core debug hook implementation
+local M = {}
+local fs = require("lib.tools.filesystem")
+local static_analyzer -- Lazily loaded when used
+local config = {}
+local tracked_files = {}
+local processing_hook = false -- Flag to prevent recursive hook calls
+local coverage_data = {
+  files = {},
+  lines = {},
+  functions = {},
+  blocks = {},      -- Block tracking
+  conditions = {}   -- Condition tracking
+}
+
+-- Should we track this file?
+function M.should_track_file(file_path)
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Quick lookup for already-decided files
+  if tracked_files[normalized_path] ~= nil then
+    return tracked_files[normalized_path]
+  end
+  
+  -- Apply exclude patterns (fast reject)
+  for _, pattern in ipairs(config.exclude or {}) do
+    if fs.matches_pattern(normalized_path, pattern) then
+      tracked_files[normalized_path] = false
+      return false
+    end
+  end
+  
+  -- Apply include patterns
+  for _, pattern in ipairs(config.include or {}) do
+    if fs.matches_pattern(normalized_path, pattern) then
+      tracked_files[normalized_path] = true
+      return true
+    end
+  end
+  
+  -- Check source directories
+  for _, dir in ipairs(config.source_dirs or {"."}) do
+    local normalized_dir = fs.normalize_path(dir)
+    if normalized_path:sub(1, #normalized_dir) == normalized_dir then
+      tracked_files[normalized_path] = true
+      return true
+    end
+  end
+  
+  -- Default decision based on file extension
+  local is_lua = normalized_path:match("%.lua$") ~= nil
+  tracked_files[normalized_path] = is_lua
+  return is_lua
+end
+
+-- Initialize tracking for a file
+local function initialize_file(file_path)
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Skip if already initialized
+  if coverage_data.files[normalized_path] then
+    return
+  end
+  
+  -- Count lines in file and store them as an array
+  local line_count = 0
+  local source_text = fs.read_file(file_path)
+  local source_lines = {}
+  
+  if source_text then
+    for line in (source_text .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+      line_count = line_count + 1
+      source_lines[line_count] = line
+    end
+  end
+  
+  coverage_data.files[normalized_path] = {
+    lines = {},
+    functions = {},
+    line_count = line_count,
+    source = source_lines,
+    source_text = source_text,
+    executable_lines = {},
+    logical_chunks = {}  -- Store code blocks information
+  }
+end
+
+-- Check if a line is executable in a file
+local function is_line_executable(file_path, line)
+  if not static_analyzer then
+    static_analyzer = require("lib.coverage.static_analyzer")
+  end
+  
+  -- Check if we have static analysis data for this file
+  local normalized_path = fs.normalize_path(file_path)
+  local file_data = coverage_data.files[normalized_path]
+  
+  if file_data and file_data.code_map then
+    -- Use static analysis data
+    local is_exec = static_analyzer.is_line_executable(file_data.code_map, line)
+    
+    -- Debug output for specific test files
+    if config.debug and file_path:match("examples/minimal_coverage.lua") then
+      local line_type = "unknown"
+      if file_data.code_map.lines and file_data.code_map.lines[line] then
+        line_type = file_data.code_map.lines[line].type or "unknown"
+      end
+      
+      print(string.format("DEBUG [Coverage] Line %d classification: executable=%s, type=%s", 
+        line, tostring(is_exec), line_type))
+    end
+    
+    return is_exec
+  end
+  
+  -- Fall back to basic assumption that the line is executable
+  -- (the patchup module will fix this later)
+  return true
+end
+
+-- Debug hook function with optimizations
+function M.debug_hook(event, line)
+  -- Original hook with optimizations
+  -- Skip if we're already processing a hook to prevent recursion
+  if processing_hook then
+    return
+  end
+  
+  -- Set flag to prevent recursion
+  processing_hook = true
+  
+  -- Main hook logic with protected call
+  local success, err = pcall(function()
+    if event == "line" then
+      local info = debug.getinfo(2, "S")
+      if not info or not info.source or info.source:sub(1, 1) ~= "@" then
+        processing_hook = false
+        return
+      end
+      
+      local file_path = info.source:sub(2)  -- Remove @ prefix
+      
+      -- Quick pattern match to skip coverage module files, parser, and test files
+      -- Using direct string search which is much faster than pattern matching
+      if file_path:find("lib/coverage", 1, true) or 
+         file_path:find("lib/tools/parser", 1, true) or
+         file_path:find("lib/tools/vendor", 1, true) or
+         file_path:match("_test%.lua$") or 
+         file_path:match("_spec%.lua$") or
+         file_path:match("/tests/") or
+         file_path:match("/test/") or
+         file_path:match("test_.*%.lua$") then
+        processing_hook = false
+        return
+      end
+      
+      -- Check cached tracked_files first for performance
+      local should_track = tracked_files[file_path]
+      
+      -- If not in cache, determine if we should track
+      if should_track == nil then
+        should_track = M.should_track_file(file_path)
+      end
+      
+      if should_track then
+        local normalized_path = fs.normalize_path(file_path)
+        
+        -- Initialize file data if needed - use coverage_data.files directly
+        if not coverage_data.files[normalized_path] then
+          initialize_file(file_path)
+          
+          -- Debug output only if needed
+          if config.debug then
+            print("DEBUG [Coverage Debug Hook] Initialized file: " .. normalized_path)
+          end
+        end
+        
+        -- Special debug files for extra verbose output if debug is enabled
+        local is_debug_file = file_path:match("examples/minimal_coverage.lua") or
+                              file_path:match("examples/simple_multiline_comment_test.lua") or
+                              file_path:match("validator_coverage_test.lua")
+        
+        -- Debug output for minimal_coverage.lua but don't force coverage
+        if config.debug and file_path:match("examples/minimal_coverage.lua") then
+          print(string.format("DEBUG [minimal_coverage.lua] Line %d execution detected in debug hook", line))
+        end
+        
+        -- Track line with minimum operations
+        if coverage_data.files[normalized_path] then
+          -- CRITICAL BUGFIX - initialize lines table if it doesn't exist
+          if not coverage_data.files[normalized_path].lines then
+            coverage_data.files[normalized_path].lines = {}
+          end
+          
+          -- Initialize executable_lines table if it doesn't exist
+          if not coverage_data.files[normalized_path].executable_lines then
+            coverage_data.files[normalized_path].executable_lines = {}
+          end
+          
+          -- Check if this line is executable BEFORE marking it as covered
+          local is_executable = true
+          
+          -- Check if this is a comment line first
+          if coverage_data.files[normalized_path].source and 
+             coverage_data.files[normalized_path].source[line] then
+            local line_text = coverage_data.files[normalized_path].source[line]
+            if line_text:match("^%s*%-%-") then
+              is_executable = false
+            end
+          end
+          
+          -- Use static analysis if available, otherwise default to executable
+          if is_executable and coverage_data.files[normalized_path].code_map then
+            is_executable = is_line_executable(file_path, line)
+          end
+          
+          -- CRITICAL: Always track all executed lines regardless of executability
+          -- This provides a ground truth of which lines were actually executed
+          coverage_data.files[normalized_path]._executed_lines = coverage_data.files[normalized_path]._executed_lines or {}
+          coverage_data.files[normalized_path]._executed_lines[line] = true
+          
+          -- Only mark executable lines as covered in the main coverage tracking
+          if is_executable then
+            -- Mark this line as covered - THIS IS THE CRITICAL LINE THAT SETS COVERAGE
+            coverage_data.files[normalized_path].lines[line] = true
+            
+            -- Also mark this as executable
+            coverage_data.files[normalized_path].executable_lines[line] = true
+            
+            -- Special debug output for test files
+            if config.debug and is_debug_file then
+              print(string.format("DEBUG [Coverage Hook] Line %d execution tracked as covered and executable", line))
+            end
+          else
+            -- DO NOT mark non-executable lines as covered
+            -- This is key to fixing the coverage issue
+            
+            -- Make sure to mark it explicitly as non-executable
+            coverage_data.files[normalized_path].executable_lines[line] = false
+            
+            -- Special debug output for non-executable lines
+            if config.debug and is_debug_file then
+              print(string.format("DEBUG [Coverage Hook] Line %d execution tracked but not counted (non-executable)", line))
+            end
+          end
+          
+          -- Always track in global map for all executed lines when debugging
+          if config.debug then
+            coverage_data.lines[normalized_path .. ":" .. line] = true
+          end
+          
+          -- Track block coverage if static analyzer is available and tracking is enabled
+          if config.track_blocks and coverage_data.files[normalized_path].code_map then
+            -- Lazily load the static analyzer
+            if not static_analyzer then
+              static_analyzer = require("lib.coverage.static_analyzer")
+            end
+            
+            -- Use the static analyzer to find which blocks contain this line
+            local blocks_for_line = static_analyzer.get_blocks_for_line(
+              coverage_data.files[normalized_path].code_map, 
+              line
+            )
+            
+            -- Initialize logical_chunks if it doesn't exist
+            if not coverage_data.files[normalized_path].logical_chunks then
+              coverage_data.files[normalized_path].logical_chunks = {}
+            end
+            
+            -- Mark each block as executed
+            for _, block in ipairs(blocks_for_line) do
+              -- Get or create block record
+              local block_copy = coverage_data.files[normalized_path].logical_chunks[block.id]
+              
+              if not block_copy then
+                -- Create a new deep copy if this is the first time we've seen this block
+                block_copy = {
+                  id = block.id,
+                  type = block.type,
+                  start_line = block.start_line,
+                  end_line = block.end_line,
+                  parent_id = block.parent_id,
+                  branches = {},
+                  executed = true, -- Mark as executed immediately
+                  execution_count = 1 -- Track execution count
+                }
+                
+                -- Copy branches array if it exists
+                if block.branches then
+                  for _, branch_id in ipairs(block.branches) do
+                    table.insert(block_copy.branches, branch_id)
+                  end
+                end
+              else
+                -- Update existing block record
+                block_copy.executed = true
+                block_copy.execution_count = (block_copy.execution_count or 0) + 1
+              end
+              
+              -- Store the block in our logical_chunks
+              coverage_data.files[normalized_path].logical_chunks[block.id] = block_copy
+              
+              -- Also track the block in the global blocks table for reference
+              coverage_data.blocks[normalized_path .. ":" .. block.id] = true
+              
+              -- Update parent blocks - ensures parent blocks are marked as executed
+              if block_copy.parent_id and block_copy.parent_id ~= "root" then
+                local parent_block = coverage_data.files[normalized_path].logical_chunks[block_copy.parent_id]
+                if parent_block then
+                  parent_block.executed = true
+                  parent_block.execution_count = (parent_block.execution_count or 0) + 1
+                end
+              end
+              
+              -- Debug output
+              if config.debug then
+                print("DEBUG [Coverage] Executed block " .. block.id .. 
+                      " (" .. block.type .. ") at line " .. line .. 
+                      " in " .. normalized_path ..
+                      " (count: " .. (block_copy.execution_count or 1) .. ")")
+              end
+            end
+            
+            -- Track condition coverage for this line
+            local conditions_for_line = static_analyzer.get_conditions_for_line(
+              coverage_data.files[normalized_path].code_map,
+              line
+            )
+            
+            -- Initialize logical_conditions if it doesn't exist
+            if not coverage_data.files[normalized_path].logical_conditions then
+              coverage_data.files[normalized_path].logical_conditions = {}
+            end
+            
+            -- Mark each condition as executed
+            for _, condition in ipairs(conditions_for_line) do
+              -- Get or create condition record
+              local condition_copy = coverage_data.files[normalized_path].logical_conditions[condition.id]
+              
+              if not condition_copy then
+                condition_copy = {
+                  id = condition.id,
+                  type = condition.type,
+                  start_line = condition.start_line,
+                  end_line = condition.end_line,
+                  parent_id = condition.parent_id,
+                  executed = true,
+                  executed_true = false,
+                  executed_false = false,
+                  execution_count = 1
+                }
+              else
+                condition_copy.executed = true
+                condition_copy.execution_count = (condition_copy.execution_count or 0) + 1
+              end
+              
+              -- Improved condition outcome detection
+              if condition.type:match("if_condition") or condition.type:match("while_condition") then
+                -- Scan ahead to find the then/else parts
+                local then_body_start = condition.end_line + 1
+                local else_body_start = nil
+                
+                -- Scan a reasonable number of lines forward looking for else
+                local max_scan_lines = 20
+                local in_then_block = true
+                
+                for i = condition.end_line + 1, condition.end_line + max_scan_lines do
+                  if coverage_data.files[normalized_path].source and 
+                     coverage_data.files[normalized_path].source[i] then
+                     
+                    local line_text = coverage_data.files[normalized_path].source[i]
+                    
+                    -- If we find an else, record its position
+                    if line_text:match("^%s*else%s*$") or 
+                       line_text:match("^%s*elseif%s+") then
+                      else_body_start = i + 1
+                      in_then_block = false
+                      break
+                    end
+                    
+                    -- If we find an end, we've reached the end of the if block
+                    if line_text:match("^%s*end%s*$") then
+                      break
+                    end
+                  end
+                end
+                
+                -- Check for then branch execution (true outcome)
+                if coverage_data.files[normalized_path].lines[then_body_start] then
+                  condition_copy.executed_true = true
+                end
+                
+                -- Check for else branch execution (false outcome)
+                if else_body_start and coverage_data.files[normalized_path].lines[else_body_start] then
+                  condition_copy.executed_false = true
+                end
+              end
+              
+              -- For conditions inside loop conditions, check for loop body execution
+              if condition.type:match("while_condition") or condition.type:match("for_condition") then
+                local loop_body_start = condition.end_line + 1
+                
+                -- If the loop body is executed, the condition was true at least once
+                if coverage_data.files[normalized_path].lines[loop_body_start] then
+                  condition_copy.executed_true = true
+                end
+                
+                -- Check for lines after the loop body to determine if the condition ever evaluated to false
+                -- This is a heuristic - if execution continues after the loop, the condition was false
+                if coverage_data.files[normalized_path].lines[condition.end_line + 10] then
+                  condition_copy.executed_false = true
+                end
+              end
+              
+              -- Update parent conditions if this is a sub-condition
+              if condition.parent_id and condition.parent_id ~= "root" then
+                local parent_condition = coverage_data.files[normalized_path].logical_conditions[condition.parent_id]
+                if parent_condition then
+                  parent_condition.executed = true
+                  
+                  -- If sub-condition was evaluated as true or false, propagate to parent
+                  if condition_copy.executed_true then
+                    parent_condition.executed_true = true
+                  end
+                  
+                  if condition_copy.executed_false then
+                    parent_condition.executed_false = true
+                  end
+                end
+              end
+              
+              -- Store the condition in our logical_conditions
+              coverage_data.files[normalized_path].logical_conditions[condition.id] = condition_copy
+              
+              -- Also track in the global conditions table for reference
+              coverage_data.conditions[normalized_path .. ":" .. condition.id] = true
+              
+              -- Debug output
+              if config.debug then
+                local outcomes = ""
+                if condition_copy.executed_true then outcomes = outcomes .. " true" end
+                if condition_copy.executed_false then outcomes = outcomes .. " false" end
+                
+                print("DEBUG [Coverage] Executed condition " .. condition.id .. 
+                      " (" .. condition.type .. ") at line " .. line .. 
+                      " in " .. normalized_path .. 
+                      " (count: " .. (condition_copy.execution_count or 1) ..
+                      ", outcomes:" .. outcomes .. ")")
+              end
+            end
+          end
+        end
+      end
+    end
+  end)
+  
+  -- Clear flag after processing
+  processing_hook = false
+  
+  -- Report errors but don't crash
+  if not success and config.debug then
+    print("DEBUG [Coverage Debug Hook] Error: " .. tostring(err))
+  end
+  
+  -- Handle call events
+  if event == "call" then
+    -- Skip if we're already processing a hook to prevent recursion
+    if processing_hook then
+      return
+    end
+    
+    -- Set flag to prevent recursion
+    processing_hook = true
+    
+    -- Main hook logic with protected call
+    local success, err = pcall(function()
+      local info = debug.getinfo(2, "Sn")
+      if not info or not info.source or info.source:sub(1, 1) ~= "@" then
+        processing_hook = false
+        return
+      end
+      
+      local file_path = info.source:sub(2)
+      
+      -- Skip lib/coverage, lib/tools/parser, and test files
+      if file_path:match("lib/coverage") or 
+         file_path:match("lib/tools/parser") or
+         file_path:match("lib/tools/vendor") or
+         file_path:match("_test%.lua$") or 
+         file_path:match("_spec%.lua$") or
+         file_path:match("/tests/") or
+         file_path:match("/test/") or
+         file_path:match("test_.*%.lua$") then
+        processing_hook = false
+        return
+      end
+      
+      if M.should_track_file(file_path) then
+        local normalized_path = fs.normalize_path(file_path)
+        
+        -- Initialize file data if needed
+        if not coverage_data.files[normalized_path] then
+          initialize_file(file_path)
+        end
+        
+        -- IMPORTANT: Make sure we have a valid line number for the function
+        if not info.linedefined or info.linedefined <= 0 then
+          processing_hook = false
+          return
+        end
+        
+        -- Create unique function key - include explicit type identifier for easier lookup
+        local func_key = info.linedefined .. ":function:" .. (info.name or "anonymous")
+        local func_name = info.name or ("function_at_line_" .. info.linedefined)
+        
+        -- Add additional information to help with debugging
+        local func_info = {
+          name = func_name,
+          line = info.linedefined,
+          executed = true, -- Mark as executed immediately
+          calls = 1,
+          dynamically_detected = true,
+          name_from_debug = info.name, -- Store original name from debug.getinfo
+          what = info.what,            -- Store function type (Lua, C, main)
+          source = info.source         -- Store source information
+        }
+        
+        -- Check if this function was already registered by static analysis
+        -- FIXED: More robust matching using line number as the primary key
+        local found = false
+        for existing_key, func_data in pairs(coverage_data.files[normalized_path].functions) do
+          -- Match on line number since that's most reliable
+          if func_data.line == info.linedefined then
+            -- Function found, mark as executed
+            coverage_data.files[normalized_path].functions[existing_key].executed = true
+            coverage_data.files[normalized_path].functions[existing_key].calls = 
+              (coverage_data.files[normalized_path].functions[existing_key].calls or 0) + 1
+            found = true
+            
+            -- Use the existing key for global tracking
+            coverage_data.functions[normalized_path .. ":" .. existing_key] = true
+            
+            -- Debug output
+            if config.debug then
+              print("DEBUG [Coverage Debug Hook] Executed function '" .. 
+                    coverage_data.files[normalized_path].functions[existing_key].name .. 
+                    "' at line " .. info.linedefined .. " in " .. normalized_path)
+            end
+            
+            break
+          end
+        end
+        
+        -- If not found in registered functions, add it
+        if not found then
+          coverage_data.files[normalized_path].functions[func_key] = func_info
+          coverage_data.functions[normalized_path .. ":" .. func_key] = true
+          
+          -- Debug output
+          if config.debug then
+            print("DEBUG [Coverage Debug Hook] Tracked new function '" .. func_name .. 
+                  "' at line " .. info.linedefined .. " in " .. normalized_path)
+          end
+        end
+      end
+    end)
+    
+    -- Clear flag after processing
+    processing_hook = false
+    
+    -- Report errors but don't crash
+    if not success and config.debug then
+      print("DEBUG [Coverage Debug Hook] Error: " .. tostring(err))
+    end
+  end
+end
+
+-- Set configuration
+function M.set_config(new_config)
+  config = new_config
+  tracked_files = {}  -- Reset cached decisions
+  return M
+end
+
+-- Get coverage data
+function M.get_coverage_data()
+  return coverage_data
+end
+
+-- Check if a specific line was executed (important for fixing incorrectly marked lines)
+function M.was_line_executed(file_path, line_num)
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Check if we have data for this file
+  if not coverage_data.files[normalized_path] then
+    return false
+  end
+  
+  -- FIXED: Always use _executed_lines for actual execution tracking
+  -- This is more reliable than using lines, which only tracks covered executable lines
+  if coverage_data.files[normalized_path]._executed_lines then
+    return coverage_data.files[normalized_path]._executed_lines[line_num] == true
+  end
+  
+  -- Fall back to lines table if _executed_lines doesn't exist
+  return coverage_data.files[normalized_path].lines[line_num] == true
+end
+
+-- Reset coverage data
+function M.reset()
+  coverage_data = {
+    files = {},
+    lines = {},
+    functions = {},
+    blocks = {},
+    conditions = {}
+  }
+  tracked_files = {}
+  return M
+end
+
+return M
