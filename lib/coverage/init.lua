@@ -298,9 +298,7 @@ function process_module_structure(file_path)
       local ast, code_map = static_analyzer.parse_file(file_path)
       
       if ast and code_map then
-        if config.debug then
-          print("DEBUG [Coverage] Using static analysis for " .. file_path)
-        end
+        log_debug("DEBUG [Coverage] Using static analysis for " .. file_path)
         
         -- Store static analysis information
         debug_hook.get_coverage_data().files[normalized_path].code_map = code_map
@@ -334,9 +332,7 @@ function process_module_structure(file_path)
         end
       else
         -- Static analysis failed, use basic heuristics
-        if config.debug then
-          print("DEBUG [Coverage] Static analysis failed for " .. file_path .. ", using heuristics")
-        end
+        log_debug("DEBUG [Coverage] Static analysis failed for " .. file_path .. ", using heuristics")
         fallback_heuristic_analysis(file_path, normalized_path, lines)
       end
     else
@@ -402,19 +398,15 @@ local function apply_static_analysis(file_path, file_data)
   
   -- Skip if the file doesn't exist or can't be read
   if not fs.file_exists(file_path) then
-    if config.debug then
-      print("DEBUG [Coverage] Skipping static analysis for non-existent file: " .. file_path)
-    end
+    log_debug("DEBUG [Coverage] Skipping static analysis for non-existent file: " .. file_path)
     return 0
   end
   
   -- Skip files over 250KB for performance (INCREASED from 100KB)
   local file_size = fs.get_file_size(file_path)
   if file_size and file_size > 250000 then
-    if config.debug then
-      print("DEBUG [Coverage] Skipping static analysis for large file: " .. file_path .. 
+    log_debug("DEBUG [Coverage] Skipping static analysis for large file: " .. file_path .. 
             " (" .. math.floor(file_size/1024) .. "KB)")
-    end
     return 0
   end
   
@@ -423,9 +415,7 @@ local function apply_static_analysis(file_path, file_data)
      file_path:match("_spec%.lua$") or
      file_path:match("/tests/") or
      file_path:match("/test/") then
-    if config.debug then
-      print("DEBUG [Coverage] Skipping static analysis for test file: " .. file_path)
-    end
+    log_debug("DEBUG [Coverage] Skipping static analysis for test file: " .. file_path)
     return 0
   end
   
