@@ -23,6 +23,9 @@ local DEFAULT_CONFIG = {
   threshold = 90,
   debug = false,
   
+  -- Execution vs coverage distinction
+  track_self_coverage = true,  -- Record execution of coverage module files themselves
+  
   -- Static analysis options
   use_static_analysis = true,  -- Use static analysis when available
   branch_coverage = false,      -- Track branch coverage (not just line coverage)
@@ -1265,8 +1268,37 @@ function M.get_report_data()
     tracking_blocks = config.track_blocks
   }
   
-  -- Pass the original file data for source code display
-  stats.original_files = coverage_data.files
+  -- Pass the original file data for source code display, including execution data
+  stats.original_files = {}
+  
+  -- Copy the files data, ensuring _executed_lines is included for each file
+  for file_path, file_data in pairs(coverage_data.files) do
+    stats.original_files[file_path] = {
+      lines = {},  -- Covered lines
+      _executed_lines = {}, -- Just executed (but not necessarily covered) lines
+      executable_lines = {},
+      source = file_data.source,
+      source_text = file_data.source_text,
+      line_count = file_data.line_count,
+      logical_chunks = file_data.logical_chunks,
+      logical_conditions = file_data.logical_conditions
+    }
+    
+    -- Copy line coverage data
+    for line_num, is_covered in pairs(file_data.lines or {}) do
+      stats.original_files[file_path].lines[line_num] = is_covered
+    end
+    
+    -- Copy executable line data
+    for line_num, is_executable in pairs(file_data.executable_lines or {}) do
+      stats.original_files[file_path].executable_lines[line_num] = is_executable
+    end
+    
+    -- Copy executed line data - this is crucial for our new distinction
+    for line_num, was_executed in pairs(file_data._executed_lines or {}) do
+      stats.original_files[file_path]._executed_lines[line_num] = was_executed
+    end
+  end
   
   return stats
 end

@@ -15,20 +15,23 @@ local function escape_html(str)
 end
 
 -- Format a single line of source code with coverage highlighting
-local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions)
+local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed)
   local class
   local block_info = ""
   local condition_info = ""
   
-  -- This is the critical fix for executable/non-executable line handling
+  -- Expanded line classification to handle executed-but-not-covered
   if is_executable == false then
     -- Non-executable line (comments, blank lines, etc.)
     class = "non-executable"
   elseif is_covered and is_executable then
-    -- Only mark as covered if BOTH executable AND actually covered
+    -- Fully covered (executed and validated)
     class = "covered"
+  elseif is_executed and is_executable then
+    -- Executed but not properly covered by tests
+    class = "executed-not-covered"
   else
-    -- Executable but not covered
+    -- Executable but not executed at all
     class = "uncovered"
   end
   
@@ -221,11 +224,15 @@ local function create_coverage_legend()
     <table class="legend-table">
       <tr>
         <td class="legend-sample covered"></td>
-        <td class="legend-desc">Executed code (covered)</td>
+        <td class="legend-desc">Covered: executed and validated by tests</td>
+      </tr>
+      <tr>
+        <td class="legend-sample executed-not-covered"></td>
+        <td class="legend-desc">Executed but not validated by tests</td>
       </tr>
       <tr>
         <td class="legend-sample uncovered"></td>
-        <td class="legend-desc">Executable code not executed (uncovered)</td>
+        <td class="legend-desc">Not executed: code that never ran</td>
       </tr>
       <tr>
         <td class="legend-sample non-executable"></td>
@@ -454,6 +461,7 @@ function M.format_coverage(coverage_data)
       --file-item-border: #444;
       --covered-bg: #144a14;      /* Base dark green */
       --covered-highlight: #4CAF50; /* Brighter green for executed lines */
+      --executed-not-covered-bg: #8a7c3a; /* Amber/orange for executed but not covered */
       --uncovered-bg: #5c2626;    /* Darker red for dark mode */
       --syntax-keyword: #569cd6;  /* Blue */
       --syntax-string: #6a9955;   /* Green */
@@ -520,6 +528,10 @@ function M.format_coverage(coverage_data)
       color: #ffffff;
       font-weight: 500;
     } 
+    .executed-not-covered {
+      background-color: var(--executed-not-covered-bg, #6b5d1b);  /* Darker amber/orange shade */
+      color: #ffffff;
+    }
     .uncovered { 
       background-color: var(--uncovered-bg);
     } 
@@ -695,6 +707,10 @@ function M.format_coverage(coverage_data)
     
     .legend-sample.covered {
       background-color: var(--covered-highlight);
+    }
+    
+    .legend-sample.executed-not-covered {
+      background-color: var(--executed-not-covered-bg, #6b5d1b);
     }
     
     .legend-sample.uncovered {
@@ -943,6 +959,9 @@ function M.format_coverage(coverage_data)
         for i, line_content in ipairs(lines) do
           local is_covered = original_file_data.lines and original_file_data.lines[i] or false
           
+          -- Check if line was executed (separate from covered)
+          local is_executed = original_file_data._executed_lines and original_file_data._executed_lines[i] or false
+          
           -- FIX: Default to non-executable instead of executable
           local is_executable = false -- Default to non-executable for safety
           
@@ -965,7 +984,7 @@ function M.format_coverage(coverage_data)
             end
           end
           
-          html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line)
+          html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line, nil, is_executed)
         end
         
         html = html .. '</div>'

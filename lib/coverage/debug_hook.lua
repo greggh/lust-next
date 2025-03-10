@@ -140,16 +140,41 @@ function M.debug_hook(event, line)
       
       local file_path = info.source:sub(2)  -- Remove @ prefix
       
-      -- Quick pattern match to skip coverage module files, parser, and test files
-      -- Using direct string search which is much faster than pattern matching
-      if file_path:find("lib/coverage", 1, true) or 
-         file_path:find("lib/tools/parser", 1, true) or
-         file_path:find("lib/tools/vendor", 1, true) or
-         file_path:match("_test%.lua$") or 
-         file_path:match("_spec%.lua$") or
-         file_path:match("/tests/") or
-         file_path:match("/test/") or
-         file_path:match("test_.*%.lua$") then
+      -- Identify coverage module files and test files for special handling
+      local is_coverage_file = file_path:find("lib/coverage", 1, true) or 
+                              file_path:find("lib/tools/parser", 1, true) or
+                              file_path:find("lib/tools/vendor", 1, true)
+                              
+      -- Identify test files for special handling
+      local is_test_file = file_path:match("_test%.lua$") or 
+                           file_path:match("_spec%.lua$") or
+                           file_path:match("/tests/") or
+                           file_path:match("/test/") or
+                           file_path:match("test_.*%.lua$")
+      
+      -- Special handling for coverage module and test files
+      if is_coverage_file or is_test_file then
+        -- Always record execution data for self-coverage regardless of config
+        -- This helps us see what parts of the coverage system itself are running
+        local normalized_path = fs.normalize_path(file_path)
+        
+        -- Initialize file data if not already done
+        if not coverage_data.files[normalized_path] then
+          initialize_file(file_path)
+        end
+        
+        -- Record raw execution data without counting it for coverage metrics
+        if coverage_data.files[normalized_path] then
+          -- Track execution for visualization purposes
+          coverage_data.files[normalized_path]._executed_lines = coverage_data.files[normalized_path]._executed_lines or {}
+          coverage_data.files[normalized_path]._executed_lines[line] = true
+          
+          -- Mark as executable but not covered (for proper display)
+          coverage_data.files[normalized_path].executable_lines = coverage_data.files[normalized_path].executable_lines or {}
+          coverage_data.files[normalized_path].executable_lines[line] = true
+        end
+        
+        -- Don't continue with normal coverage processing to avoid recursion
         processing_hook = false
         return
       end
@@ -482,15 +507,50 @@ function M.debug_hook(event, line)
       
       local file_path = info.source:sub(2)
       
-      -- Skip lib/coverage, lib/tools/parser, and test files
-      if file_path:match("lib/coverage") or 
-         file_path:match("lib/tools/parser") or
-         file_path:match("lib/tools/vendor") or
-         file_path:match("_test%.lua$") or 
-         file_path:match("_spec%.lua$") or
-         file_path:match("/tests/") or
-         file_path:match("/test/") or
-         file_path:match("test_.*%.lua$") then
+      -- Identify coverage module files and test files for special handling
+      local is_coverage_file = file_path:find("lib/coverage", 1, true) or 
+                              file_path:find("lib/tools/parser", 1, true) or
+                              file_path:find("lib/tools/vendor", 1, true)
+                              
+      -- Identify test files for special handling
+      local is_test_file = file_path:match("_test%.lua$") or 
+                           file_path:match("_spec%.lua$") or
+                           file_path:match("/tests/") or
+                           file_path:match("/test/") or
+                           file_path:match("test_.*%.lua$")
+      
+      -- Special handling for coverage module and test files
+      if is_coverage_file or is_test_file then
+        -- We still want to track function executions for visualization purposes
+        local normalized_path = fs.normalize_path(file_path)
+        
+        -- Initialize file data if not already done
+        if not coverage_data.files[normalized_path] then
+          initialize_file(file_path)
+        end
+        
+        -- Record function execution data for visualization only
+        if coverage_data.files[normalized_path] and info.linedefined and info.linedefined > 0 then
+          -- Create unique function key
+          local func_key = info.linedefined .. ":function:" .. (info.name or "anonymous")
+          local func_name = info.name or ("function_at_line_" .. info.linedefined)
+          
+          -- Track this function
+          coverage_data.files[normalized_path].functions = coverage_data.files[normalized_path].functions or {}
+          coverage_data.files[normalized_path].functions[func_key] = {
+            name = func_name,
+            line = info.linedefined,
+            executed = true,
+            calls = 1,
+            dynamically_detected = true
+          }
+          
+          -- Also mark function's lines as executed
+          coverage_data.files[normalized_path]._executed_lines = coverage_data.files[normalized_path]._executed_lines or {}
+          coverage_data.files[normalized_path]._executed_lines[info.linedefined] = true
+        end
+        
+        -- Don't continue with normal coverage processing to avoid recursion
         processing_hook = false
         return
       end
