@@ -5,6 +5,22 @@ Based on lua-parser by Andre Murbach Maidl (https://github.com/andremm/lua-parse
 
 local M = {}
 
+local logging
+local logger
+
+-- Try to load logging module (may not be available during initial load)
+local function get_logger()
+  if not logger then
+    local success, log_module = pcall(require, "lib.tools.logging")
+    if success then
+      logging = log_module
+      logger = logging.get_logger("parser.pp")
+      logging.configure_from_config("parser.pp")
+    end
+  end
+  return logger
+end
+
 local block2str, stm2str, exp2str, var2str
 local explist2str, varlist2str, parlist2str, fieldlist2str
 
@@ -324,24 +340,62 @@ end
 -- Print an AST
 function M.print(t)
   assert(type(t) == "table")
-  print(M.tostring(t))
+  local log = get_logger()
+  
+  -- If logger is available, use it, otherwise fall back to print
+  if log then
+    log.debug(M.tostring(t))
+  else
+    print(M.tostring(t))
+  end
 end
 
 -- Dump an AST with detailed formatting
-function M.dump(t, i)
-  if i == nil then i = 0 end
-  io.write(string.format("{\n"))
-  io.write(string.format("%s[tag] = %s\n", string.rep(" ", i+2), t.tag or "nil"))
-  io.write(string.format("%s[pos] = %s\n", string.rep(" ", i+2), t.pos or "nil"))
-  for k,v in ipairs(t) do
-    io.write(string.format("%s[%s] = ", string.rep(" ", i+2), tostring(k)))
-    if type(v) == "table" then
-      M.dump(v,i+2)
+function M.dump(t, i, use_logger)
+  i = i or 0
+  use_logger = use_logger or false
+  
+  local log_str = ""
+  local function append(str)
+    if use_logger then
+      log_str = log_str .. str
     else
-      io.write(string.format("%s\n", tostring(v)))
+      io.write(str)
     end
   end
-  io.write(string.format("%s}\n", string.rep(" ", i)))
+  
+  append(string.format("{\n"))
+  append(string.format("%s[tag] = %s\n", string.rep(" ", i+2), t.tag or "nil"))
+  append(string.format("%s[pos] = %s\n", string.rep(" ", i+2), t.pos or "nil"))
+  
+  for k,v in ipairs(t) do
+    append(string.format("%s[%s] = ", string.rep(" ", i+2), tostring(k)))
+    if type(v) == "table" then
+      if use_logger then
+        log_str = log_str .. M.dump(v, i+2, true)
+      else
+        M.dump(v, i+2)
+      end
+    else
+      append(string.format("%s\n", tostring(v)))
+    end
+  end
+  
+  append(string.format("%s}\n", string.rep(" ", i)))
+  
+  if use_logger then
+    return log_str
+  end
+end
+
+-- Dump an AST with logging
+function M.log_dump(t)
+  local log = get_logger()
+  if log then
+    log.debug("AST dump: \n" .. M.dump(t, 0, true))
+  else
+    M.dump(t)
+  end
 end
 
 return M

@@ -1,11 +1,16 @@
 -- Fix for the lust-next expect assertion system
 local lust_next = require('../lust-next')
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("fix_expect")
+logging.configure_from_config("fix_expect")
 
 -- Function to check if a path is properly set up
 local function validate_path(path_key, path_elements)
   -- Check if the path exists
   if not lust_next.paths[path_key] then
-    print("Path not found: " .. path_key)
+    logger.warn("Path not found: " .. path_key)
     return false
   end
   
@@ -20,7 +25,7 @@ local function validate_path(path_key, path_elements)
     end
     
     if not found then
-      print("Element missing in path: " .. path_key .. "." .. element)
+      logger.warn("Element missing in path: " .. path_key .. "." .. element)
       return false
     end
   end
@@ -30,7 +35,7 @@ end
 
 -- Function to debug paths
 local function inspect_paths()
-  print("Inspecting lust_next.paths:")
+  logger.debug("Inspecting lust_next.paths:")
   for k, v in pairs(lust_next.paths) do
     if type(v) == "table" then
       local elements = {}
@@ -41,9 +46,9 @@ local function inspect_paths()
           table.insert(elements, ek .. ":" .. type(ev))
         end
       end
-      print("  " .. k .. ": " .. table.concat(elements, ", "))
+      logger.debug("  " .. k .. ": " .. table.concat(elements, ", "))
     else
-      print("  " .. k .. ": " .. tostring(v))
+      logger.debug("  " .. k .. ": " .. tostring(v))
     end
   end
 end
@@ -53,17 +58,17 @@ local function test_has()
   local test_table = {"a", "b", "c"}
   assert(lust_next.has(test_table, "a"), "has() function should return true for 'a'")
   assert(not lust_next.has(test_table, "d"), "has() function should return false for 'd'")
-  print("has() function works as expected")
+  logger.debug("has() function works as expected")
 end
 
 -- Function to fix expect assertion system
 local function fix_expect_system()
-  print("Fixing lust-next expect assertion system...")
+  logger.info("Fixing lust-next expect assertion system...")
   
   -- Make sure the has function exists
   local has_fn = lust_next.has
   if not has_fn then
-    print("ERROR: has function not found in lust_next")
+    logger.warn("has function not found in lust_next")
     -- Define a has function if it doesn't exist
     lust_next.has = function(t, x)
       for _, v in pairs(t) do
@@ -71,50 +76,50 @@ local function fix_expect_system()
       end
       return false
     end
-    print("Added has function to lust_next")
+    logger.info("Added has function to lust_next")
   else
-    print("has function exists in lust_next")
+    logger.debug("has function exists in lust_next")
   end
   
   -- Ensure paths table exists
   if not lust_next.paths then
-    print("ERROR: paths table not found in lust_next, creating it")
+    logger.warn("paths table not found in lust_next, creating it")
     lust_next.paths = {}
   end
   
   -- Make sure the be path is properly set up with truthy
   if not lust_next.paths.be then
-    print("Creating be path")
+    logger.info("Creating be path")
     lust_next.paths.be = { 'a', 'an', 'truthy', 'falsey', 'greater', 'less' }
   else
     -- Make sure truthy is in the be path
     if not lust_next.has(lust_next.paths.be, 'truthy') then
-      print("Adding truthy to be path")
+      logger.info("Adding truthy to be path")
       table.insert(lust_next.paths.be, 'truthy')
     end
     
     -- Make sure falsey is in the be path
     if not lust_next.has(lust_next.paths.be, 'falsey') then
-      print("Adding falsey to be path")
+      logger.info("Adding falsey to be path")
       table.insert(lust_next.paths.be, 'falsey')
     end
     
     -- Make sure greater is in the be path
     if not lust_next.has(lust_next.paths.be, 'greater') then
-      print("Adding greater to be path")
+      logger.info("Adding greater to be path")
       table.insert(lust_next.paths.be, 'greater')
     end
     
     -- Make sure less is in the be path
     if not lust_next.has(lust_next.paths.be, 'less') then
-      print("Adding less to be path")
+      logger.info("Adding less to be path")
       table.insert(lust_next.paths.be, 'less')
     end
   end
   
   -- Make sure be_truthy is defined
   if not lust_next.paths.be_truthy then
-    print("Adding be_truthy path")
+    logger.info("Adding be_truthy path")
     lust_next.paths.be_truthy = {
       test = function(v)
         return v ~= false and v ~= nil,
@@ -126,7 +131,7 @@ local function fix_expect_system()
   
   -- Make sure be_falsey is defined
   if not lust_next.paths.be_falsey then
-    print("Adding be_falsey path")
+    logger.info("Adding be_falsey path")
     lust_next.paths.be_falsey = {
       test = function(v)
         return v == false or v == nil,
@@ -138,7 +143,7 @@ local function fix_expect_system()
   
   -- Make sure be_greater is defined
   if not lust_next.paths.be_greater then
-    print("Adding be_greater path")
+    logger.info("Adding be_greater path")
     lust_next.paths.be_greater = {
       than = function(a, b)
         return a > b,
@@ -150,7 +155,7 @@ local function fix_expect_system()
   
   -- Make sure be_less is defined
   if not lust_next.paths.be_less then
-    print("Adding be_less path")
+    logger.info("Adding be_less path")
     lust_next.paths.be_less = {
       than = function(a, b)
         return a < b,

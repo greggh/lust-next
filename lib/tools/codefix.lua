@@ -2,6 +2,11 @@
 -- Implementation of code quality checking and fixing capabilities
 
 local M = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("codefix")
+logging.configure_from_config("codefix")
 
 -- Try to load JSON module
 local json
@@ -51,11 +56,12 @@ M.config = {
 -- Helper function to execute shell commands
 local function execute_command(command)
   if M.config.debug then
-    print(string.format("[DEBUG] Executing command: %s", command))
+    logger.debug("Executing command: " .. command)
   end
 
   local handle = io.popen(command .. " 2>&1", "r")
   if not handle then
+    logger.error("Failed to execute command: " .. command)
     return nil, false, -1, "Failed to execute command: " .. command
   end
   
@@ -64,9 +70,9 @@ local function execute_command(command)
   code = code or 0
   
   if M.config.debug then
-    print(string.format("[DEBUG] Command: %s", command))
-    print(string.format("[DEBUG] Exit code: %s", code))
-    print(string.format("[DEBUG] Output: %s", result or ""))
+    logger.debug("Command: " .. command)
+    logger.debug("Exit code: " .. tostring(code))
+    logger.debug("Output: " .. (result or ""))
   end
   
   return result, success, code, reason
@@ -108,28 +114,30 @@ local function get_os()
   return package.config:sub(1,1) == '\\' and "windows" or "unix"
 end
 
--- Logger functions
+-- Logger functions - redirected to central logging system
 local function log_info(msg)
   if M.config.verbose or M.config.debug then
-    print("[INFO] " .. msg)
+    logger.info(msg)
   end
 end
 
 local function log_debug(msg)
   if M.config.debug then
-    print("[DEBUG] " .. msg)
+    logger.debug(msg)
   end
 end
 
 local function log_warning(msg)
-  print("[WARNING] " .. msg)
+  logger.warn(msg)
 end
 
 local function log_error(msg)
-  print("[ERROR] " .. msg)
+  logger.error(msg)
 end
 
 local function log_success(msg)
+  logger.info(msg) -- Success messages are info level but will print to console
+  -- Also print to console for user feedback
   print("[SUCCESS] " .. msg)
 end
 

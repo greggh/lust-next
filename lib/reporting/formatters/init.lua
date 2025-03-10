@@ -1,6 +1,11 @@
 -- Formatter registry initialization
 -- Import filesystem module for path normalization
 local fs = require("lib.tools.filesystem")
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("formatters")
+logging.configure_from_config("formatters")
 
 local M = {
   -- Export a list of built-in formatters for documentation
@@ -73,7 +78,7 @@ function M.register_all(formatters)
     end
     
     if not loaded then
-      print("WARNING: Failed to load formatter module: " .. module_name)
+      logger.warn("Failed to load formatter module: " .. module_name)
     end
   end
   

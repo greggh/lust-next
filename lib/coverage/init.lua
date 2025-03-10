@@ -157,6 +157,7 @@ function M.init(options)
   
   -- Configure module logging level
   logging.configure_from_config("Coverage")
+  logger.debug("Initializing coverage module with configuration")
   
   -- Reset coverage
   M.reset()
@@ -166,6 +167,7 @@ function M.init(options)
   
   -- Initialize static analyzer if enabled
   if config.use_static_analysis then
+    logger.debug("Initializing static analyzer with options")
     static_analyzer.init({
       cache_files = config.cache_parsed_files,
       control_flow_keywords_executable = config.control_flow_keywords_executable,
@@ -1529,7 +1531,7 @@ function M.track_execution(file_path, line_num)
           static_analyzer.get_executable_lines(code_map)
         
         if config.debug then
-          print("DEBUG [Coverage Static Analysis] Generated code map for " .. normalized_path .. 
+          logger.debug("Static Analysis: Generated code map for " .. normalized_path .. 
                 " during track_execution call")
         end
       end
@@ -1598,7 +1600,7 @@ function M.track_execution(file_path, line_num)
       
       -- Debug output
       if config.debug and config.verbose then
-        print("DEBUG [Manual Block Tracking] Tracked block " .. block.id .. 
+        logger.verbose("Manual Block Tracking: Tracked block " .. block.id .. 
               " (" .. block.type .. ") at line " .. line_num .. 
               " in " .. normalized_path)
       end
@@ -1647,53 +1649,54 @@ function M.debug_dump()
   local data = debug_hook.get_coverage_data()
   local stats = M.get_report_data().summary
   
-  -- Since this is a user-facing debug output, we'll use print statements for consistent formatting
-  -- but wrap them in a function that could later be modified to use the logger if needed
-  local function debug_out(msg, level)
-    local level = level or "info"
-    -- For now we'll use print to maintain the exact formatting
-    print(msg)
-    -- Later this could be changed to: logger[level](msg)
+  -- Save current log level to restore it later
+  local current_log_level = logging.set_module_level("Coverage", logging.LEVELS.INFO)
+  
+  -- For user-facing debug output, we want to ensure it appears in console
+  -- Capture lines for a single multi-line output to ensure clean formatting
+  local debug_lines = {}
+  local function add_line(line)
+    table.insert(debug_lines, line)
   end
   
-  debug_out("=== COVERAGE MODULE DEBUG DUMP ===")
-  debug_out("Mode: " .. (enhanced_mode and "Enhanced (C extensions)" or "Standard (Pure Lua)"))
-  debug_out("Active: " .. tostring(active))
-  debug_out("Configuration:")
+  add_line("=== COVERAGE MODULE DEBUG DUMP ===")
+  add_line("Mode: " .. (enhanced_mode and "Enhanced (C extensions)" or "Standard (Pure Lua)"))
+  add_line("Active: " .. tostring(active))
+  add_line("Configuration:")
   for k, v in pairs(config) do
     if type(v) == "table" then
-      debug_out("  " .. k .. ": " .. #v .. " items")
+      add_line("  " .. k .. ": " .. #v .. " items")
     else
-      debug_out("  " .. k .. ": " .. tostring(v))
+      add_line("  " .. k .. ": " .. tostring(v))
     end
   end
   
-  debug_out("\nCoverage Stats:")
-  debug_out("  Files: " .. stats.covered_files .. "/" .. stats.total_files .. 
+  add_line("\nCoverage Stats:")
+  add_line("  Files: " .. stats.covered_files .. "/" .. stats.total_files .. 
         " (" .. string.format("%.2f%%", stats.file_coverage_percent) .. ")")
-  debug_out("  Lines: " .. stats.covered_lines .. "/" .. stats.total_lines .. 
+  add_line("  Lines: " .. stats.covered_lines .. "/" .. stats.total_lines .. 
         " (" .. string.format("%.2f%%", stats.line_coverage_percent) .. ")")
-  debug_out("  Functions: " .. stats.covered_functions .. "/" .. stats.total_functions .. 
+  add_line("  Functions: " .. stats.covered_functions .. "/" .. stats.total_functions .. 
         " (" .. string.format("%.2f%%", stats.function_coverage_percent) .. ")")
   
   -- Show block coverage if available
   if stats.total_blocks > 0 then
-    debug_out("  Blocks: " .. stats.covered_blocks .. "/" .. stats.total_blocks .. 
+    add_line("  Blocks: " .. stats.covered_blocks .. "/" .. stats.total_blocks .. 
           " (" .. string.format("%.2f%%", stats.block_coverage_percent) .. ")")
   end
   
-  debug_out("  Overall: " .. string.format("%.2f%%", stats.overall_percent))
+  add_line("  Overall: " .. string.format("%.2f%%", stats.overall_percent))
   
-  debug_out("\nTracked Files (first 5):")
+  add_line("\nTracked Files (first 5):")
   local count = 0
   for file_path, file_data in pairs(data.files) do
     if count < 5 then
       local covered = 0
       for _ in pairs(file_data.lines) do covered = covered + 1 end
       
-      debug_out("  " .. file_path)
-      debug_out("    Lines: " .. covered .. "/" .. (file_data.line_count or 0))
-      debug_out("    Discovered: " .. tostring(file_data.discovered or false))
+      add_line("  " .. file_path)
+      add_line("    Lines: " .. covered .. "/" .. (file_data.line_count or 0))
+      add_line("    Discovered: " .. tostring(file_data.discovered or false))
       
       count = count + 1
     else
@@ -1702,10 +1705,23 @@ function M.debug_dump()
   end
   
   if count == 5 and stats.total_files > 5 then
-    debug_out("  ... and " .. (stats.total_files - 5) .. " more files")
+    add_line("  ... and " .. (stats.total_files - 5) .. " more files")
   end
   
-  debug_out("=== END DEBUG DUMP ===")
+  add_line("=== END DEBUG DUMP ===")
+  
+  -- Create a formatted multi-line string
+  local debug_text = table.concat(debug_lines, "\n")
+  
+  -- Log to file via logger
+  logger.info(debug_text)
+  
+  -- Also print to console for user visibility
+  print(debug_text)
+  
+  -- Restore previous log level
+  logging.set_module_level("Coverage", current_log_level)
+  
   return M
 end
 

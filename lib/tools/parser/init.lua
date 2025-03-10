@@ -4,6 +4,11 @@
 
 local M = {}
 local fs = require("lib.tools.filesystem")
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("parser")
+logging.configure_from_config("parser")
 
 -- Load LPegLabel first to ensure it's available
 local has_lpeglabel, lpeg = pcall(require, "lib.tools.vendor.lpeglabel")

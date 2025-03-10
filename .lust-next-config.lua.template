@@ -149,4 +149,28 @@ return {
       "^_G$", "^package%.", "^debug%."
     },
   },
+  
+  -- Logging Configuration
+  logging = {
+    level = 3,                       -- Default log level (ERROR=1, WARN=2, INFO=3, DEBUG=4, VERBOSE=5)
+    timestamps = true,               -- Include timestamps in log entries
+    use_colors = true,               -- Use colors for console output
+    output_file = "lust-next.log",   -- Log file name (nil for console-only output)
+    log_dir = "logs",                -- Log directory (relative to current directory)
+    max_file_size = 50 * 1024,       -- Max log file size before rotation (50KB)
+    max_log_files = 5,               -- Number of rotated log files to keep
+    date_pattern = "%Y-%m-%d",       -- Date pattern for log timestamps
+    silent = false,                  -- Suppress all log output when true
+    
+    -- Module-specific log levels
+    modules = {
+      coverage = 3,                  -- INFO level for coverage module
+      reporting = 3,                 -- INFO level for reporting module
+      parser = 2,                    -- WARN level for parser module
+      codefix = 4,                   -- DEBUG level for codefix module
+      watcher = 3,                   -- INFO level for watcher module
+      interactive = 3,               -- INFO level for interactive module
+      formatters = 2,                -- WARN level for formatters module
+    }
+  },
 }

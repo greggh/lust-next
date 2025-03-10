@@ -2,21 +2,47 @@
 local lust = require("lust-next")
 local logging = require("lib.tools.logging")
 local config = require("lib.core.config")
+local fs = require("lib.tools.filesystem")
 
 print("Logging with Global Config Example")
 print("---------------------------------")
+
+-- Create logs directory if it doesn't exist
+fs.ensure_directory_exists("logs")
+
+-- Remove any existing example log files
+local example_log = "logs/config_example.log"
+if fs.file_exists(example_log) then
+  fs.remove_file(example_log)
+end
+for i = 1, 5 do
+  local rotated_log = example_log .. "." .. i
+  if fs.file_exists(rotated_log) then
+    fs.remove_file(rotated_log)
+  end
+end
 
 -- Create a temporary config for demonstration
 local temp_config = {
   debug = true,    -- Enable debug logging globally
   verbose = false, -- Don't enable verbose logging
   
-  -- Module-specific logging configuration
+  -- Complete logging configuration
   logging = {
+    level = 3,  -- Default to INFO
+    timestamps = true,
+    use_colors = true,
+    output_file = "config_example.log",
+    log_dir = "logs",
+    max_file_size = 1024,  -- Small size (1KB) to demonstrate rotation
+    max_log_files = 3,     -- Keep 3 rotated files
+    
+    -- Module-specific log levels
     modules = {
       -- Set specific log levels for different modules
       ConfigTest = logging.LEVELS.VERBOSE,  -- Extra verbose for this module
-      SecondModule = logging.LEVELS.WARN    -- Only warnings and errors for this module
+      SecondModule = logging.LEVELS.WARN,   -- Only warnings and errors for this module
+      RotationDemo = logging.LEVELS.DEBUG   -- Demo of log rotation
     }
   }
 }
@@ -80,4 +106,33 @@ end
 -- Run the example initialization
 local module = example_module_init()
 
-print("\nDone! Global config-based logging is working correctly.")
+-- Create a special logger to demonstrate log rotation
+print("\nDemonstrating log rotation:")
+print("-------------------------")
+logging.configure_from_config("RotationDemo")  
+local rotation_logger = logging.get_logger("RotationDemo")
+
+-- Generate enough logs to trigger rotation
+print("Writing logs to trigger rotation...")
+for i = 1, 50 do
+  rotation_logger.debug("Log entry " .. i .. ": " .. string.rep("x", 30))
+end
+
+-- Check if log rotation worked
+print("Checking for rotated log files...")
+if fs.file_exists(example_log) then
+  print("- Main log file exists: " .. example_log)
+end
+
+for i = 1, 3 do
+  local rotated_log = example_log .. "." .. i
+  if fs.file_exists(rotated_log) then
+    print("- Rotated log file exists: " .. rotated_log)
+  end
+end
+
+print("\nLog files have been created in the logs directory:")
+print("- logs/config_example.log (main log file)")
+print("- logs/config_example.log.[1-3] (rotated log files)")
+
+print("\nDone! Global config-based logging is working correctly with log rotation.")

@@ -12,6 +12,24 @@ config.default_config_path = ".lust-next-config.lua"
 -- Store loaded configuration
 config.loaded = nil
 
+-- Default configuration values
+config.defaults = {
+  coverage = {
+    control_flow_keywords_executable = true -- Default to strict coverage (control flow keywords are executable)
+  },
+  logging = {
+    level = 3, -- Default to INFO level
+    modules = {}, -- Module-specific log levels
+    timestamps = true, -- Include timestamps in log entries
+    use_colors = true, -- Use colors in console output
+    output_file = "lust-next.log", -- Default log filename
+    log_dir = "logs", -- Directory for log files
+    max_file_size = 50 * 1024, -- 50KB default size limit per log file (small for testing, would be ~10MB in production)
+    max_log_files = 5, -- Number of rotated log files to keep
+    date_pattern = "%Y-%m-%d" -- Date pattern for log filenames
+  }
+}
+
 -- Deep merge two tables
 local function deep_merge(target, source)
   for k, v in pairs(source) do
@@ -54,8 +72,15 @@ function config.get()
   if not config.loaded then
     local user_config, err = config.load_from_file()
     if not user_config then
-      -- No config file found, use empty table
+      -- No config file found, create new with defaults
       config.loaded = {}
+      -- Apply defaults
+      for section, values in pairs(config.defaults) do
+        config.loaded[section] = config.loaded[section] or {}
+        for k, v in pairs(values) do
+          config.loaded[section][k] = v
+        end
+      end
     end
   end
   
@@ -178,6 +203,23 @@ function config.apply_to_lust(lust_next)
   if cfg.quality and lust_next.quality_options then
     for k, v in pairs(cfg.quality) do
       lust_next.quality_options[k] = v
+    end
+  end
+  
+  -- Apply logging configuration
+  if cfg.logging and lust_next.logging then
+    if type(lust_next.logging.configure) == "function" then
+      lust_next.logging.configure({
+        level = cfg.logging.level,
+        module_levels = cfg.logging.modules,
+        timestamps = cfg.logging.timestamps,
+        use_colors = cfg.logging.use_colors,
+        output_file = cfg.logging.output_file,
+        log_dir = cfg.logging.log_dir,
+        max_file_size = cfg.logging.max_file_size,
+        max_log_files = cfg.logging.max_log_files,
+        date_pattern = cfg.logging.date_pattern
+      })
     end
   end
   

@@ -1,5 +1,10 @@
 -- File watcher module for lust-next
 local watcher = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("watcher")
+logging.configure_from_config("watcher")
 
 -- List of file patterns to watch
 local watch_patterns = {
@@ -50,7 +55,7 @@ function watcher.init(directories, exclude_patterns)
   
   -- Scan all files in directories
   for _, dir in ipairs(directories) do
-    print("Watching directory: " .. dir)
+    logger.info("Watching directory: " .. dir)
     
     -- Use find to get all files (Linux/macOS compatible)
     local cmd = 'find "' .. dir .. '" -type f 2>/dev/null'
@@ -79,7 +84,7 @@ function watcher.init(directories, exclude_patterns)
     end
   end
   
-  print("Watching " .. #file_timestamps .. " files for changes")
+  logger.info("Watching " .. table.getn(file_timestamps) .. " files for changes")
   return true
 end
 

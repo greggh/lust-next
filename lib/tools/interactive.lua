@@ -1,5 +1,10 @@
 -- Interactive CLI module for lust-next
 local interactive = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("interactive")
+logging.configure_from_config("interactive")
 
 -- Try to load required modules
 local has_discovery, discover = pcall(require, "discover")
@@ -45,6 +50,7 @@ local function print_header()
   print(colors.bold .. colors.cyan .. "Lust-Next Interactive CLI" .. colors.normal)
   print(colors.green .. "Type 'help' for available commands" .. colors.normal)
   print(string.rep("-", 60))
+  logger.debug("Interactive CLI initialized")
 end
 
 -- Print help information
@@ -58,6 +64,7 @@ local function print_help()
   print("  tags <tag1,tag2>    Run tests with specific tags")
   print("  watch <on|off>      Toggle watch mode")
   print("  watch-dir <path>    Add directory to watch")
+  logger.debug("Help information displayed")
   print("  watch-exclude <pat> Add exclusion pattern for watch")
   print("  codefix <cmd> <dir> Run codefix (check|fix) on directory")
   print("  dir <path>          Set test directory")
@@ -90,12 +97,17 @@ local function print_status()
   print("  Codefix:            " .. (state.codefix_enabled and "enabled" or "disabled"))
   print("  Available tests:    " .. #state.current_files)
   print(string.rep("-", 60))
+  
+  logger.debug("Status displayed - Tests: " .. #state.current_files .. 
+               ", Watch: " .. (state.watch_mode and "on" or "off") .. 
+               ", Focus: " .. (state.focus_filter or "none"))
 end
 
 -- List available test files
 local function list_test_files()
   if #state.current_files == 0 then
     print(colors.yellow .. "No test files found in " .. state.test_dir .. colors.normal)
+    logger.warn("No test files found in directory: " .. state.test_dir)
     return
   end
   
@@ -104,15 +116,19 @@ local function list_test_files()
     print("  " .. i .. ". " .. file)
   end
   print(string.rep("-", 60))
+  logger.debug("Listed " .. #state.current_files .. " test files")
 end
 
 -- Discover test files
 local function discover_test_files()
   if has_discovery then
+    logger.debug("Discovering test files in " .. state.test_dir .. " with pattern " .. state.test_pattern)
     state.current_files = discover.find_tests(state.test_dir, state.test_pattern)
+    logger.debug("Found " .. #state.current_files .. " test files")
     return #state.current_files > 0
   else
     print(colors.red .. "Error: Discovery module not available" .. colors.normal)
+    logger.error("Discovery module not available")
     return false
   end
 end
@@ -121,30 +137,37 @@ end
 local function run_tests(file_path)
   if not has_runner then
     print(colors.red .. "Error: Runner module not available" .. colors.normal)
+    logger.error("Runner module not available")
     return false
   end
   
   -- Reset lust state
   state.lust.reset()
+  logger.debug("Lust state reset before test run")
   
   local success = false
   
   if file_path then
     -- Run single file
     print(colors.cyan .. "Running file: " .. file_path .. colors.normal)
+    logger.info("Running single test file: " .. file_path)
     local results = runner.run_file(file_path, state.lust)
     success = results.success and results.errors == 0
+    logger.info("Test run completed with " .. (success and "success" or "failures"))
   else
     -- Run all discovered files
     if #state.current_files == 0 then
       if not discover_test_files() then
         print(colors.yellow .. "No test files found. Check test directory and pattern." .. colors.normal)
+        logger.warn("No test files found to run. Check test directory and pattern.")
         return false
       end
     end
     
     print(colors.cyan .. "Running " .. #state.current_files .. " test files..." .. colors.normal)
+    logger.info("Running " .. #state.current_files .. " test files")
     success = runner.run_all(state.current_files, state.lust)
+    logger.info("Test run completed with " .. (success and "success" or "failures"))
   end
   
   return success
@@ -154,17 +177,21 @@ end
 local function start_watch_mode()
   if not has_watcher then
     print(colors.red .. "Error: Watch module not available" .. colors.normal)
+    logger.error("Watch module not available, can't start watch mode")
     return false
   end
   
   if not has_runner then
     print(colors.red .. "Error: Runner module not available" .. colors.normal)
+    logger.error("Runner module not available, can't start watch mode")
     return false
   end
   
   print(colors.cyan .. "Starting watch mode..." .. colors.normal)
   print("Watching directories: " .. table.concat(state.watch_dirs, ", "))
   print("Press Enter to return to interactive mode")
+  
+  logger.info("Starting watch mode on directories: " .. table.concat(state.watch_dirs, ", "))
   
   watcher.set_check_interval(state.watch_interval)
   watcher.init(state.watch_dirs, state.exclude_patterns)
@@ -201,6 +228,7 @@ local function start_watch_mode()
   runner.run_all(state.current_files, state.lust)
   
   print(colors.cyan .. "\n--- WATCHING FOR CHANGES (Press Enter to return to interactive mode) ---" .. colors.normal)
+  logger.info("Watch mode active, waiting for changes")
   
   while watch_running do
     local current_time = os.time()
@@ -215,6 +243,9 @@ local function start_watch_mode()
       for _, file in ipairs(changed_files) do
         print("  - " .. file)
       end
+      
+      logger.info("File changes detected: " .. #changed_files .. " files changed")
+      logger.debug("Changed files: " .. table.concat(changed_files, ", "))
     end
     
     -- Run tests if needed and after debounce period
@@ -225,12 +256,14 @@ local function start_watch_mode()
       -- Clear terminal
       io.write("\027[2J\027[H")
       
+      logger.info("Running tests after file changes (debounce: " .. debounce_time .. "s)")
       state.lust.reset()
       runner.run_all(state.current_files, state.lust)
       last_run_time = current_time
       need_to_run = false
       
       print(colors.cyan .. "\n--- WATCHING FOR CHANGES (Press Enter to return to interactive mode) ---" .. colors.normal)
+      logger.info("Watch mode resumed after test run")
     end
     
     -- Check for input to exit watch mode
@@ -249,16 +282,19 @@ end
 local function run_codefix(command, target)
   if not has_codefix then
     print(colors.red .. "Error: Codefix module not available" .. colors.normal)
+    logger.error("Codefix module not available")
     return false
   end
   
   if not command or not target then
     print(colors.yellow .. "Usage: codefix <check|fix> <directory>" .. colors.normal)
+    logger.warn("Invalid codefix usage - command or target missing")
     return false
   end
   
   -- Initialize codefix if needed
   if not state.codefix_enabled then
+    logger.debug("Initializing codefix module")
     codefix.init({
       enabled = true,
       verbose = true
@@ -267,14 +303,17 @@ local function run_codefix(command, target)
   end
   
   print(colors.cyan .. "Running codefix: " .. command .. " " .. target .. colors.normal)
+  logger.info("Running codefix operation: " .. command .. " on " .. target)
   
   local codefix_args = {command, target}
   local success = codefix.run_cli(codefix_args)
   
   if success then
     print(colors.green .. "Codefix completed successfully" .. colors.normal)
+    logger.info("Codefix operation completed successfully")
   else
     print(colors.red .. "Codefix failed" .. colors.normal)
+    logger.warn("Codefix operation failed")
   end
   
   return success
