@@ -3,9 +3,13 @@ local M = {}
 
 -- Generate a summary coverage report from coverage data
 function M.format_coverage(coverage_data)
+  -- Get logger
+  local logging = require("lib.tools.logging")
+  local logger = logging.get_logger("Reporting:Summary")
+
   -- Validate the input data to prevent runtime errors
   if not coverage_data then
-    print("ERROR [Reporting] Missing coverage data")
+    logger.error("Missing coverage data")
     return {
       files = {},
       total_files = 0,
@@ -62,9 +66,13 @@ end
 
 -- Generate a text summary of quality data
 function M.format_quality(quality_data)
+  -- Get logger
+  local logging = require("lib.tools.logging")
+  local logger = logging.get_logger("Reporting:Summary")
+  
   -- Validate input
   if not quality_data then
-    print("ERROR [Reporting] Missing quality data")
+    logger.error("Missing quality data")
     return {
       level = 0,
       level_name = "unknown",

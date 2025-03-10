@@ -1,6 +1,7 @@
 -- Core debug hook implementation
 local M = {}
 local fs = require("lib.tools.filesystem")
+local logging = require("lib.tools.logging")
 local static_analyzer -- Lazily loaded when used
 local config = {}
 local tracked_files = {}
@@ -13,21 +14,8 @@ local coverage_data = {
   conditions = {}   -- Condition tracking
 }
 
--- Helper function for debug logging
-local function log_debug(message)
-  -- Only print if debug is enabled in config
-  if config.debug then
-    print("[Coverage Debug Hook] " .. message)
-  end
-end
-
--- Helper for verbose logging (more detailed than debug)
-local function log_verbose(message)
-  -- Only print if verbose is enabled in config
-  if config.verbose then
-    print("[Coverage Debug Hook Verbose] " .. message)
-  end
-end
+-- Create a logger for this module
+local logger = logging.get_logger("CoverageHook")
 
 -- Should we track this file?
 function M.should_track_file(file_path)
@@ -129,7 +117,7 @@ local function is_line_executable(file_path, line)
         line_type = file_data.code_map.lines[line].type or "unknown"
       end
       
-      log_verbose(string.format("Line %d classification: executable=%s, type=%s", 
+      logger.verbose(string.format("Line %d classification: executable=%s, type=%s", 
         line, tostring(is_exec), line_type))
     end
     
@@ -245,7 +233,7 @@ function M.debug_hook(event, line)
           initialize_file(file_path)
           
           -- Debug output only if needed
-          log_debug("Initialized file: " .. normalized_path)
+          logger.debug("Initialized file: " .. normalized_path)
           
           -- Proactively try to get a code map using the static analyzer
           -- This ensures more accurate line classification early on
@@ -268,7 +256,7 @@ function M.debug_hook(event, line)
               coverage_data.files[normalized_path].executable_lines = 
                 static_analyzer.get_executable_lines(code_map)
               
-              log_debug("Generated code map for " .. normalized_path)
+              logger.debug("Generated code map for " .. normalized_path)
             end
           end
         end
@@ -280,7 +268,7 @@ function M.debug_hook(event, line)
         
         -- Verbose output for test files
         if config.verbose and is_debug_file then
-          log_verbose(string.format("Line %d execution detected in debug hook", line))
+          logger.verbose(string.format("Line %d execution detected in debug hook", line))
         end
         
         -- Track line with minimum operations
@@ -320,7 +308,7 @@ function M.debug_hook(event, line)
           -- Verbose output for execution tracking
           -- Only log for example files or test files
           if config.verbose and (file_path:match("example") or file_path:match("test")) then
-            log_verbose(string.format("Detected execution of line %d in %s", 
+            logger.verbose(string.format("Detected execution of line %d in %s", 
                              line, normalized_path:match("([^/]+)$") or normalized_path))
           end
           
@@ -334,7 +322,7 @@ function M.debug_hook(event, line)
             
             -- Verbose output for test files
             if config.verbose and is_debug_file then
-              log_verbose(string.format("Line %d execution tracked as covered and executable", line))
+              logger.verbose(string.format("Line %d execution tracked as covered and executable", line))
             end
           else
             -- DO NOT mark non-executable lines as covered
@@ -345,7 +333,7 @@ function M.debug_hook(event, line)
             
             -- Verbose output for non-executable lines
             if config.verbose and is_debug_file then
-              log_verbose(string.format("Line %d execution tracked but not counted (non-executable)", line))
+              logger.verbose(string.format("Line %d execution tracked but not counted (non-executable)", line))
             end
           end
           
@@ -376,7 +364,7 @@ function M.debug_hook(event, line)
                 coverage_data.files[normalized_path].code_map = code_map
                 coverage_data.files[normalized_path].ast = ast
                 
-                log_debug("Generated code map on-demand for " .. normalized_path)
+                logger.debug("Generated code map on-demand for " .. normalized_path)
               end
               
               -- Mark that we tried, regardless of success
@@ -448,7 +436,7 @@ function M.debug_hook(event, line)
                 
                 -- Verbose output for block execution
                 if config.verbose then
-                  log_verbose("Executed block " .. block.id .. 
+                  logger.verbose("Executed block " .. block.id .. 
                       " (" .. block.type .. ") at line " .. line .. 
                       " in " .. normalized_path ..
                       " (count: " .. (block_copy.execution_count or 1) .. ")")
@@ -575,7 +563,7 @@ function M.debug_hook(event, line)
                   if condition_copy.executed_true then outcomes = outcomes .. " true" end
                   if condition_copy.executed_false then outcomes = outcomes .. " false" end
                   
-                  log_verbose("Executed condition " .. condition.id .. 
+                  logger.verbose("Executed condition " .. condition.id .. 
                       " (" .. condition.type .. ") at line " .. line .. 
                       " in " .. normalized_path .. 
                       " (count: " .. (condition_copy.execution_count or 1) ..
@@ -594,7 +582,7 @@ function M.debug_hook(event, line)
   
   -- Report errors but don't crash
   if not success then
-    log_debug("Error: " .. tostring(err))
+    logger.debug("Error: " .. tostring(err))
   end
   
   -- Handle call events
@@ -712,7 +700,7 @@ function M.debug_hook(event, line)
             
             -- Verbose output for function execution
             if config.verbose then
-              log_verbose("Executed function '" .. 
+              logger.verbose("Executed function '" .. 
                   coverage_data.files[normalized_path].functions[existing_key].name .. 
                   "' at line " .. info.linedefined .. " in " .. normalized_path)
             end
@@ -728,7 +716,7 @@ function M.debug_hook(event, line)
           
           -- Verbose output for new functions
           if config.verbose then
-            log_verbose("Tracked new function '" .. func_name .. 
+            logger.verbose("Tracked new function '" .. func_name .. 
                   "' at line " .. info.linedefined .. " in " .. normalized_path)
           end
         end
@@ -740,7 +728,7 @@ function M.debug_hook(event, line)
     
     -- Report errors but don't crash
     if not success then
-      log_debug("Error: " .. tostring(err))
+      logger.debug("Error: " .. tostring(err))
     end
   end
 end
@@ -749,6 +737,16 @@ end
 function M.set_config(new_config)
   config = new_config
   tracked_files = {}  -- Reset cached decisions
+  
+  -- Configure logging based on debug/verbose settings
+  local log_level = logging.LEVELS.INFO
+  if config.debug then
+    log_level = logging.LEVELS.DEBUG
+  elseif config.verbose then
+    log_level = logging.LEVELS.VERBOSE
+  end
+  logging.set_module_level("CoverageHook", log_level)
+  
   return M
 end
 
