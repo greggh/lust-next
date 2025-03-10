@@ -76,8 +76,13 @@ function M.configure(options)
     config.verbose = options.verbose
   end
   
-  -- Configure module logging level
-  logging.configure_from_config("Reporting")
+  -- We can use options directly for logging configuration if provided
+  if options.debug ~= nil or options.verbose ~= nil then
+    logging.configure_from_options("Reporting", options)
+  else
+    -- Otherwise use global config
+    logging.configure_from_config("Reporting")
+  end
   
   -- Return the module for chaining
   return M

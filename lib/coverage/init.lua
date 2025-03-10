@@ -1440,14 +1440,11 @@ function M.report(format)
   -- Use reporting module for formatting
   local reporting = require("lib.reporting")
   
-  -- Configure reporting module with our debug settings
+  -- Configure reporting module (this handles both configuration and logging setup)
   reporting.configure({
     debug = config.debug,
     verbose = config.verbose
   })
-  
-  -- Set up logging for the reporting module
-  logging.configure_from_config("Reporting")
   
   local data = M.get_report_data()
   return reporting.format_coverage(data, format or "summary")
@@ -1457,14 +1454,11 @@ end
 function M.save_report(file_path, format)
   local reporting = require("lib.reporting")
   
-  -- Configure reporting module with our debug settings
+  -- Configure reporting module (this handles both configuration and logging setup)
   reporting.configure({
     debug = config.debug,
     verbose = config.verbose
   })
-  
-  -- Set up logging for the reporting module
-  logging.configure_from_config("Reporting")
   
   local data = M.get_report_data()
   return reporting.save_coverage_report(file_path, data, format or "html")
