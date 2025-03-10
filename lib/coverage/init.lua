@@ -155,14 +155,8 @@ function M.init(options)
     M.config[k] = v
   end
   
-  -- Configure logging based on debug/verbose settings
-  local log_level = logging.LEVELS.INFO
-  if config.debug then
-    log_level = logging.LEVELS.DEBUG
-  elseif config.verbose then
-    log_level = logging.LEVELS.VERBOSE
-  end
-  logging.set_module_level("Coverage", log_level)
+  -- Configure module logging level
+  logging.configure_from_options("Coverage", config)
   
   -- Reset coverage
   M.reset()
@@ -1453,13 +1447,7 @@ function M.report(format)
   })
   
   -- Set up logging for the reporting module
-  local log_level = logging.LEVELS.INFO
-  if config.debug then
-    log_level = logging.LEVELS.DEBUG
-  elseif config.verbose then
-    log_level = logging.LEVELS.VERBOSE
-  end
-  logging.set_module_level("Reporting", log_level)
+  logging.configure_from_options("Reporting", config)
   
   local data = M.get_report_data()
   return reporting.format_coverage(data, format or "summary")
@@ -1476,13 +1464,7 @@ function M.save_report(file_path, format)
   })
   
   -- Set up logging for the reporting module
-  local log_level = logging.LEVELS.INFO
-  if config.debug then
-    log_level = logging.LEVELS.DEBUG
-  elseif config.verbose then
-    log_level = logging.LEVELS.VERBOSE
-  end
-  logging.set_module_level("Reporting", log_level)
+  logging.configure_from_options("Reporting", config)
   
   local data = M.get_report_data()
   return reporting.save_coverage_report(file_path, data, format or "html")

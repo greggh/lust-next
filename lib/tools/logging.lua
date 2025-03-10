@@ -232,6 +232,18 @@ function M.set_level(level)
   return M
 end
 
+-- Configure module level based on debug/verbose settings
+function M.configure_from_options(module_name, options)
+  local log_level = M.LEVELS.INFO
+  if options.debug then
+    log_level = M.LEVELS.DEBUG
+  elseif options.verbose then
+    log_level = M.LEVELS.VERBOSE
+  end
+  M.set_module_level(module_name, log_level)
+  return log_level
+end
+
 -- Compatibility with existing code
 function M.log_debug(message, module_name)
   log(M.LEVELS.DEBUG, module_name, message)

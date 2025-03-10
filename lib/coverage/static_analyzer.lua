@@ -51,14 +51,8 @@ function M.init(options)
     config.verbose = options.verbose
   end
   
-  -- Configure logging based on debug/verbose settings
-  local log_level = logging.LEVELS.INFO
-  if config.debug then
-    log_level = logging.LEVELS.DEBUG
-  elseif config.verbose then
-    log_level = logging.LEVELS.VERBOSE
-  end
-  logging.set_module_level("StaticAnalyzer", log_level)
+  -- Configure module logging level
+  logging.configure_from_options("StaticAnalyzer", config)
   
   return M
 end

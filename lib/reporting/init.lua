@@ -76,14 +76,8 @@ function M.configure(options)
     config.verbose = options.verbose
   end
   
-  -- Configure logging based on debug/verbose settings
-  local log_level = logging.LEVELS.INFO
-  if config.debug then
-    log_level = logging.LEVELS.DEBUG
-  elseif config.verbose then
-    log_level = logging.LEVELS.VERBOSE
-  end
-  logging.set_module_level("Reporting", log_level)
+  -- Configure module logging level
+  logging.configure_from_options("Reporting", config)
   
   -- Return the module for chaining
   return M

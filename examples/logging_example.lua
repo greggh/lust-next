@@ -53,6 +53,37 @@ db_logger.verbose("Even in database module")
 -- Restore normal settings
 logging.set_level(logging.LEVELS.INFO)
 
+-- Using the helper function to configure logging from options
+print("\nUsing configure_from_options:")
+print("----------------------------")
+
+-- Standard options object similar to what's used throughout the codebase
+local options = {
+  debug = true,
+  verbose = false
+}
+
+-- Use the helper function to configure logging from standard options
+logging.configure_from_options("ConfigModule", options)
+local config_logger = logging.get_logger("ConfigModule")
+
+config_logger.info("Config module info message")
+config_logger.debug("Debug message is visible because debug=true")
+config_logger.verbose("Verbose message hidden because verbose=false")
+
+-- Change options to show verbose output
+local verbose_options = {
+  debug = false,
+  verbose = true
+}
+
+logging.configure_from_options("VerboseModule", verbose_options)
+local verbose_logger = logging.get_logger("VerboseModule")
+
+verbose_logger.info("VerboseModule info message")
+verbose_logger.debug("Debug message hidden because debug=false")
+verbose_logger.verbose("Verbose message visible because verbose=true")
+
 -- Log to a file
 print("\nConfiguring file output:")
 print("-----------------------")
