@@ -14,6 +14,28 @@ local lust_next = require("lust-next")
 local discover = require("discover")
 local runner = require("runner")
 
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for run_tests module
+local logger = logging.get_logger("run_tests")
+-- Configure from config if possible
+logging.configure_from_config("run_tests")
+
 -- Parse command line arguments
 local dir = "./tests"
 local pattern = "*_test.lua"
@@ -41,6 +63,8 @@ local report_config = {
 
 -- Print usage information
 local function print_usage()
+  -- Still use print directly for help info to ensure it's always visible
+  -- regardless of logger configuration
   print("Usage: run_tests.lua [options] [file.lua]")
   print("Options:")
   print("  --dir <directory>         Directory to search for test files (default: ./tests)")
@@ -165,7 +189,7 @@ if codefix_enabled then
   local ok, loaded = pcall(function() codefix = require("src.codefix") end)
   
   if not ok or not codefix then
-    print("Error: Codefix module not found: " .. (err or "unknown error"))
+    logger.error("Codefix module not found: " .. (err or "unknown error"))
     os.exit(1)
   end
   
@@ -176,9 +200,9 @@ if codefix_enabled then
   })
   
   -- Run the requested command
-  print("\n" .. string.rep("-", 60))
-  print("RUNNING CODEFIX: " .. codefix_command .. " " .. (codefix_target or ""))
-  print(string.rep("-", 60))
+  logger.info("\n" .. string.rep("-", 60))
+  logger.info("RUNNING CODEFIX: " .. codefix_command .. " " .. (codefix_target or ""))
+  logger.info(string.rep("-", 60))
   
   local codefix_args = {codefix_command, codefix_target}
   success = codefix.run_cli(codefix_args)
@@ -225,7 +249,7 @@ if interactive_mode_enabled then
   local ok, loaded = pcall(function() interactive = require("src.interactive") end)
   
   if not ok or not interactive then
-    print("Error: Interactive module not found: " .. (err or "unknown error"))
+    logger.error("Interactive module not found: " .. (err or "unknown error"))
     os.exit(1)
   end
   
@@ -240,6 +264,7 @@ if interactive_mode_enabled then
     report_config = report_config  -- Pass report config to interactive mode
   }
   
+  logger.info("Starting interactive mode...")
   success = interactive.start(lust_next, options)
   os.exit(success and 0 or 1)
 -- Check for watch mode  

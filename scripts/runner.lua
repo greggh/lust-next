@@ -5,6 +5,29 @@ local runner = {}
 local watcher
 local has_watcher = pcall(function() watcher = require("src.watcher") end)
 
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for runner module
+local logger = logging.get_logger("runner")
+-- Configure from config if possible
+logging.configure_from_config("runner")
+
+-- ANSI color codes (keep them for compatibility with existing code)
 local red = string.char(27) .. '[31m'
 local green = string.char(27) .. '[32m'
 local yellow = string.char(27) .. '[33m'
@@ -24,7 +47,7 @@ function runner.run_file(file_path, lust, options)
   local prev_errors = lust.errors
   local prev_skipped = lust.skipped
   
-  print("\nRunning file: " .. file_path)
+  logger.info("\nRunning file: " .. file_path)
   
   -- Count PASS/FAIL from test output
   local pass_count = 0
@@ -105,7 +128,7 @@ function runner.run_file(file_path, lust, options)
   end
   
   if not success then
-    print(red .. "ERROR: " .. err .. normal)
+    logger.error(red .. "ERROR: " .. err .. normal)
     table.insert(results.test_errors, {
       message = tostring(err),
       file = file_path,
@@ -113,7 +136,7 @@ function runner.run_file(file_path, lust, options)
     })
   else
     -- Always show the completion status with test counts
-    print(green .. "Completed with " .. results.passes .. " passes, " 
+    logger.info(green .. "Completed with " .. results.passes .. " passes, " 
          .. results.errors .. " failures, "
          .. results.skipped .. " skipped" .. normal)
   end
@@ -196,7 +219,7 @@ function runner.run_file(file_path, lust, options)
       
       -- Format as JSON with markers for parallel execution
       local json_results = json_module.encode(test_results)
-      print("\nRESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END")
+      logger.info("\nRESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END")
     end
   end
   
@@ -207,7 +230,7 @@ end
 function runner.run_all(files, lust, options)
   options = options or {}
   
-  print(green .. "Running " .. #files .. " test files" .. normal)
+  logger.info(green .. "Running " .. #files .. " test files" .. normal)
   
   local passed_files = 0
   local failed_files = 0
@@ -234,20 +257,20 @@ function runner.run_all(files, lust, options)
   
   local elapsed_time = os.clock() - start_time
   
-  print("\n" .. string.rep("-", 60))
-  print("File Summary: " .. green .. passed_files .. " passed" .. normal .. ", " .. 
+  logger.info("\n" .. string.rep("-", 60))
+  logger.info("File Summary: " .. green .. passed_files .. " passed" .. normal .. ", " .. 
         (failed_files > 0 and red or green) .. failed_files .. " failed" .. normal)
-  print("Test Summary: " .. green .. total_passes .. " passed" .. normal .. ", " .. 
+  logger.info("Test Summary: " .. green .. total_passes .. " passed" .. normal .. ", " .. 
         (total_failures > 0 and red or green) .. total_failures .. " failed" .. normal .. 
         ", " .. yellow .. total_skipped .. " skipped" .. normal)
-  print("Total time: " .. string.format("%.2f", elapsed_time) .. " seconds")
-  print(string.rep("-", 60))
+  logger.info("Total time: " .. string.format("%.2f", elapsed_time) .. " seconds")
+  logger.info(string.rep("-", 60))
   
   local all_passed = failed_files == 0
   if not all_passed then
-    print(red .. "✖ Some tests failed" .. normal)
+    logger.error(red .. "✖ Some tests failed" .. normal)
   else
-    print(green .. "✓ All tests passed" .. normal)
+    logger.info(green .. "✓ All tests passed" .. normal)
   end
   
   -- Output overall JSON results if requested
@@ -279,7 +302,7 @@ function runner.run_all(files, lust, options)
       
       -- Format as JSON with markers for parallel execution
       local json_results = json_module.encode(test_results)
-      print("\nRESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END")
+      logger.info("\nRESULTS_JSON_BEGIN" .. json_results .. "RESULTS_JSON_END")
     end
   end
   
@@ -289,7 +312,7 @@ end
 -- Watch mode for continuous testing
 function runner.watch_mode(directories, test_dirs, lust, options)
   if not has_watcher then
-    print(red .. "Error: Watch mode requires the watcher module" .. normal)
+    logger.error(red .. "Error: Watch mode requires the watcher module" .. normal)
     return false
   end
   
@@ -298,8 +321,8 @@ function runner.watch_mode(directories, test_dirs, lust, options)
   local watch_interval = options.interval or 1.0
   
   -- Initialize the file watcher
-  print(cyan .. "\n--- WATCH MODE ACTIVE ---" .. normal)
-  print("Press Ctrl+C to exit")
+  logger.info(cyan .. "\n--- WATCH MODE ACTIVE ---" .. normal)
+  logger.info("Press Ctrl+C to exit")
   
   watcher.set_check_interval(watch_interval)
   watcher.init(directories, exclude_patterns)
@@ -337,16 +360,16 @@ function runner.watch_mode(directories, test_dirs, lust, options)
       last_change_time = current_time
       need_to_run = true
       
-      print(yellow .. "\nFile changes detected:" .. normal)
+      logger.info(yellow .. "\nFile changes detected:" .. normal)
       for _, file in ipairs(changed_files) do
-        print("  - " .. file)
+        logger.info("  - " .. file)
       end
     end
     
     -- Run tests if needed and after debounce period
     if need_to_run and current_time - last_change_time >= debounce_time then
-      print(cyan .. "\n--- RUNNING TESTS ---" .. normal)
-      print(os.date("%Y-%m-%d %H:%M:%S"))
+      logger.info(cyan .. "\n--- RUNNING TESTS ---" .. normal)
+      logger.info(os.date("%Y-%m-%d %H:%M:%S"))
       
       -- Clear terminal
       io.write("\027[2J\027[H")
@@ -356,7 +379,7 @@ function runner.watch_mode(directories, test_dirs, lust, options)
       last_run_time = current_time
       need_to_run = false
       
-      print(cyan .. "\n--- WATCHING FOR CHANGES ---" .. normal)
+      logger.info(cyan .. "\n--- WATCHING FOR CHANGES ---" .. normal)
     end
     
     -- Small sleep to prevent CPU hogging

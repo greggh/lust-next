@@ -3,18 +3,40 @@
 
 package.path = "/home/gregg/Projects/lua-library/lust-next/?.lua;" .. package.path
 
-print("Testing parser module...")
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for test_parser module
+local logger = logging.get_logger("test_parser")
+-- Configure from config if possible
+logging.configure_from_config("test_parser")
+
+logger.info("Testing parser module...")
 
 local ok, parser = pcall(function()
   return require("lib.tools.parser")
 end)
 
 if not ok then
-  print("Failed to load parser module: " .. tostring(parser))
+  logger.error("Failed to load parser module: " .. tostring(parser))
   os.exit(1)
 end
 
-print("Parser module loaded successfully")
+logger.info("Parser module loaded successfully")
 
 -- Test simple parsing
 local code = [[
@@ -38,18 +60,18 @@ local ok, ast = pcall(function()
 end)
 
 if not ok then
-  print("Parse error: " .. tostring(ast))
+  logger.error("Parse error: " .. tostring(ast))
   os.exit(1)
 end
 
-print("Parsed sample code successfully")
-print("Pretty printing AST sample...")
+logger.info("Parsed sample code successfully")
+logger.info("Pretty printing AST sample...")
 local pp_output = parser.pretty_print(ast)
-print(string.sub(pp_output, 1, 100) .. "...")
+logger.info(string.sub(pp_output, 1, 100) .. "...")
 
-print("\nTesting executable line detection...")
+logger.info("\nTesting executable line detection...")
 local executable_lines = parser.get_executable_lines(ast, code)
-print("Executable lines found: " .. (function()
+logger.info("Executable lines found: " .. (function()
   local count = 0
   for _ in pairs(executable_lines) do count = count + 1 end
   return count
@@ -67,15 +89,15 @@ for line, _ in pairs(executable_lines) do
     break
   end
 end
-print(lines_str)
+logger.info(lines_str)
 
-print("\nTesting function detection...")
+logger.info("\nTesting function detection...")
 local functions = parser.get_functions(ast, code)
-print("Functions found: " .. #functions)
+logger.info("Functions found: " .. #functions)
 
 -- Print function details
 for i, func in ipairs(functions) do
-  print(string.format("Function %d: %s (lines %d-%d, params: %s%s)",
+  logger.info(string.format("Function %d: %s (lines %d-%d, params: %s%s)",
     i,
     func.name,
     func.line_start,
@@ -85,14 +107,14 @@ for i, func in ipairs(functions) do
   ))
 end
 
-print("\nTesting code map creation...")
+logger.info("\nTesting code map creation...")
 local code_map = parser.create_code_map(code, "test_code")
 if code_map.valid then
-  print("Created valid code map")
-  print("Source lines: " .. code_map.source_lines)
+  logger.info("Created valid code map")
+  logger.info("Source lines: " .. code_map.source_lines)
 else
-  print("Error creating code map: " .. tostring(code_map.error))
+  logger.error("Error creating code map: " .. tostring(code_map.error))
   os.exit(1)
 end
 
-print("\nParser module test completed successfully!")
+logger.info("\nParser module test completed successfully!")

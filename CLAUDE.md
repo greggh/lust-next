@@ -31,9 +31,9 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 - `lust.lua`: Compatibility layer for original lust
 - `run_all_tests.lua`: Improved test runner for proper test state isolation
 
-## Current Focus - Advanced Coverage Module Features
+## Current Focus - Centralized Logging System and Coverage Module
 
-We've made significant progress on our coverage module, with the most recent enhancements focusing on configurability and improved comment detection:
+We've made significant progress on implementing a comprehensive logging system and enhancing the coverage module, with the most recent enhancements focusing on global config integration, debug print replacement, and improved comment detection:
 
 1. **Implementation Progress**:
    - ✅ Researched and analyzed five different Lua coverage implementations
@@ -103,10 +103,44 @@ We've made significant progress on our coverage module, with the most recent enh
    - ✅ Added comprehensive documentation for control flow keywords option
    - ✅ Created examples demonstrating the impact of different configuration values
    - ✅ Added detailed guide for configuring coverage settings
-   - ⚠️ Need to convert proof-of-concept fixes to production code
-   - ⚠️ Need to remove temporary debugging hacks from reporting
 
-4. **Quality Validation Enhancements**:
+4. **Centralized Logging System**:
+   - ✅ Implemented centralized logging module (lib/tools/logging.lua)
+   - ✅ Created robust logging API with multiple severity levels
+   - ✅ Added support for module-specific log configurations
+   - ✅ Implemented colored output and timestamp formatting
+   - ✅ Added file output capabilities for persistent logs
+   - ✅ Added `configure_from_options` helper to reduce code duplication
+   - ✅ Implemented `configure_from_config` for global config integration
+   - ✅ Removed redundant config passing between modules
+   - ✅ Created example demonstrating global config-based logging
+   - ✅ Converted debug print statements in multiple modules
+   - ✅ Added careful wrapper for user-facing debug output
+   - ✅ Implemented comprehensive log rotation system
+   - ✅ Added configuration for log directory, file size limits and rotation count
+   - ✅ Enhanced .gitignore to handle rotated log files
+   - ✅ Created filesystem integration for log directory creation
+   - ✅ Added logging system to global config defaults
+   - ✅ Added detailed documentation for the logging system
+   - ✅ Added log rotation system with size-based rotation
+   - ✅ Converted print statements to logging in fix_expect, formatters, coverage, and watcher modules
+   - ✅ Completely rewrote debug_dump in coverage module to fully use the logging system while preserving console output
+   - ✅ Enhanced interactive.lua to use the logging system
+   - ✅ Updated codefix module to use centralized logging
+   - ✅ Enhanced parser modules to use logging with fallbacks for early loading
+   - ✅ Created test case for log rotation system
+   - ✅ Added logging configuration section to config template
+   - ✅ Updated example to demonstrate config integration with rotation
+   - ✅ Created comprehensive logging guide for contributors and users
+   - ✅ Converted print statements in all script files to use the logging system:
+     - scripts/run_tests.lua, scripts/runner.lua (core test runners)
+     - scripts/fix_markdown.lua, scripts/version_check.lua, scripts/version_bump.lua (utility scripts) 
+     - scripts/test_parser.lua, scripts/test_static_analyzer.lua, scripts/test_lpeglabel.lua, scripts/test_coverage_static_analysis.lua (test scripts)
+   - ✅ Added proper logging initialization with fallbacks for early module loading
+   - ✅ Implemented consistent logging patterns across all script modules
+   - ⚠️ Some print statements in run_all_tests.lua still need conversion
+
+5. **Quality Validation Enhancements**:
    - ✅ Refactored to use new filesystem module
    - ✅ Increased coverage threshold to 90% from 80%
    - Integrate AST-based complexity metrics
@@ -169,14 +203,17 @@ We've previously completed these major features:
   - ✅ Results aggregation from parallel test runs
   - ✅ Coverage data merging from multiple processes
   - ✅ Configuration file system for customizing defaults (.lust-next-config.lua)
-- Current focus - Coverage module and quality improvements:
+- Current focus - Centralized logging system and coverage improvements:
+  - ✅ Implement comprehensive centralized logging module
+  - ✅ Add global config integration for logging configuration
+  - ✅ Convert debug print statements to standardized logging
   - ✅ Implement static analysis for improved coverage accuracy
-  - ✅ Implemented block-based coverage tracking
-  - ✅ Added configuration option for control flow keywords treatment
-  - ✅ Implemented significantly improved comment detection
-  - ✅ Added comprehensive documentation for control flow keywords option
-  - ✅ Created examples demonstrating the impact of different configuration values
-  - ✅ Added detailed guide for configuring coverage settings
+  - ✅ Implement block-based coverage tracking
+  - ✅ Add configuration option for control flow keywords treatment
+  - ✅ Create significantly improved comment detection
+  - ✅ Add comprehensive documentation for control flow keywords option
+  - ✅ Create examples demonstrating the impact of different configuration values
+  - ⚠️ Create detailed documentation for the logging system
   - Integrate AST-based code analysis for quality metrics
   - Add hover tooltips for execution count tracking
   - Document coverage features and integration patterns

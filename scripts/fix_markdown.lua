@@ -11,19 +11,43 @@ local root_dir = script_dir .. "../"
 package.path = root_dir .. "?.lua;" .. root_dir .. "lib/?.lua;" .. 
                root_dir .. "lib/?/init.lua;" .. package.path
 
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for fix_markdown module
+local logger = logging.get_logger("fix_markdown")
+-- Configure from config if possible
+logging.configure_from_config("fix_markdown")
+
 -- Try to load the markdown module
 local ok, markdown = pcall(require, "lib.tools.markdown")
 if not ok then
   -- Try alternative paths
   ok, markdown = pcall(require, "tools.markdown")
   if not ok then
-    print("Error: Could not load markdown module")
+    logger.error("Could not load markdown module")
     os.exit(1)
   end
 end
 
 -- Print usage information
 local function print_usage()
+  -- Still use print directly for help info to ensure it's always visible
+  -- regardless of logger configuration
   print("Usage: fix_markdown.lua [options] [files_or_directories...]")
   print("Options:")
   print("  --help, -h          Show this help message")
@@ -69,7 +93,7 @@ local function fix_markdown_file(file_path, fix_mode)
   
   local file = io.open(file_path, "r")
   if not file then
-    print("Could not open file for reading: " .. file_path)
+    logger.error("Could not open file for reading: " .. file_path)
     return false
   end
   
@@ -100,7 +124,7 @@ local function fix_markdown_file(file_path, fix_mode)
   if fixed ~= content then
     file = io.open(file_path, "w")
     if not file then
-      print("Could not open file for writing (permission error): " .. file_path)
+      logger.error("Could not open file for writing (permission error): " .. file_path)
       return false
     end
     
@@ -110,11 +134,11 @@ local function fix_markdown_file(file_path, fix_mode)
     end)
     
     if not success then
-      print("Error writing to file: " .. file_path .. " - " .. (err or "unknown error"))
+      logger.error("Error writing to file: " .. file_path .. " - " .. (err or "unknown error"))
       return false
     end
     
-    print("Fixed: " .. file_path)
+    logger.info("Fixed: " .. file_path)
     return true
   end
   
@@ -139,16 +163,16 @@ while i <= #arg do
     fix_mode = "comprehensive"
     i = i + 1
   elseif arg[i] == "--version" then
-    print("fix_markdown.lua v1.0.0")
-    print("Part of lust-next - Enhanced Lua testing framework")
+    logger.info("fix_markdown.lua v1.0.0")
+    logger.info("Part of lust-next - Enhanced Lua testing framework")
     os.exit(0)
   elseif not arg[i]:match("^%-") then
     -- Not a flag, assume it's a file or directory path
     table.insert(paths, arg[i])
     i = i + 1
   else
-    print("Unknown option: " .. arg[i])
-    print("Use --help to see available options")
+    logger.error("Unknown option: " .. arg[i])
+    logger.error("Use --help to see available options")
     os.exit(1)
   end
 end
@@ -187,9 +211,9 @@ for _, path in ipairs(paths) do
     end
     
     if #normalized_files == 0 then
-      print("No markdown files found in " .. path)
+      logger.warn("No markdown files found in " .. path)
     else
-      print("Found " .. #normalized_files .. " markdown files in " .. path)
+      logger.info("Found " .. #normalized_files .. " markdown files in " .. path)
       
       -- Process all found files in this directory
       for _, file_path in ipairs(normalized_files) do
@@ -200,28 +224,28 @@ for _, path in ipairs(paths) do
       end
     end
   else
-    print("Warning: Path not found or not a markdown file: " .. path)
+    logger.warn("Path not found or not a markdown file: " .. path)
   end
 end
 
 -- Show summary statistics
 if total_files_processed == 0 then
-  print("\nNo markdown files processed.")
+  logger.info("\nNo markdown files processed.")
 else
-  print("\nMarkdown fixing complete.")
-  print("Fixed " .. total_files_fixed .. " of " .. total_files_processed .. " files processed.")
+  logger.info("\nMarkdown fixing complete.")
+  logger.info("Fixed " .. total_files_fixed .. " of " .. total_files_processed .. " files processed.")
   
   -- Debug output for tests - helpful for diagnosing issues
   local debug_mode = os.getenv("LUST_NEXT_DEBUG")
   if debug_mode == "1" then
-    print("DEBUG: Processed path details:")
+    logger.debug("Processed path details:")
     for i, path in ipairs(paths) do
       if is_file(path) and path:match("%.md$") then
-        print("DEBUG:   - File: " .. path)
+        logger.debug("  - File: " .. path)
       elseif is_directory(path) then  
-        print("DEBUG:   - Directory: " .. path)
+        logger.debug("  - Directory: " .. path)
       else
-        print("DEBUG:   - Other/Not found: " .. path)
+        logger.debug("  - Other/Not found: " .. path)
       end
     end
   end

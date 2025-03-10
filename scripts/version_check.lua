@@ -2,6 +2,28 @@
 -- Version Check Script
 -- Validates version consistency across project files
 
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for version_check module
+local logger = logging.get_logger("version_check")
+-- Configure from config if possible
+logging.configure_from_config("version_check")
+
 -- Configuration
 local config = {
   -- Known files that should contain version information
@@ -98,20 +120,20 @@ local function check_versions()
   local errors = {}
   local canonical_version
   
-  print("Checking version consistency...")
+  logger.info("Checking version consistency...")
   
   -- First, get the canonical version from version.lua
   local version_file_path = format_path(config.version_files[1].path)
   canonical_version = extract_version(version_file_path, config.version_files[1].pattern)
   
   if not canonical_version then
-    table.insert(errors, "ERROR: Could not find canonical version in " .. version_file_path)
-    print("ERROR: Cannot proceed without canonical version")
+    table.insert(errors, "Could not find canonical version in " .. version_file_path)
+    logger.error("Cannot proceed without canonical version")
     return false, errors
   end
   
-  print("Canonical version: v" .. canonical_version)
-  print(string.format("✓ %s: v%s (source of truth)", version_file_path, canonical_version))
+  logger.info("Canonical version: v" .. canonical_version)
+  logger.info(string.format("✓ %s: v%s (source of truth)", version_file_path, canonical_version))
   versions[version_file_path] = canonical_version
   
   -- Check each file
@@ -125,25 +147,25 @@ local function check_versions()
         if version then
           if version ~= canonical_version then
             table.insert(errors, string.format(
-              "ERROR: Version mismatch in %s: expected %s, found %s",
+              "Version mismatch in %s: expected %s, found %s",
               path, canonical_version, version
             ))
           else
-            print(string.format("✓ %s: v%s", path, version))
+            logger.info(string.format("✓ %s: v%s", path, version))
           end
           versions[path] = version
         else
           if file_config.required then
-            table.insert(errors, "ERROR: Could not find version in " .. path)
+            table.insert(errors, "Could not find version in " .. path)
           else
-            print("ℹ️ Skipping optional file: " .. path .. " (version pattern not found)")
+            logger.info("ℹ️ Skipping optional file: " .. path .. " (version pattern not found)")
           end
         end
       else
         if file_config.required then
-          table.insert(errors, "ERROR: Required file not found: " .. path)
+          table.insert(errors, "Required file not found: " .. path)
         else
-          print("ℹ️ Skipping optional file: " .. path .. " (not found)")
+          logger.info("ℹ️ Skipping optional file: " .. path .. " (not found)")
         end
       end
     end
@@ -151,13 +173,13 @@ local function check_versions()
   
   -- Output results
   if #errors > 0 then
-    print("\nFound " .. #errors .. " error(s):")
+    logger.error("\nFound " .. #errors .. " error(s):")
     for _, err in ipairs(errors) do
-      print("  " .. err)
+      logger.error("  " .. err)
     end
     return false, errors
   else
-    print("\nAll versions are consistent! 🎉")
+    logger.info("\nAll versions are consistent! 🎉")
     return true, nil
   end
 end

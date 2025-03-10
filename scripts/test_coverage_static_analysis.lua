@@ -1,9 +1,32 @@
 -- Test script for coverage module with static analysis integration
+
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for test_coverage_static_analysis module
+local logger = logging.get_logger("test_coverage_static_analysis")
+-- Configure from config if possible
+logging.configure_from_config("test_coverage_static_analysis")
+
 local coverage = require("lib.coverage")
 
 local function run_test()
-  print("Testing Coverage Module with Static Analysis")
-  print("--------------------------------------------")
+  logger.info("Testing Coverage Module with Static Analysis")
+  logger.info("--------------------------------------------")
   
   -- Initialize coverage with static analysis enabled
   coverage.init({
@@ -49,18 +72,18 @@ local function run_test()
   end
   
   -- Call functions to track coverage
-  print("Add result: " .. add(5, 7))
-  print("Multiply result: " .. multiply(5, 3))
+  logger.info("Add result: " .. add(5, 7))
+  logger.info("Multiply result: " .. multiply(5, 3))
   
   -- Stop coverage tracking
   coverage.stop()
   
   -- Show coverage report
-  print("\nCoverage Report:")
-  print(coverage.report("summary"))
+  logger.info("\nCoverage Report:")
+  logger.info(coverage.report("summary"))
   
   -- Debug dump
-  print("\nCoverage Debug Dump:")
+  logger.info("\nCoverage Debug Dump:")
   coverage.debug_dump()
 end
 

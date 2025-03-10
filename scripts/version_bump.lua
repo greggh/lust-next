@@ -2,6 +2,28 @@
 -- Version Bump Script
 -- Updates version across all project files
 
+-- Initialize logging system
+local logging
+local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+if not ok or not logging then
+  -- Fall back to standard print if logging module isn't available
+  logging = {
+    configure = function() end,
+    get_logger = function() return {
+      info = print,
+      error = print,
+      warn = print,
+      debug = print,
+      verbose = print
+    } end
+  }
+end
+
+-- Get logger for version_bump module
+local logger = logging.get_logger("version_bump")
+-- Configure from config if possible
+logging.configure_from_config("version_bump")
+
 -- Configuration
 local config = {
   -- Known files that should contain version information
@@ -37,6 +59,7 @@ end
 -- Get the new version from the command line
 local new_version = arg[2]
 if not new_version then
+  -- Usage info should be printed directly to stdout, regardless of log level
   print("Usage: lua version_bump.lua [project_name] <new_version>")
   print("Example: lua version_bump.lua 1.2.3")
   os.exit(1)
@@ -44,7 +67,7 @@ end
 
 -- Validate version format
 if not new_version:match("^%d+%.%d+%.%d+$") then
-  print("ERROR: Version must be in the format X.Y.Z (e.g., 1.2.3)")
+  logger.error("Version must be in the format X.Y.Z (e.g., 1.2.3)")
   os.exit(1)
 end
 
@@ -112,13 +135,13 @@ local function update_version(file_config, new_version)
   local path = format_path(file_config.path)
   
   if not file_exists(path) then
-    print("⚠️ File not found, skipping: " .. path)
+    logger.warn("⚠️ File not found, skipping: " .. path)
     return true
   end
   
   local content, err = read_file(path)
   if not content then
-    print("❌ Error reading file: " .. path .. " - " .. tostring(err))
+    logger.error("❌ Error reading file: " .. path .. " - " .. tostring(err))
     return false
   end
   
@@ -126,13 +149,13 @@ local function update_version(file_config, new_version)
   if path:match("CHANGELOG.md$") then
     -- Check if [Unreleased] section exists
     if not content:match("## %[Unreleased%]") then
-      print("❌ CHANGELOG.md does not have an [Unreleased] section. Please add one.")
+      logger.error("❌ CHANGELOG.md does not have an [Unreleased] section. Please add one.")
       return false
     end
     
     -- Ensure [Unreleased] has content for the new version
     if content:match("## %[Unreleased%]%s*\n\n## ") then
-      print("⚠️ Warning: [Unreleased] section in CHANGELOG.md appears to be empty.")
+      logger.warn("⚠️ Warning: [Unreleased] section in CHANGELOG.md appears to be empty.")
     end
     
     -- Replace the Unreleased section header to add the new version
@@ -167,17 +190,17 @@ local function update_version(file_config, new_version)
     
     local success, write_err = write_file(path, new_content)
     if not success then
-      print("❌ Error writing file: " .. path .. " - " .. tostring(write_err))
+      logger.error("❌ Error writing file: " .. path .. " - " .. tostring(write_err))
       return false
     end
     
-    print("✅ Updated version in: " .. path)
+    logger.info("✅ Updated version in: " .. path)
     return true
   else
     -- Standard replacement for other files
     local old_version = extract_version(path, file_config.pattern)
     if not old_version then
-      print("⚠️ Could not find version pattern in: " .. path)
+      logger.warn("⚠️ Could not find version pattern in: " .. path)
       return true  -- Not a fatal error
     end
     
@@ -189,7 +212,7 @@ local function update_version(file_config, new_version)
         local replacement_text = file_config.replacement(new_version)
         new_content = content:gsub(file_config.pattern, replacement_text)
       else
-        print("❌ Complex replacement specified but no function provided for: " .. path)
+        logger.error("❌ Complex replacement specified but no function provided for: " .. path)
         return false
       end
     else
@@ -200,24 +223,24 @@ local function update_version(file_config, new_version)
     end
     
     if new_content == content then
-      print("⚠️ No changes made to: " .. path)
+      logger.warn("⚠️ No changes made to: " .. path)
       return true
     end
     
     local success, write_err = write_file(path, new_content)
     if not success then
-      print("❌ Error writing file: " .. path .. " - " .. tostring(write_err))
+      logger.error("❌ Error writing file: " .. path .. " - " .. tostring(write_err))
       return false
     end
     
-    print("✅ Updated version " .. old_version .. " → " .. new_version .. " in: " .. path)
+    logger.info("✅ Updated version " .. old_version .. " → " .. new_version .. " in: " .. path)
     return true
   end
 end
 
 -- Main function to update all versions
 local function bump_version(new_version)
-  print("Bumping version to: " .. new_version)
+  logger.info("Bumping version to: " .. new_version)
   
   local all_success = true
   
@@ -226,7 +249,7 @@ local function bump_version(new_version)
   local version_file_path = format_path(version_file_config.path)
   
   if not file_exists(version_file_path) then
-    print("❌ Canonical version file not found: " .. version_file_path)
+    logger.error("❌ Canonical version file not found: " .. version_file_path)
     
     -- Ask if we should create it
     io.write("Would you like to create it? (y/n): ")
@@ -237,9 +260,9 @@ local function bump_version(new_version)
       if dir_path then
         os.execute("mkdir -p " .. dir_path)
         write_file(version_file_path, string.format("return \"%s\"", new_version))
-        print("✅ Created version file: " .. version_file_path)
+        logger.info("✅ Created version file: " .. version_file_path)
       else
-        print("❌ Could not determine directory path for: " .. version_file_path)
+        logger.error("❌ Could not determine directory path for: " .. version_file_path)
         return false
       end
     else
@@ -256,15 +279,15 @@ local function bump_version(new_version)
   end
   
   if all_success then
-    print("\n🎉 Version bumped to " .. new_version .. " successfully!")
-    print("\nRemember to:")
-    print("1. Review the changes, especially in CHANGELOG.md")
-    print("2. Commit the changes: git commit -m \"Release: Version " .. new_version .. "\"")
-    print("3. Create a tag: git tag -a v" .. new_version .. " -m \"Version " .. new_version .. "\"")
-    print("4. Push the changes: git push && git push --tags")
+    logger.info("\n🎉 Version bumped to " .. new_version .. " successfully!")
+    logger.info("\nRemember to:")
+    logger.info("1. Review the changes, especially in CHANGELOG.md")
+    logger.info("2. Commit the changes: git commit -m \"Release: Version " .. new_version .. "\"")
+    logger.info("3. Create a tag: git tag -a v" .. new_version .. " -m \"Version " .. new_version .. "\"")
+    logger.info("4. Push the changes: git push && git push --tags")
     return true
   else
-    print("\n⚠️ Version bump completed with some errors.")
+    logger.warn("\n⚠️ Version bump completed with some errors.")
     return false
   end
 end
