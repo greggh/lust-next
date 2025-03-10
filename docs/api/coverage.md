@@ -55,11 +55,14 @@ Configuration table for coverage options:
 | `use_default_patterns` | boolean | `true` | Whether to use default include/exclude patterns |
 | `discover_uncovered` | boolean | `true` | Discover files not executed by tests |
 | `format` | string | `"summary"` | Default format for reports (html, json, lcov, summary) |
-| `threshold` | number | `80` | Minimum coverage percentage required (0-100) |
+| `threshold` | number | `90` | Minimum coverage percentage required (0-100) |
 | `output` | string | `nil` | Default output location for reports |
 | `include` | table | `{"*.lua", "**/*.lua", "src/**/*.lua", "lib/**/*.lua"}` | Patterns of files to include |
 | `exclude` | table | `{"*_test.lua", "test_*.lua", "tests/**/*.lua", etc.}` | Patterns to exclude |
 | `debug` | boolean | `false` | Enable debug output |
+| `track_blocks` | boolean | `false` | Enable tracking of code blocks (if/else, loops) |
+| `use_static_analysis` | boolean | `false` | Use static analysis for improved accuracy |
+| `control_flow_keywords_executable` | boolean | `true` | Treat control flow keywords (`end`, `else`, etc.) as executable lines |
 
 ### `lust.with_coverage(options, fn)`
 Run a function with coverage tracking:

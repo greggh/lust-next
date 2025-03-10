@@ -5,6 +5,7 @@ This directory contains guides and tutorials for using Lust-Next.
 
 - [Getting Started](getting-started.md): A beginner's guide to using Lust-Next
 - [Reporting](reporting.md): Guide to coverage, quality, and reporting
+- [Coverage Configuration](coverage_configuration.md): Detailed guide to configuring code coverage
 - [Advanced Topics](advanced-topics.md): Detailed exploration of advanced features
 - [Testing Patterns](testing-patterns.md): Common testing patterns and best practices
 - [Migration Guide](migration-guide.md): Guide for migrating from lust or other testing frameworks

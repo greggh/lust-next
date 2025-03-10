@@ -120,9 +120,12 @@ coverage = {
     "_spec%.lua$", 
     "_test%.lua$",
   },
-  threshold = 80,                   -- Coverage threshold percentage
+  threshold = 90,                   -- Coverage threshold percentage
   format = "summary",               -- Default report format (summary, json, html, lcov)
   output = nil,                     -- Custom output file path (nil=auto-generated)
+  track_blocks = false,             -- Enable tracking of code blocks (if/else, loops)
+  use_static_analysis = false,      -- Use static analysis for improved accuracy
+  control_flow_keywords_executable = true, -- Treat control flow keywords (end, else, etc.) as executable
 }
 
 ```text
