@@ -30,6 +30,10 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
   elseif is_executed and is_executable then
     -- Executed but not properly covered by tests
     class = "executed-not-covered"
+    
+    -- Debug output for diagnostic
+    print(string.format("INFO: Found executed-but-not-covered line %d (content: %s)", 
+                       line_num, content and content:sub(1, 40) or "nil"))
   else
     -- Executable but not executed at all
     class = "uncovered"
@@ -461,7 +465,7 @@ function M.format_coverage(coverage_data)
       --file-item-border: #444;
       --covered-bg: #144a14;      /* Base dark green */
       --covered-highlight: #4CAF50; /* Brighter green for executed lines */
-      --executed-not-covered-bg: #8a7c3a; /* Amber/orange for executed but not covered */
+      --executed-not-covered-bg: #cc9900; /* Brighter amber/orange for executed but not covered */
       --uncovered-bg: #5c2626;    /* Darker red for dark mode */
       --syntax-keyword: #569cd6;  /* Blue */
       --syntax-string: #6a9955;   /* Green */
@@ -972,6 +976,25 @@ function M.format_coverage(coverage_data)
           else
             -- If executability info is missing, use the map we built earlier
             is_executable = executable_lines[i] or false
+          end
+          
+          -- Debugging output for all lines - no matter if debug is enabled or not
+          -- to help troubleshoot execution vs coverage issues
+          if filename:match("/tmp/execution_coverage_fixed.lua") then
+            -- Debug information displayed when explicitly requested
+            if options.debug then
+              print(string.format("[HTML Formatter Debug] %s Line %d:", filename, i))
+            end
+            print(string.format("  - Content: %s", line_content and line_content:sub(1, 40) or "nil"))
+            print(string.format("  - is_covered: %s (raw value: %s)", tostring(is_covered), 
+                  tostring(original_file_data.lines and original_file_data.lines[i])))
+            print(string.format("  - is_executed: %s (raw value: %s)", tostring(is_executed),
+                  tostring(original_file_data._executed_lines and original_file_data._executed_lines[i])))
+            print(string.format("  - is_executable: %s", tostring(is_executable)))
+            print(string.format("  - Expected class: %s", 
+                  is_executable == false and "non-executable" or
+                  (is_covered and is_executable and "covered" or
+                  (is_executed and is_executable and "executed-not-covered" or "uncovered"))))
           end
           
           -- Get blocks that contain this line

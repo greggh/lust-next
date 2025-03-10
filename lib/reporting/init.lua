@@ -6,6 +6,28 @@ local M = {}
 -- Import filesystem module for file operations
 local fs = require("lib.tools.filesystem")
 
+-- Default configuration
+local config = {
+  debug = false,
+  verbose = false
+}
+
+-- Helper function for debug logging
+local function log_debug(message)
+  -- Only print if debug is enabled in config
+  if config.debug then
+    print("[Reporting] " .. message)
+  end
+end
+
+-- Helper for verbose logging (more detailed than debug)
+local function log_verbose(message)
+  -- Only print if verbose is enabled in config
+  if config.verbose then
+    print("[Reporting Verbose] " .. message)
+  end
+end
+
 -- Load the JSON module if available
 local json_module
 local ok, mod = pcall(require, "lib.reporting.json")
@@ -51,6 +73,23 @@ local function escape_xml(str)
             :gsub(">", "&gt;")
             :gsub("\"", "&quot;")
             :gsub("'", "&apos;")
+end
+
+-- Configure the module
+function M.configure(options)
+  options = options or {}
+  
+  -- Apply debug settings
+  if options.debug ~= nil then
+    config.debug = options.debug
+  end
+  
+  if options.verbose ~= nil then
+    config.verbose = options.verbose
+  end
+  
+  -- Return the module for chaining
+  return M
 end
 
 ---------------------------
@@ -335,8 +374,8 @@ end
 
 -- Write content to a file using the filesystem module
 function M.write_file(file_path, content)
-  print("DEBUG [Reporting] Writing file: " .. file_path)
-  print("DEBUG [Reporting] Content length: " .. (content and #content or 0) .. " bytes")
+  log_debug("Writing file: " .. file_path)
+  log_debug("Content length: " .. (content and #content or 0) .. " bytes")
   
   -- Make sure content is a string
   if type(content) == "table" then
@@ -357,7 +396,7 @@ function M.write_file(file_path, content)
     return false, "Error writing to file: " .. tostring(err)
   end
   
-  print("DEBUG [Reporting] Successfully wrote file: " .. file_path)
+  log_debug("Successfully wrote file: " .. file_path)
   return true
 end
 
@@ -457,7 +496,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
   
   -- Debug output for troubleshooting
   if config.verbose then
-    print("DEBUG [Reporting] auto_save_reports called with:")
+    log_debug("auto_save_reports called with:")
     print("  base_dir: " .. base_dir)
     print("  coverage_data: " .. (coverage_data and "present" or "nil"))
     if coverage_data then
@@ -491,7 +530,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
   
   -- Use filesystem module to ensure directory exists
   if config.verbose then
-    print("DEBUG [Reporting] Ensuring directory exists using filesystem module...")
+    log_debug("Ensuring directory exists using filesystem module...")
   end
   
   -- Create the directory if it doesn't exist
@@ -502,7 +541,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       print("ERROR [Reporting] Failed to create directory: " .. tostring(dir_err))
     end
   elseif config.verbose then
-    print("DEBUG [Reporting] Directory exists or was created: " .. base_dir)
+    log_debug("Directory exists or was created: " .. base_dir)
   end
   
   -- Always save coverage reports in multiple formats if coverage data is provided
@@ -514,7 +553,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       local path = process_template(config.coverage_path_template, format, "coverage")
       
       if config.verbose then
-        print("DEBUG [Reporting] Saving " .. format .. " report to: " .. path)
+        log_debug("Saving " .. format .. " report to: " .. path)
       end
       
       local ok, err = M.save_coverage_report(path, coverage_data, format)
@@ -525,7 +564,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       }
       
       if config.verbose then
-        print("DEBUG [Reporting] " .. format .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
+        log_debug(format .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
       end
     end
   end
@@ -539,7 +578,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       local path = process_template(config.quality_path_template, format, "quality")
       
       if config.verbose then
-        print("DEBUG [Reporting] Saving quality " .. format .. " report to: " .. path)
+        log_debug("Saving quality " .. format .. " report to: " .. path)
       end
       
       local ok, err = M.save_quality_report(path, quality_data, format)
@@ -550,7 +589,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       }
       
       if config.verbose then
-        print("DEBUG [Reporting] Quality " .. format .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
+        log_debug("Quality " .. format .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
       end
     end
   end
@@ -568,7 +607,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       local path = process_template(config.results_path_template, info.ext, "test-results")
       
       if config.verbose then
-        print("DEBUG [Reporting] Saving " .. info.name .. " report to: " .. path)
+        log_debug("Saving " .. info.name .. " report to: " .. path)
       end
       
       local ok, err = M.save_results_report(path, results_data, format)
@@ -579,7 +618,7 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       }
       
       if config.verbose then
-        print("DEBUG [Reporting] " .. info.name .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
+        log_debug(info.name .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
       end
     end
   end

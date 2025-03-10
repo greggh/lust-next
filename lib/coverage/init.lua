@@ -8,11 +8,28 @@ local patchup = require("lib.coverage.patchup")
 local static_analyzer = require("lib.coverage.static_analyzer")
 local fs = require("lib.tools.filesystem")
 
+-- Initialize static analyzer with our config settings
+local function init_static_analyzer()
+  static_analyzer.init({
+    control_flow_keywords_executable = config and config.control_flow_keywords_executable or true,
+    debug = config and config.debug or false,
+    verbose = config and config.verbose or false
+  })
+end
+
 -- Helper function for debug logging
 local function log_debug(message)
   -- Only print if debug is enabled in config
   if config and config.debug then
-    print(message)
+    print("[Coverage] " .. message)
+  end
+end
+
+-- Helper for verbose logging (more detailed than debug)
+local function log_verbose(message)
+  -- Only print if verbose is enabled in config
+  if config and config.verbose then
+    print("[Coverage Verbose] " .. message)
   end
 end
 
@@ -160,7 +177,9 @@ function M.init(options)
   if config.use_static_analysis then
     static_analyzer.init({
       cache_files = config.cache_parsed_files,
-      control_flow_keywords_executable = config.control_flow_keywords_executable
+      control_flow_keywords_executable = config.control_flow_keywords_executable,
+      debug = config.debug,
+      verbose = config.verbose
     })
     
     -- Pre-analyze files if configured
@@ -188,7 +207,7 @@ function M.init(options)
       end
       
       -- Pre-analyze all discovered files
-      log_debug("DEBUG [Coverage] Pre-analyzing " .. #found_files .. " files")
+      log_debug("Pre-analyzing " .. #found_files .. " files")
       
       for _, file_path in ipairs(found_files) do
         static_analyzer.parse_file(file_path)
@@ -298,7 +317,7 @@ function process_module_structure(file_path)
       local ast, code_map = static_analyzer.parse_file(file_path)
       
       if ast and code_map then
-        log_debug("DEBUG [Coverage] Using static analysis for " .. file_path)
+        log_debug("Using static analysis for " .. file_path)
         
         -- Store static analysis information
         debug_hook.get_coverage_data().files[normalized_path].code_map = code_map
@@ -332,7 +351,7 @@ function process_module_structure(file_path)
         end
       else
         -- Static analysis failed, use basic heuristics
-        log_debug("DEBUG [Coverage] Static analysis failed for " .. file_path .. ", using heuristics")
+        log_debug("Static analysis failed for " .. file_path .. ", using heuristics")
         fallback_heuristic_analysis(file_path, normalized_path, lines)
       end
     else
@@ -398,14 +417,14 @@ local function apply_static_analysis(file_path, file_data)
   
   -- Skip if the file doesn't exist or can't be read
   if not fs.file_exists(file_path) then
-    log_debug("DEBUG [Coverage] Skipping static analysis for non-existent file: " .. file_path)
+    log_debug("Skipping static analysis for non-existent file: " .. file_path)
     return 0
   end
   
   -- Skip files over 250KB for performance (INCREASED from 100KB)
   local file_size = fs.get_file_size(file_path)
   if file_size and file_size > 250000 then
-    log_debug("DEBUG [Coverage] Skipping static analysis for large file: " .. file_path .. 
+    log_debug("Skipping static analysis for large file: " .. file_path .. 
             " (" .. math.floor(file_size/1024) .. "KB)")
     return 0
   end
@@ -415,7 +434,7 @@ local function apply_static_analysis(file_path, file_data)
      file_path:match("_spec%.lua$") or
      file_path:match("/tests/") or
      file_path:match("/test/") then
-    log_debug("DEBUG [Coverage] Skipping static analysis for test file: " .. file_path)
+    log_debug("Skipping static analysis for test file: " .. file_path)
     return 0
   end
   
@@ -460,20 +479,16 @@ local function apply_static_analysis(file_path, file_data)
   
   -- Handle errors from phase 1
   if not phase1_success then
-    if config.debug then
-      print("DEBUG [Coverage] Static analysis phase 1 error: " .. tostring(phase1_result) .. 
-           " for file: " .. file_path)
-    end
+    log_debug("Static analysis phase 1 error: " .. tostring(phase1_result) .. 
+         " for file: " .. file_path)
     return 0
   end
   
   -- Check for timeout or missing AST
   if timeout_reached or not ast then
-    if config.debug then
-      print("DEBUG [Coverage] Static analysis " .. 
-            (timeout_reached and "timed out" or "failed") .. 
-            " in phase 1 for file: " .. file_path)
-    end
+    log_debug("Static analysis " .. 
+          (timeout_reached and "timed out" or "failed") .. 
+          " in phase 1 for file: " .. file_path)
     return 0
   end
   
@@ -524,12 +539,10 @@ local function apply_static_analysis(file_path, file_data)
   
   -- Handle errors from phase 2
   if not phase2_success or timeout_reached then
-    if config.debug then
-      print("DEBUG [Coverage] Static analysis " .. 
-            (timeout_reached and "timed out" or "failed") .. 
-            " in phase 2 for file: " .. file_path ..
-            (not phase2_success and (": " .. tostring(phase2_result)) or ""))
-    end
+    log_debug("Static analysis " .. 
+          (timeout_reached and "timed out" or "failed") .. 
+          " in phase 2 for file: " .. file_path ..
+          (not phase2_success and (": " .. tostring(phase2_result)) or ""))
     return 0
   end
   
@@ -600,17 +613,15 @@ local function apply_static_analysis(file_path, file_data)
   
   -- Handle errors from phase 3
   if not phase3_success then
-    if config.debug then
-      print("DEBUG [Coverage] Static analysis phase 3 error: " .. tostring(phase3_result) .. 
-           " for file: " .. file_path)
-    end
+    log_debug("Static analysis phase 3 error: " .. tostring(phase3_result) .. 
+         " for file: " .. file_path)
     return 0
   end
   
   -- If timeout occurred during phase 3, we still return any improvements we made
-  if timeout_reached and config.debug then
-    print("DEBUG [Coverage] Static analysis timed out in phase 3 for file: " .. file_path ..
-          " - partial results used")
+  if timeout_reached then
+    log_debug("Static analysis timed out in phase 3 for file: " .. file_path ..
+        " - partial results used")
   end
   
   -- Return the number of improved lines
@@ -635,9 +646,7 @@ function M.stop()
       config
     )
     
-    if config.debug then
-      print("DEBUG [Coverage] Added " .. added .. " discovered files")
-    end
+    log_debug("Added " .. added .. " discovered files")
   end
   
   -- Apply static analysis if configured
@@ -655,10 +664,8 @@ function M.stop()
       end
     end
     
-    if config.debug then
-      print("DEBUG [Coverage] Applied static analysis to " .. improved_files .. 
-            " files, improving " .. improved_lines .. " lines")
-    end
+    log_debug("Applied static analysis to " .. improved_files .. 
+          " files, improving " .. improved_lines .. " lines")
   end
   
   -- Patch coverage data for non-executable lines, ensuring we're not
@@ -695,11 +702,9 @@ function M.stop()
     end
   end
   
-  if config.debug then
-    print("DEBUG [Coverage] Patched " .. patched .. " non-executable lines")
-    if fixed_lines > 0 then
-      print("DEBUG [Coverage] Fixed " .. fixed_lines .. " incorrectly marked executable lines in " .. fixed_files .. " files")
-    end
+  log_debug("Patched " .. patched .. " non-executable lines")
+  if fixed_lines > 0 then
+    log_debug("Fixed " .. fixed_lines .. " incorrectly marked executable lines in " .. fixed_files .. " files")
   end
   
   active = false
@@ -946,22 +951,27 @@ function M.get_report_data()
     local covered_lines = 0
     local total_executable_lines = 0
     
-    -- Debug output when processing our minimal_coverage.lua file
-    local debug_this_file = config.debug and file_path:match("examples/minimal_coverage.lua")
+    -- Verbose output when processing our test files
+    local is_test_file = file_path:match("examples/minimal_coverage.lua")
     
-    if debug_this_file then
-      print(string.format("DEBUG [Coverage] Counting lines for file: %s", file_path))
+    if is_test_file then
+      log_verbose(string.format("Counting lines for file: %s", file_path))
       
-      -- Print lines data
-      print("  - file_data.lines table: " .. tostring(file_data.lines ~= nil))
-      print("  - file_data.executable_lines table: " .. tostring(file_data.executable_lines ~= nil))
-      
-      -- Check some line examples
-      for i = 1, 20 do
-        local line_covered = file_data.lines and file_data.lines[i]
-        local line_executable = file_data.executable_lines and file_data.executable_lines[i]
-        print(string.format("  - Line %d: covered=%s, executable=%s", 
-          i, tostring(line_covered), tostring(line_executable)))
+      -- Print lines data in verbose mode
+      if config.verbose then
+        local lines_info = "  - file_data.lines table: " .. tostring(file_data.lines ~= nil)
+        local exec_info = "  - file_data.executable_lines table: " .. tostring(file_data.executable_lines ~= nil)
+        print("[Coverage Verbose] " .. lines_info)
+        print("[Coverage Verbose] " .. exec_info)
+        
+        -- Check some line examples
+        for i = 1, 20 do
+          local line_covered = file_data.lines and file_data.lines[i]
+          local line_executable = file_data.executable_lines and file_data.executable_lines[i]
+          local line_info = string.format("  - Line %d: covered=%s, executable=%s", 
+            i, tostring(line_covered), tostring(line_executable))
+          print("[Coverage Verbose] " .. line_info)
+        end
       end
     end
     
@@ -1036,12 +1046,12 @@ function M.get_report_data()
         end
       end
       
-      if debug_this_file then
-        print("DEBUG [Coverage] Created missing _executed_lines table from existing covered lines")
+      if is_test_file then
+        log_verbose("Created missing _executed_lines table from existing covered lines")
       end
     end
     
-    -- CRITICAL CHANGE: We do NOT automatically mark executed lines as covered
+    -- We do NOT automatically mark executed lines as covered
     -- This is what preserves the distinction between "executed" and "covered"
     -- Lines must be explicitly marked as covered through test assertions
     -- The HTML formatter will use both data points to determine the 
@@ -1053,20 +1063,20 @@ function M.get_report_data()
       local source_line = file_data.source and file_data.source[line_num]
       local is_comment = source_line and is_comment_line(source_line)
       
-      -- CRITICAL FIX: Only count lines that are both covered AND executable AND not a comment
+      -- Only count lines that are both covered AND executable AND not a comment
       if is_covered and file_data.executable_lines and file_data.executable_lines[line_num] == true and not is_comment then
         -- This is a valid executable and covered line - count it
         covered_lines = covered_lines + 1
         
-        if debug_this_file then
-          print(string.format("DEBUG [Coverage] Counted covered line %d", line_num))
+        if is_test_file and config.verbose then
+          print(string.format("[Coverage Verbose] Counted covered line %d", line_num))
         end
       else
-        -- CRITICAL FIX: Remove coverage marking from any non-executable line or comment
+        -- Remove coverage marking from any non-executable line or comment
         if file_data.executable_lines == nil or file_data.executable_lines[line_num] ~= true or is_comment then
           -- This line isn't marked as executable or is a comment but has coverage - remove it
-          if debug_this_file then
-            print(string.format("DEBUG [Coverage] Removed invalid coverage for line %d%s", 
+          if is_test_file and config.verbose then
+            print(string.format("[Coverage Verbose] Removed invalid coverage for line %d%s", 
                               line_num, is_comment and " (comment line)" or ""))
           end
           file_data.lines[line_num] = nil
@@ -1079,19 +1089,19 @@ function M.get_report_data()
     local covered_functions = 0
     local functions_info = {}
     
-    -- Debug the functions table
-    if debug_this_file then
-      print("Functions table in file_data:", tostring(file_data.functions ~= nil))
+    -- Debug the functions table in verbose mode
+    if is_test_file and config.verbose then
+      print("[Coverage Verbose] Functions table in file_data:", tostring(file_data.functions ~= nil))
       
       -- More detailed debugging for functions table
       local function_count = 0
       for _, _ in pairs(file_data.functions or {}) do
         function_count = function_count + 1
       end
-      print("Function count:", function_count)
+      print("[Coverage Verbose] Function count:", function_count)
       
       for func_key, func_data in pairs(file_data.functions or {}) do
-        print(string.format("  Function %s at line %d: executed=%s, key=%s", 
+        print(string.format("[Coverage Verbose] Function %s at line %d: executed=%s, key=%s", 
           func_data.name or "anonymous", 
           func_data.line or 0, 
           tostring(func_data.executed),
@@ -1107,10 +1117,10 @@ function M.get_report_data()
         total_functions = total_functions + 1
         
         -- Enhanced debugging for function tracking
-        if debug_this_file then
-          print(string.format("DEBUG [Function Tracking] Processing function: %s at line %d", 
+        if is_test_file and config.verbose then
+          print(string.format("[Coverage Verbose] Processing function: %s at line %d", 
             func_data.name or "anonymous", func_data.line))
-          print(string.format("  - executed: %s, calls: %d", 
+          print(string.format("[Coverage Verbose] - executed: %s, calls: %d", 
             tostring(func_data.executed), func_data.calls or 0))
         end
         
@@ -1124,8 +1134,8 @@ function M.get_report_data()
           for i = start_line, end_line do
             if file_data.lines and file_data.lines[i] then
               func_data.executed = true
-              if debug_this_file then
-                print(string.format("  - Function marked as executed based on line %d", i))
+              if is_test_file and config.verbose then
+                print(string.format("[Coverage Verbose] - Function marked as executed based on line %d", i))
               end
               break
             end
@@ -1143,8 +1153,8 @@ function M.get_report_data()
         }
         
         -- Additional debug for key functions
-        if debug_this_file then
-          print(string.format("  Added function %s to report, executed=%s", 
+        if is_test_file and config.verbose then
+          print(string.format("[Coverage Verbose] Added function %s to report, executed=%s", 
             func_data.name or "anonymous",
             tostring(func_data.executed == true)))
         end
@@ -1258,26 +1268,26 @@ function M.get_report_data()
     table.sort(functions_info, function(a, b) return a.line < b.line end)
     table.sort(blocks_info, function(a, b) return a.start_line < b.start_line end)
     
-    -- Add debug output to diagnose the coverage statistics
-    if config.debug and file_path:match("examples/minimal_coverage.lua") then
-      print(string.format("DEBUG [Coverage] File %s stats:", file_path))
-      print(string.format("  - Executable lines: %d", total_executable_lines))
-      print(string.format("  - Covered lines: %d", covered_lines))
-      print(string.format("  - Line coverage: %.1f%%", line_pct))
-      print(string.format("  - File data line_count: %s", tostring(file_data.line_count)))
+    -- Add verbose output to diagnose the coverage statistics
+    if is_test_file and config.verbose then
+      log_verbose(string.format("File %s stats:", file_path))
+      log_verbose(string.format("  - Executable lines: %d", total_executable_lines))
+      log_verbose(string.format("  - Covered lines: %d", covered_lines))
+      log_verbose(string.format("  - Line coverage: %.1f%%", line_pct))
+      log_verbose(string.format("  - File data line_count: %s", tostring(file_data.line_count)))
       
       -- Print first 10 covered lines
       local covered_count = 0
-      print("  - First 10 covered lines:")
+      log_verbose("  - First 10 covered lines:")
       for line_num, is_covered in pairs(file_data.lines) do
         if is_covered and covered_count < 10 then
           covered_count = covered_count + 1
-          print(string.format("    Line %d: covered", line_num))
+          log_verbose(string.format("    Line %d: covered", line_num))
         end
       end
       
       if covered_count == 0 then
-        print("    No covered lines found!")
+        log_verbose("    No covered lines found!")
       end
     end
     
@@ -1438,16 +1448,28 @@ end
 function M.report(format)
   -- Use reporting module for formatting
   local reporting = require("lib.reporting")
-  local data = M.get_report_data()
   
+  -- Configure reporting module with our debug settings
+  reporting.configure({
+    debug = config.debug,
+    verbose = config.verbose
+  })
+  
+  local data = M.get_report_data()
   return reporting.format_coverage(data, format or "summary")
 end
 
 -- Save coverage report
 function M.save_report(file_path, format)
   local reporting = require("lib.reporting")
-  local data = M.get_report_data()
   
+  -- Configure reporting module with our debug settings
+  reporting.configure({
+    debug = config.debug,
+    verbose = config.verbose
+  })
+  
+  local data = M.get_report_data()
   return reporting.save_coverage_report(file_path, data, format or "html")
 end
 
@@ -1629,10 +1651,10 @@ function M.track_execution(file_path, line_num)
   end
   coverage_data.files[normalized_path].executable_lines[line_num] = is_executable
   
-  -- Debug output
-  if config.debug and config.verbose then
-    print(string.format("DEBUG [Manual Execution Tracking] Tracked line %d in %s (executable=%s)", 
-                      line_num, normalized_path, tostring(is_executable)))
+  -- Verbose output for execution tracking
+  if config.verbose then
+    log_verbose(string.format("Tracked line %d in %s (executable=%s)", 
+                   line_num, normalized_path, tostring(is_executable)))
   end
 end
 

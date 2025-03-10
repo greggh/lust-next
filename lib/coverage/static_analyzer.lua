@@ -23,8 +23,26 @@ M.LINE_TYPES = {
 
 -- Module configuration
 local config = {
-  control_flow_keywords_executable = true -- Default to strict coverage
+  control_flow_keywords_executable = true, -- Default to strict coverage
+  debug = false,
+  verbose = false
 }
+
+-- Helper function for debug logging
+local function log_debug(message)
+  -- Only print if debug is enabled in config
+  if config.debug then
+    print("[Coverage Static Analyzer] " .. message)
+  end
+end
+
+-- Helper for verbose logging (more detailed than debug)
+local function log_verbose(message)
+  -- Only print if verbose is enabled in config
+  if config.verbose then
+    print("[Coverage Static Analyzer Verbose] " .. message)
+  end
+end
 
 -- Initializes the static analyzer
 function M.init(options)
@@ -34,6 +52,15 @@ function M.init(options)
   -- Update config from options
   if options.control_flow_keywords_executable ~= nil then
     config.control_flow_keywords_executable = options.control_flow_keywords_executable
+  end
+  
+  -- Propagate debug settings
+  if options.debug ~= nil then
+    config.debug = options.debug
+  end
+  
+  if options.verbose ~= nil then
+    config.verbose = options.verbose
   end
   
   return M
@@ -78,8 +105,8 @@ function M.parse_file(file_path)
   -- This ensures we can handle reasonable-sized source files
   local file_size = filesystem.get_file_size(file_path)
   if file_size and file_size > 1024000 then -- 1MB size limit
-    print("WARNING: Skipping static analysis for large file: " .. file_path .. 
-          " (" .. math.floor(file_size/1024) .. "KB)")
+    log_debug("Skipping static analysis for large file: " .. file_path .. 
+        " (" .. math.floor(file_size/1024) .. "KB)")
     return nil, "File too large for analysis: " .. file_path
   end
 
@@ -103,8 +130,8 @@ function M.parse_file(file_path)
 
   -- Skip if content is too large (use smaller limit for safety)
   if #content > 200000 then -- 200KB content limit - reduced from 500KB
-    print("WARNING: Skipping static analysis for large content: " .. file_path .. 
-          " (" .. math.floor(#content/1024) .. "KB)")
+    log_debug("Skipping static analysis for large content: " .. file_path .. 
+        " (" .. math.floor(#content/1024) .. "KB)")
     return nil, "File content too large for analysis"
   end
   
@@ -125,8 +152,8 @@ function M.parse_file(file_path)
   
   -- Skip files with excessively deep nesting
   if max_depth > 100 then
-    print("WARNING: Skipping static analysis for deeply nested file: " .. file_path .. 
-          " (depth " .. max_depth .. ")")
+    log_debug("Skipping static analysis for deeply nested file: " .. file_path .. 
+        " (depth " .. max_depth .. ")")
     return nil, "File has too deeply nested structures"
   end
 
@@ -290,12 +317,12 @@ local function is_line_executable(nodes, line_num, content)
     -- Check processing limits
     node_count = node_count + 1
     if node_count > MAX_NODES then
-      print("WARNING: Node limit reached in is_line_executable")
+      log_debug("Node limit reached in is_line_executable")
       return false
     end
     
     if node_count % 1000 == 0 and os.clock() - start_time > MAX_ANALYSIS_TIME then
-      print("WARNING: Time limit reached in is_line_executable")
+      log_debug("Time limit reached in is_line_executable")
       return false
     end
     
@@ -446,7 +473,7 @@ local function collect_nodes(ast, nodes)
     
     -- Performance safety - if we've processed too many nodes, break
     if processed > 100000 then
-      print("WARNING: Node collection limit reached (100,000 nodes)")
+      log_debug("Node collection limit reached (100,000 nodes)")
       break
     end
   end
@@ -503,7 +530,7 @@ local function find_functions(ast, functions, context)
     
     -- Performance safety - if we've processed too many nodes, break
     if processed > 100000 then
-      print("WARNING: Function finding limit reached (100,000 nodes)")
+      log_debug("Function finding limit reached (100,000 nodes)")
       break
     end
   end
@@ -603,7 +630,7 @@ local function find_blocks(ast, blocks, content, parent_id)
     
     -- Safety limit
     if processed > 100000 then
-      print("WARNING: Block finding limit reached (100,000 nodes)")
+      log_debug("Block finding limit reached (100,000 nodes)")
       break
     end
     
@@ -791,7 +818,7 @@ local function find_conditions(ast, conditions, content)
     
     -- Safety limit
     if processed > 100000 then
-      print("WARNING: Condition finding limit reached (100,000 nodes)")
+      log_debug("Condition finding limit reached (100,000 nodes)")
       break
     end
     
@@ -885,7 +912,7 @@ function M.generate_code_map(ast, content)
   
   -- Set a reasonable upper limit for line count to prevent DOS
   if code_map.line_count > 10000 then
-    print("WARNING: File too large for code mapping: " .. code_map.line_count .. " lines")
+    log_debug("File too large for code mapping: " .. code_map.line_count .. " lines")
     return nil
   end
   
@@ -903,18 +930,18 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    print("ERROR in collect_nodes: " .. tostring(result))
+    log_debug("ERROR in collect_nodes: " .. tostring(result))
     return nil
   end
   
   if not all_nodes then
-    print("ERROR: " .. (result or "Node collection failed"))
+    log_debug("ERROR: " .. (result or "Node collection failed"))
     return nil
   end
   
   -- Add size limit for node collection
   if #all_nodes > 50000 then
-    print("WARNING: AST too complex for analysis: " .. #all_nodes .. " nodes")
+    log_debug("AST too complex for analysis: " .. #all_nodes .. " nodes")
     return nil
   end
   
@@ -932,12 +959,12 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    print("ERROR in find_functions: " .. tostring(result))
+    log_debug("ERROR in find_functions: " .. tostring(result))
     return nil
   end
   
   if not functions then
-    print("ERROR: " .. (result or "Function finding failed"))
+    log_debug("ERROR: " .. (result or "Function finding failed"))
     return nil
   end
   
@@ -955,7 +982,7 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    print("ERROR in find_blocks: " .. tostring(result))
+    log_debug("ERROR in find_blocks: " .. tostring(result))
     return nil
   end
   
@@ -977,7 +1004,7 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    print("ERROR in find_conditions: " .. tostring(result))
+    log_debug("ERROR in find_conditions: " .. tostring(result))
     -- Don't return, we can still continue without conditions
   elseif conditions then
     code_map.conditions = conditions
@@ -987,7 +1014,7 @@ function M.generate_code_map(ast, content)
   for i, func in ipairs(functions) do
     -- Periodic time checks
     if i % 100 == 0 and os.clock() - start_time > MAX_CODEMAP_TIME then
-      print("WARNING: Function map timeout after " .. i .. " functions")
+      log_debug("Function map timeout after " .. i .. " functions")
       break
     end
     
@@ -1341,7 +1368,7 @@ function M.generate_code_map(ast, content)
     file_info = " for " .. file_path
   end
   
-  print(string.format("Code map generation took %.2f seconds%s (%d lines, %d nodes)", 
+  log_verbose(string.format("Code map generation took %.2f seconds%s (%d lines, %d nodes)", 
     total_time, 
     file_info,
     code_map.line_count or 0, 
@@ -1349,11 +1376,11 @@ function M.generate_code_map(ast, content)
   
   -- Verify we have executable lines
   if executable_count == 0 then
-    print("WARNING: No executable lines found in file! This will cause incorrect coverage reporting.")
+    log_debug("No executable lines found in file! This will cause incorrect coverage reporting.")
     
     -- Apply emergency fallback for important coverage module files
     if file_path and (file_path:match("lib/coverage/init.lua") or file_path:match("lib/coverage/debug_hook.lua")) then
-      print("FALLBACK: Applying emergency fallback for critical file: " .. file_path)
+      log_debug("FALLBACK: Applying emergency fallback for critical file: " .. file_path)
       
       -- If content is available, quickly classify lines based on simple patterns
       if content and type(content) == "string" then
@@ -1385,7 +1412,7 @@ function M.generate_code_map(ast, content)
           end
         end
         
-        print(string.format("FALLBACK: Marked %d lines as executable with fallback mechanism", fallback_executable))
+        log_debug(string.format("FALLBACK: Marked %d lines as executable with fallback mechanism", fallback_executable))
         executable_count = fallback_executable
       end
     end
