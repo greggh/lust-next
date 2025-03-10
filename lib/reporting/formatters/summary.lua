@@ -34,12 +34,8 @@ function M.format_coverage(coverage_data)
     overall_percent = 0
   }
   
-  -- Debug output for troubleshooting
-  print("DEBUG [Reporting] Formatting coverage data with:")
-  print("  Total files: " .. (summary.total_files or 0))
-  print("  Covered files: " .. (summary.covered_files or 0))
-  print("  Total lines: " .. (summary.total_lines or 0))
-  print("  Covered lines: " .. (summary.covered_lines or 0))
+  -- Debug output handled by reporting module
+  -- Configuration is managed by the main reporting module
   
   local report = {
     files = coverage_data.files or {},
