@@ -50,7 +50,10 @@ local function print_header()
   print(colors.bold .. colors.cyan .. "Lust-Next Interactive CLI" .. colors.normal)
   print(colors.green .. "Type 'help' for available commands" .. colors.normal)
   print(string.rep("-", 60))
-  logger.debug("Interactive CLI initialized")
+  logger.info("Interactive CLI initialized")
+  logger.debug("Display settings: Test dir: " .. state.test_dir .. 
+              ", Pattern: " .. state.test_pattern .. 
+              ", Watch: " .. (state.watch_mode and "on" or "off"))
 end
 
 -- Print help information

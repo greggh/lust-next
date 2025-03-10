@@ -1,181 +1,203 @@
-# Logging System
+# Logging API
 
-The lust-next testing framework includes a comprehensive logging system that provides centralized logging capabilities throughout the framework. This document explains how to configure and use the logging system in your test code.
-
-## Overview
-
-The logging system provides:
-
-- Multiple log levels (ERROR, WARN, INFO, DEBUG, VERBOSE)
-- Module-specific logging configuration
-- Colorized console output
-- File output with log rotation
-- Integration with the global configuration system
-- Timestamp support
+The logging system in lust-next provides a centralized way to handle log messages with different severity levels, module-specific configuration, and output options.
 
 ## Basic Usage
 
-### Importing the Logging Module
-
 ```lua
+-- Import the logging module
 local logging = require("lib.tools.logging")
-```
 
-### Creating a Logger
-
-```lua
--- Create a logger for a specific module
+-- Create a logger for your module
 local logger = logging.get_logger("my_module")
 
--- Use the logger
-logger.info("This is an informational message")
-logger.debug("This is a debug message")
-logger.error("An error occurred: " .. err)
-logger.warn("Warning: something unexpected happened")
-logger.verbose("Detailed execution information")
-```
-
-### Direct Logging
-
-```lua
--- Log directly without a module name
-logging.info("This is a general info message")
-logging.error("A global error occurred")
+-- Use various logging levels
+logger.error("Critical error: database connection failed")
+logger.warn("Warning: configuration file missing, using defaults")
+logger.info("Server started on port 8080")
+logger.debug("Request parameters: " .. json.encode(params))
+logger.verbose("Function called with arguments: " .. table.concat(args, ", "))
 ```
 
 ## Log Levels
 
-The logging system supports the following log levels:
+The logging system supports 5 severity levels:
 
-| Level | Value | Description |
-|-------|-------|-------------|
-| ERROR | 1 | Critical errors that prevent normal operation |
-| WARN | 2 | Warnings about potential issues |
-| INFO | 3 | General information about operation (default) |
-| DEBUG | 4 | Detailed information for debugging |
-| VERBOSE | 5 | Maximum detail for in-depth troubleshooting |
+| Level   | Constant          | Description                                        |
+|---------|-------------------|----------------------------------------------------|
+| ERROR   | logging.LEVELS.ERROR   | Critical errors that prevent normal operation     |
+| WARN    | logging.LEVELS.WARN    | Unexpected conditions that don't stop execution   |
+| INFO    | logging.LEVELS.INFO    | Normal operational messages                       |
+| DEBUG   | logging.LEVELS.DEBUG   | Detailed information useful for debugging         |
+| VERBOSE | logging.LEVELS.VERBOSE | Extremely detailed diagnostic information         |
 
 ## Configuration
 
-### Direct Configuration
+### Basic Configuration
+
+You can configure the logging system with various options:
 
 ```lua
 logging.configure({
-  level = logging.LEVELS.DEBUG,       -- Global log level
-  timestamps = true,                  -- Include timestamps in log messages
-  use_colors = true,                  -- Use ANSI colors in console output
-  output_file = "lust-next.log",      -- Log file name
-  log_dir = "logs",                   -- Directory for log files
-  max_file_size = 50 * 1024,          -- Max size before rotation (50KB)
-  max_log_files = 5,                  -- Number of rotated files to keep
-  date_pattern = "%Y-%m-%d",          -- Date pattern for timestamps
-  silent = false                      -- Set to true to suppress all output
+  level = logging.LEVELS.INFO,   -- Global default level
+  timestamps = true,             -- Include timestamps in log messages
+  use_colors = true,             -- Use ANSI colors in console output
+  output_file = "lust-next.log", -- Log to file (nil = console only)
+  log_dir = "logs",              -- Directory for log files
+  max_file_size = 1024 * 1024,   -- 1MB max file size before rotation
+  max_log_files = 5,             -- Keep 5 rotated log files
+  format = "text",               -- Log format: "text" or "json"
+  json_file = "lust-next.json"   -- Separate JSON structured log file
 })
 ```
 
 ### Module-Specific Levels
 
-```lua
--- Set different log levels for different modules
-logging.set_module_level("coverage", logging.LEVELS.DEBUG)
-logging.set_module_level("reporting", logging.LEVELS.INFO)
-```
-
-### Configuration from Options
+You can set different log levels for specific modules:
 
 ```lua
--- Configure log level based on debug/verbose flags
--- Commonly used when parsing command-line options
-local options = { debug = true }
-logging.configure_from_options("my_module", options)
-```
+-- Set levels for specific modules
+logging.set_module_level("ui", logging.LEVELS.ERROR)
+logging.set_module_level("network", logging.LEVELS.DEBUG)
 
-### Integration with Global Config
-
-In your `.lust-next-config.lua` file:
-
-```lua
-return {
-  -- Other configuration...
-  
-  logging = {
-    level = 3,  -- INFO level
-    modules = {
-      coverage = 4,  -- DEBUG level for coverage module
-      reporting = 2  -- WARN level for reporting module
-    },
-    timestamps = true,
-    use_colors = true,
-    output_file = "lust-next.log",
-    log_dir = "logs",
-    max_file_size = 50 * 1024,          -- 50KB
-    max_log_files = 5
+-- Or configure multiple modules at once
+logging.configure({
+  module_levels = {
+    ui = logging.LEVELS.ERROR,
+    network = logging.LEVELS.DEBUG,
+    database = logging.LEVELS.WARN
   }
-}
+})
 ```
 
-In your module:
+### Module Filtering
+
+You can filter logs to only show specific modules:
 
 ```lua
-local logging = require("lib.tools.logging")
-local logger = logging.get_logger("my_module")
-logging.configure_from_config("my_module")
+-- Only show logs from the UI and API modules
+logging.filter_module("ui")
+logging.filter_module("api")
+
+-- Use wildcards to match multiple modules
+logging.filter_module("test*")  -- Any module starting with "test"
+
+-- Clear filters to show all modules again
+logging.clear_module_filters()
+```
+
+### Module Blacklisting
+
+You can also exclude specific modules from logging:
+
+```lua
+-- Hide logs from the database module
+logging.blacklist_module("database")
+
+-- Use wildcards to hide multiple modules
+logging.blacklist_module("debug*")  -- Hide any module starting with "debug"
+
+-- Clear the blacklist
+logging.clear_blacklist()
+```
+
+## Structured Logging (JSON)
+
+For machine processing and log analysis tools, the logging system supports JSON structured output:
+
+```lua
+logging.configure({
+  format = "text",              -- Console format remains human-readable
+  json_file = "app.json",       -- Separate machine-readable JSON log
+  output_file = "app.log"       -- Regular text log still available
+})
+```
+
+The JSON log file format is one JSON object per line (newline-delimited JSON):
+
+```
+{"timestamp":"2025-03-10T14:32:45","level":"INFO","module":"app","message":"Application started"}
+{"timestamp":"2025-03-10T14:32:46","level":"ERROR","module":"database","message":"Connection failed"}
 ```
 
 ## Log Rotation
 
-The logging system automatically rotates log files when they reach the configured size limit:
-
-- When a log file reaches `max_file_size`, it is renamed to `filename.1`
-- Existing rotated files are shifted (e.g., `filename.1` becomes `filename.2`)
-- The system keeps up to `max_log_files` rotated files
-
-## Checking Log Level Status
+The logging system automatically rotates log files when they reach the configured size:
 
 ```lua
--- Check if debug logging is enabled
+logging.configure({
+  output_file = "app.log",     -- Log file name
+  log_dir = "logs",            -- Log directory
+  max_file_size = 10 * 1024,   -- 10KB max file size (small for demo)
+  max_log_files = 3            -- Keep 3 rotated log files
+})
+```
+
+When rotation occurs:
+- The current log file (app.log) is moved to app.log.1
+- Previous rotated files move up: app.log.1 → app.log.2, etc.
+- The oldest rotated file is deleted if max_log_files is exceeded
+
+## Integration with Global Config
+
+The logging system integrates with lust-next's global configuration system:
+
+```lua
+-- In your .lust-next-config.lua file:
+return {
+  -- Test configuration
+  filter = ".*test",
+  verbose = true,
+  
+  -- Logging configuration
+  logging = {
+    level = 3,  -- INFO level
+    timestamps = true,
+    output_file = "lust-next.log",
+    log_dir = "logs",
+    module_levels = {
+      coverage = 4,  -- DEBUG level for coverage module
+      reporting = 2  -- WARN level for reporting module
+    },
+    format = "text",
+    json_file = "lust-next.json",
+    module_filter = {"coverage", "reporting", "test*"}
+  }
+}
+```
+
+To configure a module using the global config:
+
+```lua
+local logging = require("lib.tools.logging")
+logging.configure_from_config("my_module")
+```
+
+## Checking Log Level Availability
+
+You can check if a specific log level is enabled before performing expensive operations:
+
+```lua
+local logger = logging.get_logger("database")
+
 if logger.is_debug_enabled() then
-  -- Perform expensive debug operations only if debug logging is enabled
-  local details = gather_expensive_debug_details()
-  logger.debug("Debug details: " .. details)
+  -- Only do this expensive operation if debug logging is enabled
+  local stats = calculate_detailed_stats()
+  logger.debug("Database stats: " .. table.concat(stats, ", "))
 end
 ```
 
-## Best Practices
+## Performance Considerations
 
-1. **Create Module-Specific Loggers**
-   ```lua
-   local logger = logging.get_logger("my_module")
-   ```
-
-2. **Configure from Global Config**
-   ```lua
-   logging.configure_from_config("my_module")
-   ```
-
-3. **Use Appropriate Log Levels**
-   - ERROR: Only for critical errors that prevent normal operation
-   - WARN: For concerning but non-critical issues
-   - INFO: For important state changes and normal operation
-   - DEBUG: For developer information useful for troubleshooting
-   - VERBOSE: For extremely detailed execution information
-
-4. **Check Level Before Expensive Operations**
-   ```lua
-   if logger.is_debug_enabled() then
-     -- Expensive debug operations here
-   end
-   ```
-
-5. **Include Context Information**
-   ```lua
-   logger.info("Processing file: " .. filename)
-   ```
+- Log messages at levels below the current threshold are discarded with minimal overhead
+- When logging to files, the system checks if the file needs rotation on each write
+- For high-volume logging, consider setting appropriate log levels to avoid I/O bottlenecks
+- The JSON structured log format has slightly higher overhead than plain text logging
 
 ## Examples
 
-See the example scripts in the `examples` directory:
-
-- `logging_example.lua` - Basic logging usage
-- `logging_config_example.lua` - Configuration through global config
-- `logging_rotation_example.lua` - Log file rotation demonstration
+See the following examples for detailed usage:
+- `examples/logging_example.lua` - Basic logging usage
+- `examples/logging_config_example.lua` - Configuration options with JSON structured logging
+- `examples/logging_rotation_example.lua` - Log rotation demonstration
+- `examples/logging_filtering_example.lua` - Module filtering capabilities

@@ -313,10 +313,19 @@ local function run_test_file(file_path)
     if DEBUG then
       if line:match(".*%[32mPASS%[0m") then
         original_print("DEBUG: Found PASS result in: " .. line)
+        if logger.is_debug_enabled() then
+          logger.debug("Found PASS result in: " .. line)
+        end
       elseif line:match(".*%[31mFAIL%[0m") then 
         original_print("DEBUG: Found FAIL result in: " .. line)
+        if logger.is_debug_enabled() then
+          logger.debug("Found FAIL result in: " .. line)
+        end
       elseif line:match(".*%[33mPENDING:%[0m") then
         original_print("DEBUG: Found PENDING result in: " .. line)
+        if logger.is_debug_enabled() then
+          logger.debug("Found PENDING result in: " .. line)
+        end
       end
     end
     
@@ -688,18 +697,18 @@ if failed_files > 0 then
           local line_count = data.line_count or 0
           local cov_pct = line_count > 0 and (covered_lines / line_count * 100) or 0
           
-          print("  File: " .. file)
-          print("    Lines: " .. covered_lines .. "/" .. line_count .. " (" .. string.format("%.1f%%", cov_pct) .. ")")
+          logger.debug("  File: " .. file)
+          logger.debug("    Lines: " .. covered_lines .. "/" .. line_count .. " (" .. string.format("%.1f%%", cov_pct) .. ")")
         end
         file_count = file_count + 1
       end
       
       if file_count > 5 and options.coverage_debug ~= "verbose" then
-        print("  ... and " .. (file_count - 5) .. " more files")
+        logger.debug("  ... and " .. (file_count - 5) .. " more files")
       end
       
       if file_count == 0 then
-        print("  WARNING: No files are being tracked for coverage!")
+        logger.warn("  WARNING: No files are being tracked for coverage!")
       end
     end
     
@@ -709,12 +718,12 @@ if failed_files > 0 then
       if coverage.save_report then
         local success = coverage.save_report("./coverage-reports/coverage-report." .. format, format)
         if success then
-          print("Generated " .. format .. " coverage report")
+          logger.info("Generated " .. format .. " coverage report")
         else
-          print("Failed to generate " .. format .. " coverage report")
+          logger.error("Failed to generate " .. format .. " coverage report")
         end
       else
-        print("ERROR: coverage.save_report function not found!")
+        logger.error("ERROR: coverage.save_report function not found!")
         break
       end
     end
@@ -722,43 +731,43 @@ if failed_files > 0 then
     -- Print coverage summary
     if coverage.summary_report then
       local report = coverage.summary_report()
-      print("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
-      print("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
-      print("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
+      logger.info("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
+      logger.info("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
+      logger.info("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
       
       -- Check if coverage meets threshold
       if coverage.meets_threshold and coverage.meets_threshold() then
-        print("✅ Coverage meets the threshold")
+        logger.info("✅ Coverage meets the threshold")
       else
-        print("❌ Coverage is below the threshold")
+        logger.warn("❌ Coverage is below the threshold")
       end
     else
-      print("ERROR: coverage.summary_report function not found!")
+      logger.error("ERROR: coverage.summary_report function not found!")
     end
   end
   
   -- Generate quality report if enabled
   if quality_loaded and options.quality then
-    print("\n=== Quality Report ===")
+    logger.info("\n=== Quality Report ===")
     quality.calculate_stats()
     
     -- Generate quality report
     local success = quality.save_report("./coverage-reports/quality-report.html", "html")
     if success then
-      print("Generated HTML quality report")
+      logger.info("Generated HTML quality report")
     end
     
     -- Generate JSON quality report
     success = quality.save_report("./coverage-reports/quality-report.json", "json")
     if success then
-      print("Generated JSON quality report")
+      logger.info("Generated JSON quality report")
     end
     
     -- Print quality summary
     local report = quality.summary_report()
-    print("Quality score: " .. string.format("%.2f%%", report.quality_score))
-    print("Tests analyzed: " .. report.tests_analyzed)
-    print("Quality level: " .. report.level .. " (" .. report.level_name .. ")")
+    logger.info("Quality score: " .. string.format("%.2f%%", report.quality_score))
+    logger.info("Tests analyzed: " .. report.tests_analyzed)
+    logger.info("Quality level: " .. report.level .. " (" .. report.level_name .. ")")
   end
   
   os.exit(1)
@@ -771,16 +780,16 @@ else
     if coverage.stop then
       coverage.stop()
     else
-      print("ERROR: coverage.stop function not found!")
+      logger.error("coverage.stop function not found!")
     end
     
     -- Calculate and save coverage reports
-    print("\n=== Coverage Report ===")
+    logger.info("\n=== Coverage Report ===")
     
     if coverage.calculate_stats then
       coverage.calculate_stats()
     else
-      print("ERROR: coverage.calculate_stats function not found!")
+      logger.error("coverage.calculate_stats function not found!")
     end
     
     -- Print coverage data status before generating reports
@@ -791,8 +800,8 @@ else
         tracked_files = tracked_files + 1
       end
       
-      print("DEBUG: Coverage file tracking status:")
-      print("  Tracked files: " .. tracked_files)
+      logger.debug("Coverage file tracking status:")
+      logger.debug("  Tracked files: " .. tracked_files)
       
       -- Show first few tracked files for debugging
       local file_count = 0
@@ -807,18 +816,18 @@ else
           local line_count = data.line_count or 0
           local cov_pct = line_count > 0 and (covered_lines / line_count * 100) or 0
           
-          print("  File: " .. file)
-          print("    Lines: " .. covered_lines .. "/" .. line_count .. " (" .. string.format("%.1f%%", cov_pct) .. ")")
+          logger.debug("  File: " .. file)
+          logger.debug("    Lines: " .. covered_lines .. "/" .. line_count .. " (" .. string.format("%.1f%%", cov_pct) .. ")")
         end
         file_count = file_count + 1
       end
       
       if file_count > 5 and options.coverage_debug ~= "verbose" then
-        print("  ... and " .. (file_count - 5) .. " more files")
+        logger.debug("  ... and " .. (file_count - 5) .. " more files")
       end
       
       if file_count == 0 then
-        print("  WARNING: No files are being tracked for coverage!")
+        logger.warn("  WARNING: No files are being tracked for coverage!")
       end
     end
     
@@ -828,12 +837,12 @@ else
       if coverage.save_report then
         local success = coverage.save_report("./coverage-reports/coverage-report." .. format, format)
         if success then
-          print("Generated " .. format .. " coverage report")
+          logger.info("Generated " .. format .. " coverage report")
         else
-          print("Failed to generate " .. format .. " coverage report")
+          logger.error("Failed to generate " .. format .. " coverage report")
         end
       else
-        print("ERROR: coverage.save_report function not found!")
+        logger.error("coverage.save_report function not found!")
         break
       end
     end
@@ -841,43 +850,43 @@ else
     -- Print coverage summary
     if coverage.summary_report then
       local report = coverage.summary_report()
-      print("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
-      print("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
-      print("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
+      logger.info("Overall coverage: " .. string.format("%.2f%%", report.overall_pct))
+      logger.info("Line coverage: " .. string.format("%.2f%%", report.lines_pct))
+      logger.info("Function coverage: " .. string.format("%.2f%%", report.functions_pct))
       
       -- Check if coverage meets threshold
       if coverage.meets_threshold and coverage.meets_threshold() then
-        print("✅ Coverage meets the threshold")
+        logger.info("✅ Coverage meets the threshold")
       else
-        print("❌ Coverage is below the threshold")
+        logger.warn("❌ Coverage is below the threshold")
       end
     else
-      print("ERROR: coverage.summary_report function not found!")
+      logger.error("coverage.summary_report function not found!")
     end
   end
   
   -- Generate quality report if enabled
   if quality_loaded and options.quality then
-    print("\n=== Quality Report ===")
+    logger.info("\n=== Quality Report ===")
     quality.calculate_stats()
     
     -- Generate quality report
     local success = quality.save_report("./coverage-reports/quality-report.html", "html")
     if success then
-      print("Generated HTML quality report")
+      logger.info("Generated HTML quality report")
     end
     
     -- Generate JSON quality report
     success = quality.save_report("./coverage-reports/quality-report.json", "json")
     if success then
-      print("Generated JSON quality report")
+      logger.info("Generated JSON quality report")
     end
     
     -- Print quality summary
     local report = quality.summary_report()
-    print("Quality score: " .. string.format("%.2f%%", report.quality_score))
-    print("Tests analyzed: " .. report.tests_analyzed)
-    print("Quality level: " .. report.level .. " (" .. report.level_name .. ")")
+    logger.info("Quality score: " .. string.format("%.2f%%", report.quality_score))
+    logger.info("Tests analyzed: " .. report.tests_analyzed)
+    logger.info("Quality level: " .. report.level .. " (" .. report.level_name .. ")")
   end
   
   os.exit(0)
