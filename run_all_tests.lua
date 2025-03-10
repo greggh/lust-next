@@ -26,14 +26,12 @@ local logger = logging.get_logger("run_all_tests")
 -- Configure from config if possible
 logging.configure_from_config("run_all_tests")
 
-logger.info("lust-next Test Runner")
-logger.info("--------------------")
-logger.info("")
+logger.info("Starting test runner", {framework = "lust-next"})
 
 -- Try to load module_reset for enhanced isolation
 local module_reset_loaded, module_reset = pcall(require, "lib.core.module_reset")
 if module_reset_loaded then
-  logger.info("Module reset system loaded for enhanced test isolation")
+  logger.info("Module reset system loaded", {feature = "enhanced test isolation"})
   module_reset.register_with_lust(lust_next)
   
   -- Configure isolation options
@@ -42,7 +40,7 @@ if module_reset_loaded then
     verbose = false
   })
 else
-  logger.warn("Module reset system not available, using basic isolation")
+  logger.warn("Module reset system unavailable", {fallback = "using basic isolation"})
 end
 
 -- Try to load benchmark module for performance reporting
@@ -94,7 +92,7 @@ end
 -- Try to load coverage module
 local coverage_loaded, coverage = pcall(require, "lib.coverage")
 if coverage_loaded and options.coverage then
-  logger.info("Coverage module loaded for test coverage analysis")
+  logger.info("Coverage module loaded", {purpose = "test coverage analysis"})
   -- Configure coverage
   coverage.init({
     enabled = true,
@@ -109,14 +107,14 @@ if coverage_loaded and options.coverage then
   if coverage.start then
     coverage.start()
   else
-    logger.error("coverage.start function not found!")
+    logger.error("Function not found", {function_name = "coverage.start"})
   end
 end
 
 -- Try to load quality module
 local quality_loaded, quality = pcall(require, "lib.quality")
 if quality_loaded and options.quality then
-  logger.info("Quality module loaded for test quality analysis")
+  logger.info("Quality module loaded", {purpose = "test quality analysis"})
   -- Configure quality validation
   quality.init({
     enabled = true,
@@ -275,8 +273,7 @@ local DEBUG = false
 
 -- Run a single test file with isolated environment
 local function run_test_file(file_path)
-  logger.info("\nRunning test: " .. file_path)
-  logger.info(string.rep("-", 50))
+  logger.info("Running test", {file_path = file_path})
   
   -- Memory stats before test
   local before_memory = collectgarbage("count")
@@ -312,19 +309,16 @@ local function run_test_file(file_path)
     -- Check if this line has a test result marker and log for debugging
     if DEBUG then
       if line:match(".*%[32mPASS%[0m") then
-        original_print("DEBUG: Found PASS result in: " .. line)
-        if logger.is_debug_enabled() then
-          logger.debug("Found PASS result in: " .. line)
+        if logger.would_log("debug") then
+          logger.debug("Found test result", {result = "pass", line = line})
         end
       elseif line:match(".*%[31mFAIL%[0m") then 
-        original_print("DEBUG: Found FAIL result in: " .. line)
-        if logger.is_debug_enabled() then
-          logger.debug("Found FAIL result in: " .. line)
+        if logger.would_log("debug") then
+          logger.debug("Found test result", {result = "fail", line = line})
         end
       elseif line:match(".*%[33mPENDING:%[0m") then
-        original_print("DEBUG: Found PENDING result in: " .. line)
-        if logger.is_debug_enabled() then
-          logger.debug("Found PENDING result in: " .. line)
+        if logger.would_log("debug") then
+          logger.debug("Found test result", {result = "pending", line = line})
         end
       end
     end
@@ -339,7 +333,7 @@ local function run_test_file(file_path)
   -- Special handling for coverage tests
   if is_coverage_test and coverage_loaded and options.coverage then
     if options.coverage_debug then
-      logger.debug("Running coverage test file - preserving state")
+      logger.debug("Running coverage test file", {state = "preserving"})
     end
   end
   
@@ -391,11 +385,10 @@ local function run_test_file(file_path)
   
   -- Show performance stats if requested
   if options.performance then
-    logger.info("\nPerformance:")
-    logger.info(string.format("  Time: %.4f sec", execution_time))
-    if options.memory then
-      logger.info(string.format("  Memory delta: %.2f KB", memory_delta))
-    end
+    logger.info("Performance metrics", {
+      execution_time_sec = string.format("%.4f", execution_time),
+      memory_delta_kb = options.memory and string.format("%.2f", memory_delta) or nil
+    })
   end
   
   return {
@@ -413,7 +406,7 @@ end
 -- Get all test files
 local test_files = get_test_files()
 if #test_files == 0 then
-  logger.error("No test files found in tests/ directory!")
+  logger.error("No test files found", {directory = "tests/"})
   os.exit(1)
 end
 
@@ -426,7 +419,7 @@ if options.filter then
     end
   end
   test_files = filtered_files
-  logger.info("Filtered to " .. #test_files .. " test files matching '" .. options.filter .. "'")
+  logger.info("Filtered test files", {count = #test_files, pattern = options.filter})
 end
 
 -- Sort test files based on order option
@@ -498,30 +491,30 @@ local end_memory = collectgarbage("count")
 local total_memory_delta = end_memory - lust_next.test_stats.start_memory
 
 -- Print summary
-logger.info("\n" .. string.rep("-", 70))
-logger.info("Test Summary")
-logger.info(string.rep("-", 70))
+logger.info("Test run completed", {
+  total_files = #test_files,
+  passed_files = passed_files,
+  failed_files = failed_files
+})
 
--- File summary
-logger.info("Test files:")
-logger.info("  Total files: " .. #test_files)
-logger.info("  Passed files: " .. passed_files)
-logger.info("  Failed files: " .. failed_files)
-
--- Detailed results
-logger.info("\nDetailed test results by file:")
-logger.info(string.rep("-", 70))
+logger.info("Generating detailed results")
 
 -- Define column format based on options
 local column_format
 if options.performance then
   column_format = "%-36s %8s %8s %8s %8s %10s"
-  logger.info(string.format(column_format, "Test File", "Total", "Passed", "Failed", "Pending", "Time (s)"))
+  logger.info("Result table headers", {
+    columns = {"Test File", "Total", "Passed", "Failed", "Pending", "Time (s)"},
+    with_timing = true
+  })
 else
   column_format = "%-40s %10s %10s %10s %10s"
-  logger.info(string.format(column_format, "Test File", "Total", "Passed", "Failed", "Pending"))
+  logger.info("Result table headers", {
+    columns = {"Test File", "Total", "Passed", "Failed", "Pending"},
+    with_timing = false
+  })
 end
-logger.info(string.rep("-", 70))
+logger.info("Table separator")
 
 -- Convert by_file table to array for sorting
 local file_results = {}
@@ -575,63 +568,62 @@ for _, result in ipairs(file_results) do
 end
 
 -- Print totals row
-logger.info(string.rep("-", 70))
+logger.info("Table separator")
 if options.performance then
-  logger.info(string.format("%-36s %8d %8d %8d %8d %10.4f", 
-    "TOTAL",
-    lust_next.test_stats.total,
-    lust_next.test_stats.passes,
-    lust_next.test_stats.failures,
-    lust_next.test_stats.pending,
-    total_time
-  ))
+  logger.info("Test totals", {
+    total_tests = lust_next.test_stats.total,
+    passed = lust_next.test_stats.passes,
+    failed = lust_next.test_stats.failures,
+    pending = lust_next.test_stats.pending,
+    time_seconds = total_time
+  })
 else
-  logger.info(string.format("%-40s %10d %10d %10d %10d", 
-    "TOTAL",
-    lust_next.test_stats.total,
-    lust_next.test_stats.passes,
-    lust_next.test_stats.failures,
-    lust_next.test_stats.pending
-  ))
+  logger.info("Test totals", {
+    total_tests = lust_next.test_stats.total,
+    passed = lust_next.test_stats.passes,
+    failed = lust_next.test_stats.failures,
+    pending = lust_next.test_stats.pending
+  })
 end
 
 -- Test assertions summary
-logger.info("\nTest assertions:")
 if lust_next.test_stats.total > 0 then
-  logger.info("  Total assertions: " .. lust_next.test_stats.total)
-  logger.info("  Passed: " .. lust_next.test_stats.passes .. " (" .. string.format("%.1f%%", lust_next.test_stats.passes / lust_next.test_stats.total * 100) .. ")")
-  logger.info("  Failed: " .. lust_next.test_stats.failures)
-  logger.info("  Pending: " .. lust_next.test_stats.pending)
+  local pass_percentage = lust_next.test_stats.passes / lust_next.test_stats.total * 100
+  logger.info("Assertion summary", {
+    total = lust_next.test_stats.total,
+    passed = lust_next.test_stats.passes,
+    passed_percentage = string.format("%.1f", pass_percentage),
+    failed = lust_next.test_stats.failures,
+    pending = lust_next.test_stats.pending
+  })
 else
-  logger.info("  No assertions detected in tests")
+  logger.info("Assertion summary", {total = 0, status = "no assertions detected"})
 end
 
 -- Performance summary
-logger.info("\nPerformance:")
-logger.info("  Total time: " .. string.format("%.4f seconds", total_time))
-logger.info("  Average time per test: " .. string.format("%.4f seconds", total_time / #test_files))
-if options.memory then
-  logger.info("  Total memory delta: " .. string.format("%.2f KB", total_memory_delta))
-  logger.info("  Memory usage after tests: " .. string.format("%.2f KB", end_memory))
-end
+logger.info("Performance summary", {
+  total_time_seconds = string.format("%.4f", total_time),
+  average_time_seconds = string.format("%.4f", total_time / #test_files),
+  total_memory_delta_kb = options.memory and string.format("%.2f", total_memory_delta) or nil,
+  final_memory_kb = options.memory and string.format("%.2f", end_memory) or nil
+})
 
 -- Module reset stats if available
 if module_reset_loaded then
-  logger.info("\nModule isolation:")
-  logger.info("  Reset system: Active")
-  logger.info("  Protected modules: " .. #module_reset.get_loaded_modules())
+  logger.info("Module isolation status", {
+    status = "active",
+    protected_modules_count = #module_reset.get_loaded_modules()
+  })
   
   if options.verbose then
-    logger.info("  Protected module list:")
-    for _, module_name in ipairs(module_reset.get_loaded_modules()) do
-      logger.info("    - " .. module_name)
-    end
+    logger.info("Protected modules list", {modules = module_reset.get_loaded_modules()})
   end
 end
 
 -- Print failed files if any
 if failed_files > 0 then
-  logger.error("\nFailed tests:")
+  logger.error("Failed tests detected", {count = failed_files})
+  
   for _, result in ipairs(test_results) do
     -- Show files with:
     -- 1. Runtime errors
@@ -641,17 +633,21 @@ if failed_files > 0 then
        (result.result ~= nil and result.result ~= true) or 
        result.counts.failures > 0 then
       
-      logger.error("  - " .. result.file_path)
+      local failure_info = {
+        file_path = result.file_path
+      }
       
-      -- Show the error message for runtime errors
+      -- Add error info for runtime errors
       if not result.success then
-        logger.error("    Error: " .. tostring(result.result))
+        failure_info.error = tostring(result.result)
       end
       
-      -- Show count of failed assertions
+      -- Add failed assertions count
       if result.counts.failures > 0 then
-        logger.error("    Failed assertions: " .. result.counts.failures)
+        failure_info.failed_assertions = result.counts.failures
       end
+      
+      logger.error("Test file failed", failure_info)
     end
   end
   
@@ -661,16 +657,16 @@ if failed_files > 0 then
     if coverage.stop then
       coverage.stop()
     else
-      logger.error("coverage.stop function not found!")
+      logger.error("Function not found", {function_name = "coverage.stop"})
     end
     
     -- Calculate and save coverage reports
-    logger.info("\n=== Coverage Report ===")
+    logger.info("Generating coverage report")
     
     if coverage.calculate_stats then
       coverage.calculate_stats()
     else
-      logger.error("coverage.calculate_stats function not found!")
+      logger.error("Function not found", {function_name = "coverage.calculate_stats"})
     end
     
     -- Print coverage data status before generating reports
