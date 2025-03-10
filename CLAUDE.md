@@ -31,9 +31,9 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 - `lust.lua`: Compatibility layer for original lust
 - `run_all_tests.lua`: Improved test runner for proper test state isolation
 
-## Current Focus - Coverage Module Implementation
+## Current Focus - Advanced Coverage Module Features
 
-We've made significant progress on our coverage module:
+We've made significant progress on our coverage module, with the most recent enhancements focusing on configurability and improved comment detection:
 
 1. **Implementation Progress**:
    - ✅ Researched and analyzed five different Lua coverage implementations
@@ -45,6 +45,8 @@ We've made significant progress on our coverage module:
      - instrumentation.lua for source code transformation approach
    - ✅ Implemented pure Lua implementation (the first tier of our plan)
    - ✅ Created comprehensive test suite with real code execution
+   - ✅ Implemented distinction between execution and coverage tracking
+   - ✅ Added visualization for "executed but not covered" state
 
 2. **Fixed Core Coverage Issues**:
    - ✅ Fixed lust-next assertion chain syntax (to.be_greater_than vs to.be.greater.than)
@@ -58,6 +60,9 @@ We've made significant progress on our coverage module:
    - ✅ Resolved filesystem "Permission denied" errors
    - ✅ Implemented discovery of uncovered files
    - ✅ Improved coverage visualization with dark mode theme
+   - ✅ Fixed non-executable lines incorrectly marked as covered
+   - ✅ Resolved circular logic in coverage calculation
+   - ✅ Improved multiline comment detection
 
 3. **Static Analysis Integration**:
    - ✅ Integrated lua-parser (MIT licensed) for AST generation
@@ -91,6 +96,13 @@ We've made significant progress on our coverage module:
    - ✅ Updated statistics calculation to only count executable lines in coverage metrics
    - ✅ Fixed comparison against nil threshold values
    - ✅ Removed outdated test files from project root
+   - ✅ Implemented distinction between execution and coverage tracking
+   - ✅ Added visualization for "executed but not covered" state
+   - ✅ Added configuration option for control flow keywords treatment
+   - ✅ Implemented significantly improved comment detection
+   - ✅ Added comprehensive documentation for control flow keywords option
+   - ✅ Created examples demonstrating the impact of different configuration values
+   - ✅ Added detailed guide for configuring coverage settings
    - ⚠️ Need to convert proof-of-concept fixes to production code
    - ⚠️ Need to remove temporary debugging hacks from reporting
 
@@ -160,10 +172,13 @@ We've previously completed these major features:
 - Current focus - Coverage module and quality improvements:
   - ✅ Implement static analysis for improved coverage accuracy
   - ✅ Implemented block-based coverage tracking
-  - ⚠️ Fix block visualization issues in HTML reports
-  - ⚠️ Fix data flow between static analyzer and debug hook
+  - ✅ Added configuration option for control flow keywords treatment
+  - ✅ Implemented significantly improved comment detection
+  - ✅ Added comprehensive documentation for control flow keywords option
+  - ✅ Created examples demonstrating the impact of different configuration values
+  - ✅ Added detailed guide for configuring coverage settings
   - Integrate AST-based code analysis for quality metrics
-  - Add conditional coverage tracking for boolean expressions
+  - Add hover tooltips for execution count tracking
   - Document coverage features and integration patterns
   - Fully integrate with hooks-util project
   - Develop comprehensive integration tests for markdown processing tools
