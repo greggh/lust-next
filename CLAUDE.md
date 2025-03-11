@@ -31,9 +31,9 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 - `lust.lua`: Compatibility layer for original lust
 - `run_all_tests.lua`: Improved test runner for proper test state isolation
 
-## Current Focus - Centralized Logging System and Coverage Module
+## Current Focus - Logging System Documentation and Filesystem Integration
 
-We've made significant progress on implementing a comprehensive logging system and enhancing the coverage module, with the most recent enhancements focusing on global config integration, debug print replacement, and improved comment detection:
+We've completed all features for the comprehensive logging system including advanced capabilities like log search, external tool integration, test formatter integration, and buffering. Our current focus is on creating thorough documentation for all these features and replacing io.* function usage with our filesystem module:
 
 1. **Implementation Progress**:
    - ✅ Researched and analyzed five different Lua coverage implementations
@@ -106,7 +106,7 @@ We've made significant progress on implementing a comprehensive logging system a
 
 4. **Centralized Logging System**:
    - ✅ Implemented centralized logging module (lib/tools/logging.lua)
-   - ✅ Created robust logging API with multiple severity levels
+   - ✅ Created robust logging API with multiple severity levels (FATAL, ERROR, WARN, INFO, DEBUG, TRACE)
    - ✅ Added support for module-specific log configurations
    - ✅ Implemented colored output and timestamp formatting
    - ✅ Added file output capabilities for persistent logs
@@ -136,9 +136,30 @@ We've made significant progress on implementing a comprehensive logging system a
      - scripts/run_tests.lua, scripts/runner.lua (core test runners)
      - scripts/fix_markdown.lua, scripts/version_check.lua, scripts/version_bump.lua (utility scripts) 
      - scripts/test_parser.lua, scripts/test_static_analyzer.lua, scripts/test_lpeglabel.lua, scripts/test_coverage_static_analysis.lua (test scripts)
+   - ✅ Created find_print_statements.lua utility to identify and track remaining print statements
    - ✅ Added proper logging initialization with fallbacks for early module loading
    - ✅ Implemented consistent logging patterns across all script modules
-   - ⚠️ Some print statements in run_all_tests.lua still need conversion
+   - ✅ Added logging to core modules including fix_expect, config, coverage, formatters
+   - ✅ Created comprehensive logging style guide (docs/api/logging_style_guide.md)
+   - ✅ Implemented structured parameter-based logging pattern
+   - ✅ Converted key modules to use structured logging:
+     - lib/core/config.lua - Configuration module with proper parameter tables
+     - lib/coverage/init.lua - Coverage module with detailed structured logging
+     - lib/tools/benchmark.lua - Performance benchmarking with structured data
+     - lib/tools/parallel.lua - Parallel execution with robust logging
+     - lib/tools/codefix.lua - Code quality tools with structured output
+     - lib/reporting/init.lua and formatters - All reporting modules
+     - lib/quality/init.lua - Quality module with detailed parameter information
+     - lib/mocking/* - Complete mocking system (init, spy, stub, mock)
+     - lib/tools/markdown.lua - Markdown processing module
+     - lib/tools/parser/* - Parser modules (init, grammar, validator)
+     - lust-next.lua - Main framework file with structured logging
+     - lust.lua - Compatibility layer with structured warnings
+     - test files - Primary test files with structured logging
+   - ✅ Standardized separation of message content from contextual data
+   - ✅ Added detailed parameter information for improved debugging
+   - ✅ Implemented consistent logging patterns across all primary modules
+   - ✅ Enhanced interactive.lua with improved component-based logging
 
 5. **Quality Validation Enhancements**:
    - ✅ Refactored to use new filesystem module
@@ -150,12 +171,22 @@ We've made significant progress on implementing a comprehensive logging system a
    - Run level 5 code quality tests
 
 5. **Documentation Enhancement Plan**:
-   - Document all filesystem functions with comprehensive examples
-   - Create usage patterns documentation for common scenarios
-   - Add cross-platform compatibility notes for all functions
+   - ✅ Create comprehensive documentation for all logging features:
+     - ✅ Document log search and query functionality
+     - ✅ Document external tool integration for popular platforms
+     - ✅ Document test formatter integration
+     - ✅ Explain buffering capabilities and configuration
+   - ✅ Document all filesystem functions with comprehensive examples
+   - ✅ Create usage patterns documentation for common scenarios
+   - ✅ Add cross-platform compatibility notes for all functions
+   - ✅ Create migration guide for replacing io.* functions
+   - ✅ Create detailed implementation plan for filesystem migration
+   - Replace io.* functions with filesystem module throughout codebase
    - Update coverage module documentation with new features
    - Create tutorials for common use cases across modules
    - Document test mode feature for coverage module
+   - ✅ Update documentation for structured logging implementation across framework
+   - ✅ Create logging style guide for consistent implementation
 
 All major filesystem module work is complete with proper integration throughout the codebase. The static analysis integration is now fully implemented with significant performance optimizations. By fixing critical recursive functions and implementing efficient caching strategies, we've reduced processing time for large files from potential infinite loops to just a few seconds. The system can now reliably process files up to 2,000+ lines, making it suitable for real-world Lua codebases. Our current focus is completing the block-based coverage tracking for even more detailed metrics.
 
@@ -203,22 +234,46 @@ We've previously completed these major features:
   - ✅ Results aggregation from parallel test runs
   - ✅ Coverage data merging from multiple processes
   - ✅ Configuration file system for customizing defaults (.lust-next-config.lua)
-- Current focus - Centralized logging system and coverage improvements:
+- Current focus - Logging System Documentation and Filesystem Integration:
   - ✅ Implement comprehensive centralized logging module
   - ✅ Add global config integration for logging configuration
   - ✅ Convert debug print statements to standardized logging
+  - ✅ Convert all script modules to use the logging system
   - ✅ Implement static analysis for improved coverage accuracy
   - ✅ Implement block-based coverage tracking
   - ✅ Add configuration option for control flow keywords treatment
   - ✅ Create significantly improved comment detection
   - ✅ Add comprehensive documentation for control flow keywords option
   - ✅ Create examples demonstrating the impact of different configuration values
-  - ⚠️ Create detailed documentation for the logging system
-  - Integrate AST-based code analysis for quality metrics
-  - Add hover tooltips for execution count tracking
-  - Document coverage features and integration patterns
-  - Fully integrate with hooks-util project
-  - Develop comprehensive integration tests for markdown processing tools
+  - ✅ Create detailed documentation for basic logging system
+  - ✅ Create find_print_statements.lua utility for tracking conversion progress
+  - ✅ Complete conversion of run_all_tests.lua (function override pattern)
+  - ✅ Implement structured logging formats (JSON) for monitoring tools
+  - ✅ Add filtering capabilities by module/level for interactive sessions
+  - ✅ Create comprehensive examples for JSON logging and filtering capabilities
+  - ✅ Create comprehensive logging style guide (docs/api/logging_style_guide.md)
+  - ✅ Implement structured parameter-based logging pattern
+  - ✅ Convert key modules to structured logging style (config, coverage, benchmark, parallel, codefix)
+  - ✅ Convert reporting modules to structured logging 
+  - ✅ Convert quality module to structured logging
+  - ✅ Convert mocking system to structured logging
+  - ✅ Convert parser modules to structured logging
+  - ✅ Convert markdown.lua to structured logging
+  - ✅ Enhanced interactive.lua with improved component-based structured logging
+  - ✅ Add log search and query functionality (search.lua)
+  - ✅ Create external tool integration (export.lua)
+  - ✅ Add test formatter integration (formatter_integration.lua)
+  - ✅ Implement buffering for high-volume logging
+  - ✅ Create comprehensive test suite for all logging features
+  - [ ] Document log search and query functionality
+  - [ ] Document external tool integration for popular platforms
+  - [ ] Document test formatter integration
+  - [ ] Document buffering capabilities and configuration
+  - [ ] Replace io.* functions with filesystem module throughout codebase
+  - [ ] Integrate AST-based code analysis for quality metrics
+  - [ ] Add hover tooltips for execution count tracking
+  - [ ] Test logging system with larger codebases to verify performance
+  - [ ] Fully integrate with hooks-util project
 - Potential future enhancements:
   - Additional specialized formatters for specific CI/CD pipelines
   - Stream-based test result processing for extremely large test suites

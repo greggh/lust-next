@@ -1,0 +1,652 @@
+-- Log search and query module for lust-next
+-- This module provides search and filtering capabilities for log files
+
+local M = {}
+
+-- Try to import filesystem module (might not be available during first load)
+local fs
+local function get_fs()
+  if not fs then
+    fs = require("lib.tools.filesystem")
+  end
+  return fs
+end
+
+-- Parse a log line (text format)
+local function parse_text_log_line(line)
+  if not line then return nil end
+  
+  -- Basic text log format parser
+  -- Parse timestamp
+  local timestamp = line:match("^(%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d)")
+  
+  -- Parse log level
+  local level = line:match(" | ([A-Z]+) | ")
+  
+  -- Parse module name
+  local module = line:match(" | [A-Z]+ | ([^|]+) | ")
+  
+  -- Parse message (everything after module)
+  local message
+  if module then
+    message = line:match(" | [A-Z]+ | [^|]+ | (.+)")
+  else
+    message = line:match(" | [A-Z]+ | (.+)")
+  end
+  
+  -- Parse parameters if present
+  local params_str = message and message:match("%([^)]+%)$")
+  local clean_message = message and message:gsub("%([^)]+%)$", ""):gsub("%s+$", "")
+  
+  return {
+    timestamp = timestamp,
+    level = level,
+    module = module and module:gsub("%s+$", ""),
+    message = clean_message,
+    params = params_str,
+    raw = line
+  }
+end
+
+-- Parse a log line (JSON format)
+local function parse_json_log_line(line)
+  if not line or line:sub(1, 1) ~= "{" then return nil end
+  
+  -- Implement a very simple JSON parser for log entries
+  local function extract_string_value(input, key)
+    local pattern = '"' .. key .. '"%s*:%s*"([^"]*)"'
+    return input:match(pattern)
+  end
+  
+  local function extract_numeric_value(input, key)
+    local pattern = '"' .. key .. '"%s*:%s*([0-9%.]+)'
+    local value = input:match(pattern)
+    return value and tonumber(value)
+  end
+  
+  return {
+    timestamp = extract_string_value(line, "timestamp"),
+    level = extract_string_value(line, "level"),
+    module = extract_string_value(line, "module"),
+    message = extract_string_value(line, "message"),
+    raw = line,
+    -- Note: other fields will be parsed on demand as needed
+  }
+end
+
+-- Basic log search function
+function M.search_logs(options)
+  options = options or {}
+  
+  local fs = get_fs()
+  if not fs then
+    return nil, "Filesystem module not available"
+  end
+  
+  -- Validate options
+  local log_file = options.log_file
+  if not log_file then
+    return nil, "Log file path is required"
+  end
+  
+  -- Check if file exists
+  if not fs.file_exists(log_file) then
+    return nil, "Log file does not exist: " .. log_file
+  end
+  
+  -- Determine log format (text or JSON)
+  local is_json = log_file:match("%.json$") or options.format == "json"
+  
+  -- Read log file
+  local content, err = fs.read_file(log_file)
+  if not content then
+    return nil, "Failed to read log file: " .. (err or "unknown error")
+  end
+  
+  -- Set up filtering criteria
+  local from_date = options.from_date
+  local to_date = options.to_date
+  local level = options.level and options.level:upper()
+  local module = options.module
+  local message_pattern = options.message_pattern
+  local limit = options.limit or 1000  -- Default limit to prevent memory issues
+  
+  -- Initialize results
+  local results = {}
+  local count = 0
+  
+  -- Process log file line by line (split content into lines)
+  for line in content:gmatch("([^\r\n]+)[\r\n]*") do
+    local log_entry
+    
+    -- Parse based on format
+    if is_json then
+      log_entry = parse_json_log_line(line)
+    else
+      log_entry = parse_text_log_line(line)
+    end
+    
+    -- Apply filters to parsed entry
+    if log_entry then
+      local include = true
+      
+      -- Filter by timestamp/date if specified
+      if include and from_date and log_entry.timestamp then
+        include = log_entry.timestamp >= from_date
+      end
+      
+      if include and to_date and log_entry.timestamp then
+        include = log_entry.timestamp <= to_date
+      end
+      
+      -- Filter by log level
+      if include and level and log_entry.level then
+        include = log_entry.level == level
+      end
+      
+      -- Filter by module
+      if include and module and log_entry.module then
+        -- Support exact match or wildcard at end
+        if module:match("%*$") then
+          local prefix = module:gsub("%*$", "")
+          include = log_entry.module:sub(1, #prefix) == prefix
+        else
+          include = log_entry.module == module
+        end
+      end
+      
+      -- Filter by message content
+      if include and message_pattern and log_entry.message then
+        include = log_entry.message:match(message_pattern) ~= nil
+      end
+      
+      -- Add to results if passes all filters
+      if include then
+        count = count + 1
+        results[count] = log_entry
+        
+        -- Check limit
+        if count >= limit then
+          break
+        end
+      end
+    end
+  end
+  
+  -- Return results
+  return {
+    entries = results,
+    count = count,
+    truncated = count >= limit
+  }
+end
+
+-- Get log statistics
+function M.get_log_stats(log_file, options)
+  options = options or {}
+  
+  local fs = get_fs()
+  if not fs then
+    return nil, "Filesystem module not available"
+  end
+  
+  -- Check if file exists
+  if not fs.file_exists(log_file) then
+    return nil, "Log file does not exist: " .. log_file
+  end
+  
+  -- Determine log format (text or JSON)
+  local is_json = log_file:match("%.json$") or options.format == "json"
+  
+  -- Open log file
+  local file, err = io.open(log_file, "r")
+  if not file then
+    return nil, "Failed to open log file: " .. (err or "unknown error")
+  end
+  
+  -- Initialize statistics
+  local stats = {
+    total_entries = 0,
+    by_level = {},
+    by_module = {},
+    errors = 0,
+    warnings = 0,
+    first_timestamp = nil,
+    last_timestamp = nil
+  }
+  
+  -- Process log file
+  for line in file:lines() do
+    local log_entry
+    
+    -- Parse based on format
+    if is_json then
+      log_entry = parse_json_log_line(line)
+    else
+      log_entry = parse_text_log_line(line)
+    end
+    
+    -- Update statistics
+    if log_entry then
+      stats.total_entries = stats.total_entries + 1
+      
+      -- Track by level
+      if log_entry.level then
+        stats.by_level[log_entry.level] = (stats.by_level[log_entry.level] or 0) + 1
+        
+        -- Count errors and warnings
+        if log_entry.level == "ERROR" or log_entry.level == "FATAL" then
+          stats.errors = stats.errors + 1
+        elseif log_entry.level == "WARN" then
+          stats.warnings = stats.warnings + 1
+        end
+      end
+      
+      -- Track by module
+      if log_entry.module then
+        stats.by_module[log_entry.module] = (stats.by_module[log_entry.module] or 0) + 1
+      end
+      
+      -- Track timestamp range
+      if log_entry.timestamp then
+        if not stats.first_timestamp or log_entry.timestamp < stats.first_timestamp then
+          stats.first_timestamp = log_entry.timestamp
+        end
+        
+        if not stats.last_timestamp or log_entry.timestamp > stats.last_timestamp then
+          stats.last_timestamp = log_entry.timestamp
+        end
+      end
+    end
+  end
+  
+  -- Close file
+  file:close()
+  
+  -- Add file size information
+  stats.file_size = fs.get_file_size(log_file)
+  
+  return stats
+end
+
+-- Export logs to a different format
+function M.export_logs(log_file, output_file, format, options)
+  options = options or {}
+  
+  local fs = get_fs()
+  if not fs then
+    return nil, "Filesystem module not available"
+  end
+  
+  -- Check if source file exists
+  if not fs.file_exists(log_file) then
+    return nil, "Log file does not exist: " .. log_file
+  end
+  
+  -- Determine source log format (text or JSON)
+  local is_json_source = log_file:match("%.json$") or options.source_format == "json"
+  
+  -- Open source log file
+  local source_file, err = io.open(log_file, "r")
+  if not source_file then
+    return nil, "Failed to open source log file: " .. (err or "unknown error")
+  end
+  
+  -- Create output file
+  local output, err = io.open(output_file, "w")
+  if not output then
+    source_file:close()
+    return nil, "Failed to create output file: " .. (err or "unknown error")
+  end
+  
+  -- Function to write CSV header
+  local function write_csv_header()
+    output:write("timestamp,level,module,message\n")
+  end
+  
+  -- Write format-specific header
+  if format == "csv" then
+    write_csv_header()
+  elseif format == "html" then
+    -- Write HTML header
+    output:write([[
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Log Export</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f1f1f1; border-bottom: 2px solid #ddd; text-align: left; padding: 8px; }
+    td { border-bottom: 1px solid #ddd; padding: 8px; vertical-align: top; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+    .fatal { background-color: #ffdddd; }
+    .error { color: #d00; }
+    .warn { color: #e90; }
+    .info { color: #07f; }
+    .debug { color: #090; }
+    .trace { color: #777; }
+  </style>
+</head>
+<body>
+  <h1>Log Export</h1>
+  <p>Source: ]] .. log_file .. [[</p>
+  <table>
+    <tr>
+      <th>Timestamp</th>
+      <th>Level</th>
+      <th>Module</th>
+      <th>Message</th>
+    </tr>
+]])
+  end
+  
+  -- Process each line
+  local count = 0
+  for line in source_file:lines() do
+    local log_entry
+    
+    -- Parse based on format
+    if is_json_source then
+      log_entry = parse_json_log_line(line)
+    else
+      log_entry = parse_text_log_line(line)
+    end
+    
+    -- Process entries that were successfully parsed
+    if log_entry then
+      count = count + 1
+      
+      -- Write entry in the output format
+      if format == "json" and not is_json_source then
+        -- Convert text log to JSON format
+        output:write(string.format(
+          '{"timestamp":"%s","level":"%s","module":"%s","message":"%s"}',
+          log_entry.timestamp or "",
+          log_entry.level or "",
+          log_entry.module or "",
+          (log_entry.message or ""):gsub('"', '\\"')
+        ))
+        output:write("\n")
+      elseif format == "csv" then
+        -- Write as CSV
+        output:write(string.format(
+          '"%s","%s","%s","%s"\n',
+          log_entry.timestamp or "",
+          log_entry.level or "",
+          log_entry.module or "",
+          (log_entry.message or ""):gsub('"', '""')  -- Escape quotes in CSV
+        ))
+      elseif format == "html" then
+        -- Write as HTML table row
+        local level_class = log_entry.level and log_entry.level:lower() or ""
+        output:write(string.format(
+          '    <tr class="%s">\n      <td>%s</td>\n      <td class="%s">%s</td>\n      <td>%s</td>\n      <td>%s</td>\n    </tr>\n',
+          log_entry.level and log_entry.level:lower() == "fatal" and "fatal" or "",
+          log_entry.timestamp or "",
+          level_class,
+          log_entry.level or "",
+          log_entry.module or "",
+          (log_entry.message or ""):gsub("<", "&lt;"):gsub(">", "&gt;")  -- Escape HTML
+        ))
+      elseif format == "text" and is_json_source then
+        -- Convert JSON log to text format
+        local text = string.format(
+          "%s | %s | %s | %s",
+          log_entry.timestamp or "",
+          log_entry.level or "",
+          log_entry.module or "",
+          log_entry.message or ""
+        )
+        output:write(text .. "\n")
+      else
+        -- Copy as-is
+        output:write(log_entry.raw .. "\n")
+      end
+    end
+  end
+  
+  -- Write format-specific footer
+  if format == "html" then
+    output:write([[
+  </table>
+  <p>Total entries: ]] .. count .. [[</p>
+</body>
+</html>
+]])
+  end
+  
+  -- Close files
+  source_file:close()
+  output:close()
+  
+  return {
+    entries_processed = count,
+    output_file = output_file
+  }
+end
+
+-- Add adapter for popular log analysis tools
+function M.create_export_adapter(adapter_type, options)
+  options = options or {}
+  
+  -- Validate adapter type
+  if not adapter_type then
+    return nil, "Adapter type is required"
+  end
+  
+  local adapters = {
+    -- Logstash adapter
+    logstash = function(log_entry)
+      return {
+        ["@timestamp"] = log_entry.timestamp,
+        ["@metadata"] = {
+          type = "lust_log"
+        },
+        level = log_entry.level,
+        module = log_entry.module,
+        message = log_entry.message,
+        application = options.application_name or "lust-next",
+        environment = options.environment or "development",
+        host = options.host or os.getenv("HOSTNAME") or "unknown"
+      }
+    end,
+    
+    -- ELK adapter
+    elk = function(log_entry)
+      return {
+        ["@timestamp"] = log_entry.timestamp,
+        log = {
+          level = log_entry.level,
+          logger = log_entry.module
+        },
+        message = log_entry.message,
+        service = {
+          name = options.service_name or "lust-next",
+          environment = options.environment or "development"
+        },
+        host = {
+          name = options.host or os.getenv("HOSTNAME") or "unknown"
+        }
+      }
+    end,
+    
+    -- Splunk adapter
+    splunk = function(log_entry)
+      return {
+        time = log_entry.timestamp,
+        host = options.host or os.getenv("HOSTNAME") or "unknown",
+        source = options.source or "lust-next",
+        sourcetype = options.sourcetype or "lust:log",
+        index = options.index or "main",
+        event = {
+          level = log_entry.level,
+          module = log_entry.module,
+          message = log_entry.message,
+          environment = options.environment or "development"
+        }
+      }
+    end,
+    
+    -- Datadog adapter
+    datadog = function(log_entry)
+      return {
+        timestamp = log_entry.timestamp,
+        message = log_entry.message,
+        level = log_entry.level and log_entry.level:lower() or "info",
+        service = options.service or "lust-next",
+        ddsource = "lust",
+        ddtags = "env:" .. (options.environment or "development") .. 
+                 ",module:" .. (log_entry.module or "unknown"),
+        hostname = options.hostname or os.getenv("HOSTNAME") or "unknown"
+      }
+    end
+  }
+  
+  -- Return the selected adapter
+  if adapters[adapter_type] then
+    return adapters[adapter_type]
+  else
+    return nil, "Unknown adapter type: " .. adapter_type
+  end
+end
+
+-- Get a function to process log entries in real-time
+function M.get_log_processor(options)
+  options = options or {}
+  
+  -- Supported outputs
+  local outputs = {}
+  
+  -- Add file output if configured
+  if options.output_file then
+    local file = io.open(options.output_file, "a")
+    if file then
+      table.insert(outputs, {
+        type = "file",
+        format = options.format or "text",
+        file = file,
+        close = function() file:close() end
+      })
+    end
+  end
+  
+  -- Add adapter output if configured
+  if options.adapter and options.adapter_type then
+    table.insert(outputs, {
+      type = "adapter",
+      adapter = options.adapter,
+      adapter_type = options.adapter_type
+    })
+  end
+  
+  -- Add callback output if provided
+  if options.callback and type(options.callback) == "function" then
+    table.insert(outputs, {
+      type = "callback",
+      callback = options.callback
+    })
+  end
+  
+  -- Set up filtering
+  local filter = {
+    level = options.level,
+    module = options.module,
+    message_pattern = options.message_pattern
+  }
+  
+  -- Return processor function
+  return {
+    -- Process a log entry
+    process = function(log_entry)
+      -- Apply filters
+      local include = true
+      
+      -- Filter by log level
+      if include and filter.level and log_entry.level then
+        include = log_entry.level == filter.level
+      end
+      
+      -- Filter by module
+      if include and filter.module and log_entry.module then
+        -- Support exact match or wildcard at end
+        if filter.module:match("%*$") then
+          local prefix = filter.module:gsub("%*$", "")
+          include = log_entry.module:sub(1, #prefix) == prefix
+        else
+          include = log_entry.module == filter.module
+        end
+      end
+      
+      -- Filter by message content
+      if include and filter.message_pattern and log_entry.message then
+        include = log_entry.message:match(filter.message_pattern) ~= nil
+      end
+      
+      -- Process if passes filters
+      if include then
+        for _, output in ipairs(outputs) do
+          if output.type == "file" then
+            if output.format == "json" then
+              -- Write as JSON
+              output.file:write(string.format(
+                '{"timestamp":"%s","level":"%s","module":"%s","message":"%s"}',
+                log_entry.timestamp or "",
+                log_entry.level or "",
+                log_entry.module or "",
+                (log_entry.message or ""):gsub('"', '\\"')
+              ))
+              output.file:write("\n")
+              output.file:flush()
+            elseif output.format == "csv" then
+              -- Write as CSV
+              output.file:write(string.format(
+                '"%s","%s","%s","%s"\n',
+                log_entry.timestamp or "",
+                log_entry.level or "",
+                log_entry.module or "",
+                (log_entry.message or ""):gsub('"', '""')  -- Escape quotes in CSV
+              ))
+              output.file:flush()
+            else
+              -- Write as text
+              local text = string.format(
+                "%s | %s | %s | %s",
+                log_entry.timestamp or "",
+                log_entry.level or "",
+                log_entry.module or "",
+                log_entry.message or ""
+              )
+              output.file:write(text .. "\n")
+              output.file:flush()
+            end
+          elseif output.type == "adapter" then
+            -- Process through adapter
+            if output.adapter then
+              local adapted = output.adapter(log_entry)
+              -- The adapted result can be processed further or sent to external systems
+            end
+          elseif output.type == "callback" then
+            -- Call the callback function
+            output.callback(log_entry)
+          end
+        end
+        
+        return true
+      end
+      
+      return false
+    end,
+    
+    -- Close all outputs
+    close = function()
+      for _, output in ipairs(outputs) do
+        if output.type == "file" and output.close then
+          output.close()
+        end
+      end
+    end
+  }
+end
+
+return M
