@@ -14,6 +14,11 @@ $RECYCLE.BIN/
 *.swo
 *.tmp
 *.lua~
+*.original
+*.save
+*.old
+*.prev
+*.backup
 .luacheckcache
 
 # IDE - VSCode
@@ -121,21 +126,27 @@ tmp/
 .sass-cache/
 
 # Project specific files - lust-next
-# Generated report output directories
-html-report-examples/
-output-reports/
-report-examples/
-temp-reports-demo/
+# Generated report output directories (now in examples/reports)
+# But allow the files tracked in git
+examples/reports/auto-generated/*/
 
-# Keep example report files in coverage-reports/
-# But ignore new generated files there
-coverage-reports/*
-!coverage-reports/coverage-report.cobertura
-!coverage-reports/coverage-report.html
-!coverage-reports/coverage-report.json
-!coverage-reports/coverage-report.lcov
-!coverage-reports/quality-report.html
-!coverage-reports/quality-report.json
-!coverage-reports/test-results-report.csv
-!coverage-reports/test-results-report.tap
-!coverage-reports/test-results-report.xml
+# Generated coverage reports in the project root
+coverage-reports/
+
+# Test temporary files
+debug-instrumentation.lua
+test-instrumentation.lua
+test_instrumentation*.lua
+concat_test.lua
+unused_vars_test.lua
+whitespace_test.lua
+
+# Temporary log files
+*.log.1
+*.log.2
+*.log.3
+*.log.4
+*.log.5
+
+# Local development files
+.luacheckrc.local
