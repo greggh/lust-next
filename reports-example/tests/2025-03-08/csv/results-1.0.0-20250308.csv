@@ -1,3 +1,0 @@
-test_id,test_suite,test_name,status,duration,message,error_type,details,timestamp
-1,"Report Path Example","generates multiple reports in organized structure","pass",0.001000,"","","","2025-03-08T15:27:58"
-2,"Report Path Example","generates data for report analysis","pass",0.001000,"","","","2025-03-08T15:27:58"
