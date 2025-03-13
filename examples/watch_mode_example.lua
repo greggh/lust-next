@@ -1,9 +1,5 @@
 -- Example of using watch mode in lust-next
--- Run with: env -C /home/gregg/Projects/lua-library/lust-next lua scripts/run_tests.lua --watch examples/watch_mode_example.lua
-
--- Add paths for proper module loading
-local script_path = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
-package.path = script_path .. "../?.lua;" .. script_path .. "../scripts/?.lua;" .. script_path .. "../src/?.lua;" .. package.path
+-- Run with: lua scripts/run_tests.lua --watch examples/watch_mode_example.lua
 
 -- Load lust-next
 local lust = require("lust-next")
@@ -43,25 +39,27 @@ describe("Watch Mode Example", function()
   end)
 end)
 
--- If running this file directly, print usage instructions
+-- If running this file directly, show usage instructions
 if arg[0]:match("watch_mode_example%.lua$") then
-  print("\nWatch Mode Example")
-  print("=================")
-  print("This file demonstrates the watch mode functionality for continuous testing.")
-  print("")
-  print("To run with watch mode, use:")
-  print("  env -C /home/gregg/Projects/lua-library/lust-next lua scripts/run_tests.lua --watch examples/watch_mode_example.lua")
-  print("")
-  print("Watch mode will:")
-  print("1. Run the tests in this file")
-  print("2. Watch for changes to any files")
-  print("3. Automatically re-run tests when changes are detected")
-  print("4. Continue until you press Ctrl+C")
-  print("")
-  print("Try editing this file while watch mode is running to see the tests automatically re-run.")
-  print("")
-  print("Tips:")
-  print("- Uncomment the 'failing test' sections to see failure detection")
-  print("- Add new tests to see them get picked up automatically")
-  print("- Try changing test assertions to see how the system responds")
+  lust.log.info({ message = "Watch Mode Example" })
+  lust.log.info({ message = "=================" })
+  lust.log.info({ message = "This file demonstrates the watch mode functionality for continuous testing." })
+  lust.log.info({ message = "" })
+  lust.log.info({ message = "To run with watch mode, use:" })
+  lust.log.info({ message = "  lua scripts/run_tests.lua --watch examples/watch_mode_example.lua" })
+  lust.log.info({ message = "" })
+  lust.log.info({ message = "Watch mode will:" })
+  lust.log.info({ message = "1. Run the tests in this file" })
+  lust.log.info({ message = "2. Watch for changes to any files" })
+  lust.log.info({ message = "3. Automatically re-run tests when changes are detected" })
+  lust.log.info({ message = "4. Continue until you press Ctrl+C" })
+  lust.log.info({ message = "" })
+  lust.log.info({ message = "Try editing this file while watch mode is running to see the tests automatically re-run." })
+  lust.log.info({ message = "" })
+  lust.log.info({ message = "Tips:" })
+  lust.log.info({ message = "- Uncomment the 'failing test' sections to see failure detection" })
+  lust.log.info({ message = "- Add new tests to see them get picked up automatically" })
+  lust.log.info({ message = "- Try changing test assertions to see how the system responds" })
 end
+
+-- Note: Tests are run by scripts/runner.lua or run_all_tests.lua, not by explicit call

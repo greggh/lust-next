@@ -3,14 +3,11 @@
 
 -- Import the testing framework
 local lust = require "../lust-next"
+local fs = require("lib.tools.filesystem")
 
 -- Create multiple test files
 local function write_test_file(name, pass, fail, skip)
   local file_path = os.tmpname() .. ".lua"
-  local file = io.open(file_path, "w")
-  if not file then
-    error("Failed to create test file: " .. file_path)
-  end
   
   local content = [[
 -- Test file: ]] .. name .. [[
@@ -52,8 +49,10 @@ describe("]] .. name .. [[", function()
 end)
 ]]
   
-  file:write(content)
-  file:close()
+  local success, err = fs.write_file(file_path, content)
+  if not success then
+    error("Failed to create test file: " .. file_path .. " - " .. (err or "unknown error"))
+  end
   
   return file_path
 end
@@ -83,7 +82,10 @@ local results = parallel.run_tests(test_files, {
 
 -- Clean up the test files
 for _, file in ipairs(test_files) do
-  os.remove(file)
+  local success, err = fs.delete_file(file)
+  if not success then
+    print("Warning: Failed to delete test file " .. file .. ": " .. (err or "unknown error"))
+  end
 end
 
 -- Manually count the results from test outputs

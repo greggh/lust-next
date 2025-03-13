@@ -9,11 +9,12 @@ print("lust-next Configuration System Example")
 print("=====================================")
 print("")
 
+-- Import the filesystem module
+local fs = require("lib.tools.filesystem")
+
 -- Create and load a temporary config file
 local temp_config_path = "temp_config.lua"
-local file = io.open(temp_config_path, "w")
-if file then
-  file:write([[
+local content = [[
 -- Temporary configuration file for demo purposes
 return {
   -- Output Formatting
@@ -38,11 +39,13 @@ return {
     timestamp_format = "%Y%m%d-%H%M",
   }
 }
-]])
-  file:close()
+]]
+
+local success, err = fs.write_file(temp_config_path, content)
+if success then
   print("Created temporary config file at " .. temp_config_path)
 else
-  print("Failed to create temporary config file!")
+  print("Failed to create temporary config file: " .. (err or "unknown error"))
   os.exit(1)
 end
 
@@ -92,7 +95,11 @@ lust.describe("Configuration Example", function()
 end)
 
 -- Clean up the temporary file
-os.remove(temp_config_path)
-print("\nRemoved temporary config file: " .. temp_config_path)
+local delete_success, delete_err = fs.delete_file(temp_config_path)
+if delete_success then
+  print("\nRemoved temporary config file: " .. temp_config_path)
+else
+  print("\nFailed to remove temporary config file: " .. (delete_err or "unknown error"))
+end
 print("\nIn a real project, you would create a .lust-next-config.lua file in your project root.")
 print("Use 'lua lust-next.lua --create-config' to generate a template configuration file.")

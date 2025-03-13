@@ -1,6 +1,7 @@
 -- Basic usage example for lust-next
 local lust = require("lust-next")
 local describe, it, expect = lust.describe, lust.it, lust.expect
+local before, after = lust.before, lust.after
 
 -- A simple calculator module to test
 local calculator = {
@@ -16,13 +17,13 @@ local calculator = {
 -- Test suite
 describe("Calculator", function()
   -- Setup that runs before each test
-  lust.before(function()
-    print("Setting up test...")
+  before(function()
+    lust.log.info({ message = "Setting up test" })
   end)
   
   -- Cleanup that runs after each test
-  lust.after(function()
-    print("Cleaning up test...")
+  after(function()
+    lust.log.info({ message = "Cleaning up test" })
   end)
   
   describe("addition", function()
@@ -58,4 +59,5 @@ describe("Calculator", function()
   end)
 end)
 
+-- Note: Tests are run by scripts/runner.lua or run_all_tests.lua, not by explicit call
 -- Output will show nested describe blocks and test results with colors

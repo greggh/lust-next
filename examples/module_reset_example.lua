@@ -20,12 +20,15 @@ if not module_reset_available then
   )
 end
 
+local fs = require("lib.tools.filesystem")
+
 -- Create test modules
 local function create_test_module(name, content)
   local file_path = os.tmpname()
-  local file = io.open(file_path, "w")
-  file:write(content)
-  file:close()
+  local success, err = fs.write_file(file_path, content)
+  if not success then
+    error("Failed to create test module: " .. (err or "unknown error"))
+  end
   
   -- Store module path for later requiring
   _G["_test_module_" .. name .. "_path"] = file_path
@@ -114,5 +117,8 @@ else
 end
 
 -- Clean up temporary files
-os.remove(_G._test_module_a_path)
+local success, err = fs.delete_file(_G._test_module_a_path)
+if not success then
+  print("Warning: Failed to delete test module: " .. (err or "unknown error"))
+end
 _G._test_module_a_path = nil

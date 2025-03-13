@@ -45,39 +45,46 @@ if arg[0]:match("parallel_execution_example%.lua$") then
   print("\nDemonstrating parallel test execution...")
   print("----------------------------------------")
   
+  -- Load the filesystem module
+  local fs = require("lib.tools.filesystem")
+  
   local function create_test_files(dir, count)
     -- Create a temporary directory for test files
-    os.execute("mkdir -p " .. dir)
+    fs.ensure_directory_exists(dir)
     
     -- Create a few test files
     local files = {}
     for i = 1, count do
-      local file_path = dir .. "/test_" .. i .. ".lua"
+      local file_path = fs.join_paths(dir, "test_" .. i .. ".lua")
       local delay = math.random() * 0.3 -- Random delay between 0-300ms
       
-      local f = io.open(file_path, "w")
-      if f then
-        f:write("-- Generated test file #" .. i .. "\n")
-        f:write("local lust = require('lust-next')\n")
-        f:write("local describe, it, expect = lust.describe, lust.it, lust.expect\n\n")
-        f:write("-- Simulate work by sleeping\n")
-        f:write("local function sleep(sec)\n")
-        f:write("  local start = os.clock()\n")
-        f:write("  while os.clock() - start < sec do end\n")
-        f:write("end\n\n")
-        f:write("describe('Test File " .. i .. "', function()\n")
-        
-        -- Create a few test cases in each file
-        for j = 1, 3 do
-          f:write("  it('test case " .. j .. "', function()\n")
-          f:write("    sleep(" .. string.format("%.3f", delay) .. ") -- Sleep to simulate work\n")
-          f:write("    expect(1 + " .. j .. ").to.equal(" .. (1 + j) .. ")\n")
-          f:write("  end)\n")
-        end
-        
-        f:write("end)\n")
-        f:close()
+      -- Build file content
+      local content = "-- Generated test file #" .. i .. "\n"
+      content = content .. "local lust = require('lust-next')\n"
+      content = content .. "local describe, it, expect = lust.describe, lust.it, lust.expect\n\n"
+      content = content .. "-- Simulate work by sleeping\n"
+      content = content .. "local function sleep(sec)\n"
+      content = content .. "  local start = os.clock()\n"
+      content = content .. "  while os.clock() - start < sec do end\n"
+      content = content .. "end\n\n"
+      content = content .. "describe('Test File " .. i .. "', function()\n"
+      
+      -- Create a few test cases in each file
+      for j = 1, 3 do
+        content = content .. "  it('test case " .. j .. "', function()\n"
+        content = content .. "    sleep(" .. string.format("%.3f", delay) .. ") -- Sleep to simulate work\n"
+        content = content .. "    expect(1 + " .. j .. ").to.equal(" .. (1 + j) .. ")\n"
+        content = content .. "  end)\n"
+      end
+      
+      content = content .. "end)\n"
+      
+      -- Write the file
+      local success, err = fs.write_file(file_path, content)
+      if success then
         table.insert(files, file_path)
+      else
+        print("Error writing test file: " .. (err or "unknown error"))
       end
     end
     
@@ -132,9 +139,9 @@ if arg[0]:match("parallel_execution_example%.lua$") then
   -- Clean up temporary files
   print("\nCleaning up temporary test files...")
   for _, file in ipairs(files) do
-    os.remove(file)
+    fs.delete_file(file)
   end
-  os.execute("rmdir " .. temp_dir)
+  fs.delete_directory(temp_dir)
   
   print("\nParallel Test Execution Example Complete")
   print("To use parallel execution in your own tests, run:")

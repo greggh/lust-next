@@ -274,54 +274,67 @@ function benchmark.generate_large_test_suite(options)
   local nesting_level = options.nesting_level or 3
   local output_dir = options.output_dir or "./benchmark_tests"
   
+  -- Load filesystem module
+  local fs_ok, fs = pcall(require, "lib.tools.filesystem")
+  if not fs_ok then
+    error("Filesystem module required for generate_large_test_suite")
+    return nil
+  end
+  
   -- Ensure output directory exists
-  os.execute("mkdir -p " .. output_dir)
+  local dir_success, dir_err = fs.ensure_directory_exists(output_dir)
+  if not dir_success then
+    error("Failed to create output directory: " .. (dir_err or "unknown error"))
+    return nil
+  end
   
   -- Create test files
   for i = 1, file_count do
-    local file_path = output_dir .. "/test_" .. i .. ".lua"
-    local file = io.open(file_path, "w")
+    local file_path = fs.join_paths(output_dir, "test_" .. i .. ".lua")
     
-    if file then
-      -- Write test file header
-      file:write("-- Generated large test suite file #" .. i .. "\n")
-      file:write("local lust = require('lust-next')\n")
-      file:write("local describe, it, expect = lust.describe, lust.it, lust.expect\n\n")
+    -- Build file content
+    local content = "-- Generated large test suite file #" .. i .. "\n"
+    content = content .. "local lust = require('lust-next')\n"
+    content = content .. "local describe, it, expect = lust.describe, lust.it, lust.expect\n\n"
+    
+    -- Create nested tests
+    local function generate_tests(level, prefix)
+      if level <= 0 then return "" end
       
-      -- Create nested tests
-      local function generate_tests(level, prefix)
-        if level <= 0 then return end
-        
-        local tests_at_level = level == nesting_level and tests_per_file or math.ceil(tests_per_file / level)
-        
-        for j = 1, tests_at_level do
-          if level == nesting_level then
-            -- Leaf test case
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("it('test " .. prefix .. "." .. j .. "', function()\n")
-            file:write(string.rep("  ", nesting_level - level + 1))
-            file:write("expect(1 + 1).to.equal(2)\n")
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("end)\n\n")
-          else
-            -- Nested describe block
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("describe('suite " .. prefix .. "." .. j .. "', function()\n")
-            generate_tests(level - 1, prefix .. "." .. j)
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("end)\n\n")
-          end
+      local tests_at_level = level == nesting_level and tests_per_file or math.ceil(tests_per_file / level)
+      local result = ""
+      
+      for j = 1, tests_at_level do
+        if level == nesting_level then
+          -- Leaf test case
+          result = result .. string.rep("  ", nesting_level - level)
+          result = result .. "it('test " .. prefix .. "." .. j .. "', function()\n"
+          result = result .. string.rep("  ", nesting_level - level + 1)
+          result = result .. "expect(1 + 1).to.equal(2)\n"
+          result = result .. string.rep("  ", nesting_level - level)
+          result = result .. "end)\n\n"
+        else
+          -- Nested describe block
+          result = result .. string.rep("  ", nesting_level - level)
+          result = result .. "describe('suite " .. prefix .. "." .. j .. "', function()\n"
+          result = result .. generate_tests(level - 1, prefix .. "." .. j)
+          result = result .. string.rep("  ", nesting_level - level)
+          result = result .. "end)\n\n"
         end
       end
       
-      -- Start the top level describe block
-      file:write("describe('benchmark test file " .. i .. "', function()\n")
-      generate_tests(nesting_level, i)
-      file:write("end)\n")
-      
-      file:close()
-    else
-      print("Error: Failed to create test file " .. file_path)
+      return result
+    end
+    
+    -- Start the top level describe block
+    content = content .. "describe('benchmark test file " .. i .. "', function()\n"
+    content = content .. generate_tests(nesting_level, i)
+    content = content .. "end)\n"
+    
+    -- Write file
+    local success, err = fs.write_file(file_path, content)
+    if not success then
+      print("Error: Failed to create test file " .. file_path .. ": " .. (err or "unknown error"))
     end
   end
   
@@ -373,8 +386,10 @@ module_reset.register_with_lust(lust)
 local small_suite_dir = "/tmp/lust_benchmark_small"
 local large_suite_dir = "/tmp/lust_benchmark_large"
 
-os.execute("mkdir -p " .. small_suite_dir)
-os.execute("mkdir -p " .. large_suite_dir)
+-- Ensure benchmark directories exist
+local fs = require("lib.tools.filesystem")
+fs.ensure_directory_exists(small_suite_dir)
+fs.ensure_directory_exists(large_suite_dir)
 
 -- Generate test suites for benchmarking
 print("\nGenerating test suites for benchmarking...")
@@ -406,15 +421,17 @@ local function run_tests_with_isolation(suite_dir, iterations)
     })
   end
   
-  -- Get all test files
+  -- Get all test files using filesystem module
   local files = {}
-  local command = "ls -1 " .. suite_dir .. "/*.lua"
-  local handle = io.popen(command)
-  local result = handle:read("*a")
-  handle:close()
   
-  for file in result:gmatch("([^\n]+)") do
-    table.insert(files, file)
+  -- Find all Lua files in the directory
+  local all_files = fs.scan_directory(suite_dir, false) -- non-recursive
+  
+  -- Filter for .lua files
+  for _, file in ipairs(all_files or {}) do
+    if file:match("%.lua$") then
+      table.insert(files, file)
+    end
   end
   
   -- Limit files to iterations (for quicker benchmarks)
@@ -440,15 +457,17 @@ local function run_tests_without_isolation(suite_dir, iterations)
     })
   end
   
-  -- Get all test files
+  -- Get all test files using filesystem module
   local files = {}
-  local command = "ls -1 " .. suite_dir .. "/*.lua"
-  local handle = io.popen(command)
-  local result = handle:read("*a")
-  handle:close()
   
-  for file in result:gmatch("([^\n]+)") do
-    table.insert(files, file)
+  -- Find all Lua files in the directory
+  local all_files = fs.scan_directory(suite_dir, false) -- non-recursive
+  
+  -- Filter for .lua files
+  for _, file in ipairs(all_files or {}) do
+    if file:match("%.lua$") then
+      table.insert(files, file)
+    end
   end
   
   -- Limit files to iterations (for quicker benchmarks)
@@ -552,7 +571,7 @@ else
 end
 
 -- Clean up benchmark directories
-os.execute("rm -rf " .. small_suite_dir)
-os.execute("rm -rf " .. large_suite_dir)
+fs.delete_directory(small_suite_dir, true)  -- true means recursive deletion
+fs.delete_directory(large_suite_dir, true)
 
 print("\nBenchmark complete!")

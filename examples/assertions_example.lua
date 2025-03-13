@@ -1,5 +1,4 @@
 -- Example demonstrating enhanced assertions in lust-next
-package.path = "../?.lua;" .. package.path
 local lust_next = require("lust-next")
 local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
 
@@ -200,4 +199,4 @@ describe("Enhanced Assertions Examples", function()
   end)
 end)
 
-print("\nEnhanced assertions examples completed!")
+-- Note: Tests are run by scripts/runner.lua or run_all_tests.lua, not by explicit call

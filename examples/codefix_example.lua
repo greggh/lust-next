@@ -4,18 +4,21 @@ local lust = require("lust-next")
 print("This example demonstrates the enhanced codefix module in lust-next")
 print("The codefix module can be used to fix common Lua code quality issues across multiple files")
 
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+
 -- Create a directory with example files
 local function create_example_files()
   -- Create directory
   local dirname = "codefix_examples"
-  os.execute("mkdir -p " .. dirname)
+  fs.ensure_directory_exists(dirname)
   print("Created example directory: " .. dirname)
   
   -- Create multiple files with different quality issues
   local files = {}
   
   -- File 1: Unused variables and arguments
-  local filename1 = dirname .. "/unused_vars.lua"
+  local filename1 = fs.join_paths(dirname, "unused_vars.lua")
   local content1 = [[
 -- Example file with unused variables and arguments
 
@@ -36,16 +39,16 @@ return {
 }
 ]]
   
-  local file1 = io.open(filename1, "w")
-  if file1 then
-    file1:write(content1)
-    file1:close()
+  local success, err = fs.write_file(filename1, content1)
+  if success then
     table.insert(files, filename1)
     print("Created: " .. filename1)
+  else
+    print("Error creating file: " .. (err or "unknown error"))
   end
   
   -- File 2: Trailing whitespace in multiline strings
-  local filename2 = dirname .. "/whitespace.lua"
+  local filename2 = fs.join_paths(dirname, "whitespace.lua")
   local content2 = [=[
 -- Example file with trailing whitespace issues
 
@@ -71,16 +74,16 @@ return {
 }
 ]=]
   
-  local file2 = io.open(filename2, "w")
-  if file2 then
-    file2:write(content2)
-    file2:close()
+  local success, err = fs.write_file(filename2, content2)
+  if success then
     table.insert(files, filename2)
     print("Created: " .. filename2)
+  else
+    print("Error creating file: " .. (err or "unknown error"))
   end
   
   -- File 3: String concatenation issues
-  local filename3 = dirname .. "/string_concat.lua"
+  local filename3 = fs.join_paths(dirname, "string_concat.lua")
   local content3 = [[
 -- Example file with string concatenation issues
 
@@ -100,12 +103,12 @@ return {
 }
 ]]
   
-  local file3 = io.open(filename3, "w")
-  if file3 then
-    file3:write(content3)
-    file3:close()
+  local success, err = fs.write_file(filename3, content3)
+  if success then
     table.insert(files, filename3)
     print("Created: " .. filename3)
+  else
+    print("Error creating file: " .. (err or "unknown error"))
   end
   
   return dirname, files
@@ -161,10 +164,11 @@ local function run_multi_file_codefix(dirname, files)
   for _, filename in ipairs(files) do
     print("\nFile: " .. filename)
     print(string.rep("-", 40))
-    local file = io.open(filename, "r")
-    if file then
-      print(file:read("*a"))
-      file:close()
+    local content, err = fs.read_file(filename)
+    if content then
+      print(content)
+    else
+      print("Error reading file: " .. (err or "unknown error"))
     end
   end
   
@@ -172,12 +176,11 @@ local function run_multi_file_codefix(dirname, files)
   if options.generate_report and options.report_file then
     print("\n5. Generated report:")
     print(string.rep("-", 60))
-    local report_file = io.open(options.report_file, "r")
-    if report_file then
-      print(report_file:read("*a"))
-      report_file:close()
+    local report_content, err = fs.read_file(options.report_file)
+    if report_content then
+      print(report_content)
     else
-      print("Report file not found")
+      print("Error reading report file: " .. (err or "unknown error"))
     end
   end
 end
@@ -188,15 +191,15 @@ local function cleanup(dirname, files)
   
   -- Remove the example files
   for _, filename in ipairs(files) do
-    os.remove(filename)
-    os.remove(filename .. ".bak")
+    fs.delete_file(filename)
+    fs.delete_file(filename .. ".bak")
   end
   
   -- Remove the directory
-  os.execute("rm -rf " .. dirname)
+  fs.delete_directory(dirname, true)  -- true for recursive deletion
   
   -- Remove report file
-  os.remove("codefix_report.json")
+  fs.delete_file("codefix_report.json")
   
   print("Removed example files and directory")
 end
