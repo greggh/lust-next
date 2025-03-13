@@ -52,8 +52,9 @@ local config = {
 -- Get the project name from the script argument or from the current directory
 local project_name = arg[1]
 if not project_name then
-  local current_dir = io.popen("basename `pwd`"):read("*l")
-  project_name = current_dir:gsub("%-", "_")
+  local pwd = fs.get_absolute_path(".")
+  local project_name_with_path = pwd:match("/([^/]+)$")
+  project_name = project_name_with_path:gsub("%-", "_")
 end
 
 -- Get the new version from the command line
@@ -74,31 +75,13 @@ end
 -- Get the current date for CHANGELOG updates
 local current_date = os.date("%Y-%m-%d")
 
--- Function to read a file's content
-local function read_file(path)
-  local file, err = io.open(path, "r")
-  if not file then
-    return nil, err
-  end
-  local content = file:read("*a")
-  file:close()
-  return content
-end
-
--- Function to write content to a file
-local function write_file(path, content)
-  local file, err = io.open(path, "w")
-  if not file then
-    return false, err
-  end
-  file:write(content)
-  file:close()
-  return true
-end
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+logger.debug("Loaded filesystem module", {version = fs._VERSION})
 
 -- Function to extract version from file using pattern
 local function extract_version(path, pattern)
-  local content, err = read_file(path)
+  local content, err = fs.read_file(path)
   if not content then
     return nil, "Could not read "..path..": "..tostring(err)
   end
@@ -122,12 +105,7 @@ end
 
 -- Check if a file exists
 local function file_exists(path)
-  local file = io.open(path, "r")
-  if file then
-    file:close()
-    return true
-  end
-  return false
+  return fs.file_exists(path)
 end
 
 -- Update the version in a file
@@ -139,7 +117,7 @@ local function update_version(file_config, new_version)
     return true
   end
   
-  local content, err = read_file(path)
+  local content, err = fs.read_file(path)
   if not content then
     logger.error("❌ Error reading file: " .. path .. " - " .. tostring(err))
     return false
@@ -188,7 +166,7 @@ local function update_version(file_config, new_version)
       end
     end
     
-    local success, write_err = write_file(path, new_content)
+    local success, write_err = fs.write_file(path, new_content)
     if not success then
       logger.error("❌ Error writing file: " .. path .. " - " .. tostring(write_err))
       return false
@@ -227,7 +205,7 @@ local function update_version(file_config, new_version)
       return true
     end
     
-    local success, write_err = write_file(path, new_content)
+    local success, write_err = fs.write_file(path, new_content)
     if not success then
       logger.error("❌ Error writing file: " .. path .. " - " .. tostring(write_err))
       return false
@@ -258,8 +236,8 @@ local function bump_version(new_version)
       -- Get the directory path
       local dir_path = version_file_path:match("(.+)/[^/]+$")
       if dir_path then
-        os.execute("mkdir -p " .. dir_path)
-        write_file(version_file_path, string.format("return \"%s\"", new_version))
+        fs.ensure_directory_exists(dir_path)
+        fs.write_file(version_file_path, string.format("return \"%s\"", new_version))
         logger.info("✅ Created version file: " .. version_file_path)
       else
         logger.error("❌ Could not determine directory path for: " .. version_file_path)

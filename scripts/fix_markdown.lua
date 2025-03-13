@@ -66,22 +66,18 @@ local function print_usage()
   os.exit(0)
 end
 
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+logger.debug("Loaded filesystem module", {version = fs._VERSION})
+
 -- Function to check if path is a directory
 local function is_directory(path)
-  local f = io.popen("cd \"" .. path .. "\" 2>/dev/null && echo ok || echo fail")
-  local result = f:read("*a")
-  f:close()
-  return result:match("ok") ~= nil
+  return fs.directory_exists(path)
 end
 
 -- Function to check if path is a file
 local function is_file(path)
-  local file = io.open(path, "r")
-  if file then
-    file:close()
-    return true
-  end
-  return false
+  return fs.file_exists(path)
 end
 
 -- Function to fix a single markdown file
@@ -91,14 +87,12 @@ local function fix_markdown_file(file_path, fix_mode)
     return false
   end
   
-  local file = io.open(file_path, "r")
-  if not file then
-    logger.error("Failed to open file for reading", {file_path = file_path})
+  -- Read file using filesystem module
+  local content, err = fs.read_file(file_path)
+  if not content then
+    logger.error("Failed to read file", {file_path = file_path, error = err})
     return false
   end
-  
-  local content = file:read("*all") or ""
-  file:close()
   
   -- Apply the requested fixes
   local fixed
@@ -122,22 +116,9 @@ local function fix_markdown_file(file_path, fix_mode)
   
   -- Only write back if there were changes
   if fixed ~= content then
-    file = io.open(file_path, "w")
-    if not file then
-      logger.error("Failed to open file for writing", {file_path = file_path, reason = "permission error"})
-      return false
-    end
-    
-    local success, err = pcall(function()
-      file:write(fixed)
-      file:close()
-    end)
-    
+    local success, write_err = fs.write_file(file_path, fixed)
     if not success then
-      logger.error("Error writing to file", {
-        file_path = file_path, 
-        error = err or "unknown error"
-      })
+      logger.error("Failed to write file", {file_path = file_path, error = write_err})
       return false
     end
     

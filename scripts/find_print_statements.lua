@@ -23,13 +23,9 @@ local logger = logging.get_logger("find_print_statements")
 -- Configure from config if possible
 logging.configure_from_config("find_print_statements")
 
--- Try to load the filesystem module
-local fs
-local ok, err = pcall(function() fs = require("lib.tools.filesystem") end)
-if not ok or not fs then
-  logger.error("Could not load filesystem module: " .. (err or "unknown error"))
-  os.exit(1)
-end
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+logger.debug("Loaded filesystem module", {version = fs._VERSION})
 
 -- Configuration
 local config = {
@@ -72,59 +68,42 @@ local function should_ignore_file(file_path)
   return false
 end
 
--- Helper function to get files from a directory using io.popen
-local function get_files_from_dir(dir)
-  local files = {}
-  local command = "find \"" .. dir .. "\" -type f -name \"*.lua\" 2>/dev/null"
-  local handle = io.popen(command)
-  if handle then
-    for file in handle:lines() do
-      table.insert(files, file)
-    end
-    handle:close()
-  end
-  return files
-end
-
 -- Function to find Lua files
 local function find_lua_files(dir, files)
   files = files or {}
   
-  -- Use a simple command to get all Lua files
-  local found_files = get_files_from_dir(dir)
+  logger.debug("Finding Lua files using filesystem module", {
+    directory = dir
+  })
   
-  -- Apply filters
-  for _, file_path in ipairs(found_files) do
-    -- Check if file should be excluded
-    local is_excluded = false
-    
-    -- Check excluded directories
-    for _, pattern in ipairs(config.excluded_dirs) do
-      if file_path:match(pattern) then
-        is_excluded = true
-        break
-      end
-    end
-    
+  -- Use filesystem module to discover files
+  local include_patterns = config.included_extensions
+  local exclude_patterns = config.excluded_dirs
+  
+  local all_files = fs.discover_files({dir}, include_patterns, exclude_patterns)
+  
+  -- Apply additional filters
+  for _, file_path in ipairs(all_files) do
     -- Check if file should be ignored
-    if not is_excluded and not should_ignore_file(file_path) then
+    if not should_ignore_file(file_path) then
       table.insert(files, file_path)
     end
   end
+  
+  logger.debug("Found Lua files", {
+    count = #files
+  })
   
   return files
 end
 
 -- Function to count print statements in a file
 local function count_print_statements(file_path)
-  local file, err = io.open(file_path, "r")
-  if not file then
-    logger.error("Could not open file: " .. file_path .. " - " .. (err or "unknown error"))
+  local content, err = fs.read_file(file_path)
+  if not content then
+    logger.error("Could not read file: " .. file_path .. " - " .. (err or "unknown error"))
     return 0
   end
-  
-  local content = file:read("*all")
-  file:close()
   
   -- Count matches for each pattern
   local count = 0
