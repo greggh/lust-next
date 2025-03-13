@@ -2,6 +2,7 @@
 local M = {}
 
 local logging = require("lib.tools.logging")
+local error_handler = require("lib.tools.error_handler")
 local logger = logging.get_logger("Reporting:Summary")
 
 -- Configure module logging
@@ -18,37 +19,94 @@ local DEFAULT_CONFIG = {
 
 -- Get configuration for Summary formatter
 local function get_config()
-  -- Try to load the reporting module for configuration access
-  local ok, reporting = pcall(require, "lib.reporting")
-  if ok and reporting.get_formatter_config then
-    local formatter_config = reporting.get_formatter_config("summary")
-    if formatter_config then
+  -- Try to load the reporting module for configuration access using error_handler.try
+  local success, reporting, reporting_err = error_handler.try(function()
+    return require("lib.reporting")
+  end)
+  
+  if success and reporting and reporting.get_formatter_config then
+    -- Try to get formatter config with error handling
+    local get_config_success, formatter_config, config_err = error_handler.try(function()
+      return reporting.get_formatter_config("summary")
+    end)
+    
+    if get_config_success and formatter_config then
       logger.debug("Using configuration from reporting module")
       return formatter_config
+    else
+      -- Log warning but continue with fallbacks
+      logger.warn("Failed to get formatter config from reporting module", {
+        formatter = "summary",
+        error = get_config_success and "No config returned" or error_handler.format_error(formatter_config)
+      })
     end
+  else
+    -- Log warning but continue with fallbacks
+    logger.warn("Failed to require reporting module", {
+      formatter = "summary",
+      error = success and "Module doesn't have get_formatter_config" or error_handler.format_error(reporting)
+    })
   end
   
-  -- If we can't get from reporting module, try central_config directly
-  local success, central_config = pcall(require, "lib.core.central_config")
-  if success then
-    local formatter_config = central_config.get("reporting.formatters.summary")
-    if formatter_config then
+  -- If we can't get from reporting module, try central_config directly with error handling
+  local central_success, central_config, central_err = error_handler.try(function()
+    return require("lib.core.central_config")
+  end)
+  
+  if central_success and central_config then
+    -- Try to get formatter config with error handling
+    local get_config_success, formatter_config, config_err = error_handler.try(function()
+      return central_config.get("reporting.formatters.summary")
+    end)
+    
+    if get_config_success and formatter_config then
       logger.debug("Using configuration from central_config")
       return formatter_config
+    else
+      -- Log warning but continue with fallback
+      logger.warn("Failed to get formatter config from central_config", {
+        formatter = "summary",
+        error = get_config_success and "No config returned" or error_handler.format_error(formatter_config)
+      })
     end
+  else
+    -- Log warning but continue with fallback
+    logger.warn("Failed to require central_config module", {
+      formatter = "summary",
+      error = central_success and "Module missing get function" or error_handler.format_error(central_config)
+    })
   end
   
   -- Fall back to default configuration
-  logger.debug("Using default configuration")
+  logger.debug("Using default configuration for summary formatter")
   return DEFAULT_CONFIG
 end
 
 -- Function to colorize output if enabled
 local function colorize(text, color_code, config)
+  -- Validate input parameters
+  if not text then
+    logger.warn("Missing text parameter in colorize", {
+      formatter = "summary",
+      color_code = color_code
+    })
+    return ""
+  end
+  
+  if not color_code then
+    logger.warn("Missing color_code parameter in colorize", {
+      formatter = "summary",
+      text = type(text) == "string" and text:sub(1, 20) .. (text:len() > 20 and "..." or "") or tostring(text)
+    })
+    return text
+  end
+  
+  -- Check if colorization is disabled in config
   if not config or config.colorize == false then
     return text
   end
   
+  -- Define available colors with error handling
   local colors = {
     reset = "\27[0m",
     red = "\27[31m",
@@ -61,13 +119,48 @@ local function colorize(text, color_code, config)
     bold = "\27[1m"
   }
   
-  return colors[color_code] .. text .. colors.reset
+  -- Handle invalid color codes gracefully
+  if not colors[color_code] then
+    logger.warn("Invalid color code in colorize", {
+      formatter = "summary",
+      color_code = color_code,
+      available_colors = "reset, red, green, yellow, blue, magenta, cyan, white, bold"
+    })
+    return text
+  end
+  
+  -- Use error_handler.try for string concatenation (rare but possible errors)
+  local success, result = error_handler.try(function()
+    return colors[color_code] .. tostring(text) .. colors.reset
+  end)
+  
+  if not success then
+    logger.warn("Failed to colorize text", {
+      formatter = "summary",
+      color_code = color_code,
+      error = error_handler.format_error(result)
+    })
+    return tostring(text)
+  end
+  
+  return result
 end
 
 -- Generate a summary coverage report from coverage data
 function M.format_coverage(coverage_data)
-  -- Get formatter configuration
-  local config = get_config()
+  -- Get formatter configuration with error handling
+  local get_config_success, config, config_err = error_handler.try(function()
+    return get_config()
+  end)
+  
+  if not get_config_success then
+    -- Log error and use default config
+    logger.error("Failed to get formatter configuration", {
+      formatter = "summary",
+      error = error_handler.format_error(config) -- config contains the error
+    })
+    config = DEFAULT_CONFIG
+  end
   
   logger.debug("Formatting coverage summary", {
     has_files = coverage_data and coverage_data.files ~= nil,
@@ -78,11 +171,19 @@ function M.format_coverage(coverage_data)
 
   -- Validate the input data to prevent runtime errors
   if not coverage_data then
-    logger.error("Missing coverage data", {
-      formatter = "summary",
-      data_type = type(coverage_data)
-    })
+    local err = error_handler.validation_error(
+      "Missing coverage data",
+      {
+        formatter = "summary",
+        data_type = type(coverage_data),
+        operation = "format_coverage"
+      }
+    )
+    logger.error(err.message, err.context)
+    
+    -- Return an empty report structure with zeros
     return {
+      output = "No coverage data available",
       files = {},
       total_files = 0,
       covered_files = 0,
@@ -97,11 +198,25 @@ function M.format_coverage(coverage_data)
     }
   end
   
-  -- Count files in a safer way
+  -- Count files in a safer way with error handling
   local file_count = 0
   if coverage_data.files then
-    for _ in pairs(coverage_data.files) do
-      file_count = file_count + 1
+    local count_success, count_result = error_handler.try(function()
+      local count = 0
+      for _ in pairs(coverage_data.files) do
+        count = count + 1
+      end
+      return count
+    end)
+    
+    if count_success then
+      file_count = count_result
+    else
+      logger.warn("Failed to count files in coverage data", {
+        formatter = "summary",
+        error = error_handler.format_error(count_result)
+      })
+      -- Continue with file_count = 0
     end
   end
   
@@ -124,33 +239,93 @@ function M.format_coverage(coverage_data)
     overall_percent = 0
   }
   
-  -- Prepare the summary data
+  -- Prepare the summary data with error handling for division operations
   local report = {
     files = coverage_data.files or {},
     total_files = summary.total_files or 0,
     covered_files = summary.covered_files or 0,
-    files_pct = summary.total_files > 0 and 
-                ((summary.covered_files or 0) / summary.total_files * 100) or 0,
+    files_pct = 0, -- Default value, calculated below with error handling
     
     total_lines = summary.total_lines or 0,
     covered_lines = summary.covered_lines or 0,
-    lines_pct = summary.total_lines > 0 and 
-               ((summary.covered_lines or 0) / summary.total_lines * 100) or 0,
+    lines_pct = 0, -- Default value, calculated below with error handling
     
     total_functions = summary.total_functions or 0,
     covered_functions = summary.covered_functions or 0,
-    functions_pct = summary.total_functions > 0 and 
-                   ((summary.covered_functions or 0) / summary.total_functions * 100) or 0,
+    functions_pct = 0, -- Default value, calculated below with error handling
     
     overall_pct = summary.overall_percent or 0,
   }
   
+  -- Calculate percentages with error handling
+  if summary.total_files and summary.total_files > 0 and summary.covered_files then
+    local calc_success, files_pct = error_handler.try(function()
+      return (summary.covered_files / summary.total_files) * 100
+    end)
+    
+    if calc_success then
+      report.files_pct = files_pct
+    else
+      logger.warn("Failed to calculate files coverage percentage", {
+        formatter = "summary",
+        covered = summary.covered_files,
+        total = summary.total_files,
+        error = error_handler.format_error(files_pct)
+      })
+    end
+  end
+  
+  if summary.total_lines and summary.total_lines > 0 and summary.covered_lines then
+    local calc_success, lines_pct = error_handler.try(function()
+      return (summary.covered_lines / summary.total_lines) * 100
+    end)
+    
+    if calc_success then
+      report.lines_pct = lines_pct
+    else
+      logger.warn("Failed to calculate lines coverage percentage", {
+        formatter = "summary",
+        covered = summary.covered_lines,
+        total = summary.total_lines,
+        error = error_handler.format_error(lines_pct)
+      })
+    end
+  end
+  
+  if summary.total_functions and summary.total_functions > 0 and summary.covered_functions then
+    local calc_success, functions_pct = error_handler.try(function()
+      return (summary.covered_functions / summary.total_functions) * 100
+    end)
+    
+    if calc_success then
+      report.functions_pct = functions_pct
+    else
+      logger.warn("Failed to calculate functions coverage percentage", {
+        formatter = "summary",
+        covered = summary.covered_functions,
+        total = summary.total_functions,
+        error = error_handler.format_error(functions_pct)
+      })
+    end
+  end
+  
   -- Format summary as a string based on configuration
   local output = {}
   
-  -- Add header
-  table.insert(output, colorize("Coverage Summary", "bold", config))
-  table.insert(output, colorize("----------------", "bold", config))
+  -- Add header with error handling
+  local add_header_success, _ = error_handler.try(function()
+    table.insert(output, colorize("Coverage Summary", "bold", config))
+    table.insert(output, colorize("----------------", "bold", config))
+    return true
+  end)
+  
+  if not add_header_success then
+    logger.warn("Failed to add header to coverage summary", {
+      formatter = "summary"
+    })
+    -- Continue with empty output array
+    output = {}
+  end
   
   -- Make sure config has valid thresholds
   local min_coverage_ok = config.min_coverage_ok or DEFAULT_CONFIG.min_coverage_ok
@@ -164,50 +339,135 @@ function M.format_coverage(coverage_data)
     overall_color = "yellow"
   end
   
-  -- Add overall coverage percentage
-  table.insert(output, string.format("Overall Coverage: %s", 
-                                    colorize(string.format("%.1f%%", report.overall_pct), overall_color, config)))
+  -- Add overall coverage percentage with error handling
+  local add_overall_success, _ = error_handler.try(function()
+    table.insert(output, string.format("Overall Coverage: %s", 
+      colorize(string.format("%.1f%%", report.overall_pct), overall_color, config)))
+    return true
+  end)
   
-  -- Add detailed stats
-  table.insert(output, string.format("Files: %s/%s (%.1f%%)", 
-    report.covered_files, report.total_files, report.files_pct))
-  table.insert(output, string.format("Lines: %s/%s (%.1f%%)", 
-    report.covered_lines, report.total_lines, report.lines_pct))
-  table.insert(output, string.format("Functions: %s/%s (%.1f%%)", 
-    report.covered_functions, report.total_functions, report.functions_pct))
+  if not add_overall_success then
+    logger.warn("Failed to add overall coverage to summary", {
+      formatter = "summary",
+      overall_pct = report.overall_pct
+    })
+    -- Add a simpler version as fallback
+    table.insert(output, "Overall Coverage: " .. tostring(report.overall_pct) .. "%")
+  end
   
-  -- Add detailed file information if configured
+  -- Add detailed stats with error handling
+  local add_stats_success, _ = error_handler.try(function()
+    table.insert(output, string.format("Files: %s/%s (%.1f%%)", 
+      report.covered_files, report.total_files, report.files_pct))
+    table.insert(output, string.format("Lines: %s/%s (%.1f%%)", 
+      report.covered_lines, report.total_lines, report.lines_pct))
+    table.insert(output, string.format("Functions: %s/%s (%.1f%%)", 
+      report.covered_functions, report.total_functions, report.functions_pct))
+    return true
+  end)
+  
+  if not add_stats_success then
+    logger.warn("Failed to add detailed stats to coverage summary", {
+      formatter = "summary"
+    })
+    -- Add simpler versions as fallback
+    table.insert(output, "Files: " .. tostring(report.covered_files) .. "/" .. tostring(report.total_files))
+    table.insert(output, "Lines: " .. tostring(report.covered_lines) .. "/" .. tostring(report.total_lines))
+    table.insert(output, "Functions: " .. tostring(report.covered_functions) .. "/" .. tostring(report.total_functions))
+  end
+  
+  -- Add detailed file information if configured with error handling
   if config.show_files and config.detailed and report.files then
-    table.insert(output, "")
-    table.insert(output, colorize("File Details", "bold", config))
-    table.insert(output, colorize("------------", "bold", config))
+    local add_detail_header_success, _ = error_handler.try(function()
+      table.insert(output, "")
+      table.insert(output, colorize("File Details", "bold", config))
+      table.insert(output, colorize("------------", "bold", config))
+      return true
+    end)
     
-    local files_list = {}
-    for file_path, file_data in pairs(report.files) do
-      table.insert(files_list, {
-        path = file_path,
-        pct = file_data.line_coverage_percent or 0
+    if not add_detail_header_success then
+      logger.warn("Failed to add detail header to coverage summary", {
+        formatter = "summary"
       })
-    end
-    
-    -- Sort files by coverage percentage (ascending)
-    table.sort(files_list, function(a, b) return a.pct < b.pct end)
-    
-    for _, file in ipairs(files_list) do
-      local file_color = "red"
-      if file.pct >= config.min_coverage_ok then
-        file_color = "green"
-      elseif file.pct >= config.min_coverage_warn then
-        file_color = "yellow"
+      -- Skip file details section
+    else
+      -- Continue with file details
+      local files_list = {}
+      
+      -- Build file list with error handling
+      local build_list_success, _ = error_handler.try(function()
+        for file_path, file_data in pairs(report.files) do
+          table.insert(files_list, {
+            path = file_path,
+            pct = file_data.line_coverage_percent or 0
+          })
+        end
+        return true
+      end)
+      
+      if not build_list_success then
+        logger.warn("Failed to build file list for coverage summary", {
+          formatter = "summary"
+        })
+        -- Continue with empty files_list
       end
       
-      table.insert(output, string.format("%s: %s", 
-        file.path, colorize(string.format("%.1f%%", file.pct), file_color, config)))
+      -- Sort files by coverage percentage with error handling
+      local sort_success, _ = error_handler.try(function()
+        table.sort(files_list, function(a, b) return a.pct < b.pct end)
+        return true
+      end)
+      
+      if not sort_success then
+        logger.warn("Failed to sort file list for coverage summary", {
+          formatter = "summary",
+          files_count = #files_list
+        })
+        -- Continue with unsorted files_list
+      end
+      
+      -- Add each file with error handling
+      for _, file in ipairs(files_list) do
+        local add_file_success, _ = error_handler.try(function()
+          local file_color = "red"
+          if file.pct >= config.min_coverage_ok then
+            file_color = "green"
+          elseif file.pct >= config.min_coverage_warn then
+            file_color = "yellow"
+          end
+          
+          table.insert(output, string.format("%s: %s", 
+            file.path, colorize(string.format("%.1f%%", file.pct), file_color, config)))
+          return true
+        end)
+        
+        if not add_file_success then
+          logger.warn("Failed to add file to coverage summary", {
+            formatter = "summary",
+            file_path = tostring(file.path)
+          })
+          -- Continue with next file
+        end
+      end
     end
   end
   
-  -- Prepare the formatted output string
-  local formatted_output = table.concat(output, "\n")
+  -- Prepare the formatted output string with error handling
+  local formatted_output
+  local format_success, concat_result = error_handler.try(function()
+    return table.concat(output, "\n")
+  end)
+  
+  if format_success then
+    formatted_output = concat_result
+  else
+    logger.error("Failed to format coverage summary output", {
+      formatter = "summary",
+      output_length = #output,
+      error = error_handler.format_error(concat_result)
+    })
+    formatted_output = "Error formatting coverage summary"
+  end
   
   -- Return both the formatted string and structured data for programmatic use
   return {
