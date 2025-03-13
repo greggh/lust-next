@@ -1,316 +1,405 @@
-# lust-next Test Framework Guide
+# Test Framework Guide for lust-next
 
-## Overview
+## Introduction
 
-This document provides a comprehensive guide to the lust-next testing framework, detailing its features, available functions, proper usage patterns, and best practices. It serves as the definitive reference for writing and maintaining tests in the lust-next project.
+This guide provides a comprehensive overview of the lust-next test framework, including its architecture, components, and usage patterns. It serves as both a reference for contributors and a guide for users writing tests.
 
-## How Testing Works in lust-next
+## Framework Architecture
 
-### Test File Structure
+lust-next is a behavior-driven development (BDD) test framework for Lua, featuring a rich set of testing capabilities:
 
-A test file in lust-next follows this general structure:
+1. **Core Testing Functionality**:
+   - Nested test blocks with `describe` and `it`
+   - Setup and teardown hooks with `before` and `after`
+   - Rich assertion library with chainable syntax
+
+2. **Advanced Features**:
+   - Comprehensive mocking system
+   - Asynchronous testing support
+   - Test tagging and filtering
+   - Code coverage analysis
+   - Test quality validation
+
+3. **Output and Reporting**:
+   - Multiple output formats (TAP, CSV, XML, JSON)
+   - HTML coverage reports
+   - Test result summaries
+   - Custom formatter support
+
+### Component Overview
+
+The test framework consists of several key components:
+
+1. **Test Runner** (`test.lua`):
+   - Entry point for executing tests
+   - Processes command-line options
+   - Manages test discovery and execution
+
+2. **Test Discovery System**:
+   - Finds test files in specified directories
+   - Supports pattern-based filtering
+   - Detects test functions and blocks
+
+3. **Core Framework** (`lust-next.lua`):
+   - Defines core testing functions
+   - Manages test state and lifecycle
+   - Provides assertion functions
+
+4. **Coverage System**:
+   - Tracks code execution during tests
+   - Identifies executable vs. non-executable lines
+   - Generates coverage reports
+
+5. **Output System**:
+   - Formats test results for various outputs
+   - Supports console and file-based reporting
+   - Integrates with continuous integration systems
+
+## Using the Framework
+
+### Running Tests
+
+All tests are executed through the unified `test.lua` interface:
+
+```bash
+lua test.lua [options] [path]
+```
+
+Where:
+- `[options]` are command-line flags that modify test behavior
+- `[path]` is a file or directory to test (automatically detected)
+
+Common options include:
+
+| Option | Description |
+|--------|-------------|
+| `--coverage` | Enable code coverage tracking |
+| `--quality` | Enable test quality validation |
+| `--pattern=<pattern>` | Filter test files by pattern |
+| `--watch` | Enable continuous testing on file changes |
+| `--format=<format>` | Specify output format (tap, csv, json, etc.) |
+| `--verbose` | Show more detailed output |
+| `--help` | Show all available options |
+
+Examples:
+
+```bash
+# Run all tests
+lua test.lua tests/
+
+# Run a specific test file
+lua test.lua tests/reporting_test.lua
+
+# Run tests with coverage tracking
+lua test.lua --coverage tests/
+
+# Run tests with a specific pattern
+lua test.lua --pattern=coverage tests/
+
+# Run tests with continuous testing
+lua test.lua --watch tests/
+
+# Run tests with quality validation
+lua test.lua --quality tests/
+```
+
+### Writing Tests
+
+#### Basic Test Structure
 
 ```lua
--- Basic test file structure
-local lust = require("lust-next")  -- or require("../lust-next") for relative paths
+-- Import lust-next
+local lust = require "lust-next"
+
+-- Import test functions
 local describe, it, expect = lust.describe, lust.it, lust.expect
 
--- Optional lifecycle hooks
+-- Optional: import test lifecycle hooks
 local before, after = lust.before, lust.after
 
-describe("Component Name", function()
-  -- Setup code if needed
-  before(function()
-    -- Setup code that runs before each test in this block
-  end)
+-- Import module to test
+local module_to_test = require "path.to.module"
 
-  -- Test cases
-  it("should do something specific", function()
-    -- Test implementation
-    local result = someFunction()
-    expect(result).to.equal(expectedValue)
-  end)
-
-  it("should handle edge cases", function()
-    -- Another test case
-    expect(someFunction("edge case")).to_not.be.nil()
-  end)
-
-  -- Cleanup code if needed
-  after(function()
-    -- Cleanup code that runs after each test in this block
-  end)
-end)
-
--- NO explicit lust() or lust.run() call is needed
--- Tests are run by the test runner (run_all_tests.lua)
-```
-
-### Test Execution
-
-There are two ways to run tests in the lust-next project:
-
-1. **Individual Test Files** (using scripts/runner.lua):
-   ```bash
-   lua scripts/runner.lua tests/your_test_file.lua
-   ```
-   This method is preferred during development when you're working on a specific component and want quick feedback.
-
-2. **Complete Test Suite** (using run_all_tests.lua):
-   ```bash
-   lua run_all_tests.lua
-   ```
-   This method runs all tests and is ideal for comprehensive verification before commits or during CI/CD.
-
-Both runners work by:
-1. Loading each test file using `loadfile()` or `dofile()`
-2. Executing the file, which registers tests with the framework
-3. Collecting and reporting test results
-
-The actual execution of tests occurs when a test file is loaded and executed, not because of an explicit call to run tests within the file. Therefore, you should never include calls to `lust()` or `lust.run()` in your test files.
-
-## Test API Reference
-
-### Core Testing Functions
-
-The primary functions for defining tests:
-
-| Function | Description |
-|----------|-------------|
-| `describe(name, fn)` | Creates a test group with the given name |
-| `it(name, fn)` | Defines a single test case within a describe block |
-| `expect(value)` | Creates an assertion chain for validating values |
-| `pending(message)` | Marks a test as pending/incomplete |
-
-### Test Lifecycle Functions
-
-Functions for setup and teardown:
-
-| Function | Description |
-|----------|-------------|
-| `before(fn)` | Runs before each test in the current describe block |
-| `after(fn)` | Runs after each test in the current describe block |
-| `before_each(fn)` | Alias for before() |
-| `after_each(fn)` | Alias for after() |
-
-Note: While `before_all` and `after_all` are mentioned in some documentation, they are **not implemented** in the current version of lust-next. Use `before` and `after` instead.
-
-### Focused and Excluded Tests
-
-Functions for selectively running tests:
-
-| Function | Description |
-|----------|-------------|
-| `fdescribe(name, fn)` | Focused describe - only run this and other focused tests |
-| `fit(name, fn)` | Focused test - only run this and other focused tests |
-| `xdescribe(name, fn)` | Excluded describe - skip this entire group |
-| `xit(name, fn)` | Excluded test - skip this test case |
-
-### Asynchronous Testing
-
-Functions for async tests (requires async module):
-
-| Function | Description |
-|----------|-------------|
-| `async(fn)` | Wraps a function for async execution |
-| `await(ms)` | Waits for the specified time in milliseconds |
-| `wait_until(condition, timeout)` | Waits until a condition is true or timeout |
-| `parallel_async(fns)` | Runs multiple async functions in parallel |
-| `it_async(name, fn)` | Defines an asynchronous test case |
-
-### Common Assertions
-
-Available assertion methods:
-
-| Assertion | Description |
-|-----------|-------------|
-| `expect(value).to.equal(expected)` | Checks equality |
-| `expect(value).to.be(expected)` | Alias for equal |
-| `expect(value).to.exist()` | Checks that value is not nil |
-| `expect(value).to.be.truthy()` | Checks for truthy value (not nil or false) |
-| `expect(value).to.be.falsey()` | Checks for falsy value (nil or false) |
-| `expect(fn).to.fail()` | Checks if a function raises an error |
-| `expect(fn).to.fail.with(message)` | Checks if function fails with specific message |
-| `expect(table).to.have(item)` | Checks if item is in table |
-| `expect(value).to.be.a(type)` | Checks type (e.g., "string", "number") |
-| `expect(string).to.match(pattern)` | Checks string against pattern |
-
-All assertions can be negated with `to_not` instead of `to`:
-
-```lua
-expect(value).to_not.equal(unexpected)
-```
-
-## Common Testing Patterns
-
-### Test File Organization
-
-```lua
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-
--- Group tests by functionality
-describe("Component", function()
-  -- Subgroup for specific feature
-  describe("Feature", function()
-    -- Test cases for this feature
-    it("should handle normal input", function() end)
-    it("should handle edge cases", function() end)
+-- Top-level test suite
+describe("ModuleName", function()
+  -- Test case
+  it("should perform a specific function", function()
+    local result = module_to_test.function()
+    expect(result).to.equal(expected_value)
   end)
   
-  -- Another subgroup
-  describe("Another Feature", function()
-    it("should work correctly", function() end)
+  -- Nested test group
+  describe("SubComponent", function()
+    -- More specific tests
+    it("should handle specific case", function()
+      expect(module_to_test.sub_function()).to.be_truthy()
+    end)
   end)
 end)
 ```
 
-### Temporary File Management
+#### Test Lifecycle Hooks
 
 ```lua
-local test_files = {}
-
--- Create temporary files for testing
-before(function()
-  local temp_file = "test_file.tmp"
-  local file = io.open(temp_file, "w")
-  file:write("Test content")
-  file:close()
-  table.insert(test_files, temp_file)
-end)
-
--- Clean up files after tests
-after(function()
-  for _, file_path in ipairs(test_files) do
-    os.remove(file_path)
-  end
+describe("Module with state", function()
+  local instance
+  
+  -- Runs before each test in this describe block
+  before(function()
+    instance = module.create()
+  end)
+  
+  -- Runs after each test in this describe block
+  after(function()
+    instance:cleanup()
+    instance = nil
+  end)
+  
+  it("should perform operation", function()
+    -- instance is available here
+    local result = instance:operation()
+    expect(result).to.equal(expected)
+  end)
 end)
 ```
 
-### Mocking and Isolation
+#### Assertions
+
+lust-next uses expect-style assertions with a chainable syntax:
 
 ```lua
--- Simple function mocking
-local original_function = some_module.function_name
-some_module.function_name = function() return mock_result end
+-- Basic assertions
+expect(value).to.exist()              -- value is not nil
+expect(actual).to.equal(expected)     -- equality check
+expect(value).to.be.a("string")       -- type check
+expect(value).to.be_truthy()          -- truthy check
+expect(string_value).to.match(pattern) -- pattern matching
+expect(function_that_errors).to.fail() -- error check
 
--- Restore after test
-after(function()
-  some_module.function_name = original_function
+-- Negated assertions
+expect(value).to_not.exist()          -- value is nil
+expect(a).to_not.equal(b)             -- inequality check
+expect(value).to_not.be_truthy()      -- falsey check
+```
+
+For detailed assertion patterns and examples, see [Assertion Pattern Mapping](assertion_pattern_mapping.md).
+
+### Test Organization
+
+#### File Structure
+
+Test files should follow a consistent structure:
+
+```
+tests/                      # Main test directory
+├── module_name_test.lua    # Tests for a specific module
+├── another_module_test.lua # Tests for another module
+├── fixtures/               # Test fixtures directory
+│   ├── test_data.lua       # Test data
+│   └── mocks/              # Mock implementations
+│       └── dependency.lua  # Mock of a dependency
+└── ...
+```
+
+#### Test Naming Conventions
+
+- Test file names: `module_name_test.lua`
+- Test suite names: Descriptive of the module being tested
+- Test case names: Start with "should" and describe expected behavior
+
+#### Group Organization
+
+Group related tests using nested `describe` blocks:
+
+```lua
+describe("Calculator", function()
+  describe("basic operations", function()
+    it("should add numbers", function() end)
+    it("should subtract numbers", function() end)
+  end)
+  
+  describe("advanced operations", function()
+    it("should calculate square root", function() end)
+    it("should handle complex expressions", function() end)
+  end)
+  
+  describe("error handling", function()
+    it("should throw on division by zero", function() end)
+    it("should handle invalid input", function() end)
+  end)
 end)
 ```
+
+## Advanced Features
+
+### Mocking
+
+lust-next provides a powerful mocking system:
+
+```lua
+local mock = lust.mock
+local spy = lust.spy
+local stub = lust.stub
+
+describe("Module with dependencies", function()
+  local original_dependency
+  
+  before(function()
+    -- Store original and replace with mock
+    original_dependency = package.loaded["module.dependency"]
+    package.loaded["module.dependency"] = mock({
+      function_name = function(arg) return "mocked " .. arg end
+    })
+  end)
+  
+  after(function()
+    -- Restore original
+    package.loaded["module.dependency"] = original_dependency
+  end)
+  
+  it("should use dependency correctly", function()
+    local result = module_under_test.function_that_uses_dependency("input")
+    expect(result).to.equal("processed mocked input")
+  end)
+end)
+```
+
+### Async Testing
+
+For asynchronous code, use the async testing support:
+
+```lua
+local async = lust.async
+
+describe("Asynchronous operations", function()
+  it("should complete callback operation", async(function(done)
+    async_function(function(result)
+      expect(result).to.equal(expected)
+      done() -- Signal test completion
+    end)
+  end))
+  
+  it("should time out after specified period", async(function(done)
+    -- This test will automatically fail if done() isn't called within 100ms
+    async_function_that_never_calls_back(function(result)
+      done()
+    end)
+  end, 100)) -- 100ms timeout
+end)
+```
+
+### Tagging and Filtering
+
+Tests can be tagged for selective execution:
+
+```lua
+describe("Feature A", {"feature-a", "core"}, function()
+  it("should work", function() end)
+end)
+
+describe("Feature B", {"feature-b", "integration"}, function()
+  it("should also work", function() end)
+end)
+```
+
+Run with:
+```bash
+lua test.lua --tags=core tests/
+```
+
+### Code Coverage
+
+Code coverage tracking can be enabled with the `--coverage` option:
+
+```bash
+lua test.lua --coverage tests/
+```
+
+This will track line execution and generate coverage reports.
+
+### Quality Validation
+
+Test quality validation helps ensure test thoroughness:
+
+```bash
+lua test.lua --quality tests/
+```
+
+This will check for:
+- Assertion count
+- Branch coverage
+- Test specificity
+- Error case coverage
 
 ## Best Practices
 
-1. **Test Independence**: Each test should be independent and not rely on state from other tests
-2. **Descriptive Names**: Use descriptive names for describe blocks and test cases
-3. **Test One Thing**: Each test should verify one specific behavior
-4. **Cover Edge Cases**: Test normal conditions and edge cases
-5. **Clean Up Resources**: Always clean up any resources created during tests
-6. **Avoid Global State**: Don't rely on or modify global state in tests
-7. **Test Public API**: Focus on testing the public API of modules
-8. **Mock External Dependencies**: Use mocks for external systems and dependencies
+### Test Isolation
 
-## Troubleshooting Common Issues
+1. **Independent Tests**: Each test should run independently
+2. **Clean Environment**: Reset state between tests with before/after hooks
+3. **Mock External Systems**: Don't rely on external systems in tests
 
-1. **Test File Not Found**: Ensure the file path is correct relative to where tests are run
-2. **Module Not Found**: Check require paths; use relative paths if needed
-3. **Assertion Failures**: Check that expected and actual values match exactly (including type)
-4. **Hanging Tests**: Async tests might hang; check for missing callbacks or timeouts
-5. **State Leakage**: Tests affecting each other usually indicate incomplete cleanup
-6. **Function Not Available**: Verify that the function exists in the version you're using
+### Assertion Best Practices
 
-## Migration Guide for Older Tests
+1. **Be Specific**: Test precise behaviors, not implementation details
+2. **One Concept Per Test**: Each test should verify one specific concept
+3. **Clear Failure Messages**: Use descriptive test names and assertions
 
-When updating older tests to work with the current lust-next version:
+### Mocking Best Practices
 
-1. **Check Import Path**: Make sure require("lust-next") is correct
-2. **Verify Test Functions**: Use local describe, it, expect = lust.describe, lust.it, lust.expect
-3. **Use Local Variables**: Don't rely on global state
-4. **Remove Direct Run Calls**: Remove any calls to lust() or lust.run()
-5. **Check Lifecycle Functions**: Use before/after instead of before_all/after_all
-6. **Update Assertions**: Make sure assertions use the current syntax
+1. **Mock at Boundaries**: Mock at module boundaries, not internal functions
+2. **Verify Interactions**: Check that mocks were called correctly
+3. **Restore Original State**: Always clean up mocks in after hooks
 
-## Specific Module Testing Guides
+### Performance Considerations
 
-### Testing Coverage Module
+1. **Focused Tests**: Run only the tests you need during development
+2. **Mock Heavy Operations**: Use mocks for database/network/filesystem
+3. **Use Watch Mode**: For faster feedback during development
 
-```lua
-describe("Coverage Module", function()
-  -- Reset before each test to avoid state leakage
-  before(function()
-    coverage.reset()
-  end)
-  
-  it("should track executed lines", function()
-    coverage.start()
-    -- Code being tested
-    coverage.stop()
-    
-    local report_data = coverage.get_report_data()
-    -- Assertions about coverage data
-  end)
-end)
-```
+## Troubleshooting
 
-### Testing Instrumentation
+### Common Issues
 
-```lua
-describe("Instrumentation", function()
-  it("should instrument code correctly", function()
-    local instrumentation = require("lib.coverage.instrumentation")
-    
-    -- Create test file
-    local test_file = create_test_file("local x = 1")
-    
-    -- Instrument it
-    local result = instrumentation.instrument_file(test_file)
-    
-    -- Verify instrumentation added tracking code
-    expect(result).to.contain("track_line")
-    
-    -- Clean up
-    cleanup_test_file(test_file)
-  end)
-end)
-```
+1. **Tests Not Running**:
+   - Check file path and test naming
+   - Verify imports are correct
+   - Check for syntax errors
 
-## Test Runner Usage
+2. **Assertion Failures**:
+   - Check parameter order (expect(actual).to.equal(expected))
+   - Verify assertion syntax (use .to.be.a() not .to_be_a())
+   - Check for deep equality issues with tables
 
-### Individual Test Files (scripts/runner.lua)
+3. **Missing Functions**:
+   - Ensure correct imports from lust-next
+   - Check for typos in function names
+   - Verify you're not using functions that don't exist (like lust.run())
 
-To run a specific test file:
+### Debugging Tests
 
-```bash
-lua scripts/runner.lua tests/your_test_file.lua
-```
+For debugging failing tests:
 
-Options for runner.lua:
-| Option | Description |
-|--------|-------------|
-| `--json` | Output results in JSON format |
-| `--verbose` | Show verbose output |
+1. **Add Verbose Logging**:
+   ```bash
+   lua test.lua --verbose tests/failing_test.lua
+   ```
 
-### Full Test Suite (run_all_tests.lua)
+2. **Use Print Statements**: Add temporary print statements to see variable values
 
-To run all tests:
+3. **Isolate Test Cases**: Run a specific test to isolate the issue:
+   ```bash
+   lua test.lua --pattern="should handle specific case" tests/failing_test.lua
+   ```
 
-```bash
-lua run_all_tests.lua
-```
+## Conclusion
 
-To run specific test files with the full runner:
+The lust-next testing framework provides a comprehensive solution for testing Lua code with a focus on readability, flexibility, and power. By following the patterns and practices in this guide, you'll create tests that are easier to maintain and enhance the reliability of your code.
 
-```bash
-lua run_all_tests.lua tests/specific_test.lua
-```
+For detailed assertion examples and patterns, see the [Assertion Pattern Mapping](assertion_pattern_mapping.md) document.
 
-Options for run_all_tests.lua:
-| Option | Description |
-|--------|-------------|
-| `--verbose` or `-v` | Enable verbose output |
-| `--memory` or `-m` | Track memory usage |
-| `--performance` or `-p` | Show performance statistics |
-| `--coverage` or `-c` | Enable coverage analysis |
-| `--quality` or `-q` | Enable quality validation |
-| `--filter PATTERN` | Only run tests matching pattern |
+For specific guidance on testing the coverage module and other components, see the [Testing Guide](testing_guide.md).
+
+## Last Updated
+
+2025-03-13

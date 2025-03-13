@@ -47,10 +47,10 @@ end)
 ```text
 
 ### 2. Run the Test
-Run the test using the Lua interpreter:
+Run the test using the lust-next runner script:
 
 ```bash
-lua example_test.lua
+lua scripts/runner.lua example_test.lua
 
 ```text
 You should see output similar to:
@@ -62,6 +62,7 @@ Math operations
  PASS raises an error when dividing by zero
 
 ```text
+Note: Tests are run by `scripts/runner.lua` or `run_all_tests.lua`, not by directly executing the test file.
 
 ## Writing Tests
 
@@ -97,22 +98,33 @@ expect(function() error("invalid") end).to.throw.error_matching("invalid")
 ```text
 
 ### Before and After Hooks
-You can use `before` and `after` hooks for setup and teardown:
+First import the hooks, then use them for setup and teardown:
 
 ```lua
+-- Import hooks along with other test functions
+local lust = require("lust-next")
+local describe, it, expect = lust.describe, lust.it, lust.expect
+local before, after = lust.before, lust.after
+
 describe("Database tests", function()
   local db
   before(function()
     -- Set up database connection before each test
     db = Database.connect()
+    -- Use structured logging for setup information
+    lust.log.debug({ message = "Database connected", connection_id = db.id })
   end)
+  
   it("queries data", function()
     local result = db:query("SELECT * FROM users")
     expect(#result).to.be_greater_than(0)
   end)
+  
   after(function()
     -- Clean up after each test
     db:disconnect()
+    -- Log cleanup operations
+    lust.log.debug({ message = "Database disconnected" })
   end)
 end)
 
@@ -164,7 +176,7 @@ end)
 ### Running a Single Test File
 
 ```bash
-lua example_test.lua
+lua scripts/runner.lua tests/example_test.lua
 
 ```text
 
@@ -172,7 +184,7 @@ lua example_test.lua
 Create a directory for your tests (e.g., `tests`) and use Lust-Next's test discovery:
 
 ```bash
-lua lust-next.lua --dir ./tests
+lua run_all_tests.lua --dir ./tests
 
 ```text
 
@@ -180,13 +192,21 @@ lua lust-next.lua --dir ./tests
 Run only tests with specific tags:
 
 ```bash
-lua lust-next.lua --tags unit
+lua scripts/runner.lua --tags unit tests/example_test.lua
 
 ```text
 Run only tests matching a pattern:
 
 ```bash
-lua lust-next.lua --filter authentication
+lua scripts/runner.lua --filter authentication tests/example_test.lua
+
+```text
+
+### Running Tests with Watch Mode
+For continuous testing that automatically reruns tests when files change:
+
+```bash
+lua scripts/runner.lua --watch tests/example_test.lua
 
 ```text
 
