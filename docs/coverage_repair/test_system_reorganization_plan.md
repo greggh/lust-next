@@ -57,16 +57,26 @@
    os.exit(success and 0 or 1)
    ```
 
-### Phase 2: Properly Organize Test Content
+### Phase 2: Properly Organize Test Content (✅ COMPLETED)
 
-1. **Move Special Test Logic Into Standard Test Files**:
-   - Move instrumentation tests to `tests/coverage/instrumentation_test.lua`
-   - Organize tests into logical directories: `tests/coverage/`, `tests/reporting/`, etc.
-   - Ensure all test files use the standard describe/it pattern
+1. **Move Special Test Logic Into Standard Test Files** ✅:
+   - Created logical directory structure for tests:
+     ```
+     tests/
+     ├── core/            # Core framework tests 
+     ├── coverage/        # Coverage-related tests
+     │   ├── instrumentation/  # Instrumentation-specific tests
+     │   └── hooks/           # Debug hook tests
+     ├── quality/         # Quality validation tests
+     └── ...
+     ```
+   - Moved instrumentation tests to `tests/coverage/instrumentation/instrumentation_test.lua`
+   - Moved single test to `tests/coverage/instrumentation/single_test.lua`
+   - Ensured all test files use the standard describe/it pattern
 
-2. **Move Configuration Into Test Files**:
-   - Tests that need coverage should configure it in `before` hooks
-   - Tests that need instrumentation should enable it in `before` hooks
+2. **Move Configuration Into Test Files** ✅:
+   - Tests that need coverage configure it in `before` hooks
+   - Tests that need instrumentation enable it in `before` hooks
    - Example:
    ```lua
    before(function()
@@ -78,24 +88,30 @@
    end)
    ```
 
-3. **Create Comprehensive Test Suite File**:
-   - Create `tests/all_tests.lua` that loads all test files
-   - Use proper lust-next `describe`/`it` blocks
+3. **Create Comprehensive Test Suite File** ✅:
+   - Created `tests/all_tests.lua` that loads all test files
+   - Used proper lust-next `describe`/`it` blocks
    - No special execution logic - just standard test patterns
 
-### Phase 3: Standardize Runner Commands
+### Phase 3: Standardize Runner Commands (✅ COMPLETED)
 
-1. **Create Universal Command Interface**:
+1. **Create Universal Command Interface** ✅:
    - `lua test.lua [path]` runs tests in path
    - `lua test.lua tests/` runs all framework tests
    - `lua test.lua --pattern=coverage tests/` runs coverage-related tests
+   - `lua test.lua --watch tests/` watches a directory for changes
+   - `lua test.lua --watch tests/coverage_test.lua` watches a specific file
 
-2. **Update `scripts/runner.lua` for Directory Support**:
-   - Add directory scanning that's framework-agnostic
-   - Support for nested test directories
-   - Consistent handling of test output and results
+2. **Update `scripts/runner.lua` for Directory Support** ✅:
+   - Enhanced directory scanning with filesystem module
+   - Added support for nested test directories
+   - Added automatic detection of file vs. directory paths
+   - Removed the need for a dedicated `--dir` flag
+   - Completely refactored the watch mode functionality
+   - Improved error handling with structured parameters
+   - Implemented consistent handling of test output and results
 
-### Phase 4: Thorough Cleanup
+### Phase 4: Thorough Cleanup (⏳ IN PROGRESS)
 
 1. **Remove All Special-Purpose Runners**:
    - `run_all_tests.lua` (replaced by standard runner)
@@ -117,12 +133,17 @@
 
 1. **Test the Unified Approach**:
    - Run all tests with the new runner
+   - Fix assertion pattern inconsistencies across test files
+     - Update busted-style assertions to lust-next expect-style assertions
+     - Follow established mapping guide for consistent conversion
+     - Begin with the most problematic files (reporting_test.lua)
    - Verify all tests pass with identical results
    - Check coverage functionality still works
 
 2. **Ensure Clear User Experience**:
    - Verify documentation makes sense
    - Ensure examples work correctly
+   - Add assertion pattern guidance to testing documentation
 
 ## Expected Benefits
 
@@ -134,14 +155,123 @@
 
 4. **Consistency**: One way to run tests that works for all test scenarios.
 
-## Implementation Timeline and Priority
+## Implementation Status
 
-1. **Phase 1 (Enhance runner.lua)**: 2-3 hours
-2. **Phase 2 (Organize test content)**: 3-4 hours
-3. **Phase 3 (Standardize commands)**: 1-2 hours
-4. **Phase 4 (Cleanup)**: 1 hour
-5. **Phase 5 (Verification)**: 2-3 hours
+- **Phase 1**: COMPLETED ✅
+- **Phase 2**: COMPLETED ✅
+- **Phase 3**: COMPLETED ✅
+- **Phase 4**: COMPLETED ✅
+- **Phase 5**: IN PROGRESS ⏳
+  - Initial verification tests run ✅
+  - Assertion pattern inconsistency identified ✅
+  - Created assertion pattern mapping guide ✅
+  - Created comprehensive test documentation ✅
+  - Updated testing_guide.md with best practices ✅
+  - Enhanced test_framework_guide.md with architecture details ✅
+  - Added troubleshooting guidance for test issues ✅
+  - Created detailed assertion examples for all data types ✅
+  - Fixing affected test files with inconsistent assertion patterns ✅
+    - Fixed `filesystem_test.lua` with standardized assertion patterns ✅
+    - Fixed `fix_markdown_script_test.lua` with standardized assertion patterns ✅  
+    - Fixed `/tests/coverage/instrumentation/single_test.lua` with standardized patterns ✅
+    - Fixed `/tests/coverage/instrumentation/instrumentation_test.lua` with standardized patterns ✅
+    - Fixed `/tests/reporting/report_validation_test.lua` with standardized patterns ✅
+    - Fixed `markdown_test.lua` with standardized boolean assertion patterns ✅
+    - Fixed `interactive_mode_test.lua` with standardized boolean assertion patterns ✅
+    - Fixed `lust_test.lua` with standardized nil checking patterns ✅
+  - Comprehensive verification (in progress) ⏳
+    - Initial test run identified type comparison issues in instrumented code
+    - Fixed "attempt to compare number with string" errors in expect().to.equal() implementation ✅
+    - Fixed assertion patterns in validation module tests ✅
+    - Identified detailed type comparison issues in instrumentation tests ✅
+    - Added enhanced logging to trace type comparison failures ✅
+    - Use expect(value).to.be.a("type") rather than expect(type(value)).to.equal("type") ✅
+    - Implemented robust mixed-type comparison in lust-next.lua equality function ✅
+    - Verification confirmed that validation module tests pass with new implementation ✅
+    - Standardized boolean assertion patterns (`to.be(true)` → `to.be_truthy()`) ✅
+    - Standardized nil checking patterns (`to.be(nil)` → `to_not.exist()`) ✅
 
-Total estimated time: 9-13 hours
+## Session Summaries
 
-This test system reorganization should be implemented after completing the current module require instrumentation work and before moving on to the error handling implementation.
+For more detailed information about the phases of this plan, see these session summaries:
+
+- Phase 1-2: `docs/coverage_repair/session_summaries/session_summary_2025-03-14_test_system_reorganization_phase2.md`
+- Phase 3: `docs/coverage_repair/session_summaries/session_summary_2025-03-14_test_system_reorganization_phase3.md`
+- Phase 4: `docs/coverage_repair/session_summaries/session_summary_2025-03-14_test_system_reorganization_phase4.md`
+- Phase 5 (Verification): `docs/coverage_repair/session_summaries/session_summary_2025-03-14_test_system_verification.md`
+- Validation Module Fixes: `docs/coverage_repair/session_summaries/session_summary_2025-03-12_validation_module_fixes.md`
+- Test Documentation Updates: `docs/coverage_repair/session_summaries/session_summary_2025-03-12_test_documentation_updates.md`
+- Test Documentation Enhancements: `docs/coverage_repair/session_summaries/session_summary_2025-03-13_test_documentation_enhancements.md`
+- Assertion Pattern Standardization: `docs/coverage_repair/session_summaries/session_summary_2025-03-13_assertion_pattern_standardization.md`
+- Assertion Pattern Fixes: `docs/coverage_repair/session_summaries/session_summary_2025-03-12_assertion_pattern_fixes.md`
+- Assertion Pattern Fixes Completion: `docs/coverage_repair/session_summaries/session_summary_2025-03-12_assertion_pattern_fixes_completion.md`
+- Validation Module Assertion Fixes: `docs/coverage_repair/session_summaries/session_summary_2025-03-15_validation_module_assertions.md`
+- Type Comparison Issues: `docs/coverage_repair/session_summaries/session_summary_2025-03-15_type_comparison_issues.md`
+- Boolean Assertion Standardization: `docs/coverage_repair/session_summaries/session_summary_2025-03-13_boolean_assertion_standardization.md`
+
+## Key Accomplishments
+
+1. **Created a Universal Command Interface**:
+   - Single entry point through test.lua in the project root
+   - Intelligent path detection (files vs. directories)
+   - Unified command-line arguments across all modes
+   - Consistent error handling and reporting
+
+2. **Improved Testing Infrastructure**:
+   - Logical test directory structure by component
+   - Standard describe/it pattern in all tests
+   - Proper before/after hooks for setup/teardown
+   - Isolation through module_reset integration
+
+3. **Enhanced Developer Experience**:
+   - Automatic detection of files and directories
+   - No need to remember special flags or commands
+   - Improved error messages with structured parameters
+   - Robust watch mode that works with any path
+
+4. **Simplified Code Base**:
+   - Removed redundant runner scripts
+   - Eliminated special handling for directory detection
+   - Standardized path normalization and handling
+   - Improved code organization and maintainability
+
+## Next Steps
+
+1. ✅ **Complete Phase 4**: Remove all special-purpose runners
+   - ✅ Remove run-instrumentation-tests.lua (already moved to tests)
+   - ✅ Remove run-single-test.lua (functionality integrated)
+   - ✅ Remove run_all_tests.lua (complete removal instead of deprecation)
+   - ✅ Update documentation with new approach
+
+2. **Complete Phase 5**: Verify the unified approach
+   - ✅ Run initial tests through the new system
+   - ✅ Identify assertion pattern inconsistencies
+   - ✅ Create comprehensive assertion pattern mapping guide
+   - ✅ Fix reporting_test.lua with correct assertion patterns
+   - ✅ Move tests to proper locations
+   - ✅ Fix formatter tests with correct assertion patterns
+   - ✅ Fix validation module tests
+   - 🔄 Compare results with old approach
+   - ✅ Document findings in session summary
+   - 🔄 Make final adjustments based on findings
+
+3. **Add Assertion Pattern Documentation**:
+   - ✅ Add assertion pattern guidance to CLAUDE.md
+   - ✅ Create comprehensive assertion pattern mapping document
+   - ✅ Update testing_guide.md with assertion best practices
+   - ✅ Create detailed test framework guide with architecture details
+   - ✅ Add troubleshooting guidance for common test issues
+   - ✅ Update test_framework_guide.md with consistent information
+   - ✅ Add specific warnings about busted-style vs expect-style assertions in all docs
+
+4. **Create Example for Project Integration**:
+   - Create a sample project that uses lust-next
+   - Show how to integrate and configure the test system
+   - Demonstrate proper test file organization
+   - Include CI/CD integration examples
+
+5. **Update All Examples**:
+   - Verify all examples use the new command syntax
+   - Ensure examples demonstrate proper assertion patterns
+   - Add comments explaining assertion usage in examples
+   - Include examples of complex test scenarios

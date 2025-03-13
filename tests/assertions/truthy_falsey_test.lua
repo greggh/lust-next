@@ -1,0 +1,52 @@
+-- truthy_falsey_test.lua
+
+local lust = require("lust-next")
+local describe, it, expect = lust.describe, lust.it, lust.expect
+
+describe("Truthy and Falsey Assertions", function()
+  describe("expect(value).to.be_truthy()", function()
+    it("correctly identifies truthy values", function()
+      expect(true).to.be_truthy()
+      expect(1).to.be_truthy()
+      expect("hello").to.be_truthy()
+      expect({}).to.be_truthy()
+      expect(0).to.be_truthy()
+      expect("").to.be_truthy()
+    end)
+    
+    it("correctly identifies non-truthy values", function()
+      local success, err = pcall(function()
+        expect(false).to.be_truthy()
+      end)
+      expect(success).to_not.be_truthy()
+      expect(err).to.match("Expected value to be truthy")
+      
+      success, err = pcall(function()
+        expect(nil).to.be_truthy()
+      end)
+      expect(success).to_not.be_truthy()
+      expect(err).to.match("Expected value to be truthy")
+    end)
+  end)
+  
+  describe("expect(value).to_not.be_truthy()", function()
+    it("correctly identifies falsey values", function()
+      expect(false).to_not.be_truthy()
+      expect(nil).to_not.be_truthy()
+    end)
+    
+    it("correctly identifies non-falsey values", function()
+      local success, err = pcall(function()
+        expect(true).to_not.be_truthy()
+      end)
+      expect(success).to_not.be_truthy()
+      expect(err).to.match("Expected value to not be truthy")
+      
+      success, err = pcall(function()
+        expect("hello").to_not.be_truthy()
+      end)
+      expect(success).to_not.be_truthy()
+      expect(err).to.match("Expected value to not be truthy")
+    end)
+  end)
+end)
