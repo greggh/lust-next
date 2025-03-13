@@ -1,7 +1,29 @@
 -- lust-next test quality validation module
 -- Implementation of test quality analysis with level-based validation
 
+-- Lazy loading of dependencies to avoid circular references
+local _central_config
+local function get_central_config()
+  if not _central_config then
+    local success, central_config = pcall(require, "lib.core.central_config")
+    _central_config = success and central_config or nil
+  end
+  return _central_config
+end
+
 local fs = require("lib.tools.filesystem")
+local logging = require("lib.tools.logging")
+
+-- Create module logger
+local logger = logging.get_logger("Quality")
+
+-- Configure module logging
+local function configure_logging()
+  logging.configure_from_config("Quality")
+end
+
+configure_logging()
+
 local M = {}
 
 -- Define quality level constants to meet test expectations
@@ -10,6 +32,43 @@ M.LEVEL_STRUCTURED = 2
 M.LEVEL_COMPREHENSIVE = 3
 M.LEVEL_ADVANCED = 4
 M.LEVEL_COMPLETE = 5
+
+-- Register change listener for when configuration changes
+local function register_change_listener()
+  local central_config = get_central_config()
+  if central_config then
+    central_config.on_change("quality", function(path, old_value, new_value)
+      logger.debug("Quality configuration changed, updating", {
+        path = path,
+        changed_value = path:match("^quality%.(.+)$") or "all"
+      })
+      
+      -- Apply the changes to our local config for backward compatibility
+      if new_value then
+        if path == "quality" then
+          -- Full quality config replacement
+          for k, v in pairs(new_value) do
+            M.config[k] = v
+          end
+        else
+          -- Just one property changed
+          local prop = path:match("^quality%.(.+)$")
+          if prop then
+            M.config[prop] = new_value
+          end
+        end
+      end
+      
+      logger.debug("Configuration updated from central_config", {
+        enabled = M.config.enabled,
+        level = M.config.level,
+        strict = M.config.strict
+      })
+    end)
+    
+    logger.debug("Registered change listener for quality configuration")
+  end
+end
 
 -- Helper function for testing if a value contains a pattern
 local function contains_pattern(value, pattern)
@@ -304,13 +363,22 @@ M.stats = {
   issues = {},
 }
 
+-- Default configuration
+local DEFAULT_CONFIG = {
+  enabled = false,
+  level = 1,
+  strict = false,
+  custom_rules = {},
+  coverage_data = nil -- Will hold reference to coverage module data if available
+}
+
 -- Configuration
 M.config = {
   enabled = false,
   level = 1,
   strict = false,
   custom_rules = {},
-  coverage_data = nil, -- Will hold reference to coverage module data if available
+  coverage_data = nil -- Will hold reference to coverage module data if available
 }
 
 -- File cache for source code analysis
@@ -340,16 +408,70 @@ end
 
 -- Initialize quality module
 function M.init(options)
-  options = options or {}
+  local central_config = get_central_config()
   
-  -- Apply options with defaults
-  for k, v in pairs(options) do
+  -- Start with default configuration
+  for k, v in pairs(DEFAULT_CONFIG) do
     M.config[k] = v
   end
   
+  -- If central_config is available, get values from it first
+  if central_config then
+    local central_values = central_config.get("quality")
+    if central_values then
+      logger.debug("Using values from central configuration system")
+      for k, v in pairs(central_values) do
+        M.config[k] = v
+      end
+    end
+    
+    -- Register the change listener if not already registered
+    register_change_listener()
+  end
+  
+  -- Apply user options (these override both defaults and central_config)
+  options = options or {}
+  if next(options) then
+    -- Count options in a safer way
+    local option_count = 0
+    for _ in pairs(options) do
+      option_count = option_count + 1
+    end
+    
+    logger.debug("Applying user-provided options", {
+      option_count = option_count
+    })
+    
+    for k, v in pairs(options) do
+      M.config[k] = v
+    end
+    
+    -- If central_config is available, update it with the user options
+    if central_config then
+      -- Update only the keys that were explicitly provided
+      for k, v in pairs(options) do
+        central_config.set("quality." .. k, v)
+      end
+    end
+  end
+  
+  logger.debug("Quality module configuration applied", {
+    enabled = M.config.enabled,
+    level = M.config.level,
+    strict = M.config.strict
+  })
+  
   -- Connect to coverage module if available
   if package.loaded["lib.coverage"] then
+    logger.debug("Connected to coverage module")
     M.config.coverage_data = package.loaded["lib.coverage"]
+  else
+    logger.debug("Coverage module not available")
+  end
+  
+  -- Update logging configuration based on options
+  if M.config.debug or M.config.verbose then
+    logging.configure_from_options("Quality", M.config)
   end
   
   M.reset()
@@ -358,6 +480,8 @@ end
 
 -- Reset quality data
 function M.reset()
+  logger.debug("Resetting quality module state")
+  
   M.stats = {
     tests_analyzed = 0,
     tests_passing_quality = 0,
@@ -378,6 +502,41 @@ function M.reset()
   
   -- Reset file cache
   file_cache = {}
+  
+  logger.trace("Quality module reset complete")
+  return M
+end
+
+-- Full reset (clears all data and resets configuration)
+function M.full_reset()
+  -- Reset quality data
+  M.reset()
+  
+  -- Reset configuration to defaults in central_config if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.reset("quality")
+    
+    -- Sync our local config with central_config
+    local central_values = central_config.get("quality")
+    if central_values then
+      for k, v in pairs(central_values) do
+        M.config[k] = v
+      end
+    else
+      -- Fallback to defaults if central_config.get returns nil
+      for k, v in pairs(DEFAULT_CONFIG) do
+        M.config[k] = v
+      end
+    end
+    
+    logger.debug("Reset quality configuration to defaults in central_config")
+  else
+    -- If central_config is not available, just use defaults
+    for k, v in pairs(DEFAULT_CONFIG) do
+      M.config[k] = v
+    end
+  end
   
   return M
 end
@@ -655,11 +814,13 @@ end
 -- Track assertion usage in a test
 function M.track_assertion(type_name, test_name)
   if not M.config.enabled then
+    logger.trace("Quality module disabled, skipping assertion tracking")
     return
   end
   
   -- Initialize test info if needed
   if not current_test then
+    logger.trace("No current test, initializing with", { test_name = test_name or "unnamed_test" })
     M.start_test(test_name or "unnamed_test")
   end
   
@@ -674,6 +835,13 @@ function M.track_assertion(type_name, test_name)
       break
     end
   end
+  
+  logger.trace("Tracking assertion", {
+    test = current_test,
+    assertion_type = type_name,
+    pattern_type = pattern_type or "unknown",
+    count = test_data[current_test].assertion_count
+  })
   
   if pattern_type then
     test_data[current_test].assertion_types[pattern_type] = 
@@ -695,20 +863,26 @@ end
 -- Start test analysis for a specific test
 function M.start_test(test_name)
   if not M.config.enabled then
+    logger.trace("Quality module disabled, skipping test start")
     return M
   end
   
+  logger.debug("Starting test analysis", { test_name = test_name })
   current_test = test_name
   
   -- Initialize test data
   if not test_data[current_test] then
+    logger.trace("Initializing new test data structure", { test = test_name })
+    
+    local has_proper_name = (test_name and test_name ~= "" and test_name ~= "unnamed_test")
+    
     test_data[current_test] = {
       name = test_name,
       assertion_count = 0,
       assertion_types = {},
       has_describe = false,
       has_it = false,
-      has_proper_name = (test_name and test_name ~= "" and test_name ~= "unnamed_test"),
+      has_proper_name = has_proper_name,
       has_before_after = false,
       nesting_level = 1,
       has_mock_verification = false,
@@ -724,13 +898,16 @@ function M.start_test(test_name)
       -- Check for proper naming conventions
       if test_name:match("should") or test_name:match("when") then
         test_data[current_test].has_proper_name = true
+        logger.trace("Test has proper naming convention", { test = test_name })
       end
       
       -- Check for different test types
+      local found_patterns = {}
       for pat_type, patterns_list in pairs(patterns) do
         for _, pattern in ipairs(patterns_list) do
           if contains_pattern(test_name, pattern) then
             test_data[current_test].patterns_found[pat_type] = true
+            table.insert(found_patterns, pat_type)
             
             -- Mark special test types
             if pat_type == "performance" then
@@ -741,6 +918,13 @@ function M.start_test(test_name)
           end
         end
       end
+      
+      if #found_patterns > 0 then
+        logger.trace("Found patterns in test name", { 
+          test = test_name,
+          patterns = found_patterns
+        })
+      end
     end
   end
   
@@ -750,14 +934,26 @@ end
 -- End test analysis and record results
 function M.end_test()
   if not M.config.enabled or not current_test then
+    logger.trace("Quality module disabled or no current test, skipping test end")
     current_test = nil
     return M
   end
+  
+  logger.debug("Ending test analysis", { test = current_test })
   
   -- Evaluate test quality
   local evaluation = evaluate_test_quality(test_data[current_test])
   test_data[current_test].quality_level = evaluation.level
   test_data[current_test].scores = evaluation.scores
+  
+  -- Log evaluation results
+  logger.debug("Test quality evaluation complete", {
+    test = current_test,
+    quality_level = evaluation.level,
+    passing = evaluation.level >= M.config.level,
+    issues_count = #test_data[current_test].issues,
+    assertion_count = test_data[current_test].assertion_count
+  })
   
   -- Update global statistics
   M.stats.tests_analyzed = M.stats.tests_analyzed + 1
@@ -765,12 +961,30 @@ function M.end_test()
   
   if test_data[current_test].quality_level >= M.config.level then
     M.stats.tests_passing_quality = M.stats.tests_passing_quality + 1
+    logger.trace("Test passed quality check", { 
+      test = current_test, 
+      level = test_data[current_test].quality_level 
+    })
   else
     -- Add issues to global issues list
     for _, issue in ipairs(test_data[current_test].issues) do
       table.insert(M.stats.issues, {
         test = current_test,
         issue = issue
+      })
+    end
+    
+    logger.debug("Test failed quality check", {
+      test = current_test,
+      required_level = M.config.level,
+      actual_level = test_data[current_test].quality_level,
+      issues_count = #test_data[current_test].issues
+    })
+    
+    if #test_data[current_test].issues > 0 then
+      logger.trace("Test quality issues", {
+        test = current_test,
+        issues = test_data[current_test].issues
       })
     end
   end
@@ -789,8 +1003,11 @@ end
 -- Analyze test file statically
 function M.analyze_file(file_path)
   if not M.config.enabled then
+    logger.trace("Quality module disabled, skipping file analysis")
     return {}
   end
+  
+  logger.debug("Analyzing test file", { file_path = file_path })
   
   local lines = read_file(file_path)
   local results = {
@@ -804,6 +1021,11 @@ function M.analyze_file(file_path)
     issues = {},
     quality_level = 0,
   }
+  
+  logger.trace("Read file for analysis", { 
+    file_path = file_path,
+    lines_count = #lines 
+  })
   
   local current_nesting = 0
   local max_nesting = 0
@@ -831,6 +1053,13 @@ function M.analyze_file(file_path)
         line = i,
         nesting_level = current_nesting
       })
+      
+      logger.trace("Found test in file", {
+        file = file_path,
+        test_name = test_name,
+        line = i,
+        nesting_level = current_nesting
+      })
     end
     
     -- Check for before/after hooks
@@ -851,6 +1080,16 @@ function M.analyze_file(file_path)
   
   results.nesting_level = max_nesting
   
+  logger.debug("Static analysis summary", {
+    file = file_path,
+    tests_found = #results.tests,
+    has_describe = results.has_describe,
+    has_it = results.has_it,
+    has_before_after = results.has_before_after,
+    max_nesting = max_nesting,
+    assertion_count = results.assertion_count
+  })
+  
   -- Start and end tests for each detected test
   for _, test in ipairs(results.tests) do
     M.start_test(test.name)
@@ -869,6 +1108,15 @@ function M.analyze_file(file_path)
     local avg_assertions = math.floor(results.assertion_count / math.max(1, #results.tests))
     test_data[test.name].assertion_count = avg_assertions
     
+    logger.trace("Setting static test data", {
+      test = test.name,
+      nesting_level = test.nesting_level,
+      has_describe = results.has_describe,
+      has_it = results.has_it,
+      has_before_after = results.has_before_after,
+      assigned_assertions = avg_assertions
+    })
+    
     M.end_test()
   end
   
@@ -885,11 +1133,19 @@ function M.analyze_file(file_path)
   
   results.quality_level = file_tests > 0 and min_quality_level or 0
   
+  logger.debug("File analysis complete", {
+    file = file_path,
+    quality_level = results.quality_level,
+    tests_analyzed = file_tests
+  })
+  
   return results
 end
 
 -- Get structured data for quality report
 function M.get_report_data()
+  logger.debug("Generating quality report data")
+  
   -- Calculate final statistics
   local total_tests = M.stats.tests_analyzed
   if total_tests > 0 then
@@ -902,11 +1158,25 @@ function M.get_report_data()
     end
     
     M.stats.quality_level_achieved = min_level
+    
+    logger.debug("Calculated final quality statistics", {
+      tests_analyzed = total_tests,
+      passing_tests = M.stats.tests_passing_quality,
+      quality_percent = M.stats.tests_passing_quality / total_tests * 100,
+      assertions_per_test_avg = M.stats.assertions_per_test_avg,
+      quality_level_achieved = min_level,
+      issues_count = #M.stats.issues
+    })
   else
     M.stats.quality_level_achieved = 0
+    logger.debug("No tests analyzed for quality")
   end
   
   -- Build structured data
+  local quality_percent = M.stats.tests_analyzed > 0 
+    and (M.stats.tests_passing_quality / M.stats.tests_analyzed * 100) 
+    or 0
+    
   local structured_data = {
     level = M.stats.quality_level_achieved,
     level_name = M.get_level_name(M.stats.quality_level_achieved),
@@ -914,9 +1184,7 @@ function M.get_report_data()
     summary = {
       tests_analyzed = M.stats.tests_analyzed,
       tests_passing_quality = M.stats.tests_passing_quality,
-      quality_percent = M.stats.tests_analyzed > 0 
-        and (M.stats.tests_passing_quality / M.stats.tests_analyzed * 100) 
-        or 0,
+      quality_percent = quality_percent,
       assertions_total = M.stats.assertions_total,
       assertions_per_test_avg = M.stats.assertions_per_test_avg,
       assertion_types_found = M.stats.assertion_types_found,
@@ -929,7 +1197,21 @@ end
 
 -- Get quality report
 function M.report(format)
-  format = format or "summary" -- summary, json, html
+  -- Get format from central_config if available
+  local central_config = get_central_config()
+  local default_format = "summary" -- summary, json, html
+  
+  if central_config then
+    -- Check for configured default format
+    local configured_format = central_config.get("formatters.quality")
+    if configured_format then
+      default_format = configured_format
+      logger.debug("Using format from central configuration", {format = default_format})
+    end
+  end
+  
+  -- User-specified format overrides default
+  format = format or default_format
   
   local data = M.get_report_data()
   
@@ -1118,13 +1400,56 @@ end
 -- Check if quality meets level requirement
 function M.meets_level(level)
   level = level or M.config.level
+  
+  logger.debug("Checking if quality meets level requirement", {
+    required_level = level,
+    config_level = M.config.level
+  })
+  
   local report = M.summary_report()
-  return report.level >= level
+  local meets = report.level >= level
+  
+  logger.debug("Quality level check result", {
+    achieved_level = report.level,
+    required_level = level,
+    meets_requirement = meets
+  })
+  
+  return meets
 end
 
 -- Save a quality report to a file
 function M.save_report(file_path, format)
-  format = format or "html"
+  -- Get format from central_config if available
+  local central_config = get_central_config()
+  local default_format = "html"
+  
+  if central_config then
+    -- Check for configured default format
+    local configured_format = central_config.get("formatters.quality")
+    if configured_format then
+      default_format = configured_format
+      logger.debug("Using format from central configuration", {format = default_format})
+    end
+    
+    -- Check for configured report path template
+    local report_path_template = central_config.get("reporting.templates.quality")
+    if report_path_template and not file_path then
+      -- Generate file_path from template if none provided
+      local timestamp = os.date("%Y-%m-%d-%H-%M-%S")
+      file_path = report_path_template:gsub("{timestamp}", timestamp)
+                                     :gsub("{format}", format or default_format)
+      logger.debug("Using report path from template", {file_path = file_path})
+    end
+  end
+  
+  -- User-specified format overrides default
+  format = format or default_format
+  
+  logger.debug("Saving quality report", {
+    file_path = file_path,
+    format = format
+  })
   
   -- Try to load the reporting module
   local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
@@ -1132,16 +1457,28 @@ function M.save_report(file_path, format)
   if reporting_module then
     -- Get the data and use the reporting module to save it
     local data = M.get_report_data()
+    
+    logger.debug("Using reporting module to save quality report")
     return reporting_module.save_quality_report(file_path, data, format)
   else
     -- Fallback to directly saving the content
+    logger.debug("Reporting module not available, using direct file write")
     local content = M.report(format)
     
     -- Use filesystem module to write the file
     local success, err = fs.write_file(file_path, content)
     if not success then
+      logger.error("Failed to save quality report", {
+        file_path = file_path,
+        error = err or "Unknown error"
+      })
       return false, "Could not write to file: " .. (err or file_path)
     end
+    
+    logger.debug("Successfully saved quality report", {
+      file_path = file_path,
+      format = format
+    })
     
     return true
   end
@@ -1162,6 +1499,11 @@ end
 function M.check_file(file_path, level)
   level = level or M.config.level
   
+  logger.debug("Checking if file meets quality requirements", {
+    file_path = file_path,
+    required_level = level
+  })
+  
   -- Enable quality module for this check
   local previous_enabled = M.config.enabled
   M.config.enabled = true
@@ -1175,6 +1517,13 @@ function M.check_file(file_path, level)
     -- For any check_level > file_level, fail
     local result = level <= file_level
     
+    logger.debug("Found special test file with explicit level", {
+      file_path = file_path,
+      file_level = file_level,
+      required_level = level,
+      meets_requirements = result
+    })
+    
     -- Restore previous enabled state
     M.config.enabled = previous_enabled
     
@@ -1183,6 +1532,8 @@ function M.check_file(file_path, level)
   
   -- For other files that don't follow our test naming convention,
   -- use static analysis
+  logger.debug("Using static analysis for file quality check", { file_path = file_path })
+  
   -- Analyze the file
   local analysis = M.analyze_file(file_path)
   
@@ -1202,6 +1553,14 @@ function M.check_file(file_path, level)
     end
   end
   
+  logger.debug("File quality check complete", {
+    file_path = file_path,
+    analysis_level = analysis.quality_level,
+    required_level = level,
+    meets_requirements = meets_level,
+    issues_count = #issues
+  })
+  
   -- Restore previous enabled state
   M.config.enabled = previous_enabled
   
@@ -1214,16 +1573,61 @@ function M.validate_test_quality(test_name, options)
   options = options or {}
   local level = options.level or M.config.level
   
+  logger.debug("Validating test quality", {
+    test_name = test_name,
+    required_level = level
+  })
+  
   -- If there's no current test, we can't validate
   if not test_data[test_name] then
+    logger.warn("No test data available for validation", { test_name = test_name })
     return false, { "No test data available for " .. test_name }
   end
   
   -- Check if the test meets the quality level
   local evaluation = evaluate_test_quality(test_data[test_name])
   
+  logger.debug("Test quality validation complete", {
+    test_name = test_name,
+    achieved_level = evaluation.level,
+    required_level = level,
+    meets_requirements = evaluation.level >= level,
+    issues_count = #test_data[test_name].issues
+  })
+  
   -- Return validation result
   return evaluation.level >= level, test_data[test_name].issues
+end
+
+-- Debug information about the quality module configuration
+function M.debug_config()
+  local central_config = get_central_config()
+  local config_source = central_config and "Centralized configuration system" or "Module-local configuration"
+  
+  logger.info("Quality module configuration", {
+    source = config_source,
+    enabled = M.config.enabled,
+    level = M.config.level,
+    level_name = M.get_level_name(M.config.level),
+    strict = M.config.strict,
+    using_central_config = central_config ~= nil
+  })
+  
+  -- If central_config is available, show more details
+  if central_config then
+    local quality_config = central_config.get("quality")
+    local formatters_config = central_config.get("formatters")
+    local reporting_config = central_config.get("reporting")
+    
+    logger.info("Centralized configuration details", {
+      quality_registered = quality_config ~= nil,
+      quality_formatter = formatters_config and formatters_config.quality or "none",
+      quality_template = reporting_config and reporting_config.templates and 
+                          reporting_config.templates.quality or "none"
+    })
+  end
+  
+  return M
 end
 
 -- Return the module

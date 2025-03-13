@@ -3,10 +3,264 @@
 
 local async_module = {}
 
+-- Import logging module
+local logging = require("lib.tools.logging")
+local logger = logging.get_logger("Async")
+
+-- Default configuration
+local DEFAULT_CONFIG = {
+  default_timeout = 1000, -- 1 second default timeout in ms
+  check_interval = 10, -- Default check interval in ms
+  debug = false,
+  verbose = false
+}
+
 -- Internal state
 local in_async_context = false
-local default_timeout = 1000 -- 1 second default timeout in ms
+local default_timeout = DEFAULT_CONFIG.default_timeout
 local _testing_timeout = false -- Special flag for timeout testing
+local config = {
+  default_timeout = DEFAULT_CONFIG.default_timeout,
+  check_interval = DEFAULT_CONFIG.check_interval,
+  debug = DEFAULT_CONFIG.debug,
+  verbose = DEFAULT_CONFIG.verbose
+}
+
+-- Lazy loading of central_config to avoid circular dependencies
+local _central_config
+
+local function get_central_config()
+  if not _central_config then
+    -- Use pcall to safely attempt loading central_config
+    local success, central_config = pcall(require, "lib.core.central_config")
+    if success then
+      _central_config = central_config
+      
+      -- Register this module with central_config
+      _central_config.register_module("async", {
+        -- Schema
+        field_types = {
+          default_timeout = "number",
+          check_interval = "number",
+          debug = "boolean",
+          verbose = "boolean"
+        },
+        field_ranges = {
+          default_timeout = {min = 1},
+          check_interval = {min = 1}
+        }
+      }, DEFAULT_CONFIG)
+      
+      logger.debug("Successfully loaded central_config", {
+        module = "async"
+      })
+    else
+      logger.debug("Failed to load central_config", {
+        error = tostring(central_config)
+      })
+    end
+  end
+  
+  return _central_config
+end
+
+-- Set up change listener for central configuration
+local function register_change_listener()
+  local central_config = get_central_config()
+  if not central_config then
+    logger.debug("Cannot register change listener - central_config not available")
+    return false
+  end
+  
+  -- Register change listener for async configuration
+  central_config.on_change("async", function(path, old_value, new_value)
+    logger.debug("Configuration change detected", {
+      path = path,
+      changed_by = "central_config"
+    })
+    
+    -- Update local configuration from central_config
+    local async_config = central_config.get("async")
+    if async_config then
+      -- Update timeout settings
+      if async_config.default_timeout ~= nil and async_config.default_timeout ~= config.default_timeout then
+        config.default_timeout = async_config.default_timeout
+        default_timeout = config.default_timeout
+        logger.debug("Updated default_timeout from central_config", {
+          default_timeout = config.default_timeout
+        })
+      end
+      
+      -- Update check interval
+      if async_config.check_interval ~= nil and async_config.check_interval ~= config.check_interval then
+        config.check_interval = async_config.check_interval
+        logger.debug("Updated check_interval from central_config", {
+          check_interval = config.check_interval
+        })
+      end
+      
+      -- Update debug setting
+      if async_config.debug ~= nil and async_config.debug ~= config.debug then
+        config.debug = async_config.debug
+        logger.debug("Updated debug setting from central_config", {
+          debug = config.debug
+        })
+      end
+      
+      -- Update verbose setting
+      if async_config.verbose ~= nil and async_config.verbose ~= config.verbose then
+        config.verbose = async_config.verbose
+        logger.debug("Updated verbose setting from central_config", {
+          verbose = config.verbose
+        })
+      end
+      
+      -- Update logging configuration
+      logging.configure_from_options("Async", {
+        debug = config.debug,
+        verbose = config.verbose
+      })
+      
+      logger.debug("Applied configuration changes from central_config")
+    end
+  end)
+  
+  logger.debug("Registered change listener for central configuration")
+  return true
+end
+
+-- Configuration function
+function async_module.configure(options)
+  options = options or {}
+  
+  logger.debug("Configuring async module", {
+    options = options
+  })
+  
+  -- Check for central configuration first
+  local central_config = get_central_config()
+  if central_config then
+    -- Get existing central config values
+    local async_config = central_config.get("async")
+    
+    -- Apply central configuration (with defaults as fallback)
+    if async_config then
+      logger.debug("Using central_config values for initialization", {
+        default_timeout = async_config.default_timeout,
+        check_interval = async_config.check_interval
+      })
+      
+      config.default_timeout = async_config.default_timeout ~= nil 
+                              and async_config.default_timeout 
+                              or DEFAULT_CONFIG.default_timeout
+      
+      config.check_interval = async_config.check_interval ~= nil 
+                             and async_config.check_interval 
+                             or DEFAULT_CONFIG.check_interval
+                             
+      config.debug = async_config.debug ~= nil 
+                    and async_config.debug 
+                    or DEFAULT_CONFIG.debug
+                    
+      config.verbose = async_config.verbose ~= nil 
+                      and async_config.verbose 
+                      or DEFAULT_CONFIG.verbose
+    else
+      logger.debug("No central_config values found, using defaults")
+      config = {
+        default_timeout = DEFAULT_CONFIG.default_timeout,
+        check_interval = DEFAULT_CONFIG.check_interval,
+        debug = DEFAULT_CONFIG.debug,
+        verbose = DEFAULT_CONFIG.verbose
+      }
+    end
+    
+    -- Register change listener if not already done
+    register_change_listener()
+  else
+    logger.debug("central_config not available, using defaults")
+    -- Apply defaults
+    config = {
+      default_timeout = DEFAULT_CONFIG.default_timeout,
+      check_interval = DEFAULT_CONFIG.check_interval,
+      debug = DEFAULT_CONFIG.debug,
+      verbose = DEFAULT_CONFIG.verbose
+    }
+  end
+  
+  -- Apply user options (highest priority) and update central config
+  if options.default_timeout ~= nil then
+    if type(options.default_timeout) ~= "number" or options.default_timeout <= 0 then
+      logger.warn("Invalid default_timeout, must be a positive number", {
+        provided = options.default_timeout
+      })
+    else
+      config.default_timeout = options.default_timeout
+      default_timeout = options.default_timeout
+      
+      -- Update central_config if available
+      if central_config then
+        central_config.set("async.default_timeout", options.default_timeout)
+      end
+    end
+  end
+  
+  if options.check_interval ~= nil then
+    if type(options.check_interval) ~= "number" or options.check_interval <= 0 then
+      logger.warn("Invalid check_interval, must be a positive number", {
+        provided = options.check_interval
+      })
+    else
+      config.check_interval = options.check_interval
+      
+      -- Update central_config if available
+      if central_config then
+        central_config.set("async.check_interval", options.check_interval)
+      end
+    end
+  end
+  
+  if options.debug ~= nil then
+    config.debug = options.debug
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("async.debug", options.debug)
+    end
+  end
+  
+  if options.verbose ~= nil then
+    config.verbose = options.verbose
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("async.verbose", options.verbose)
+    end
+  end
+  
+  -- Configure logging
+  if options.debug ~= nil or options.verbose ~= nil then
+    logging.configure_from_options("Async", {
+      debug = config.debug,
+      verbose = config.verbose
+    })
+  else
+    logging.configure_from_config("Async")
+  end
+  
+  -- Ensure default_timeout is updated
+  default_timeout = config.default_timeout
+  
+  logger.debug("Async module configuration complete", {
+    default_timeout = config.default_timeout,
+    check_interval = config.check_interval,
+    debug = config.debug,
+    verbose = config.verbose,
+    using_central_config = central_config ~= nil
+  })
+  
+  return async_module
+end
 
 -- Compatibility for Lua 5.2/5.3+ differences
 local unpack = unpack or table.unpack
@@ -232,10 +486,16 @@ function async_module.wait_until(condition, timeout, check_interval)
     error("timeout must be a positive number", 2)
   end
   
-  check_interval = check_interval or 10 -- Default to checking every 10ms
+  -- Use configured check_interval if not specified
+  check_interval = check_interval or config.check_interval
   if type(check_interval) ~= "number" or check_interval <= 0 then
     error("check_interval must be a positive number", 2)
   end
+  
+  logger.debug("Wait until condition is true", {
+    timeout = timeout,
+    check_interval = check_interval
+  })
   
   -- Keep track of when we started
   local start = os.clock()
@@ -265,7 +525,25 @@ function async_module.set_timeout(ms)
   if type(ms) ~= "number" or ms <= 0 then
     error("timeout must be a positive number", 2)
   end
+  
+  -- Update both the local variable and config
   default_timeout = ms
+  config.default_timeout = ms
+  
+  -- Update central configuration if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.set("async.default_timeout", ms)
+    logger.debug("Updated default_timeout in central_config", {
+      default_timeout = ms
+    })
+  end
+  
+  logger.debug("Set default timeout", {
+    default_timeout = ms
+  })
+  
+  return async_module
 end
 
 -- Get the current async context state (for internal use)
@@ -277,6 +555,65 @@ end
 function async_module.reset()
   in_async_context = false
   _testing_timeout = false
+  
+  -- Reset configuration to defaults
+  config = {
+    default_timeout = DEFAULT_CONFIG.default_timeout,
+    check_interval = DEFAULT_CONFIG.check_interval,
+    debug = DEFAULT_CONFIG.debug,
+    verbose = DEFAULT_CONFIG.verbose
+  }
+  
+  -- Update the local variable
+  default_timeout = config.default_timeout
+  
+  logger.debug("Reset async module state")
+  
+  return async_module
+end
+
+-- Fully reset both local and central configuration
+function async_module.full_reset()
+  -- Reset local state
+  async_module.reset()
+  
+  -- Reset central configuration if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.reset("async")
+    logger.debug("Reset central configuration for async module")
+  end
+  
+  return async_module
+end
+
+-- Debug helper to show current configuration
+function async_module.debug_config()
+  local debug_info = {
+    local_config = {
+      default_timeout = config.default_timeout,
+      check_interval = config.check_interval,
+      debug = config.debug,
+      verbose = config.verbose
+    },
+    default_timeout_var = default_timeout,
+    in_async_context = in_async_context,
+    testing_timeout = _testing_timeout,
+    using_central_config = false,
+    central_config = nil
+  }
+  
+  -- Check for central_config
+  local central_config = get_central_config()
+  if central_config then
+    debug_info.using_central_config = true
+    debug_info.central_config = central_config.get("async")
+  end
+  
+  -- Display configuration
+  logger.info("Async module configuration", debug_info)
+  
+  return debug_info
 end
 
 -- Enable timeout testing mode - for tests only
