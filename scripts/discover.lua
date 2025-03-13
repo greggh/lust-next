@@ -1,34 +1,64 @@
 -- Test discovery module for lust-next
 local discover = {}
+discover._VERSION = "1.1.0"
+
+-- Initialize logging
+local logging
+local ok, log_module = pcall(function() return require("lib.tools.logging") end)
+if ok and log_module then
+  logging = log_module
+end
+
+local logger
+if logging then
+  logger = logging.get_logger("scripts.discover")
+  logging.configure_from_config("scripts.discover")
+  logger.debug("Test discovery module initialized", {
+    version = discover._VERSION
+  })
+end
+
+-- Helper function to determine if we're on Windows
+local function is_windows()
+  return package.config:sub(1,1) == '\\'
+end
+
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+if logger then
+  logger.debug("Filesystem module loaded", {
+    version = fs._VERSION
+  })
+end
 
 -- Find test files in a directory
-function discover.find_tests(dir)
+function discover.find_tests(dir, pattern)
   dir = dir or "./tests"
-  local files = {}
+  pattern = pattern or "*_test.lua"
   
-  -- Platform-specific command to find test files
-  local command
-  if package.config:sub(1,1) == '\\' then
-    -- Windows
-    command = 'dir /s /b "' .. dir .. '\\*_test.lua" > lust_temp_files.txt'
-  else
-    -- Unix
-    command = 'find "' .. dir .. '" -name "*_test.lua" -type f > lust_temp_files.txt'
+  if logger then
+    logger.debug("Finding test files", {
+      directory = dir,
+      pattern = pattern
+    })
   end
   
-  -- Execute the command
-  os.execute(command)
+  if logger then
+    logger.debug("Using filesystem module for test discovery", {
+      directory = dir,
+      pattern = pattern
+    })
+  end
   
-  -- Read the results from the temporary file
-  local file = io.open("lust_temp_files.txt", "r")
-  if file then
-    for line in file:lines() do
-      if line:match("_test%.lua$") then
-        table.insert(files, line)
-      end
-    end
-    file:close()
-    os.remove("lust_temp_files.txt")
+  local include_patterns = {pattern}
+  local files = fs.discover_files({dir}, include_patterns, {})
+  
+  if logger then
+    logger.info("Test files discovered", {
+      directory = dir,
+      pattern = pattern,
+      file_count = #files
+    })
   end
   
   return files

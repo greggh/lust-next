@@ -245,7 +245,11 @@ function runner.find_test_files(dir_path, options)
     exclude_patterns = table.concat(exclude_patterns, ", ")
   })
   
-  -- Ensure directory exists
+  -- Handle directory existence check properly
+  -- The fs.normalize_path() function automatically removes trailing slashes
+  -- but fs.directory_exists() works fine with or without trailing slashes
+  
+  -- Simply check if directory exists
   if not fs.directory_exists(dir_path) then
     logger.error("Directory not found", {directory = dir_path})
     return {}
@@ -522,7 +526,7 @@ function runner.run_all(files_or_dir, lust, options)
 end
 
 -- Watch mode for continuous testing
-function runner.watch_mode(directories, test_dirs, lust, options)
+function runner.watch_mode(path, lust, options)
   if not has_watcher then
     logger.error("Watch mode unavailable", {reason = "Watcher module not found"})
     return false
@@ -536,20 +540,40 @@ function runner.watch_mode(directories, test_dirs, lust, options)
   logger.info("Watch mode activated")
   logger.info("Press Ctrl+C to exit")
   
-  watcher.set_check_interval(watch_interval)
-  watcher.init(directories, exclude_patterns)
-  
-  -- Initial test run
+  -- Determine what to watch based on path type
+  local directories = {}
   local files = {}
   
-  for _, dir in ipairs(test_dirs) do
-    -- Use filesystem module to find test files
+  -- Check if path is a directory or file
+  if fs.directory_exists(path) then
+    -- Watch the directory and run tests in it
+    table.insert(directories, path)
+    
+    -- Find test files in the directory
     local test_pattern = options.pattern or "*_test.lua"
-    local found = fs.discover_files({dir}, {test_pattern})
-    for _, file in ipairs(found) do
-      table.insert(files, file)
+    local found = fs.discover_files({path}, {test_pattern}, exclude_patterns)
+    
+    if found then
+      for _, file in ipairs(found) do
+        table.insert(files, file)
+      end
     end
+    
+    logger.info("Watching directory", {path = path, files_found = #files})
+  elseif fs.file_exists(path) then
+    -- Watch the file's directory and run the specific file
+    local dir = fs.get_directory_name(path)
+    table.insert(directories, dir)
+    table.insert(files, path)
+    
+    logger.info("Watching file", {file = path, directory = dir})
+  else
+    logger.error("Path not found for watch mode", {path = path})
+    return false
   end
+  
+  watcher.set_check_interval(watch_interval)
+  watcher.init(directories, exclude_patterns)
   
   local last_run_time = os.time()
   local debounce_time = 0.5 -- seconds to wait after changes before running tests
@@ -587,7 +611,15 @@ function runner.watch_mode(directories, test_dirs, lust, options)
       io.write("\027[2J\027[H")
       
       lust.reset()
-      run_success = runner.run_all(files, lust, runner_options)
+      
+      -- Run tests based on the files we found earlier
+      if #files > 0 then
+        run_success = runner.run_all(files, lust, runner_options)
+      else
+        logger.warn("No test files found to run")
+        run_success = true
+      end
+      
       last_run_time = current_time
       need_to_run = false
       
@@ -747,23 +779,24 @@ function runner.main(args)
     end
   end
   
+  -- Check if we're running in watch mode
+  if options.watch then
+    -- Setup watch mode for continuous testing
+    return runner.watch_mode(path, lust, options)
+  end
+  
   -- Check if path is a file or directory
-  if fs.file_exists(path) then
+  -- We can automatically detect directories without a flag
+  if fs.directory_exists(path) then
+    -- Run all tests in directory
+    logger.info("Detected directory path", {path = path})
+    return runner.run_all(path, lust, options)
+  elseif fs.file_exists(path) then
     -- Run a single test file
     local result = runner.run_file(path, lust, options)
     return result.success and result.errors == 0
-  elseif fs.directory_exists(path) then
-    -- Run all tests in directory
-    if options.watch then
-      -- Setup watch mode for continuous testing
-      local watch_dirs = {path}
-      local test_dirs = {path}
-      return runner.watch_mode(watch_dirs, test_dirs, lust, options)
-    else
-      -- Run tests in directory
-      return runner.run_all(path, lust, options)
-    end
   else
+    -- Path not found
     logger.error("Path not found", {path = path})
     return false
   end
