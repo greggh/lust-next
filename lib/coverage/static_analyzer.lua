@@ -9,9 +9,13 @@ local M = {}
 local parser = require("lib.tools.parser")
 local filesystem = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
+local error_handler = require("lib.tools.error_handler")
 
 -- Cache of parsed files to avoid reparsing
 local file_cache = {}
+
+-- Cache for multiline comment detection results
+local multiline_comment_cache = {}
 
 -- Line classification types
 M.LINE_TYPES = {
@@ -57,9 +61,257 @@ function M.init(options)
   return M
 end
 
--- Clear the file cache
+-- Clear the file cache and multiline comment cache
 function M.clear_cache()
   file_cache = {}
+  multiline_comment_cache = {}
+end
+
+-- Multiline comment detection API
+-- This centralizes the previously duplicated comment detection logic
+
+-- Create a context for comment tracking
+function M.create_multiline_comment_context()
+  return {
+    in_comment = false,
+    state_stack = {},
+    line_status = {} -- Map of line numbers to comment status
+  }
+end
+
+-- Process a content string to find all multiline comments
+function M.find_multiline_comments(content)
+  -- Quick exit for empty content
+  if not content or content == "" then
+    return {}
+  end
+
+  -- Create a fresh context
+  local context = M.create_multiline_comment_context()
+  
+  -- Split content into lines for processing
+  local lines = {}
+  for line in content:gmatch("[^\r\n]+") do
+    table.insert(lines, line)
+  end
+  
+  -- Process each line to mark comment status
+  for i, line_text in ipairs(lines) do
+    M.process_line_for_comments(line_text, i, context)
+  end
+  
+  return context.line_status
+end
+
+-- Process a single line to determine if it's part of a multiline comment
+-- This is the core function of the multiline comment detection system
+function M.process_line_for_comments(line_text, line_num, context)
+  -- Handle case where context isn't provided
+  if not context then
+    context = M.create_multiline_comment_context()
+  end
+  
+  -- Track if this line was initially in a comment
+  local was_in_comment = context.in_comment
+  
+  -- Find all comment markers in this line
+  local comment_markers = {}
+  
+  -- Look for --[[ style comment starts
+  local pos = 1
+  while true do
+    local start_pos = line_text:find("%-%-%[%[", pos)
+    if not start_pos then break end
+    table.insert(comment_markers, {pos = start_pos, type = "start", style = "dash"})
+    pos = start_pos + 4
+  end
+  
+  -- Look for [[ style markers (only if not in string context)
+  -- Note: This is simplified and doesn't handle string context perfectly
+  pos = 1
+  while true do
+    local start_pos = line_text:find("%[%[", pos)
+    if not start_pos then break end
+    
+    -- Check if this is likely a string rather than comment
+    -- (very basic heuristic - could be improved)
+    local prefix = line_text:sub(1, start_pos-1)
+    if not prefix:match("['\"]%s*$") and 
+       not prefix:match("=%s*$") and 
+       not prefix:match("return%s+$") then
+      table.insert(comment_markers, {pos = start_pos, type = "start", style = "bracket"})
+    end
+    pos = start_pos + 2
+  end
+  
+  -- Look for ]] markers
+  pos = 1
+  while true do
+    local end_pos = line_text:find("%]%]", pos)
+    if not end_pos then break end
+    table.insert(comment_markers, {pos = end_pos, type = "end"})
+    pos = end_pos + 2
+  end
+  
+  -- Sort markers by position to process them in order
+  table.sort(comment_markers, function(a, b) return a.pos < b.pos end)
+  
+  -- Process markers in order with proper nesting
+  local changed_in_this_line = false
+  
+  for _, marker in ipairs(comment_markers) do
+    if marker.type == "start" and not context.in_comment then
+      context.in_comment = true
+      table.insert(context.state_stack, marker.style) -- Push style onto stack
+      changed_in_this_line = true
+    elseif marker.type == "end" and context.in_comment then
+      -- Only pop if we have items on the stack
+      if #context.state_stack > 0 then
+        table.remove(context.state_stack) -- Pop the stack
+        
+        -- Only clear in_comment flag if stack is empty
+        if #context.state_stack == 0 then
+          context.in_comment = false
+        end
+      end
+      changed_in_this_line = true
+    end
+  end
+  
+  -- Determine if this line is a comment based on its state
+  local is_comment_line = was_in_comment or context.in_comment
+  
+  -- Also check for single-line comments (--) if not already marked as comment
+  if not is_comment_line then
+    -- Check for single line comments, but ignore any code before the comment
+    local comment_pos = line_text:find("%-%-")
+    if comment_pos then
+      -- Check if this is a multiline comment start (--[[)
+      local ml_start = line_text:match("^%s*%-%-%[%[", comment_pos)
+      if not ml_start then
+        -- This is a regular single-line comment
+        is_comment_line = true
+      end
+    end
+    
+    -- Also check for empty lines
+    if not is_comment_line and line_text:match("^%s*$") then
+      is_comment_line = true
+    end
+  end
+  
+  -- Store the result in the context
+  context.line_status[line_num] = is_comment_line
+  
+  return is_comment_line
+end
+
+-- Update the multiline comment cache for a file
+function M.update_multiline_comment_cache(file_path)
+  if not file_path then
+    logger.debug("Missing file path for multiline comment detection")
+    return false
+  end
+
+  -- Normalize the path with proper error handling
+  local normalized_path, norm_err = error_handler.safe_io_operation(
+    function() return filesystem.normalize_path(file_path) end,
+    file_path,
+    {operation = "update_multiline_comment_cache"}
+  )
+  
+  if not normalized_path then
+    logger.debug("Failed to normalize path: " .. error_handler.format_error(norm_err))
+    return false
+  end
+  
+  -- Skip if the file doesn't exist
+  local file_exists, exists_err = error_handler.safe_io_operation(
+    function() return filesystem.file_exists(normalized_path) end,
+    normalized_path,
+    {operation = "update_multiline_comment_cache"}
+  )
+  
+  if not file_exists then
+    return false
+  end
+  
+  -- Read the file content with proper error handling
+  local content, read_err = error_handler.safe_io_operation(
+    function() return filesystem.read_file(normalized_path) end,
+    normalized_path,
+    {operation = "update_multiline_comment_cache"}
+  )
+  
+  if not content then
+    logger.debug({
+      message = "Failed to read file for multiline comment detection",
+      file_path = normalized_path,
+      error = error_handler.format_error(read_err)
+    })
+    return false
+  end
+  
+  -- Process the content to find multiline comments with proper error handling
+  local comment_status, comment_err = error_handler.try(function()
+    return M.find_multiline_comments(content)
+  end)
+  
+  if not comment_status then
+    logger.debug({
+      message = "Failed to process multiline comments",
+      file_path = normalized_path,
+      error = error_handler.format_error(comment_err)
+    })
+    return false
+  end
+  
+  -- Cache the results
+  multiline_comment_cache[normalized_path] = comment_status
+  
+  return true
+end
+
+-- Check if a specific line is in a multiline comment
+function M.is_in_multiline_comment(file_path, line_num)
+  -- Validate inputs
+  if not file_path or not line_num or line_num <= 0 then
+    return false
+  end
+  
+  -- Normalize the path with proper error handling
+  local normalized_path, norm_err = error_handler.safe_io_operation(
+    function() return filesystem.normalize_path(file_path) end,
+    file_path,
+    {operation = "is_in_multiline_comment"}
+  )
+  
+  if not normalized_path then
+    logger.debug("Failed to normalize path: " .. error_handler.format_error(norm_err))
+    return false
+  end
+  
+  -- Check if we have cached results
+  if not multiline_comment_cache[normalized_path] then
+    -- Update the cache if needed
+    local success, update_err = error_handler.try(function()
+      return M.update_multiline_comment_cache(normalized_path)
+    end)
+    
+    if not success or not update_err then
+      return false
+    end
+  end
+  
+  -- Check the cached status with type safety
+  if multiline_comment_cache[normalized_path] and 
+     type(multiline_comment_cache[normalized_path]) == "table" and
+     multiline_comment_cache[normalized_path][line_num] ~= nil then
+    return multiline_comment_cache[normalized_path][line_num]
+  end
+  
+  -- Default to false if no status found
+  return false
 end
 
 -- Parse a Lua file and return its AST with enhanced protection
@@ -71,7 +323,15 @@ function M.parse_file(file_path)
 
   -- Verify file exists
   if not filesystem.file_exists(file_path) then
-    return nil, "File not found: " .. file_path
+    local err = error_handler.io_error(
+      "File not found: " .. file_path,
+      {
+        file_path = file_path,
+        operation = "parse_file"
+      }
+    )
+    logger.debug("File not found: " .. error_handler.format_error(err))
+    return nil, err
   end
 
   -- Skip testing-related files to improve performance
@@ -81,7 +341,14 @@ function M.parse_file(file_path)
      file_path:match("/test/") or
      file_path:match("/specs/") or
      file_path:match("/spec/") then
-    return nil, "Test file excluded from static analysis"
+    return nil, error_handler.validation_error(
+      "Test file excluded from static analysis",
+      {
+        file_path = file_path,
+        operation = "parse_file",
+        reason = "performance optimization"
+      }
+    )
   end
   
   -- Skip already known problematic file types
@@ -89,63 +356,131 @@ function M.parse_file(file_path)
      file_path:match("/vendor/") or
      file_path:match("/deps/") or
      file_path:match("/node_modules/") then
-    return nil, "Excluded dependency from static analysis"
+    return nil, error_handler.validation_error(
+      "Excluded dependency from static analysis",
+      {
+        file_path = file_path,
+        operation = "parse_file",
+        reason = "excluded dependency"
+      }
+    )
   end
   
   -- Check file size before parsing - INCREASED the limit to 1MB
   -- This ensures we can handle reasonable-sized source files
-  local file_size = filesystem.get_file_size(file_path)
-  if file_size and file_size > 1024000 then -- 1MB size limit
-    logger.debug("Skipping static analysis for large file: " .. file_path .. 
-        " (" .. math.floor(file_size/1024) .. "KB)")
-    return nil, "File too large for analysis: " .. file_path
+  local file_size, file_size_err = error_handler.safe_io_operation(
+    function() return filesystem.get_file_size(file_path) end,
+    file_path,
+    {operation = "parse_file"}
+  )
+  
+  if not file_size then
+    logger.debug("Failed to get file size: " .. error_handler.format_error(file_size_err))
+    return nil, file_size_err
+  end
+  
+  if file_size > 1024000 then -- 1MB size limit
+    logger.debug({
+      message = "Skipping static analysis for large file",
+      file_path = file_path,
+      file_size_kb = math.floor(file_size/1024),
+      limit_kb = 1024
+    })
+    
+    return nil, error_handler.validation_error(
+      "File too large for analysis: " .. file_path,
+      {
+        file_path = file_path,
+        file_size = file_size,
+        limit = 1024000,
+        operation = "parse_file"
+      }
+    )
   end
 
-  -- Read the file content with protection
-  local content, err
-  local success, result = pcall(function()
-    content, err = filesystem.read_file(file_path)
-    if not content then
-      return nil, "Failed to read file: " .. tostring(err)
-    end
-    return content, nil
-  end)
-  
-  if not success then
-    return nil, "Exception reading file: " .. tostring(result)
-  end
+  -- Read the file content with proper error handling
+  local content, read_err = error_handler.safe_io_operation(
+    function() return filesystem.read_file(file_path) end,
+    file_path,
+    {operation = "parse_file"}
+  )
   
   if not content then
-    return nil, err or "Unknown error reading file"
+    logger.debug("Failed to read file: " .. error_handler.format_error(read_err))
+    return nil, read_err
   end
 
   -- Skip if content is too large (use smaller limit for safety)
   if #content > 200000 then -- 200KB content limit - reduced from 500KB
-    logger.debug("Skipping static analysis for large content: " .. file_path .. 
-        " (" .. math.floor(#content/1024) .. "KB)")
-    return nil, "File content too large for analysis"
+    logger.debug({
+      message = "Skipping static analysis for large content",
+      file_path = file_path,
+      content_size_kb = math.floor(#content/1024),
+      limit_kb = 200,
+      operation = "parse_file"
+    })
+    
+    return nil, error_handler.validation_error(
+      "File content too large for analysis",
+      {
+        file_path = file_path,
+        content_size = #content,
+        limit = 200000,
+        operation = "parse_file"
+      }
+    )
   end
   
   -- Quick check for deeply nested structures 
-  local max_depth = 0
-  local current_depth = 0
-  for i = 1, #content do
-    local c = content:sub(i, i)
-    if c == "{" or c == "(" or c == "[" then
-      current_depth = current_depth + 1
-      if current_depth > max_depth then
-        max_depth = current_depth
+  local max_depth, current_depth = 0, 0
+  
+  local success, depth_result = error_handler.try(function()
+    for i = 1, #content do
+      local c = content:sub(i, i)
+      if c == "{" or c == "(" or c == "[" then
+        current_depth = current_depth + 1
+        if current_depth > max_depth then
+          max_depth = current_depth
+        end
+      elseif c == "}" or c == ")" or c == "]" then
+        current_depth = math.max(0, current_depth - 1)
       end
-    elseif c == "}" or c == ")" or c == "]" then
-      current_depth = math.max(0, current_depth - 1)
     end
+    return max_depth
+  end)
+  
+  if not success then
+    return nil, error_handler.runtime_error(
+      "Error checking nesting depth",
+      {
+        file_path = file_path,
+        operation = "parse_file"
+      },
+      depth_result
+    )
   end
+  
+  max_depth = depth_result
   
   -- Skip files with excessively deep nesting
   if max_depth > 100 then
-    logger.debug("Skipping static analysis for deeply nested file: " .. file_path .. 
-        " (depth " .. max_depth .. ")")
-    return nil, "File has too deeply nested structures"
+    logger.debug({
+      message = "Skipping static analysis for deeply nested file",
+      file_path = file_path,
+      nesting_depth = max_depth,
+      depth_limit = 100,
+      operation = "parse_file"
+    })
+    
+    return nil, error_handler.validation_error(
+      "File has too deeply nested structures",
+      {
+        file_path = file_path,
+        nesting_depth = max_depth,
+        limit = 100,
+        operation = "parse_file"
+      }
+    )
   end
 
   -- Finally parse the content with all our protections in place
@@ -308,12 +643,27 @@ local function is_line_executable(nodes, line_num, content)
     -- Check processing limits
     node_count = node_count + 1
     if node_count > MAX_NODES then
-      logger.debug("Node limit reached in is_line_executable")
+      if logger.is_debug_enabled() then
+        logger.debug({
+          message = "Node limit reached in is_line_executable",
+          node_count = node_count,
+          max_nodes = MAX_NODES,
+          operation = "is_line_executable"
+        })
+      end
       return false
     end
     
     if node_count % 1000 == 0 and os.clock() - start_time > MAX_ANALYSIS_TIME then
-      logger.debug("Time limit reached in is_line_executable")
+      if logger.is_debug_enabled() then
+        logger.debug({
+          message = "Time limit reached in is_line_executable",
+          elapsed_time = os.clock() - start_time,
+          max_time = MAX_ANALYSIS_TIME,
+          operation = "is_line_executable",
+          node_count = node_count
+        })
+      end
       return false
     end
     
@@ -374,59 +724,97 @@ function M.parse_content(content, file_path)
 
   -- Safety limit for content size
   if #content > 600000 then -- 600KB limit (increased from 300KB)
-    return nil, "Content too large for parse_content: " .. (#content/1024) .. "KB"
+    return nil, error_handler.validation_error(
+      "Content too large for parse_content: " .. (#content/1024) .. "KB",
+      {
+        content_size = #content,
+        limit = 600000,
+        file_path = file_path or "inline",
+        operation = "parse_content"
+      }
+    )
   end
   
   -- Start timing
   local start_time = os.clock()
   local MAX_PARSE_TIME = 60.0 -- 60 second total parse time limit (increased from 1 second)
   
-  -- Run parsing with protection
-  local ast, err
-  local success, result = pcall(function()
-    ast, err = parser.parse(content, file_path or "inline")
+  -- Run parsing with proper error handling
+  local ast, parse_err
+  local success, result = error_handler.try(function()
+    local ast_result, err = parser.parse(content, file_path or "inline")
     
     if os.clock() - start_time > MAX_PARSE_TIME then
-      return nil, "Parse time limit exceeded"
+      return nil, error_handler.timeout_error(
+        "Parse time limit exceeded",
+        {
+          max_time = MAX_PARSE_TIME,
+          elapsed_time = os.clock() - start_time,
+          file_path = file_path or "inline",
+          operation = "parse_content"
+        }
+      )
     end
     
-    if not ast then
-      return nil, "Parse error: " .. (err or "unknown error")
+    if not ast_result then
+      return nil, error_handler.parse_error(
+        "Parse error: " .. (err or "unknown error"),
+        {
+          file_path = file_path or "inline",
+          operation = "parse_content"
+        },
+        err
+      )
     end
     
-    return ast, nil
+    return ast_result
   end)
   
-  -- Handle errors from pcall
+  -- Handle errors from try
   if not success then
-    return nil, "Parser exception: " .. tostring(result)
+    logger.debug("Parser exception: " .. error_handler.format_error(result))
+    return nil, result
   end
   
-  -- Handle errors from parse
-  if not ast then
-    return nil, err or "Unknown parse error"
-  end
+  ast = result
   
   -- Generate code map from the AST with time limit
   local code_map
-  success, result = pcall(function()
+  success, result = error_handler.try(function()
     -- Check time again before code map generation
     if os.clock() - start_time > MAX_PARSE_TIME then
-      return nil, "Code map time limit exceeded"
+      return nil, error_handler.timeout_error(
+        "Code map time limit exceeded",
+        {
+          max_time = MAX_PARSE_TIME,
+          elapsed_time = os.clock() - start_time,
+          file_path = file_path or "inline",
+          operation = "generate_code_map"
+        }
+      )
     end
     
-    code_map = M.generate_code_map(ast, content)
-    return code_map, nil
+    local map_result = M.generate_code_map(ast, content)
+    if not map_result then
+      return nil, error_handler.runtime_error(
+        "Code map generation failed",
+        {
+          file_path = file_path or "inline",
+          operation = "generate_code_map"
+        }
+      )
+    end
+    
+    return map_result
   end)
   
   -- Handle errors from code map generation
   if not success then
-    return nil, "Code map exception: " .. tostring(result)
+    logger.debug("Code map exception: " .. error_handler.format_error(result))
+    return nil, result
   end
   
-  if not code_map then
-    return nil, result or "Code map generation failed"
-  end
+  code_map = result
   
   -- Cache the results if we have a path
   if file_path then
@@ -464,7 +852,14 @@ local function collect_nodes(ast, nodes)
     
     -- Performance safety - if we've processed too many nodes, break
     if processed > 100000 then
-      logger.debug("Node collection limit reached (100,000 nodes)")
+      if logger.is_debug_enabled() then
+        logger.debug({
+          message = "Node collection limit reached",
+          processed_nodes = processed,
+          limit = 100000,
+          operation = "collect_nodes"
+        })
+      end
       break
     end
   end
@@ -621,7 +1016,14 @@ local function find_blocks(ast, blocks, content, parent_id)
     
     -- Safety limit
     if processed > 100000 then
-      logger.debug("Block finding limit reached (100,000 nodes)")
+      if logger.is_debug_enabled() then
+        logger.debug({
+          message = "Block finding limit reached",
+          processed_nodes = processed,
+          limit = 100000,
+          operation = "find_blocks"
+        })
+      end
       break
     end
     
@@ -809,7 +1211,14 @@ local function find_conditions(ast, conditions, content)
     
     -- Safety limit
     if processed > 100000 then
-      logger.debug("Condition finding limit reached (100,000 nodes)")
+      if logger.is_debug_enabled() then
+        logger.debug({
+          message = "Condition finding limit reached",
+          processed_nodes = processed,
+          limit = 100000,
+          operation = "find_conditions"
+        })
+      end
       break
     end
     
@@ -903,7 +1312,14 @@ function M.generate_code_map(ast, content)
   
   -- Set a reasonable upper limit for line count to prevent DOS
   if code_map.line_count > 10000 then
-    logger.debug("File too large for code mapping: " .. code_map.line_count .. " lines")
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "File too large for code mapping",
+        line_count = code_map.line_count,
+        max_lines = 10000,
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
@@ -921,18 +1337,37 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    logger.debug("ERROR in collect_nodes: " .. tostring(result))
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "Error in collect_nodes",
+        error = tostring(result),
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
   if not all_nodes then
-    logger.debug("ERROR: " .. (result or "Node collection failed"))
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "Node collection failed",
+        error = result or "Unknown error",
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
   -- Add size limit for node collection
   if #all_nodes > 50000 then
-    logger.debug("AST too complex for analysis: " .. #all_nodes .. " nodes")
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "AST too complex for analysis",
+        node_count = #all_nodes,
+        max_nodes = 50000,
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
@@ -950,12 +1385,24 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    logger.debug("ERROR in find_functions: " .. tostring(result))
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "Error in find_functions",
+        error = tostring(result),
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
   if not functions then
-    logger.debug("ERROR: " .. (result or "Function finding failed"))
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "Function finding failed",
+        error = result or "Unknown error",
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
@@ -973,7 +1420,13 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    logger.debug("ERROR in find_blocks: " .. tostring(result))
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "Error in find_blocks",
+        error = tostring(result),
+        operation = "generate_code_map"
+      })
+    end
     return nil
   end
   
@@ -995,7 +1448,14 @@ function M.generate_code_map(ast, content)
   end)
   
   if not success then
-    logger.debug("ERROR in find_conditions: " .. tostring(result))
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "Error in find_conditions",
+        error = tostring(result),
+        operation = "generate_code_map",
+        note = "Continuing without conditions"
+      })
+    end
     -- Don't return, we can still continue without conditions
   elseif conditions then
     code_map.conditions = conditions
@@ -1005,7 +1465,15 @@ function M.generate_code_map(ast, content)
   for i, func in ipairs(functions) do
     -- Periodic time checks
     if i % 100 == 0 and os.clock() - start_time > MAX_CODEMAP_TIME then
-      logger.debug("Function map timeout after " .. i .. " functions")
+      if logger.is_debug_enabled() then
+        logger.debug({
+          message = "Function map timeout",
+          functions_processed = i,
+          elapsed_time = os.clock() - start_time,
+          max_time = MAX_CODEMAP_TIME,
+          operation = "generate_code_map"
+        })
+      end
       break
     end
     
@@ -1353,63 +1821,116 @@ function M.generate_code_map(ast, content)
   -- Final time check and report with file info
   local total_time = os.clock() - start_time
   
-  -- Always print detailed information for debugging
-  local file_info = ""
-  if file_path then
-    file_info = " for " .. file_path
+  -- Always print detailed information for debugging using structured logging
+  if logger.is_verbose_enabled() then
+    logger.verbose({
+      message = "Code map generation completed",
+      elapsed_time_sec = string.format("%.2f", total_time),
+      file_path = file_path or "unknown",
+      line_count = code_map.line_count or 0,
+      node_count = #all_nodes or 0,
+      executable_lines = executable_count,
+      non_executable_lines = non_executable_count,
+      operation = "generate_code_map"
+    })
   end
-  
-  logger.verbose(string.format("Code map generation took %.2f seconds%s (%d lines, %d nodes)", 
-    total_time, 
-    file_info,
-    code_map.line_count or 0, 
-    #all_nodes or 0))
   
   -- Verify we have executable lines
   if executable_count == 0 then
-    logger.debug("No executable lines found in file! This will cause incorrect coverage reporting.")
+    if logger.is_debug_enabled() then
+      logger.debug({
+        message = "No executable lines found in file",
+        file_path = file_path or "unknown",
+        warning = "This will cause incorrect coverage reporting",
+        operation = "generate_code_map"
+      })
+    end
     
     -- Apply emergency fallback for important coverage module files
     if file_path and (file_path:match("lib/coverage/init.lua") or file_path:match("lib/coverage/debug_hook.lua")) then
-      logger.debug("FALLBACK: Applying emergency fallback for critical file: " .. file_path)
-      
-      -- If content is available, quickly classify lines based on simple patterns
-      if content and type(content) == "string" then
-        local lines = {}
-        for line in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
-          table.insert(lines, line)
-        end
-        
-        local fallback_executable = 0
-        
-        for i, line in ipairs(lines) do
-          -- Skip empty lines and comment lines
-          if line:match("^%s*$") or line:match("^%s*%-%-") or line:match("^%s*%-%-%[%[") then
-            code_map.lines[i] = {
-              line = i,
-              executable = false,
-              type = M.LINE_TYPES.NON_EXECUTABLE
-            }
-            code_map._executable_lines_lookup[i] = false
-          else
-            -- Mark most other lines as executable
-            code_map.lines[i] = {
-              line = i,
-              executable = true,
-              type = M.LINE_TYPES.EXECUTABLE
-            }
-            code_map._executable_lines_lookup[i] = true
-            fallback_executable = fallback_executable + 1
-          end
-        end
-        
-        logger.debug(string.format("FALLBACK: Marked %d lines as executable with fallback mechanism", fallback_executable))
-        executable_count = fallback_executable
-      end
+      -- Extract this emergency fallback code into a dedicated function for better organization
+      executable_count = M.apply_emergency_fallback(code_map, file_path, content)
     end
   end
   
   return code_map
+end
+
+-- Apply emergency fallback classification for critical files
+-- This function is extracted from the emergency fallback code block for better organization
+function M.apply_emergency_fallback(code_map, file_path, content)
+  logger.debug({
+    message = "Applying emergency fallback for critical file",
+    file_path = file_path,
+    operation = "apply_emergency_fallback"
+  })
+  
+  -- Parameter validation with error handler
+  if not code_map then
+    return 0, error_handler.validation_error(
+      "Missing code map for emergency fallback",
+      {
+        file_path = file_path,
+        operation = "apply_emergency_fallback"
+      }
+    )
+  end
+  
+  -- If content is available, quickly classify lines based on simple patterns
+  if content and type(content) == "string" then
+    -- Process lines with proper error handling
+    local success, result = error_handler.try(function()
+      local lines = {}
+      for line in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+        table.insert(lines, line)
+      end
+      
+      local fallback_executable = 0
+      
+      for i, line in ipairs(lines) do
+        -- Skip empty lines and comment lines
+        if line:match("^%s*$") or line:match("^%s*%-%-") or line:match("^%s*%-%-%[%[") then
+          code_map.lines[i] = {
+            line = i,
+            executable = false,
+            type = M.LINE_TYPES.NON_EXECUTABLE
+          }
+          code_map._executable_lines_lookup[i] = false
+        else
+          -- Mark most other lines as executable
+          code_map.lines[i] = {
+            line = i,
+            executable = true,
+            type = M.LINE_TYPES.EXECUTABLE
+          }
+          code_map._executable_lines_lookup[i] = true
+          fallback_executable = fallback_executable + 1
+        end
+      end
+      
+      logger.debug({
+        message = "Emergency fallback classification complete",
+        executable_lines = fallback_executable,
+        total_lines = #lines,
+        file_path = file_path,
+        operation = "apply_emergency_fallback"
+      })
+      
+      return fallback_executable
+    end)
+    
+    if not success then
+      logger.error("Emergency fallback failed: " .. error_handler.format_error(result), {
+        file_path = file_path,
+        operation = "apply_emergency_fallback"
+      })
+      return 0
+    end
+    
+    return result
+  end
+  
+  return 0
 end
 
 -- Get the executable lines from a code map
@@ -1432,7 +1953,12 @@ end
 -- Helper function to get or create a code map from an AST
 function M.get_code_map_for_ast(ast, file_path)
   if not ast then
-    return nil, "AST is nil"
+    return nil, error_handler.validation_error(
+      "AST is nil",
+      {
+        operation = "get_code_map_for_ast"
+      }
+    )
   end
   
   -- If the AST already has an attached code map, use it
@@ -1441,22 +1967,32 @@ function M.get_code_map_for_ast(ast, file_path)
   end
   
   -- Get the file content
-  local content
+  local content, read_err
   if file_path then
-    content = filesystem.read_file(file_path)
+    content, read_err = error_handler.safe_io_operation(
+      function() return filesystem.read_file(file_path) end,
+      file_path,
+      {operation = "get_code_map_for_ast"}
+    )
+    
     if not content then
-      return nil, "Could not read file: " .. file_path
+      return nil, read_err
     end
   else
-    return nil, "No file path provided for code map generation"
+    return nil, error_handler.validation_error(
+      "No file path provided for code map generation",
+      {
+        operation = "get_code_map_for_ast"
+      }
+    )
   end
   
   -- Generate the code map with time limit
   local start_time = os.clock()
   local MAX_TIME = 1.0 -- 1 second limit
   
-  -- Use protected call for map generation
-  local success, result = pcall(function()
+  -- Use error handler's try for map generation
+  local success, result = error_handler.try(function()
     local code_map = M.generate_code_map(ast, content) 
     
     -- Attach the code map to the AST for future reference
@@ -1466,18 +2002,22 @@ function M.get_code_map_for_ast(ast, file_path)
     
     -- Check for timeout
     if os.clock() - start_time > MAX_TIME then
-      return nil, "Timeout generating code map"
+      return nil, error_handler.timeout_error(
+        "Timeout generating code map",
+        {
+          max_time = MAX_TIME,
+          elapsed_time = os.clock() - start_time,
+          file_path = file_path,
+          operation = "get_code_map_for_ast"
+        }
+      )
     end
     
     return code_map
   end)
   
   if not success then
-    return nil, "Error generating code map: " .. tostring(result)
-  end
-  
-  -- Check if timeout occurred inside the pcall
-  if type(result) == "string" then
+    logger.debug("Error generating code map: " .. error_handler.format_error(result))
     return nil, result
   end
   
@@ -1682,6 +2222,54 @@ function M.calculate_block_coverage(code_map)
     executed_blocks = executed_blocks,
     coverage_percent = total_blocks > 0 and (executed_blocks / total_blocks * 100) or 0
   }
+end
+
+-- Simple line classification without requiring a full code map
+-- This is used as the fallback when no code map is available
+function M.classify_line_simple(line_text, configuration)
+  -- If no line text, it's not executable
+  if not line_text then
+    return false
+  end
+  
+  -- Handle config parameter
+  local cfg = configuration or config
+  
+  -- Trimmed line text
+  local trimmed = line_text:match("^%s*(.-)%s*$") or ""
+  
+  -- Common non-executable patterns
+  if trimmed == "" or                     -- Empty lines
+     trimmed:match("^%-%-") or           -- Single-line comments
+     trimmed:match("^%-%-%[%[") or       -- Start of multiline comment
+     trimmed:match("%]%]") then          -- End of multiline comment
+    return false
+  end
+  
+  -- Control flow keywords - executability depends on configuration
+  local control_flow_patterns = {
+    "^end%s*$",      -- Standalone end keyword
+    "^end[,%)]",     -- End followed by comma or closing parenthesis
+    "^end.*%-%-%s+", -- End followed by comment
+    "^else%s*$",     -- Standalone else keyword
+    "^until%s",      -- until lines
+    "^[%]}]%s*$",    -- Closing brackets/braces
+    "^then%s*$",     -- Standalone then keyword
+    "^do%s*$",       -- Standalone do keyword
+    "^repeat%s*$",   -- Standalone repeat keyword
+    "^elseif%s*$"    -- Standalone elseif keyword
+  }
+  
+  for _, pattern in ipairs(control_flow_patterns) do
+    if trimmed:match(pattern) then
+      -- Control flow keywords are executable if configured that way
+      return cfg.control_flow_keywords_executable == true
+    end
+  end
+  
+  -- If we get here, assume the line is executable
+  -- This matches the original fallback behavior
+  return true
 end
 
 return M
