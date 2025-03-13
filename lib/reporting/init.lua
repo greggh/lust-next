@@ -6,6 +6,7 @@ local M = {}
 -- Import modules
 local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
+local error_handler = require("lib.tools.error_handler")
 
 -- Default configuration
 local DEFAULT_CONFIG = {
@@ -539,23 +540,54 @@ local results_formatters = formatters.results
 
 -- Register a custom coverage report formatter
 function M.register_coverage_formatter(name, formatter_fn)
+  -- Validate name parameter
   if type(name) ~= "string" then
-    logger.error("Failed to register coverage formatter: name must be a string", {
-      name_type = type(name)
-    })
-    error("Formatter name must be a string")
+    local err = error_handler.validation_error(
+      "Failed to register coverage formatter: name must be a string",
+      {
+        name_type = type(name),
+        operation = "register_coverage_formatter",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
+  -- Validate formatter_fn parameter
   if type(formatter_fn) ~= "function" then
-    logger.error("Failed to register coverage formatter: formatter must be a function", {
-      formatter_name = name,
-      formatter_type = type(formatter_fn)
-    })
-    error("Formatter must be a function")
+    local err = error_handler.validation_error(
+      "Failed to register coverage formatter: formatter must be a function",
+      {
+        formatter_name = name,
+        formatter_type = type(formatter_fn),
+        operation = "register_coverage_formatter",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
-  -- Register the formatter
-  formatters.coverage[name] = formatter_fn
+  -- Register the formatter using error_handler.try
+  local success, result = error_handler.try(function()
+    formatters.coverage[name] = formatter_fn
+    return true
+  end)
+  
+  if not success then
+    local err = error_handler.runtime_error(
+      "Failed to register coverage formatter: registration error",
+      {
+        formatter_name = name,
+        operation = "register_coverage_formatter",
+        module = "reporting"
+      },
+      result -- result contains the error when success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
   
   logger.debug("Registered custom coverage formatter", {
     formatter_name = name
@@ -566,23 +598,54 @@ end
 
 -- Register a custom quality report formatter
 function M.register_quality_formatter(name, formatter_fn)
+  -- Validate name parameter
   if type(name) ~= "string" then
-    logger.error("Failed to register quality formatter: name must be a string", {
-      name_type = type(name)
-    })
-    error("Formatter name must be a string")
+    local err = error_handler.validation_error(
+      "Failed to register quality formatter: name must be a string",
+      {
+        name_type = type(name),
+        operation = "register_quality_formatter",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
+  -- Validate formatter_fn parameter
   if type(formatter_fn) ~= "function" then
-    logger.error("Failed to register quality formatter: formatter must be a function", {
-      formatter_name = name,
-      formatter_type = type(formatter_fn)
-    })
-    error("Formatter must be a function")
+    local err = error_handler.validation_error(
+      "Failed to register quality formatter: formatter must be a function",
+      {
+        formatter_name = name,
+        formatter_type = type(formatter_fn),
+        operation = "register_quality_formatter",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
-  -- Register the formatter
-  formatters.quality[name] = formatter_fn
+  -- Register the formatter using error_handler.try
+  local success, result = error_handler.try(function()
+    formatters.quality[name] = formatter_fn
+    return true
+  end)
+  
+  if not success then
+    local err = error_handler.runtime_error(
+      "Failed to register quality formatter: registration error",
+      {
+        formatter_name = name,
+        operation = "register_quality_formatter",
+        module = "reporting"
+      },
+      result -- result contains the error when success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
   
   logger.debug("Registered custom quality formatter", {
     formatter_name = name
@@ -593,23 +656,54 @@ end
 
 -- Register a custom test results formatter
 function M.register_results_formatter(name, formatter_fn)
+  -- Validate name parameter
   if type(name) ~= "string" then
-    logger.error("Failed to register results formatter: name must be a string", {
-      name_type = type(name)
-    })
-    error("Formatter name must be a string")
+    local err = error_handler.validation_error(
+      "Failed to register results formatter: name must be a string",
+      {
+        name_type = type(name),
+        operation = "register_results_formatter",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
+  -- Validate formatter_fn parameter
   if type(formatter_fn) ~= "function" then
-    logger.error("Failed to register results formatter: formatter must be a function", {
-      formatter_name = name,
-      formatter_type = type(formatter_fn)
-    })
-    error("Formatter must be a function")
+    local err = error_handler.validation_error(
+      "Failed to register results formatter: formatter must be a function",
+      {
+        formatter_name = name,
+        formatter_type = type(formatter_fn),
+        operation = "register_results_formatter",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
-  -- Register the formatter
-  formatters.results[name] = formatter_fn
+  -- Register the formatter using error_handler.try
+  local success, result = error_handler.try(function()
+    formatters.results[name] = formatter_fn
+    return true
+  end)
+  
+  if not success then
+    local err = error_handler.runtime_error(
+      "Failed to register results formatter: registration error",
+      {
+        formatter_name = name,
+        operation = "register_results_formatter",
+        module = "reporting"
+      },
+      result -- result contains the error when success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
   
   logger.debug("Registered custom results formatter", {
     formatter_name = name
@@ -620,11 +714,18 @@ end
 
 -- Load formatters from a module (table with format functions)
 function M.load_formatters(formatter_module)
+  -- Validate formatter_module parameter
   if type(formatter_module) ~= "table" then
-    logger.error("Failed to load formatters: module must be a table", {
-      module_type = type(formatter_module)
-    })
-    error("Formatter module must be a table")
+    local err = error_handler.validation_error(
+      "Failed to load formatters: module must be a table",
+      {
+        module_type = type(formatter_module),
+        operation = "load_formatters",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
   logger.debug("Loading formatters from module", {
@@ -634,15 +735,32 @@ function M.load_formatters(formatter_module)
   })
   
   local registered = 0
+  local registration_errors = {}
   
-  -- Register coverage formatters
+  -- Register coverage formatters with error handling
   if type(formatter_module.coverage) == "table" then
     local coverage_formatters = {}
     for name, fn in pairs(formatter_module.coverage) do
       if type(fn) == "function" then
-        M.register_coverage_formatter(name, fn)
-        registered = registered + 1
-        table.insert(coverage_formatters, name)
+        local success, err = error_handler.try(function()
+          return M.register_coverage_formatter(name, fn)
+        end)
+        
+        if success then
+          registered = registered + 1
+          table.insert(coverage_formatters, name)
+        else
+          -- Add to errors list but continue with other formatters
+          table.insert(registration_errors, {
+            formatter_type = "coverage",
+            name = name,
+            error = err
+          })
+          logger.warn("Failed to register coverage formatter", {
+            formatter_name = name,
+            error = error_handler.format_error(err)
+          })
+        end
       end
     end
     
@@ -654,14 +772,30 @@ function M.load_formatters(formatter_module)
     end
   end
   
-  -- Register quality formatters
+  -- Register quality formatters with error handling
   if type(formatter_module.quality) == "table" then
     local quality_formatters = {}
     for name, fn in pairs(formatter_module.quality) do
       if type(fn) == "function" then
-        M.register_quality_formatter(name, fn)
-        registered = registered + 1
-        table.insert(quality_formatters, name)
+        local success, err = error_handler.try(function()
+          return M.register_quality_formatter(name, fn)
+        end)
+        
+        if success then
+          registered = registered + 1
+          table.insert(quality_formatters, name)
+        else
+          -- Add to errors list but continue with other formatters
+          table.insert(registration_errors, {
+            formatter_type = "quality",
+            name = name,
+            error = err
+          })
+          logger.warn("Failed to register quality formatter", {
+            formatter_name = name,
+            error = error_handler.format_error(err)
+          })
+        end
       end
     end
     
@@ -673,14 +807,30 @@ function M.load_formatters(formatter_module)
     end
   end
   
-  -- Register test results formatters
+  -- Register test results formatters with error handling
   if type(formatter_module.results) == "table" then
     local results_formatters = {}
     for name, fn in pairs(formatter_module.results) do
       if type(fn) == "function" then
-        M.register_results_formatter(name, fn)
-        registered = registered + 1
-        table.insert(results_formatters, name)
+        local success, err = error_handler.try(function()
+          return M.register_results_formatter(name, fn)
+        end)
+        
+        if success then
+          registered = registered + 1
+          table.insert(results_formatters, name)
+        else
+          -- Add to errors list but continue with other formatters
+          table.insert(registration_errors, {
+            formatter_type = "results",
+            name = name,
+            error = err
+          })
+          logger.warn("Failed to register results formatter", {
+            formatter_name = name,
+            error = error_handler.format_error(err)
+          })
+        end
       end
     end
     
@@ -693,8 +843,26 @@ function M.load_formatters(formatter_module)
   end
   
   logger.debug("Completed formatter registration", {
-    total_registered = registered
+    total_registered = registered,
+    error_count = #registration_errors
   })
+  
+  -- If we have errors but still registered some formatters, return partial success
+  if #registration_errors > 0 then
+    local err = error_handler.runtime_error(
+      "Some formatters failed to register",
+      {
+        total_attempted = registered + #registration_errors,
+        successful = registered,
+        failed = #registration_errors,
+        operation = "load_formatters",
+        module = "reporting"
+      }
+    )
+    
+    -- Return the number registered and the error object
+    return registered, err
+  end
   
   return registered
 end
@@ -904,45 +1072,115 @@ end
 
 -- Write content to a file using the filesystem module
 function M.write_file(file_path, content)
+  -- Input validation using error_handler
+  if not file_path then
+    local err = error_handler.validation_error(
+      "Missing required file_path parameter",
+      {
+        operation = "write_file",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  if not content then
+    local err = error_handler.validation_error(
+      "Missing required content parameter",
+      {
+        operation = "write_file",
+        file_path = file_path,
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
   logger.debug("Writing file", {
     file_path = file_path,
     content_length = content and #content or 0
   })
   
-  -- Make sure content is a string
+  -- Make sure content is a string, with error handling
+  local content_str
+  local success, result, err
+  
   if type(content) == "table" then
-    content = json_module.encode(content)
+    success, result, err = error_handler.try(function()
+      return json_module.encode(content)
+    end)
+    
+    if not success then
+      local error_obj = error_handler.io_error(
+        "Failed to encode table as JSON",
+        {
+          file_path = file_path,
+          module = "reporting",
+          table_size = #content
+        },
+        result -- The error object is in result when success is false
+      )
+      logger.error(error_obj.message, error_obj.context)
+      return nil, error_obj
+    end
+    
+    content_str = result
     logger.trace("Converted table to JSON string", {
       file_path = file_path,
-      content_length = content and #content or 0
+      content_length = content_str and #content_str or 0
     })
-  end
-  
-  -- If still not a string, convert to string
-  if type(content) ~= "string" then
-    content = tostring(content)
-    logger.trace("Converted non-string content to string", {
+  else
+    -- If not a table, convert to string directly
+    success, result, err = error_handler.try(function()
+      return tostring(content)
+    end)
+    
+    if not success then
+      local error_obj = error_handler.io_error(
+        "Failed to convert content to string",
+        {
+          file_path = file_path,
+          module = "reporting",
+          content_type = type(content)
+        },
+        result -- The error object is in result when success is false
+      )
+      logger.error(error_obj.message, error_obj.context)
+      return nil, error_obj
+    end
+    
+    content_str = result
+    logger.trace("Converted content to string", {
       file_path = file_path,
       content_type = type(content),
-      content_length = content and #content or 0
+      content_length = content_str and #content_str or 0
     })
   end
   
-  -- Use the filesystem module to write the file
-  -- This will handle directory creation and error handling
-  local success, err = fs.write_file(file_path, content)
+  -- Use the filesystem module to write the file with proper error handling
+  local write_success, write_err = error_handler.safe_io_operation(
+    function() return fs.write_file(file_path, content_str) end,
+    file_path,
+    {
+      operation = "write_file",
+      module = "reporting",
+      content_length = content_str and #content_str or 0
+    }
+  )
   
-  if not success then
+  if not write_success then
     logger.error("Error writing to file", {
       file_path = file_path,
-      error = tostring(err)
+      error = error_handler.format_error(write_err)
     })
-    return false, "Error writing to file: " .. tostring(err)
+    return nil, write_err
   end
   
   logger.debug("Successfully wrote file", {
     file_path = file_path,
-    content_length = content and #content or 0
+    content_length = content_str and #content_str or 0
   })
   return true
 end
@@ -951,18 +1189,52 @@ end
 local _validation_module
 local function get_validation_module()
   if not _validation_module then
-    local success, validation = pcall(require, "lib.reporting.validation")
+    -- Use error_handler.try for better error handling and context
+    local success, validation = error_handler.try(function()
+      return require("lib.reporting.validation")
+    end)
+    
     if success then
       _validation_module = validation
       logger.debug("Successfully loaded validation module")
     else
       logger.debug("Failed to load validation module", {
-        error = tostring(validation)
+        error = error_handler.format_error(validation),
+        operation = "get_validation_module",
+        module = "reporting"
       })
-      -- Create dummy validation module
+      
+      -- Create dummy validation module with structured error handling
       _validation_module = {
-        validate_coverage_data = function() return true, {} end,
-        validate_report = function() return { validation = { is_valid = true, issues = {} } } end
+        validate_coverage_data = function() 
+          -- Return dummy validation result (valid with no issues)
+          logger.warn("Using dummy validation module", {
+            operation = "validate_coverage_data",
+            module = "reporting"
+          })
+          return true, {} 
+        end,
+        
+        validate_report = function() 
+          -- Return dummy report validation (valid with no issues)
+          logger.warn("Using dummy validation module", {
+            operation = "validate_report",
+            module = "reporting"
+          })
+          return { 
+            validation = { 
+              is_valid = true, 
+              issues = {} 
+            },
+            statistics = {
+              outliers = {},
+              anomalies = {}
+            },
+            cross_check = {
+              files_checked = 0
+            }
+          }
+        end
       }
     end
   end
@@ -1014,47 +1286,132 @@ end
 
 -- Save a coverage report to file
 function M.save_coverage_report(file_path, coverage_data, format, options)
+  -- Validate required parameters
+  if not file_path then
+    local err = error_handler.validation_error(
+      "Missing required file_path parameter",
+      {
+        operation = "save_coverage_report",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  if not coverage_data then
+    local err = error_handler.validation_error(
+      "Missing required coverage_data parameter",
+      {
+        operation = "save_coverage_report",
+        file_path = file_path,
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  -- Set defaults
   format = format or "html"
   options = options or {}
   
   logger.debug("Saving coverage report to file", {
     file_path = file_path,
     format = format,
-    has_data = coverage_data ~= nil,
+    has_data = true,
     validate = options.validate ~= false -- Default to validate=true
   })
   
   -- Validate coverage data before saving if not disabled
-  if options.validate ~= false and coverage_data then
-    local validation = get_validation_module()
-    local is_valid, issues
+  if options.validate ~= false then
+    -- Safely get the validation module using error_handler.try
+    local success, validation_module = error_handler.try(function()
+      return get_validation_module()
+    end)
     
-    -- Make sure validation is available before using it
-    if validation and validation.validate_coverage_data then
-      is_valid, issues = validation.validate_coverage_data(coverage_data)
+    if success and validation_module and validation_module.validate_coverage_data then
+      -- Validate the coverage data with error handling
+      local validation_success, is_valid, issues = error_handler.try(function()
+        return validation_module.validate_coverage_data(coverage_data)
+      end)
       
-      if issues and #issues > 0 and not is_valid then
-        logger.warn("Validation issues detected in coverage data", {
-          issue_count = #issues,
-          first_issue = issues[1] and issues[1].message or "Unknown issue"
-        })
+      if validation_success then
+        if issues and #issues > 0 and not is_valid then
+          logger.warn("Validation issues detected in coverage data", {
+            issue_count = #issues,
+            first_issue = issues[1] and issues[1].message or "Unknown issue"
+          })
+          
+          -- If validation is strict, don't save invalid data
+          if options.strict_validation then
+            local validation_err = error_handler.validation_error(
+              "Not saving report due to validation failures (strict mode)",
+              {
+                file_path = file_path,
+                format = format,
+                operation = "save_coverage_report",
+                module = "reporting",
+                issue_count = #issues,
+                first_issue = issues[1] and issues[1].message or "Unknown issue"
+              }
+            )
+            logger.error(validation_err.message, validation_err.context)
+            return nil, validation_err
+          end
+          
+          -- Otherwise just warn but continue
+          logger.warn("Saving report despite validation issues (non-strict mode)")
+        end
+      else
+        -- Validation failed with an error
+        local validation_err = error_handler.runtime_error(
+          "Error during coverage data validation",
+          {
+            file_path = file_path,
+            format = format,
+            operation = "save_coverage_report",
+            module = "reporting"
+          },
+          is_valid -- is_valid contains the error when validation_success is false
+        )
+        logger.warn(validation_err.message, validation_err.context)
         
-        -- If validation is strict, don't save invalid data
+        -- If validation is strict, don't save on validation error
         if options.strict_validation then
-          logger.error("Not saving report due to validation failures (strict mode)")
-          return false, "Validation failed (strict mode): " .. (issues[1] and issues[1].message or "Unknown issue")
+          return nil, validation_err
         end
         
-        -- Otherwise just warn but continue
-        logger.warn("Saving report despite validation issues (non-strict mode)")
+        -- Otherwise, continue despite validation error
+        logger.warn("Continuing with report generation despite validation error (non-strict mode)")
       end
     else
-      logger.warn("Validation module not fully available, skipping validation")
+      logger.warn("Validation module not fully available, skipping validation", {
+        file_path = file_path,
+        format = format
+      })
     end
   end
   
-  -- Format the coverage data
-  local formatted = M.format_coverage(coverage_data, format)
+  -- Format the coverage data with error handling
+  local format_success, formatted, format_err = error_handler.try(function()
+    return M.format_coverage(coverage_data, format)
+  end)
+  
+  if not format_success then
+    local err = error_handler.runtime_error(
+      "Failed to format coverage data",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_coverage_report",
+        module = "reporting"
+      },
+      formatted -- formatted contains the error when format_success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
   
   -- Handle both old-style string returns and new-style structured returns
   local content
@@ -1066,37 +1423,90 @@ function M.save_coverage_report(file_path, coverage_data, format, options)
     content = formatted
   end
   
-  -- Write to file
-  local success, err = M.write_file(file_path, content)
+  -- Write to file with error handling
+  local write_success, write_err = error_handler.try(function()
+    return M.write_file(file_path, content)
+  end)
   
-  if success then
-    logger.debug("Successfully saved coverage report", {
-      file_path = file_path,
-      format = format
-    })
-  else
-    logger.error("Failed to save coverage report", {
-      file_path = file_path,
-      format = format,
-      error = err
-    })
+  if not write_success then
+    local err = error_handler.io_error(
+      "Failed to write coverage report to file",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_coverage_report",
+        module = "reporting"
+      },
+      write_success -- write_success contains the error when success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
-  return success, err
+  logger.debug("Successfully saved coverage report", {
+    file_path = file_path,
+    format = format
+  })
+  
+  return true
 end
 
 -- Save a quality report to file
 function M.save_quality_report(file_path, quality_data, format)
+  -- Validate required parameters
+  if not file_path then
+    local err = error_handler.validation_error(
+      "Missing required file_path parameter",
+      {
+        operation = "save_quality_report",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  if not quality_data then
+    local err = error_handler.validation_error(
+      "Missing required quality_data parameter",
+      {
+        operation = "save_quality_report",
+        file_path = file_path,
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  -- Set defaults
   format = format or "html"
   
   logger.debug("Saving quality report to file", {
     file_path = file_path,
     format = format,
-    has_data = quality_data ~= nil
+    has_data = true
   })
   
-  -- Format the quality data
-  local formatted = M.format_quality(quality_data, format)
+  -- Format the quality data with error handling
+  local format_success, formatted, format_err = error_handler.try(function()
+    return M.format_quality(quality_data, format)
+  end)
+  
+  if not format_success then
+    local err = error_handler.runtime_error(
+      "Failed to format quality data",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_quality_report",
+        module = "reporting"
+      },
+      formatted -- formatted contains the error when format_success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
   
   -- Handle both old-style string returns and new-style structured returns
   local content
@@ -1108,55 +1518,127 @@ function M.save_quality_report(file_path, quality_data, format)
     content = formatted
   end
   
-  -- Write to file
-  local success, err = M.write_file(file_path, content)
+  -- Write to file with error handling
+  local write_success, write_err = error_handler.try(function()
+    return M.write_file(file_path, content)
+  end)
   
-  if success then
-    logger.debug("Successfully saved quality report", {
-      file_path = file_path,
-      format = format
-    })
-  else
-    logger.error("Failed to save quality report", {
-      file_path = file_path,
-      format = format,
-      error = err
-    })
+  if not write_success then
+    local err = error_handler.io_error(
+      "Failed to write quality report to file",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_quality_report",
+        module = "reporting"
+      },
+      write_success -- write_success contains the error when success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
-  return success, err
+  logger.debug("Successfully saved quality report", {
+    file_path = file_path,
+    format = format
+  })
+  
+  return true
 end
 
 -- Save a test results report to file
 function M.save_results_report(file_path, results_data, format)
+  -- Validate required parameters
+  if not file_path then
+    local err = error_handler.validation_error(
+      "Missing required file_path parameter",
+      {
+        operation = "save_results_report",
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  if not results_data then
+    local err = error_handler.validation_error(
+      "Missing required results_data parameter",
+      {
+        operation = "save_results_report",
+        file_path = file_path,
+        module = "reporting"
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  -- Set defaults
   format = format or "junit"
   
   logger.debug("Saving test results report to file", {
     file_path = file_path,
     format = format,
-    has_data = results_data ~= nil
+    has_data = true
   })
   
-  -- Format the test results data
-  local content = M.format_results(results_data, format)
+  -- Format the results data with error handling
+  local format_success, formatted, format_err = error_handler.try(function()
+    return M.format_results(results_data, format)
+  end)
   
-  -- Write to file
-  local success, err = M.write_file(file_path, content)
-  
-  if success then
-    logger.debug("Successfully saved test results report", {
-      file_path = file_path,
-      format = format
-    })
-  else
-    logger.error("Failed to save test results report", {
-      file_path = file_path,
-      format = format,
-      error = err
-    })
+  if not format_success then
+    local err = error_handler.runtime_error(
+      "Failed to format test results data",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_results_report",
+        module = "reporting"
+      },
+      formatted -- formatted contains the error when format_success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
   end
   
-  return success, err
+  -- Handle both old-style string returns and new-style structured returns
+  local content
+  if type(formatted) == "table" and formatted.output then
+    -- For formatters that return a table with both display output and structured data
+    content = formatted.output
+  else
+    -- For backward compatibility with formatters that return strings directly
+    content = formatted
+  end
+  
+  -- Write to file with error handling
+  local write_success, write_err = error_handler.try(function()
+    return M.write_file(file_path, content)
+  end)
+  
+  if not write_success then
+    local err = error_handler.io_error(
+      "Failed to write test results report to file",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_results_report",
+        module = "reporting"
+      },
+      write_success -- write_success contains the error when success is false
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  logger.debug("Successfully saved test results report", {
+    file_path = file_path,
+    format = format
+  })
+  
+  return true
 end
 
 -- Auto-save reports to configured locations
