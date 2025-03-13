@@ -8,13 +8,127 @@ local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
 
 -- Default configuration
-local config = {
+local DEFAULT_CONFIG = {
   debug = false,
-  verbose = false
+  verbose = false,
+  report_dir = "./coverage-reports",
+  report_suffix = "",
+  timestamp_format = "%Y-%m-%d",
+  formats = {
+    coverage = {
+      default = "html",
+      path_template = nil
+    },
+    quality = {
+      default = "html",
+      path_template = nil
+    },
+    results = {
+      default = "junit",
+      path_template = nil
+    }
+  },
+  formatters = {
+    html = {
+      theme = "dark",
+      show_line_numbers = true,
+      collapsible_sections = true,
+      highlight_syntax = true,
+      asset_base_path = nil,
+      include_legend = true
+    },
+    summary = {
+      detailed = false,
+      show_files = true,
+      colorize = true
+    },
+    json = {
+      pretty = false,
+      schema_version = "1.0"
+    },
+    lcov = {
+      absolute_paths = false
+    },
+    cobertura = {
+      schema_version = "4.0",
+      include_packages = true
+    },
+    junit = {
+      schema_version = "2.0",
+      include_timestamps = true,
+      include_hostname = true
+    },
+    tap = {
+      version = 13,
+      verbose = true
+    },
+    csv = {
+      delimiter = ",",
+      quote = "\"",
+      include_header = true
+    }
+  }
+}
+
+-- Current configuration (will be synchronized with central config)
+local config = {
+  debug = DEFAULT_CONFIG.debug,
+  verbose = DEFAULT_CONFIG.verbose
 }
 
 -- Create a logger for this module
 local logger = logging.get_logger("Reporting")
+
+-- Lazy loading of central_config to avoid circular dependencies
+local _central_config
+
+local function get_central_config()
+  if not _central_config then
+    -- Use pcall to safely attempt loading central_config
+    local success, central_config = pcall(require, "lib.core.central_config")
+    if success then
+      _central_config = central_config
+      
+      -- Register this module with central_config
+      _central_config.register_module("reporting", {
+        -- Schema
+        field_types = {
+          debug = "boolean",
+          verbose = "boolean",
+          report_dir = "string",
+          report_suffix = "string",
+          timestamp_format = "string",
+          formats = "table",
+          formatters = "table"
+        }
+      }, DEFAULT_CONFIG)
+      
+      -- Register formatter-specific schema
+      _central_config.register_module("reporting.formatters", {
+        field_types = {
+          html = "table",
+          summary = "table",
+          json = "table",
+          lcov = "table",
+          cobertura = "table",
+          junit = "table",
+          tap = "table",
+          csv = "table"
+        }
+      }, DEFAULT_CONFIG.formatters)
+      
+      logger.debug("Successfully loaded central_config", {
+        module = "reporting"
+      })
+    else
+      logger.debug("Failed to load central_config", {
+        error = tostring(central_config)
+      })
+    end
+  end
+  
+  return _central_config
+end
 
 -- Load the JSON module if available
 local json_module
@@ -63,28 +177,248 @@ local function escape_xml(str)
             :gsub("'", "&apos;")
 end
 
+-- Set up change listener for central configuration
+local function register_change_listener()
+  local central_config = get_central_config()
+  if not central_config then
+    logger.debug("Cannot register change listener - central_config not available")
+    return false
+  end
+  
+  -- Register change listener for reporting configuration
+  central_config.on_change("reporting", function(path, old_value, new_value)
+    logger.debug("Configuration change detected", {
+      path = path,
+      changed_by = "central_config"
+    })
+    
+    -- Update local configuration from central_config
+    local reporting_config = central_config.get("reporting")
+    if reporting_config then
+      -- Update debug and verbose settings directly
+      if reporting_config.debug ~= nil and reporting_config.debug ~= config.debug then
+        config.debug = reporting_config.debug
+        logger.debug("Updated debug setting from central_config", {
+          debug = config.debug
+        })
+      end
+      
+      if reporting_config.verbose ~= nil and reporting_config.verbose ~= config.verbose then
+        config.verbose = reporting_config.verbose
+        logger.debug("Updated verbose setting from central_config", {
+          verbose = config.verbose
+        })
+      end
+      
+      -- Update logging configuration
+      logging.configure_from_options("Reporting", {
+        debug = config.debug,
+        verbose = config.verbose
+      })
+      
+      logger.debug("Applied configuration changes from central_config")
+    end
+  end)
+  
+  logger.debug("Registered change listener for central configuration")
+  return true
+end
+
 -- Configure the module
 function M.configure(options)
   options = options or {}
   
-  -- Apply debug settings
+  logger.debug("Configuring reporting module", {
+    debug = options.debug,
+    verbose = options.verbose,
+    has_options = options ~= nil
+  })
+  
+  -- Check for central configuration first
+  local central_config = get_central_config()
+  if central_config then
+    -- Get existing central config values
+    local reporting_config = central_config.get("reporting")
+    
+    -- Apply central configuration (with defaults as fallback)
+    if reporting_config then
+      logger.debug("Using central_config values for initialization", {
+        debug = reporting_config.debug,
+        verbose = reporting_config.verbose
+      })
+      
+      if reporting_config.debug ~= nil then
+        config.debug = reporting_config.debug
+      else
+        config.debug = DEFAULT_CONFIG.debug
+      end
+      
+      if reporting_config.verbose ~= nil then
+        config.verbose = reporting_config.verbose
+      else
+        config.verbose = DEFAULT_CONFIG.verbose
+      end
+    else
+      logger.debug("No central_config values found, using defaults")
+      config.debug = DEFAULT_CONFIG.debug
+      config.verbose = DEFAULT_CONFIG.verbose
+    end
+    
+    -- Register change listener if not already done
+    register_change_listener()
+  else
+    logger.debug("central_config not available, using defaults")
+    -- Apply defaults
+    config.debug = DEFAULT_CONFIG.debug
+    config.verbose = DEFAULT_CONFIG.verbose
+  end
+  
+  -- Apply user options (highest priority) and update central config
   if options.debug ~= nil then
     config.debug = options.debug
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("reporting.debug", options.debug)
+    end
   end
   
   if options.verbose ~= nil then
     config.verbose = options.verbose
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("reporting.verbose", options.verbose)
+    end
+  end
+  
+  -- Configure reporting directory and other settings if provided
+  if options.report_dir then
+    -- Update central_config if available
+    if central_config then
+      central_config.set("reporting.report_dir", options.report_dir)
+    end
+  end
+  
+  -- Configure formatter options if provided
+  if options.formats then
+    -- Update central_config if available
+    if central_config then
+      central_config.set("reporting.formats", options.formats)
+    end
   end
   
   -- We can use options directly for logging configuration if provided
   if options.debug ~= nil or options.verbose ~= nil then
+    logger.debug("Using provided options for logging configuration")
     logging.configure_from_options("Reporting", options)
   else
     -- Otherwise use global config
+    logger.debug("Using global config for logging configuration")
     logging.configure_from_config("Reporting")
   end
   
+  logger.debug("Reporting module configuration complete", {
+    debug = config.debug,
+    verbose = config.verbose,
+    using_central_config = central_config ~= nil
+  })
+  
   -- Return the module for chaining
+  return M
+end
+
+-- Get configuration for a specific formatter
+function M.get_formatter_config(formatter_name)
+  if not formatter_name then
+    logger.warn("Formatter name required for get_formatter_config")
+    return nil
+  end
+  
+  -- Try to get from central_config
+  local central_config = get_central_config()
+  if central_config then
+    local formatter_config = central_config.get("reporting.formatters." .. formatter_name)
+    if formatter_config then
+      logger.debug("Retrieved formatter config from central_config", {
+        formatter = formatter_name
+      })
+      return formatter_config
+    end
+  end
+  
+  -- Fall back to local config
+  if config.formatters and config.formatters[formatter_name] then
+    logger.debug("Retrieved formatter config from local config", {
+      formatter = formatter_name
+    })
+    return config.formatters[formatter_name]
+  end
+  
+  -- Return default config if available
+  if DEFAULT_CONFIG.formatters and DEFAULT_CONFIG.formatters[formatter_name] then
+    logger.debug("Using default formatter config", {
+      formatter = formatter_name
+    })
+    return DEFAULT_CONFIG.formatters[formatter_name]
+  end
+  
+  logger.warn("No configuration found for formatter", {
+    formatter = formatter_name
+  })
+  return {}
+end
+
+-- Configure a specific formatter
+function M.configure_formatter(formatter_name, formatter_config)
+  if not formatter_name then
+    logger.error("Formatter name required for configure_formatter")
+    return M
+  end
+  
+  if type(formatter_config) ~= "table" then
+    logger.error("Invalid formatter configuration", {
+      formatter = formatter_name,
+      config_type = type(formatter_config)
+    })
+    return M
+  end
+  
+  -- Update central_config if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.set("reporting.formatters." .. formatter_name, formatter_config)
+  end
+  
+  -- Update local config
+  config.formatters = config.formatters or {}
+  config.formatters[formatter_name] = config.formatters[formatter_name] or {}
+  
+  for k, v in pairs(formatter_config) do
+    config.formatters[formatter_name][k] = v
+  end
+  
+  logger.debug("Updated configuration for formatter", {
+    formatter = formatter_name,
+    config_count = #formatter_config
+  })
+  
+  return M
+end
+
+-- Configure multiple formatters at once
+function M.configure_formatters(formatters_config)
+  if type(formatters_config) ~= "table" then
+    logger.error("Invalid formatters configuration", {
+      config_type = type(formatters_config)
+    })
+    return M
+  end
+  
+  for formatter_name, formatter_config in pairs(formatters_config) do
+    M.configure_formatter(formatter_name, formatter_config)
+  end
+  
   return M
 end
 
@@ -206,15 +540,26 @@ local results_formatters = formatters.results
 -- Register a custom coverage report formatter
 function M.register_coverage_formatter(name, formatter_fn)
   if type(name) ~= "string" then
+    logger.error("Failed to register coverage formatter: name must be a string", {
+      name_type = type(name)
+    })
     error("Formatter name must be a string")
   end
   
   if type(formatter_fn) ~= "function" then
+    logger.error("Failed to register coverage formatter: formatter must be a function", {
+      formatter_name = name,
+      formatter_type = type(formatter_fn)
+    })
     error("Formatter must be a function")
   end
   
   -- Register the formatter
   formatters.coverage[name] = formatter_fn
+  
+  logger.debug("Registered custom coverage formatter", {
+    formatter_name = name
+  })
   
   return true
 end
@@ -222,15 +567,26 @@ end
 -- Register a custom quality report formatter
 function M.register_quality_formatter(name, formatter_fn)
   if type(name) ~= "string" then
+    logger.error("Failed to register quality formatter: name must be a string", {
+      name_type = type(name)
+    })
     error("Formatter name must be a string")
   end
   
   if type(formatter_fn) ~= "function" then
+    logger.error("Failed to register quality formatter: formatter must be a function", {
+      formatter_name = name,
+      formatter_type = type(formatter_fn)
+    })
     error("Formatter must be a function")
   end
   
   -- Register the formatter
   formatters.quality[name] = formatter_fn
+  
+  logger.debug("Registered custom quality formatter", {
+    formatter_name = name
+  })
   
   return true
 end
@@ -238,15 +594,26 @@ end
 -- Register a custom test results formatter
 function M.register_results_formatter(name, formatter_fn)
   if type(name) ~= "string" then
+    logger.error("Failed to register results formatter: name must be a string", {
+      name_type = type(name)
+    })
     error("Formatter name must be a string")
   end
   
   if type(formatter_fn) ~= "function" then
+    logger.error("Failed to register results formatter: formatter must be a function", {
+      formatter_name = name,
+      formatter_type = type(formatter_fn)
+    })
     error("Formatter must be a function")
   end
   
   -- Register the formatter
   formatters.results[name] = formatter_fn
+  
+  logger.debug("Registered custom results formatter", {
+    formatter_name = name
+  })
   
   return true
 end
@@ -254,46 +621,88 @@ end
 -- Load formatters from a module (table with format functions)
 function M.load_formatters(formatter_module)
   if type(formatter_module) ~= "table" then
+    logger.error("Failed to load formatters: module must be a table", {
+      module_type = type(formatter_module)
+    })
     error("Formatter module must be a table")
   end
+  
+  logger.debug("Loading formatters from module", {
+    has_coverage = type(formatter_module.coverage) == "table",
+    has_quality = type(formatter_module.quality) == "table",
+    has_results = type(formatter_module.results) == "table"
+  })
   
   local registered = 0
   
   -- Register coverage formatters
   if type(formatter_module.coverage) == "table" then
+    local coverage_formatters = {}
     for name, fn in pairs(formatter_module.coverage) do
       if type(fn) == "function" then
         M.register_coverage_formatter(name, fn)
         registered = registered + 1
+        table.insert(coverage_formatters, name)
       end
+    end
+    
+    if #coverage_formatters > 0 then
+      logger.debug("Registered coverage formatters", {
+        count = #coverage_formatters,
+        formatters = coverage_formatters
+      })
     end
   end
   
   -- Register quality formatters
   if type(formatter_module.quality) == "table" then
+    local quality_formatters = {}
     for name, fn in pairs(formatter_module.quality) do
       if type(fn) == "function" then
         M.register_quality_formatter(name, fn)
         registered = registered + 1
+        table.insert(quality_formatters, name)
       end
+    end
+    
+    if #quality_formatters > 0 then
+      logger.debug("Registered quality formatters", {
+        count = #quality_formatters,
+        formatters = quality_formatters
+      })
     end
   end
   
   -- Register test results formatters
   if type(formatter_module.results) == "table" then
+    local results_formatters = {}
     for name, fn in pairs(formatter_module.results) do
       if type(fn) == "function" then
         M.register_results_formatter(name, fn)
         registered = registered + 1
+        table.insert(results_formatters, name)
       end
     end
+    
+    if #results_formatters > 0 then
+      logger.debug("Registered results formatters", {
+        count = #results_formatters,
+        formatters = results_formatters
+      })
+    end
   end
+  
+  logger.debug("Completed formatter registration", {
+    total_registered = registered
+  })
   
   return registered
 end
 
 -- Get list of available formatters for each type
 function M.get_available_formatters()
+  logger.debug("Getting available formatters")
+  
   local available = {
     coverage = {},
     quality = {},
@@ -318,6 +727,15 @@ function M.get_available_formatters()
   table.sort(available.quality)
   table.sort(available.results)
   
+  logger.debug("Available formatters", {
+    coverage_count = #available.coverage,
+    coverage = table.concat(available.coverage, ", "),
+    quality_count = #available.quality,
+    quality = table.concat(available.quality, ", "),
+    results_count = #available.results,
+    results = table.concat(available.results, ", ")
+  })
+  
   return available
 end
 
@@ -325,42 +743,158 @@ end
 -- FORMAT OUTPUT FUNCTIONS
 ---------------------------
 
+-- Get default format from configuration
+local function get_default_format(type)
+  -- Check central_config first
+  local central_config = get_central_config()
+  if central_config then
+    local format_config = central_config.get("reporting.formats." .. type .. ".default")
+    if format_config then
+      return format_config
+    end
+  end
+  
+  -- Fall back to local defaults
+  if DEFAULT_CONFIG.formats and DEFAULT_CONFIG.formats[type] then
+    return DEFAULT_CONFIG.formats[type].default
+  end
+  
+  -- Final fallbacks based on type
+  if type == "coverage" then return "summary" 
+  elseif type == "quality" then return "summary"
+  elseif type == "results" then return "junit"
+  else return "summary" end
+end
+
 -- Format coverage data
 function M.format_coverage(coverage_data, format)
-  format = format or "summary"
+  -- If no format specified, use default from config
+  format = format or get_default_format("coverage")
+  
+  logger.debug("Formatting coverage data", {
+    format = format,
+    has_data = coverage_data ~= nil,
+    formatter_available = formatters.coverage[format] ~= nil,
+    from_config = format == get_default_format("coverage")
+  })
   
   -- Use the appropriate formatter
   if formatters.coverage[format] then
-    return formatters.coverage[format](coverage_data)
+    logger.trace("Using requested formatter", { format = format })
+    local result = formatters.coverage[format](coverage_data)
+    
+    -- Handle both old-style string returns and new-style structured returns
+    if type(result) == "table" and result.output then
+      -- For formatters that return a table with both display output and structured data
+      return result
+    else
+      -- For backward compatibility with formatters that return strings directly
+      return result
+    end
   else
-    -- Default to summary if format not supported
-    return formatters.coverage.summary(coverage_data)
+    local default_format = get_default_format("coverage")
+    logger.warn("Requested formatter not available, falling back to default", {
+      requested_format = format,
+      default_format = default_format
+    })
+    -- Default to summary formatter explicitly
+    logger.debug("Using summary formatter as fallback for invalid format")
+    local result = formatters.coverage.summary(coverage_data)
+    
+    -- Handle both old-style string returns and new-style structured returns
+    if type(result) == "table" and result.output then
+      return result
+    else
+      return result
+    end
   end
 end
 
 -- Format quality data
 function M.format_quality(quality_data, format)
-  format = format or "summary"
+  -- If no format specified, use default from config
+  format = format or get_default_format("quality")
+  
+  logger.debug("Formatting quality data", {
+    format = format,
+    has_data = quality_data ~= nil,
+    formatter_available = formatters.quality[format] ~= nil,
+    from_config = format == get_default_format("quality")
+  })
   
   -- Use the appropriate formatter
   if formatters.quality[format] then
-    return formatters.quality[format](quality_data)
+    logger.trace("Using requested formatter", { format = format })
+    local result = formatters.quality[format](quality_data)
+    
+    -- Handle both old-style string returns and new-style structured returns
+    if type(result) == "table" and result.output then
+      -- For formatters that return a table with both display output and structured data
+      return result
+    else
+      -- For backward compatibility with formatters that return strings directly
+      return result
+    end
   else
-    -- Default to summary if format not supported
-    return formatters.quality.summary(quality_data)
+    local default_format = get_default_format("quality")
+    logger.warn("Requested formatter not available, falling back to default", {
+      requested_format = format,
+      default_format = default_format
+    })
+    -- Default to summary formatter explicitly
+    logger.debug("Using summary formatter as fallback for invalid format")
+    local result = formatters.quality.summary(quality_data)
+    
+    -- Handle both old-style string returns and new-style structured returns
+    if type(result) == "table" and result.output then
+      return result
+    else
+      return result
+    end
   end
 end
 
 -- Format test results data
 function M.format_results(results_data, format)
-  format = format or "junit"
+  -- If no format specified, use default from config
+  format = format or get_default_format("results")
+  
+  logger.debug("Formatting test results data", {
+    format = format,
+    has_data = results_data ~= nil,
+    formatter_available = formatters.results[format] ~= nil,
+    from_config = format == get_default_format("results")
+  })
   
   -- Use the appropriate formatter
   if formatters.results[format] then
-    return formatters.results[format](results_data)
+    logger.trace("Using requested formatter", { format = format })
+    local result = formatters.results[format](results_data)
+    
+    -- Handle both old-style string returns and new-style structured returns
+    if type(result) == "table" and result.output then
+      -- For formatters that return a table with both display output and structured data
+      return result
+    else
+      -- For backward compatibility with formatters that return strings directly
+      return result
+    end
   else
-    -- Default to JUnit if format not supported
-    return formatters.results.junit(results_data)
+    local default_format = get_default_format("results")
+    logger.warn("Requested formatter not available, falling back to default", {
+      requested_format = format,
+      default_format = default_format
+    })
+    -- Default to junit formatter explicitly
+    logger.debug("Using junit formatter as fallback for invalid format")
+    local result = formatters.results.junit(results_data)
+    
+    -- Handle both old-style string returns and new-style structured returns
+    if type(result) == "table" and result.output then
+      return result
+    else
+      return result
+    end
   end
 end
 
@@ -370,17 +904,28 @@ end
 
 -- Write content to a file using the filesystem module
 function M.write_file(file_path, content)
-  logger.debug("Writing file: " .. file_path)
-  logger.debug("Content length: " .. (content and #content or 0) .. " bytes")
+  logger.debug("Writing file", {
+    file_path = file_path,
+    content_length = content and #content or 0
+  })
   
   -- Make sure content is a string
   if type(content) == "table" then
     content = json_module.encode(content)
+    logger.trace("Converted table to JSON string", {
+      file_path = file_path,
+      content_length = content and #content or 0
+    })
   end
   
   -- If still not a string, convert to string
   if type(content) ~= "string" then
     content = tostring(content)
+    logger.trace("Converted non-string content to string", {
+      file_path = file_path,
+      content_type = type(content),
+      content_length = content and #content or 0
+    })
   end
   
   -- Use the filesystem module to write the file
@@ -388,45 +933,230 @@ function M.write_file(file_path, content)
   local success, err = fs.write_file(file_path, content)
   
   if not success then
-    logger.error("Error writing to file: " .. tostring(err))
+    logger.error("Error writing to file", {
+      file_path = file_path,
+      error = tostring(err)
+    })
     return false, "Error writing to file: " .. tostring(err)
   end
   
-  logger.debug("Successfully wrote file: " .. file_path)
+  logger.debug("Successfully wrote file", {
+    file_path = file_path,
+    content_length = content and #content or 0
+  })
   return true
 end
 
+-- Load validation module (lazy loading with fallback)
+local _validation_module
+local function get_validation_module()
+  if not _validation_module then
+    local success, validation = pcall(require, "lib.reporting.validation")
+    if success then
+      _validation_module = validation
+      logger.debug("Successfully loaded validation module")
+    else
+      logger.debug("Failed to load validation module", {
+        error = tostring(validation)
+      })
+      -- Create dummy validation module
+      _validation_module = {
+        validate_coverage_data = function() return true, {} end,
+        validate_report = function() return { validation = { is_valid = true, issues = {} } } end
+      }
+    end
+  end
+  return _validation_module
+end
+
+-- Validate coverage data before saving (can be called directly)
+function M.validate_coverage_data(coverage_data)
+  local validation = get_validation_module()
+  
+  logger.debug("Validating coverage data", {
+    has_data = coverage_data ~= nil,
+    has_summary = coverage_data and coverage_data.summary ~= nil,
+    has_files = coverage_data and coverage_data.files ~= nil
+  })
+  
+  -- Run validation
+  local is_valid, issues = validation.validate_coverage_data(coverage_data)
+  
+  logger.info("Coverage data validation results", {
+    is_valid = is_valid,
+    issue_count = issues and #issues or 0
+  })
+  
+  return is_valid, issues
+end
+
+-- Perform comprehensive validation of coverage report
+function M.validate_report(coverage_data)
+  local validation = get_validation_module()
+  
+  logger.debug("Running comprehensive report validation", {
+    has_data = coverage_data ~= nil
+  })
+  
+  -- Run full validation
+  local result = validation.validate_report(coverage_data)
+  
+  logger.info("Comprehensive validation results", {
+    is_valid = result.validation.is_valid,
+    issues = result.validation.issues and #result.validation.issues or 0,
+    outliers = result.statistics and result.statistics.outliers and #result.statistics.outliers or 0,
+    anomalies = result.statistics and result.statistics.anomalies and #result.statistics.anomalies or 0,
+    cross_check_files = result.cross_check and result.cross_check.files_checked or 0
+  })
+  
+  return result
+end
+
 -- Save a coverage report to file
-function M.save_coverage_report(file_path, coverage_data, format)
+function M.save_coverage_report(file_path, coverage_data, format, options)
   format = format or "html"
+  options = options or {}
+  
+  logger.debug("Saving coverage report to file", {
+    file_path = file_path,
+    format = format,
+    has_data = coverage_data ~= nil,
+    validate = options.validate ~= false -- Default to validate=true
+  })
+  
+  -- Validate coverage data before saving if not disabled
+  if options.validate ~= false and coverage_data then
+    local validation = get_validation_module()
+    local is_valid, issues
+    
+    -- Make sure validation is available before using it
+    if validation and validation.validate_coverage_data then
+      is_valid, issues = validation.validate_coverage_data(coverage_data)
+      
+      if issues and #issues > 0 and not is_valid then
+        logger.warn("Validation issues detected in coverage data", {
+          issue_count = #issues,
+          first_issue = issues[1] and issues[1].message or "Unknown issue"
+        })
+        
+        -- If validation is strict, don't save invalid data
+        if options.strict_validation then
+          logger.error("Not saving report due to validation failures (strict mode)")
+          return false, "Validation failed (strict mode): " .. (issues[1] and issues[1].message or "Unknown issue")
+        end
+        
+        -- Otherwise just warn but continue
+        logger.warn("Saving report despite validation issues (non-strict mode)")
+      end
+    else
+      logger.warn("Validation module not fully available, skipping validation")
+    end
+  end
   
   -- Format the coverage data
-  local content = M.format_coverage(coverage_data, format)
+  local formatted = M.format_coverage(coverage_data, format)
+  
+  -- Handle both old-style string returns and new-style structured returns
+  local content
+  if type(formatted) == "table" and formatted.output then
+    -- For formatters that return a table with both display output and structured data
+    content = formatted.output
+  else
+    -- For backward compatibility with formatters that return strings directly
+    content = formatted
+  end
   
   -- Write to file
-  return M.write_file(file_path, content)
+  local success, err = M.write_file(file_path, content)
+  
+  if success then
+    logger.debug("Successfully saved coverage report", {
+      file_path = file_path,
+      format = format
+    })
+  else
+    logger.error("Failed to save coverage report", {
+      file_path = file_path,
+      format = format,
+      error = err
+    })
+  end
+  
+  return success, err
 end
 
 -- Save a quality report to file
 function M.save_quality_report(file_path, quality_data, format)
   format = format or "html"
   
+  logger.debug("Saving quality report to file", {
+    file_path = file_path,
+    format = format,
+    has_data = quality_data ~= nil
+  })
+  
   -- Format the quality data
-  local content = M.format_quality(quality_data, format)
+  local formatted = M.format_quality(quality_data, format)
+  
+  -- Handle both old-style string returns and new-style structured returns
+  local content
+  if type(formatted) == "table" and formatted.output then
+    -- For formatters that return a table with both display output and structured data
+    content = formatted.output
+  else
+    -- For backward compatibility with formatters that return strings directly
+    content = formatted
+  end
   
   -- Write to file
-  return M.write_file(file_path, content)
+  local success, err = M.write_file(file_path, content)
+  
+  if success then
+    logger.debug("Successfully saved quality report", {
+      file_path = file_path,
+      format = format
+    })
+  else
+    logger.error("Failed to save quality report", {
+      file_path = file_path,
+      format = format,
+      error = err
+    })
+  end
+  
+  return success, err
 end
 
 -- Save a test results report to file
 function M.save_results_report(file_path, results_data, format)
   format = format or "junit"
   
+  logger.debug("Saving test results report to file", {
+    file_path = file_path,
+    format = format,
+    has_data = results_data ~= nil
+  })
+  
   -- Format the test results data
   local content = M.format_results(results_data, format)
   
   -- Write to file
-  return M.write_file(file_path, content)
+  local success, err = M.write_file(file_path, content)
+  
+  if success then
+    logger.debug("Successfully saved test results report", {
+      file_path = file_path,
+      format = format
+    })
+  else
+    logger.error("Failed to save test results report", {
+      file_path = file_path,
+      format = format,
+      error = err
+    })
+  end
+  
+  return success, err
 end
 
 -- Auto-save reports to configured locations
@@ -440,6 +1170,10 @@ end
 --   * results_path_template: path template for test results reports (optional)
 --   * timestamp_format: format string for timestamps in templates (default: "%Y-%m-%d")
 --   * verbose: enable verbose logging (default: false)
+--   * validate: whether to validate reports before saving (default: true)
+--   * strict_validation: if true, don't save invalid reports (default: false)
+--   * validation_report: if true, generate validation report (default: false)
+--   * validation_report_path: path for validation report (optional)
 function M.auto_save_reports(coverage_data, quality_data, results_data, options)
   -- Handle both string (backward compatibility) and table options
   local config = {}
@@ -450,10 +1184,61 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
     config = options
   end
   
-  -- Set defaults for missing values
-  config.report_dir = config.report_dir or "./coverage-reports"
-  config.report_suffix = config.report_suffix or ""
-  config.timestamp_format = config.timestamp_format or "%Y-%m-%d"
+  -- Check central_config for defaults
+  local central_config = get_central_config()
+  if central_config then
+    local reporting_config = central_config.get("reporting")
+    
+    if reporting_config then
+      -- Use central config as base if available, but allow options to override
+      if not config.report_dir and reporting_config.report_dir then
+        config.report_dir = reporting_config.report_dir
+      end
+      
+      if not config.report_suffix and reporting_config.report_suffix then
+        config.report_suffix = reporting_config.report_suffix
+      end
+      
+      if not config.timestamp_format and reporting_config.timestamp_format then
+        config.timestamp_format = reporting_config.timestamp_format
+      end
+      
+      -- Check for path templates in the formats section
+      if reporting_config.formats then
+        if not config.coverage_path_template and 
+           reporting_config.formats.coverage and 
+           reporting_config.formats.coverage.path_template then
+          config.coverage_path_template = reporting_config.formats.coverage.path_template
+        end
+        
+        if not config.quality_path_template and 
+           reporting_config.formats.quality and 
+           reporting_config.formats.quality.path_template then
+          config.quality_path_template = reporting_config.formats.quality.path_template
+        end
+        
+        if not config.results_path_template and 
+           reporting_config.formats.results and 
+           reporting_config.formats.results.path_template then
+          config.results_path_template = reporting_config.formats.results.path_template
+        end
+      end
+      
+      logger.debug("Using centralized configuration for reports", {
+        using_central_report_dir = config.report_dir == reporting_config.report_dir,
+        using_central_suffix = config.report_suffix == reporting_config.report_suffix,
+        using_central_timestamp = config.timestamp_format == reporting_config.timestamp_format,
+        using_coverage_template = config.coverage_path_template ~= nil,
+        using_quality_template = config.quality_path_template ~= nil,
+        using_results_template = config.results_path_template ~= nil
+      })
+    end
+  end
+  
+  -- Set defaults for missing values (after checking central_config)
+  config.report_dir = config.report_dir or DEFAULT_CONFIG.report_dir
+  config.report_suffix = config.report_suffix or DEFAULT_CONFIG.report_suffix
+  config.timestamp_format = config.timestamp_format or DEFAULT_CONFIG.timestamp_format
   config.verbose = config.verbose or false
   
   local base_dir = config.report_dir
@@ -492,75 +1277,175 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
   
   -- Debug output for troubleshooting
   if config.verbose then
-    logger.debug("auto_save_reports called with:")
-    logger.verbose("  base_dir: " .. base_dir)
-    logger.verbose("  coverage_data: " .. (coverage_data and "present" or "nil"))
+    -- Prepare debug data for coverage information
+    local coverage_debug = {
+      present = coverage_data ~= nil
+    }
+    
     if coverage_data then
-      logger.verbose("    total_files: " .. (coverage_data.summary and coverage_data.summary.total_files or "unknown"))
-      logger.verbose("    total_lines: " .. (coverage_data.summary and coverage_data.summary.total_lines or "unknown"))
+      coverage_debug.total_files = coverage_data.summary and coverage_data.summary.total_files or "unknown"
+      coverage_debug.total_lines = coverage_data.summary and coverage_data.summary.total_lines or "unknown"
       
-      -- Print file count to help diagnose data flow issues
+      -- Gather file info for diagnostics
+      local tracked_files = {}
       local file_count = 0
+      
       if coverage_data.files then
         for file, _ in pairs(coverage_data.files) do
           file_count = file_count + 1
-          if file_count <= 5 then -- Just print first 5 files for brevity
-            logger.verbose("    - File: " .. file)
+          if file_count <= 5 then -- Just include first 5 files for brevity
+            table.insert(tracked_files, file)
           end
         end
-        logger.verbose("    Total files tracked: " .. file_count)
+        coverage_debug.file_count = file_count
+        coverage_debug.sample_files = tracked_files
       else
-        logger.verbose("    No files tracked in coverage data")
+        coverage_debug.file_count = 0
+        coverage_debug.has_files_table = false
       end
     end
-    logger.verbose("  quality_data: " .. (quality_data and "present" or "nil"))
+    
+    -- Prepare debug data for quality information
+    local quality_debug = {
+      present = quality_data ~= nil
+    }
+    
     if quality_data then
-      logger.verbose("    tests_analyzed: " .. (quality_data.summary and quality_data.summary.tests_analyzed or "unknown"))
+      quality_debug.tests_analyzed = quality_data.summary and quality_data.summary.tests_analyzed or "unknown"
+      quality_debug.quality_level = quality_data.level or "unknown"
     end
-    logger.verbose("  results_data: " .. (results_data and "present" or "nil"))
+    
+    -- Prepare debug data for test results
+    local results_debug = {
+      present = results_data ~= nil
+    }
+    
     if results_data then
-      logger.verbose("    tests: " .. (results_data.tests or "unknown"))
-      logger.verbose("    failures: " .. (results_data.failures or "unknown"))
+      results_debug.tests = results_data.tests or "unknown"
+      results_debug.failures = results_data.failures or "unknown"
+      results_debug.skipped = results_data.skipped or "unknown"
     end
+    
+    -- Log the combined debug data
+    logger.debug("Auto-saving reports", {
+      base_dir = base_dir,
+      timestamp_format = config.timestamp_format,
+      coverage = coverage_debug,
+      quality = quality_debug,
+      results = results_debug
+    })
   end
   
   -- Use filesystem module to ensure directory exists
-  if config.verbose then
-    logger.debug("Ensuring directory exists using filesystem module...")
-  end
+  logger.debug("Ensuring report directory exists", {
+    directory = base_dir
+  })
   
   -- Create the directory if it doesn't exist
   local dir_ok, dir_err = fs.ensure_directory_exists(base_dir)
   
   if not dir_ok then
-    if config.verbose then
-      logger.error("Failed to create directory: " .. tostring(dir_err))
-    end
-  elseif config.verbose then
-    logger.debug("Directory exists or was created: " .. base_dir)
+    logger.error("Failed to create report directory", {
+      directory = base_dir,
+      error = tostring(dir_err)
+    })
+  else
+    logger.debug("Report directory ready", {
+      directory = base_dir,
+      created = not fs.directory_exists(base_dir)
+    })
   end
   
   -- Always save coverage reports in multiple formats if coverage data is provided
   if coverage_data then
+    -- Prepare validation options
+    local validation_options = {
+      validate = config.validate ~= false, -- Default to true
+      strict_validation = config.strict_validation or false
+    }
+    
+    -- Generate validation report if requested
+    if config.validation_report then
+      local validation = get_validation_module()
+      local validation_result = validation.validate_report(coverage_data)
+      
+      -- Save validation report
+      if validation_result then
+        local validation_path = config.validation_report_path or 
+                               process_template(config.coverage_path_template, "json", "validation")
+        
+        -- Convert validation result to JSON
+        local validation_json
+        if json_module and json_module.encode then
+          validation_json = json_module.encode(validation_result)
+        else
+          validation_json = tostring(validation_result)
+        end
+        
+        -- Save validation report
+        local ok, err = M.write_file(validation_path, validation_json)
+        if ok then
+          logger.info("Saved validation report", {
+            path = validation_path,
+            is_valid = validation_result.validation and validation_result.validation.is_valid
+          })
+          
+          results["validation"] = {
+            success = true,
+            path = validation_path,
+            is_valid = validation_result.validation and validation_result.validation.is_valid
+          }
+        else
+          logger.error("Failed to save validation report", {
+            path = validation_path,
+            error = tostring(err)
+          })
+          
+          results["validation"] = {
+            success = false,
+            error = err,
+            path = validation_path
+          }
+        end
+      end
+    end
+    
     -- Save reports in multiple formats
     local formats = {"html", "json", "lcov", "cobertura"}
+    
+    logger.debug("Saving coverage reports", {
+      formats = formats,
+      has_template = config.coverage_path_template ~= nil,
+      validate = validation_options.validate,
+      strict = validation_options.strict_validation
+    })
     
     for _, format in ipairs(formats) do
       local path = process_template(config.coverage_path_template, format, "coverage")
       
-      if config.verbose then
-        logger.debug("Saving " .. format .. " report to: " .. path)
-      end
+      logger.debug("Saving coverage report", {
+        format = format,
+        path = path
+      })
       
-      local ok, err = M.save_coverage_report(path, coverage_data, format)
+      local ok, err = M.save_coverage_report(path, coverage_data, format, validation_options)
       results[format] = {
         success = ok,
         error = err,
         path = path
       }
       
-      if config.verbose then
-        logger.debug(format .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
+      if ok then
+        logger.debug("Successfully saved coverage report", {
+          format = format,
+          path = path
+        })
+      else
+        logger.error("Failed to save coverage report", {
+          format = format,
+          path = path,
+          error = tostring(err)
+        })
       end
     end
   end
@@ -570,12 +1455,18 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
     -- Save reports in multiple formats
     local formats = {"html", "json"}
     
+    logger.debug("Saving quality reports", {
+      formats = formats,
+      has_template = config.quality_path_template ~= nil
+    })
+    
     for _, format in ipairs(formats) do
       local path = process_template(config.quality_path_template, format, "quality")
       
-      if config.verbose then
-        logger.debug("Saving quality " .. format .. " report to: " .. path)
-      end
+      logger.debug("Saving quality report", {
+        format = format,
+        path = path
+      })
       
       local ok, err = M.save_quality_report(path, quality_data, format)
       results["quality_" .. format] = {
@@ -584,8 +1475,17 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
         path = path
       }
       
-      if config.verbose then
-        logger.debug("Quality " .. format .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
+      if ok then
+        logger.debug("Successfully saved quality report", {
+          format = format,
+          path = path
+        })
+      else
+        logger.error("Failed to save quality report", {
+          format = format,
+          path = path,
+          error = tostring(err)
+        })
       end
     end
   end
@@ -599,12 +1499,20 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       csv = { ext = "csv", name = "CSV" }
     }
     
+    logger.debug("Saving test results reports", {
+      formats = {"junit", "tap", "csv"},
+      has_template = config.results_path_template ~= nil
+    })
+    
     for format, info in pairs(formats) do
       local path = process_template(config.results_path_template, info.ext, "test-results")
       
-      if config.verbose then
-        logger.debug("Saving " .. info.name .. " report to: " .. path)
-      end
+      logger.debug("Saving test results report", {
+        format = format,
+        name = info.name,
+        extension = info.ext,
+        path = path
+      })
       
       local ok, err = M.save_results_report(path, results_data, format)
       results[format] = {
@@ -613,13 +1521,77 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
         path = path
       }
       
-      if config.verbose then
-        logger.debug(info.name .. " save result: " .. (ok and "success" or "failed: " .. tostring(err)))
+      if ok then
+        logger.debug("Successfully saved test results report", {
+          format = format,
+          name = info.name,
+          path = path
+        })
+      else
+        logger.error("Failed to save test results report", {
+          format = format,
+          name = info.name,
+          path = path,
+          error = tostring(err)
+        })
       end
     end
   end
   
   return results
+end
+
+-- Reset the module to default configuration
+function M.reset()
+  -- Reset local configuration to defaults
+  config = {
+    debug = DEFAULT_CONFIG.debug,
+    verbose = DEFAULT_CONFIG.verbose
+  }
+  
+  logger.debug("Reset local configuration to defaults")
+  
+  -- Return the module for chaining
+  return M
+end
+
+-- Fully reset both local and central configuration
+function M.full_reset()
+  -- Reset local configuration
+  M.reset()
+  
+  -- Reset central configuration if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.reset("reporting")
+    logger.debug("Reset central configuration for reporting module")
+  end
+  
+  return M
+end
+
+-- Debug helper to show current configuration
+function M.debug_config()
+  local debug_info = {
+    local_config = {
+      debug = config.debug,
+      verbose = config.verbose
+    },
+    using_central_config = false,
+    central_config = nil
+  }
+  
+  -- Check for central_config
+  local central_config = get_central_config()
+  if central_config then
+    debug_info.using_central_config = true
+    debug_info.central_config = central_config.get("reporting")
+  end
+  
+  -- Display configuration
+  logger.info("Reporting module configuration", debug_info)
+  
+  return debug_info
 end
 
 -- Return the module

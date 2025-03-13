@@ -229,7 +229,7 @@ local function validate_percentages(coverage_data)
     if summary.total_lines and summary.total_lines > 0 and summary.covered_lines then
       local calculated_pct = (summary.covered_lines / summary.total_lines) * 100
       
-      if summary.line_coverage_percent and 
+      if summary.line_coverage_percent ~= nil and 
          math.abs(calculated_pct - summary.line_coverage_percent) > config.validation_threshold then
         add_issue("line_percentage", "Line coverage percentage doesn't match calculation", "warning", {
           reported = summary.line_coverage_percent,
@@ -243,7 +243,7 @@ local function validate_percentages(coverage_data)
     if summary.total_functions and summary.total_functions > 0 and summary.covered_functions then
       local calculated_pct = (summary.covered_functions / summary.total_functions) * 100
       
-      if summary.function_coverage_percent and 
+      if summary.function_coverage_percent ~= nil and 
          math.abs(calculated_pct - summary.function_coverage_percent) > config.validation_threshold then
         add_issue("function_percentage", "Function coverage percentage doesn't match calculation", "warning", {
           reported = summary.function_coverage_percent,
@@ -257,7 +257,7 @@ local function validate_percentages(coverage_data)
     if summary.total_blocks and summary.total_blocks > 0 and summary.covered_blocks then
       local calculated_pct = (summary.covered_blocks / summary.total_blocks) * 100
       
-      if summary.block_coverage_percent and 
+      if summary.block_coverage_percent ~= nil and 
          math.abs(calculated_pct - summary.block_coverage_percent) > config.validation_threshold then
         add_issue("block_percentage", "Block coverage percentage doesn't match calculation", "warning", {
           reported = summary.block_coverage_percent,
@@ -276,22 +276,28 @@ local function validate_percentages(coverage_data)
       local block_weight = has_blocks and 0.4 or 0
       
       local line_pct = summary.line_coverage_percent or 
-                      (summary.total_lines > 0 and 
+                      (summary.total_lines and summary.total_lines > 0 and 
+                       summary.covered_lines and
                       (summary.covered_lines / summary.total_lines * 100) or 0)
                       
       local function_pct = summary.function_coverage_percent or 
-                          (summary.total_functions > 0 and 
+                          (summary.total_functions and summary.total_functions > 0 and 
+                           summary.covered_functions and 
                           (summary.covered_functions / summary.total_functions * 100) or 0)
                           
       local block_pct = summary.block_coverage_percent or 
-                       (summary.total_blocks > 0 and 
+                       (summary.total_blocks and summary.total_blocks > 0 and 
+                        summary.covered_blocks and
                        (summary.covered_blocks / summary.total_blocks * 100) or 0)
       
       local calculated_overall = (line_pct * line_weight) + 
                                 (function_pct * function_weight) + 
                                 (block_pct * block_weight)
       
-      if math.abs(calculated_overall - summary.overall_percent) > config.validation_threshold then
+      local validation_threshold = config.validation_threshold or DEFAULT_CONFIG.validation_threshold
+      
+      -- Check if summary.overall_percent is nil before comparison
+      if summary.overall_percent ~= nil and math.abs(calculated_overall - summary.overall_percent) > validation_threshold then
         add_issue("overall_percentage", "Overall coverage percentage doesn't match weighted calculation", "warning", {
           reported = summary.overall_percent,
           calculated = calculated_overall,
@@ -395,17 +401,31 @@ function M.validate_coverage_data(coverage_data)
   -- Reset issues list
   validation_issues = {}
   
+  -- Count files in a safer way than using deprecated table.getn
+  local file_count = 0
+  if coverage_data and coverage_data.files then
+    for _ in pairs(coverage_data.files) do
+      file_count = file_count + 1
+    end
+  end
+  
   logger.debug("Starting coverage report validation", {
     has_data = coverage_data ~= nil,
     has_summary = coverage_data and coverage_data.summary ~= nil,
     has_files = coverage_data and coverage_data.files ~= nil,
-    file_count = coverage_data and coverage_data.files and table.getn and table.getn(coverage_data.files) or 0
+    file_count = file_count
   })
   
-  local config = get_config()
+  local config = get_config() or DEFAULT_CONFIG
+  
+  -- Ensure we have valid config values
+  local validate_reports = config.validate_reports
+  if validate_reports == nil then
+    validate_reports = DEFAULT_CONFIG.validate_reports
+  end
   
   -- Skip validation if disabled
-  if not config.validate_reports then
+  if not validate_reports then
     logger.info("Coverage report validation is disabled in configuration")
     return true, {}
   end
@@ -659,9 +679,17 @@ function M.cross_check_with_static_analysis(coverage_data)
     ::continue::
   end
   
+  -- Count discrepancies in a safer way than using deprecated table.getn
+  local discrepancy_count = 0
+  if results.discrepancies then
+    for _ in pairs(results.discrepancies) do
+      discrepancy_count = discrepancy_count + 1
+    end
+  end
+  
   logger.info("Static analysis cross-check complete", {
     files_checked = results.files_checked,
-    files_with_discrepancies = table.getn and table.getn(results.discrepancies) or 0,
+    files_with_discrepancies = discrepancy_count,
     unanalyzed_files = #results.unanalyzed_files
   })
   

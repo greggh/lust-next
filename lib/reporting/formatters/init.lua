@@ -30,6 +30,10 @@ function M.register_all(formatters)
     "cobertura"
   }
   
+  logger.debug("Registering reporting formatters", {
+    modules = formatter_modules
+  })
+  
   for _, module_name in ipairs(formatter_modules) do
     -- Get the current module path to use as a base
     local current_module_dir = debug.getinfo(1).source:match("@(.+)/[^/]+$") or ""
@@ -44,43 +48,80 @@ function M.register_all(formatters)
       fs.join_paths(current_module_dir, module_name),
     }
     
+    logger.trace("Attempting to load formatter", {
+      module = module_name,
+      paths = formatter_paths,
+      base_dir = current_module_dir
+    })
+    
     local loaded = false
     for _, path in ipairs(formatter_paths) do
       -- Silently try to load formatter without debug output
       local ok, formatter_module_or_error = pcall(require, path)
       if ok then
         -- Handle different module formats:
-        -- 1. Function that registers formatters
         if type(formatter_module_or_error) == "function" then
+          -- 1. Function that registers formatters
+          logger.trace("Loaded formatter as registration function", { 
+            module = module_name,
+            path = path
+          })
           formatter_module_or_error(formatters)
           loaded = true
           break
-        -- 2. Table with register function
         elseif type(formatter_module_or_error) == "table" and type(formatter_module_or_error.register) == "function" then
+          -- 2. Table with register function
+          logger.trace("Loaded formatter with register() method", { 
+            module = module_name,
+            path = path
+          })
           formatter_module_or_error.register(formatters)
           loaded = true
           break
-        -- 3. Table with format_coverage/format_quality functions
         elseif type(formatter_module_or_error) == "table" then
+          -- 3. Table with format_coverage/format_quality functions
+          local functions_found = {}
+          
           if type(formatter_module_or_error.format_coverage) == "function" then
             formatters.coverage[module_name] = formatter_module_or_error.format_coverage
+            table.insert(functions_found, "format_coverage")
           end
+          
           if type(formatter_module_or_error.format_quality) == "function" then
             formatters.quality[module_name] = formatter_module_or_error.format_quality
+            table.insert(functions_found, "format_quality")
           end
+          
           if type(formatter_module_or_error.format_results) == "function" then
             formatters.results[module_name] = formatter_module_or_error.format_results
+            table.insert(functions_found, "format_results")
           end
-          loaded = true
-          break
+          
+          if #functions_found > 0 then
+            logger.trace("Loaded formatter with formatting functions", {
+              module = module_name,
+              path = path,
+              functions = functions_found
+            })
+            loaded = true
+            break
+          end
         end
       end
     end
     
-    if not loaded then
-      logger.warn("Failed to load formatter module: " .. module_name)
+    if loaded then
+      logger.debug("Successfully registered formatter", { module = module_name })
+    else
+      logger.warn("Failed to load formatter module", { module = module_name })
     end
   end
+  
+  logger.debug("Formatter registration complete", {
+    coverage_formatters = table.concat(M.built_in.coverage, ", "),
+    quality_formatters = table.concat(M.built_in.quality, ", "),
+    results_formatters = table.concat(M.built_in.results, ", ")
+  })
   
   return formatters
 end

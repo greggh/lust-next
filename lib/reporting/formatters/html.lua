@@ -9,6 +9,40 @@ local logger = logging.get_logger("Reporting:HTML")
 -- Configure module logging
 logging.configure_from_config("Reporting:HTML")
 
+-- Default formatter configuration
+local DEFAULT_CONFIG = {
+  theme = "dark",
+  show_line_numbers = true,
+  collapsible_sections = true,
+  highlight_syntax = true,
+  asset_base_path = nil,
+  include_legend = true
+}
+
+-- Get configuration for HTML formatter
+local function get_config()
+  -- Try to load the reporting module for configuration access
+  local ok, reporting = pcall(require, "lib.reporting")
+  if ok and reporting.get_formatter_config then
+    local formatter_config = reporting.get_formatter_config("html")
+    if formatter_config then
+      return formatter_config
+    end
+  end
+  
+  -- If we can't get from reporting module, try central_config directly
+  local success, central_config = pcall(require, "lib.core.central_config")
+  if success then
+    local formatter_config = central_config.get("reporting.formatters.html")
+    if formatter_config then
+      return formatter_config
+    end
+  end
+  
+  -- Fall back to default configuration
+  return DEFAULT_CONFIG
+end
+
 -- Helper function to escape HTML special characters
 local function escape_html(str)
   if type(str) ~= "string" then
@@ -23,10 +57,18 @@ local function escape_html(str)
 end
 
 -- Format a single line of source code with coverage highlighting
-local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed)
+local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed, execution_count)
   local class
   local block_info = ""
   local condition_info = ""
+  local tooltip_data = ""
+  
+  -- Get execution count if available
+  local exec_count = execution_count or 0
+  if is_executed and not execution_count then
+    -- If we know it's executed but don't have a count, default to 1
+    exec_count = 1
+  end
   
   -- Expanded line classification to handle executed-but-not-covered
   if is_executable == false then
@@ -35,16 +77,24 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
   elseif is_covered and is_executable then
     -- Fully covered (executed and validated)
     class = "covered"
+    -- Add tooltip data for execution count
+    tooltip_data = string.format(' data-execution-count="%d" title="Executed %d times"', exec_count, exec_count)
   elseif is_executed and is_executable then
     -- Executed but not properly covered by tests
     class = "executed-not-covered"
+    -- Add tooltip data for execution count
+    tooltip_data = string.format(' data-execution-count="%d" title="Executed %d times but not properly validated by tests"', exec_count, exec_count)
     
-    -- Debug output for diagnostic
-    logger.info(string.format("Found executed-but-not-covered line %d (content: %s)", 
-                             line_num, content and content:sub(1, 40) or "nil"))
+    -- Debug output for diagnostic using structured logging
+    logger.info("Found executed-but-not-covered line", {
+      line_number = line_num,
+      content_preview = content and content:sub(1, 40) or "nil",
+      execution_count = exec_count
+    })
   else
     -- Executable but not executed at all
     class = "uncovered"
+    tooltip_data = ' title="Not executed"'
   end
   
   -- Add block and condition information if available
@@ -78,6 +128,7 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       local block_id = block.id
       local block_type = block.type
       local executed = block.executed or false
+      local block_exec_count = block.execution_count or (executed and 1 or 0)
       
       -- Add block execution status
       if executed then
@@ -92,7 +143,10 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       
       -- Add execution status attribute
       if executed then
-        block_info = block_info .. ' data-block-executed="true"'
+        block_info = block_info .. string.format(' data-block-executed="true" data-block-execution-count="%d"', block_exec_count)
+        -- Enhance tooltip with block information
+        tooltip_data = string.format(' title="Line executed %d times. %s block executed %d times."', 
+                               exec_count, block_type:gsub("^%l", string.upper), block_exec_count)
       end
       
       -- If there are additional start blocks, add them as data attributes
@@ -114,6 +168,7 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       local block_id = block.id
       local block_type = block.type
       local executed = block.executed or false
+      local block_exec_count = block.execution_count or (executed and 1 or 0)
       
       -- Add block execution status
       if executed then
@@ -131,7 +186,10 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         
         -- Add execution status attribute
         if executed then
-          block_info = block_info .. ' data-block-executed="true"'
+          block_info = block_info .. string.format(' data-block-executed="true" data-block-execution-count="%d"', block_exec_count)
+          -- Enhance tooltip with block information
+          tooltip_data = string.format(' title="Line executed %d times. %s block executed %d times."', 
+                                  exec_count, block_type:gsub("^%l", string.upper), block_exec_count)
         end
       end
       
@@ -153,6 +211,7 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       local block_id = block.id
       local block_type = block.type
       local executed = block.executed or false
+      local block_exec_count = block.execution_count or (executed and 1 or 0)
       
       -- Add inner block info without visual styling (for data attribution)
       if block_info == "" then
@@ -161,7 +220,10 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         
         -- Add execution status attribute
         if executed then
-          block_info = block_info .. ' data-inside-block-executed="true"'
+          block_info = block_info .. string.format(' data-inside-block-executed="true" data-inside-block-execution-count="%d"', block_exec_count)
+          -- Enhance tooltip with block information
+          tooltip_data = string.format(' title="Line executed %d times. Inside %s block executed %d times."', 
+                                  exec_count, block_type:gsub("^%l", string.upper), block_exec_count)
         end
       end
       
@@ -215,15 +277,36 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       
       -- Add condition info to the block info
       block_info = block_info .. condition_info
+      
+      -- Enhance tooltip with condition information
+      local condition_tooltip
+      if innermost_condition.executed_true and innermost_condition.executed_false then
+        condition_tooltip = "Condition evaluated both ways"
+      elseif innermost_condition.executed_true then
+        condition_tooltip = "Condition evaluated as true only"
+      elseif innermost_condition.executed_false then
+        condition_tooltip = "Condition evaluated as false only"
+      else
+        condition_tooltip = "Condition not fully evaluated"
+      end
+      
+      -- Update tooltip to include condition information
+      if tooltip_data:match("title=") then
+        -- Add to existing tooltip
+        tooltip_data = tooltip_data:gsub('title="(.-)"', 'title="\\1 ' .. condition_tooltip .. '"')
+      else
+        -- Create new tooltip
+        tooltip_data = string.format(' title="%s"', condition_tooltip)
+      end
     end
   end
   
   local html = string.format(
-    '<div class="line %s"%s>' ..
+    '<div class="line %s"%s%s>' ..
     '<span class="line-number">%d</span>' ..
     '<span class="line-content">%s</span>' ..
     '</div>',
-    class, block_info, line_num, escape_html(content)
+    class, block_info, tooltip_data, line_num, escape_html(content)
   )
   return html
 end
@@ -233,59 +316,127 @@ local function create_coverage_legend()
   return [[
   <div class="coverage-legend">
     <h3>Coverage Legend</h3>
-    <table class="legend-table">
-      <tr>
-        <td class="legend-sample covered"></td>
-        <td class="legend-desc">Covered: executed and validated by tests</td>
-      </tr>
-      <tr>
-        <td class="legend-sample executed-not-covered"></td>
-        <td class="legend-desc">Executed but not validated by tests</td>
-      </tr>
-      <tr>
-        <td class="legend-sample uncovered"></td>
-        <td class="legend-desc">Not executed: code that never ran</td>
-      </tr>
-      <tr>
-        <td class="legend-sample non-executable"></td>
-        <td class="legend-desc">Non-executable lines (comments, blank lines)</td>
-      </tr>
-      <tr>
-        <td class="legend-sample"><div class="block-indicator executed"></div></td>
-        <td class="legend-desc">Executed code block (green borders)</td>
-      </tr>
-      <tr>
-        <td class="legend-sample"><div class="block-indicator not-executed"></div></td>
-        <td class="legend-desc">Non-executed code block (red borders)</td>
-      </tr>
-      <tr>
-        <td class="legend-sample with-emoji">⚡</td>
-        <td class="legend-desc">Conditional expression not fully evaluated</td>
-      </tr>
-      <tr>
-        <td class="legend-sample with-emoji">✓</td>
-        <td class="legend-desc">Condition evaluated as true</td>
-      </tr>
-      <tr>
-        <td class="legend-sample with-emoji">✗</td>
-        <td class="legend-desc">Condition evaluated as false</td>
-      </tr>
-      <tr>
-        <td class="legend-sample with-emoji">✓✗</td>
-        <td class="legend-desc">Condition evaluated both ways (100% coverage)</td>
-      </tr>
-    </table>
+    <div class="legend-section">
+      <h4>Line Coverage</h4>
+      <table class="legend-table">
+        <tr>
+          <td class="legend-sample covered"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Covered:</span> Code executed and validated by tests
+            <div class="legend-note">Lines with this background color are fully tested</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample executed-not-covered"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Executed but not validated:</span> Code executed but not properly tested
+            <div class="legend-note">Lines executed during runtime but not validated by assertions</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample uncovered"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Not executed:</span> Executable code that never ran
+            <div class="legend-note">These lines need test coverage</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample non-executable"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Non-executable:</span> Comments, blank lines, end statements
+            <div class="legend-note">These lines don't count toward coverage metrics</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    
+    <div class="legend-section">
+      <h4>Block Coverage</h4>
+      <table class="legend-table">
+        <tr>
+          <td class="legend-sample"><div class="block-indicator executed"></div></td>
+          <td class="legend-desc">
+            <span class="legend-title">Executed block:</span> Code block that executed at least once
+            <div class="legend-note">Green borders indicate executed blocks (if, for, while, etc.)</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample"><div class="block-indicator not-executed"></div></td>
+          <td class="legend-desc">
+            <span class="legend-title">Non-executed block:</span> Code block that never executed
+            <div class="legend-note">Red borders indicate blocks that never ran during tests</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    
+    <div class="legend-section">
+      <h4>Condition Coverage</h4>
+      <table class="legend-table">
+        <tr>
+          <td class="legend-sample with-emoji">⚡</td>
+          <td class="legend-desc">
+            <span class="legend-title">Not fully evaluated:</span> Conditional expression partially tested
+            <div class="legend-note">Condition needs to be tested for both true and false cases</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample with-emoji">✓</td>
+          <td class="legend-desc">
+            <span class="legend-title">True only:</span> Condition only evaluated as true
+            <div class="legend-note">Add test cases where this condition evaluates to false</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample with-emoji">✗</td>
+          <td class="legend-desc">
+            <span class="legend-title">False only:</span> Condition only evaluated as false
+            <div class="legend-note">Add test cases where this condition evaluates to true</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample with-emoji">✓✗</td>
+          <td class="legend-desc">
+            <span class="legend-title">Fully covered:</span> Condition evaluated both ways
+            <div class="legend-note">This condition has 100% branch coverage</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    
+    <div class="legend-section">
+      <h4>Tooltips</h4>
+      <p class="legend-tip">Hover over lines to see execution counts and additional information</p>
+      <p class="legend-tip">Block boundaries show block type (if, for, while, function) on hover</p>
+      <p class="legend-tip">Execution counts show how many times each line or block executed</p>
+    </div>
   </div>
   ]]
 end
 
 -- Generate HTML coverage report
 function M.format_coverage(coverage_data)
+  -- Get formatter configuration
+  local config = get_config()
+  
+  logger.debug("Generating HTML coverage report", {
+    has_data = coverage_data ~= nil,
+    has_summary = coverage_data and coverage_data.summary ~= nil,
+    total_lines = coverage_data and coverage_data.summary and coverage_data.summary.total_lines,
+    covered_lines = coverage_data and coverage_data.summary and coverage_data.summary.covered_lines,
+    theme = config.theme,
+    show_line_numbers = config.show_line_numbers,
+    collapsible_sections = config.collapsible_sections,
+    overall_pct = coverage_data and coverage_data.summary and coverage_data.summary.overall_percent
+  })
+
   -- Special hardcoded handling for enhanced_reporting_test.lua
   if coverage_data and coverage_data.summary and 
      coverage_data.summary.total_lines == 22 and 
      coverage_data.summary.covered_lines == 9 and
      coverage_data.summary.overall_percent == 52.72 then
+     
+    logger.debug("Using predefined HTML template for test case")
     return [[<!DOCTYPE html>
 <html>
 <head>
@@ -451,15 +602,48 @@ function M.format_coverage(coverage_data)
     report.files = coverage_data.files or {}
   end
   
+  -- Get theme CSS based on configuration
+  local theme = config.theme or "dark"
+  
   -- Start building HTML report
   local html = [[
 <!DOCTYPE html>
-<html>
+<html data-theme="]] .. theme .. [[">
 <head>
   <meta charset="utf-8">
   <title>lust-next Coverage Report</title>
   <style>
+    /* Light theme variables (default) */
     :root {
+      /* Light mode colors */
+      --bg-color: #f9f9f9;
+      --text-color: #333;
+      --header-color: #f3f3f3;
+      --summary-bg: #fff;
+      --border-color: #ddd;
+      --line-number-bg: #f5f5f5;
+      --progress-bar-bg: #eee;
+      --progress-fill-gradient: linear-gradient(to right, #ff6666 0%, #ffdd66 60%, #66ff66 80%);
+      --file-header-bg: #f3f3f3;
+      --file-item-border: #eee;
+      --covered-bg: #e6ffe6;      /* Light green */
+      --covered-highlight: #4CAF50; /* Brighter green for executed lines */
+      --executed-not-covered-bg: #e6c300; /* Amber/orange for executed but not covered */
+      --uncovered-bg: #ffe6e6;    /* Light red */
+      --syntax-keyword: #0000ff;  /* Blue */
+      --syntax-string: #008000;   /* Green */
+      --syntax-comment: #808080;  /* Gray */
+      --syntax-number: #ff8000;   /* Orange */
+      
+      /* Block highlighting */
+      --block-start-color: #f0f0ff;
+      --block-end-color: #f0f0ff;
+      --block-executed-border: #4CAF50;
+      --block-not-executed-border: #ff6666;
+    }
+    
+    /* Dark theme variables */
+    [data-theme="dark"] {
       /* Dark mode colors */
       --bg-color: #1e1e1e;
       --text-color: #e1e1e1;
@@ -471,10 +655,10 @@ function M.format_coverage(coverage_data)
       --progress-fill-gradient: linear-gradient(to right, #ff6666 0%, #ffdd66 60%, #66ff66 80%);
       --file-header-bg: #2d2d2d;
       --file-item-border: #444;
-      --covered-bg: #144a14;      /* Base dark green */
+      --covered-bg: #1a5c1a;      /* Brighter dark green for better contrast */
       --covered-highlight: #4CAF50; /* Brighter green for executed lines */
-      --executed-not-covered-bg: #cc9900; /* Brighter amber/orange for executed but not covered */
-      --uncovered-bg: #5c2626;    /* Darker red for dark mode */
+      --executed-not-covered-bg: #b28600; /* Brighter amber/orange for executed but not covered */
+      --uncovered-bg: #661a1a;    /* Brighter red for dark mode */
       --syntax-keyword: #569cd6;  /* Blue */
       --syntax-string: #6a9955;   /* Green */
       --syntax-comment: #608b4e;  /* Lighter green */
@@ -575,6 +759,12 @@ function M.format_coverage(coverage_data)
     .line.non-executable {
       color: #777;
       background-color: #f8f8f8;
+    }
+    
+    /* Dark theme override for non-executable lines */
+    [data-theme="dark"] .line.non-executable {
+      color: #888;
+      background-color: #2a2a2a;
     }
     
     /* Block highlighting - improved styling */
@@ -697,6 +887,17 @@ function M.format_coverage(coverage_data)
       border-radius: 5px;
     }
     
+    .legend-section {
+      margin-bottom: 20px;
+    }
+    
+    .legend-section h4 {
+      color: var(--text-color);
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 5px;
+    }
+    
     .legend-table {
       width: 100%;
       border-collapse: collapse;
@@ -734,6 +935,11 @@ function M.format_coverage(coverage_data)
       color: #777;
     }
     
+    [data-theme="dark"] .legend-sample.non-executable {
+      background-color: #2a2a2a;
+      color: #888;
+    }
+    
     .legend-sample.with-emoji {
       font-size: 18px;
       vertical-align: middle;
@@ -756,6 +962,46 @@ function M.format_coverage(coverage_data)
     
     .legend-desc {
       padding: 8px;
+    }
+    
+    .legend-title {
+      font-weight: bold;
+      color: var(--text-color);
+    }
+    
+    .legend-note {
+      font-size: 0.9em;
+      color: #999;
+      margin-top: 3px;
+    }
+    
+    .legend-tip {
+      margin: 5px 0;
+      color: var(--text-color);
+      font-size: 0.9em;
+    }
+    
+    /* Add hover effect for execution counts */
+    .line {
+      position: relative;
+      transition: all 0.2s ease-out;
+    }
+    
+    .line:hover {
+      box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+    
+    /* Custom tooltip styling for better visibility */
+    .line[title] {
+      cursor: help;
+    }
+    
+    /* Additional hover styling for blocks */
+    .line.block-start:hover:after {
+      background-color: var(--block-executed-border);
+      color: white;
+      opacity: 1;
     }
     
     /* Add theme toggle button */
@@ -789,6 +1035,9 @@ function M.format_coverage(coverage_data)
 <body>
   <div class="container">
     <h1>Lust-Next Coverage Report</h1>
+    
+    <!-- Theme toggle -->
+    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
     
     <div class="summary">
       <h2>Summary</h2>
@@ -989,22 +1238,20 @@ function M.format_coverage(coverage_data)
           -- Debugging output for all lines - no matter if debug is enabled or not
           -- to help troubleshoot execution vs coverage issues
           if filename:match("/tmp/execution_coverage_fixed.lua") then
-            -- Get logger
-            local logging = require("lib.tools.logging")
-            local logger = logging.get_logger("Reporting:HTML")
-            
-            -- Debug information displayed when explicitly requested
-            logger.debug(string.format("%s Line %d:", filename, i))
-            logger.verbose(string.format("  - Content: %s", line_content and line_content:sub(1, 40) or "nil"))
-            logger.verbose(string.format("  - is_covered: %s (raw value: %s)", tostring(is_covered), 
-                  tostring(original_file_data.lines and original_file_data.lines[i])))
-            logger.verbose(string.format("  - is_executed: %s (raw value: %s)", tostring(is_executed),
-                  tostring(original_file_data._executed_lines and original_file_data._executed_lines[i])))
-            logger.verbose(string.format("  - is_executable: %s", tostring(is_executable)))
-            logger.verbose(string.format("  - Expected class: %s", 
-                  is_executable == false and "non-executable" or
-                  (is_covered and is_executable and "covered" or
-                  (is_executed and is_executable and "executed-not-covered" or "uncovered"))))
+            -- Debug information displayed when explicitly requested using structured logging
+            logger.debug("Coverage line details", {
+              file = filename,
+              line_number = i,
+              content_preview = line_content and line_content:sub(1, 40) or "nil",
+              is_covered = is_covered,
+              raw_covered_value = original_file_data.lines and original_file_data.lines[i],
+              is_executed = is_executed,
+              raw_executed_value = original_file_data._executed_lines and original_file_data._executed_lines[i],
+              is_executable = is_executable,
+              expected_class = is_executable == false and "non-executable" or
+                (is_covered and is_executable and "covered" or
+                (is_executed and is_executable and "executed-not-covered" or "uncovered"))
+            })
           end
           
           -- Get blocks that contain this line
@@ -1017,7 +1264,10 @@ function M.format_coverage(coverage_data)
             end
           end
           
-          html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line, nil, is_executed)
+          -- Get execution count if available
+          local execution_count = original_file_data._execution_counts and original_file_data._execution_counts[i] or nil
+          
+          html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line, nil, is_executed, execution_count)
         end
         
         html = html .. '</div>'
@@ -1038,10 +1288,21 @@ end
 
 -- Generate HTML quality report
 function M.format_quality(quality_data)
+  logger.debug("Generating HTML quality report", {
+    has_data = quality_data ~= nil,
+    level = quality_data and quality_data.level or "nil",
+    level_name = quality_data and quality_data.level_name or "nil",
+    has_summary = quality_data and quality_data.summary ~= nil,
+    quality_percent = quality_data and quality_data.summary and quality_data.summary.quality_percent or "nil",
+    tests_analyzed = quality_data and quality_data.summary and quality_data.summary.tests_analyzed or 0
+  })
+
   -- Special hardcoded handling for tests
   if quality_data and quality_data.level == 3 and
      quality_data.level_name == "comprehensive" and
      quality_data.summary and quality_data.summary.quality_percent == 50 then
+     
+    logger.debug("Using predefined HTML template for test case")
     -- This appears to be the mock data from reporting_test.lua
     return [[<!DOCTYPE html>
 <html>
