@@ -2,6 +2,7 @@
 local M = {}
 
 local logging = require("lib.tools.logging")
+local error_handler = require("lib.tools.error_handler")
 
 -- Create a logger for this module
 local logger = logging.get_logger("Reporting:HTML")
@@ -22,79 +23,203 @@ local DEFAULT_CONFIG = {
 -- Get configuration for HTML formatter
 local function get_config()
   -- Try to load the reporting module for configuration access
-  local ok, reporting = pcall(require, "lib.reporting")
-  if ok and reporting.get_formatter_config then
-    local formatter_config = reporting.get_formatter_config("html")
-    if formatter_config then
-      return formatter_config
+  local success, result, err = error_handler.try(function()
+    local reporting = require("lib.reporting")
+    if reporting.get_formatter_config then
+      local formatter_config = reporting.get_formatter_config("html")
+      if formatter_config then
+        return formatter_config
+      end
     end
+    return nil
+  end)
+  
+  if success and result then
+    return result
   end
   
-  -- If we can't get from reporting module, try central_config directly
-  local success, central_config = pcall(require, "lib.core.central_config")
-  if success then
+  -- If reporting module access fails, try central_config directly
+  local config_success, config_result = error_handler.try(function()
+    local central_config = require("lib.core.central_config")
     local formatter_config = central_config.get("reporting.formatters.html")
     if formatter_config then
       return formatter_config
     end
+    return nil
+  end)
+  
+  if config_success and config_result then
+    return config_result
   end
+  
+  -- Log the fallback to default configuration
+  logger.debug("Using default HTML formatter configuration", {
+    reason = "Could not load from reporting or central_config",
+    module = "reporting.formatters.html"
+  })
   
   -- Fall back to default configuration
   return DEFAULT_CONFIG
 end
 
--- Helper function to escape HTML special characters
+-- Helper function to escape HTML special characters with error handling
 local function escape_html(str)
+  -- Handle nil or non-string values safely
   if type(str) ~= "string" then
-    return tostring(str or "")
+    local safe_str = tostring(str or "")
+    logger.debug("Converting non-string value to string for HTML escaping", {
+      original_type = type(str),
+      result_length = #safe_str
+    })
+    str = safe_str
   end
   
-  return str:gsub("&", "&amp;")
-            :gsub("<", "&lt;")
-            :gsub(">", "&gt;")
-            :gsub("\"", "&quot;")
-            :gsub("'", "&apos;")
+  -- Use error handling for the string operations
+  local success, result = error_handler.try(function()
+    return str:gsub("&", "&amp;")
+              :gsub("<", "&lt;")
+              :gsub(">", "&gt;")
+              :gsub("\"", "&quot;")
+              :gsub("'", "&apos;")
+  end)
+  
+  if success then
+    return result
+  else
+    -- If string operations fail, log the error and return a safe alternative
+    local err = error_handler.runtime_error(
+      "Failed to escape HTML string",
+      {
+        operation = "escape_html",
+        module = "reporting.formatters.html",
+        string_length = #str
+      },
+      result -- On failure, result contains the error
+    )
+    logger.warn(err.message, err.context)
+    
+    -- Fallback to a basic escape implementation
+    local fallback_success, fallback_result = error_handler.try(function()
+      local escaped = str
+      escaped = escaped:gsub("&", "&amp;")
+      escaped = escaped:gsub("<", "&lt;")
+      escaped = escaped:gsub(">", "&gt;")
+      return escaped
+    end)
+    
+    if fallback_success then
+      return fallback_result
+    else
+      -- If all else fails, return an empty string
+      return "[ENCODING ERROR]"
+    end
+  end
 end
 
 -- Format a single line of source code with coverage highlighting
 local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed, execution_count)
-  local class
+  -- Validate parameters
+  if not line_num then
+    local err = error_handler.validation_error(
+      "Missing required line_num parameter",
+      {
+        operation = "format_source_line",
+        module = "reporting.formatters.html"
+      }
+    )
+    logger.warn(err.message, err.context)
+    -- Provide a fallback line number if missing
+    line_num = 0
+  end
+  
+  -- Initialize with safe defaults
+  local class = ""
   local block_info = ""
   local condition_info = ""
   local tooltip_data = ""
   
-  -- Get execution count if available
-  local exec_count = execution_count or 0
-  if is_executed and not execution_count then
-    -- If we know it's executed but don't have a count, default to 1
-    exec_count = 1
+  -- Get execution count if available with proper error handling
+  local exec_count = 0
+  local success, result = error_handler.try(function()
+    if execution_count then
+      return execution_count
+    elseif is_executed then
+      -- If we know it's executed but don't have a count, default to 1
+      return 1
+    else
+      return 0
+    end
+  end)
+  
+  if success then
+    exec_count = result
+  else
+    logger.warn("Error calculating execution count", {
+      operation = "format_source_line",
+      line_number = line_num,
+      fallback_value = 0
+    })
   end
   
-  -- Expanded line classification to handle executed-but-not-covered
-  if is_executable == false then
-    -- Non-executable line (comments, blank lines, etc.)
-    class = "non-executable"
-  elseif is_covered and is_executable then
-    -- Fully covered (executed and validated)
-    class = "covered"
-    -- Add tooltip data for execution count
-    tooltip_data = string.format(' data-execution-count="%d" title="Executed %d times"', exec_count, exec_count)
-  elseif is_executed and is_executable then
-    -- Executed but not properly covered by tests
-    class = "executed-not-covered"
-    -- Add tooltip data for execution count
-    tooltip_data = string.format(' data-execution-count="%d" title="Executed %d times but not properly validated by tests"', exec_count, exec_count)
-    
-    -- Debug output for diagnostic using structured logging
-    logger.info("Found executed-but-not-covered line", {
-      line_number = line_num,
-      content_preview = content and content:sub(1, 40) or "nil",
-      execution_count = exec_count
-    })
+  -- Determine line classification using error handling
+  local classify_success, classification_result = error_handler.try(function()
+    if is_executable == false then
+      -- Non-executable line (comments, blank lines, etc.)
+      return {
+        class = "non-executable",
+        tooltip = nil
+      }
+    elseif is_covered and is_executable then
+      -- Fully covered (executed and validated)
+      return {
+        class = "covered",
+        tooltip = string.format(' data-execution-count="%d" title="Executed %d times"', exec_count, exec_count)
+      }
+    elseif is_executed and is_executable then
+      -- Executed but not properly covered by tests
+      -- Log diagnostic information
+      logger.info("Found executed-but-not-covered line", {
+        line_number = line_num,
+        content_preview = content and content:sub(1, 40) or "nil",
+        execution_count = exec_count
+      })
+      
+      return {
+        class = "executed-not-covered",
+        tooltip = string.format(' data-execution-count="%d" title="Executed %d times but not properly validated by tests"', 
+                           exec_count, exec_count)
+      }
+    else
+      -- Executable but not executed at all
+      return {
+        class = "uncovered",
+        tooltip = ' title="Not executed"'
+      }
+    end
+  end)
+  
+  if classify_success then
+    class = classification_result.class
+    tooltip_data = classification_result.tooltip or ""
   else
-    -- Executable but not executed at all
+    -- If classification fails, use a safe fallback
+    local err = error_handler.runtime_error(
+      "Failed to classify line",
+      {
+        operation = "format_source_line",
+        line_number = line_num,
+        is_executable = is_executable,
+        is_covered = is_covered,
+        is_executed = is_executed,
+        module = "reporting.formatters.html"
+      },
+      classification_result -- On failure, classification_result contains the error
+    )
+    logger.warn(err.message, err.context)
+    
+    -- Use a safe fallback classification
     class = "uncovered"
-    tooltip_data = ' title="Not executed"'
+    tooltip_data = ' title="Classification error"'
   end
   
   -- Add block and condition information if available
@@ -414,11 +539,36 @@ local function create_coverage_legend()
   ]]
 end
 
--- Generate HTML coverage report
+-- Generate HTML coverage report with comprehensive error handling
 function M.format_coverage(coverage_data)
-  -- Get formatter configuration
+  -- Validate input parameters
+  if not coverage_data then
+    local err = error_handler.validation_error(
+      "Missing required coverage_data parameter",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.html"
+      }
+    )
+    logger.error(err.message, err.context)
+    -- Create a basic error page as a fallback
+    return [[<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Coverage Report Error</title>
+</head>
+<body>
+  <h1>Error Generating Coverage Report</h1>
+  <p>Missing or invalid coverage data.</p>
+</body>
+</html>]]
+  end
+  
+  -- Get formatter configuration safely
   local config = get_config()
   
+  -- Log debugging information using structured logging
   logger.debug("Generating HTML coverage report", {
     has_data = coverage_data ~= nil,
     has_summary = coverage_data and coverage_data.summary ~= nil,
@@ -572,34 +722,88 @@ function M.format_coverage(coverage_data)
 </html>]]
   end
 
-  -- Create a simplified report
-  local report = {
-    overall_pct = 0,
-    files_pct = 0,
-    lines_pct = 0,
-    functions_pct = 0,
-    files = {}
-  }
+  -- Create a simplified report with error handling
+  local report
+  local extract_success, extract_result = error_handler.try(function()
+    local extracted_report = {
+      overall_pct = 0,
+      files_pct = 0,
+      lines_pct = 0,
+      functions_pct = 0,
+      files = {}
+    }
+    
+    -- Extract data from coverage_data if available
+    if coverage_data and coverage_data.summary then
+      extracted_report.overall_pct = coverage_data.summary.overall_percent or 0
+      extracted_report.total_files = coverage_data.summary.total_files or 0
+      extracted_report.covered_files = coverage_data.summary.covered_files or 0
+      
+      -- Safe calculation of percentages
+      if coverage_data.summary.total_files and coverage_data.summary.total_files > 0 then
+        extracted_report.files_pct = ((coverage_data.summary.covered_files or 0) / 
+                                      coverage_data.summary.total_files * 100)
+      else
+        extracted_report.files_pct = 0
+      end
+      
+      extracted_report.total_lines = coverage_data.summary.total_lines or 0 
+      extracted_report.covered_lines = coverage_data.summary.covered_lines or 0
+      
+      -- Safe calculation of line percentage
+      if coverage_data.summary.total_lines and coverage_data.summary.total_lines > 0 then
+        extracted_report.lines_pct = ((coverage_data.summary.covered_lines or 0) / 
+                                     coverage_data.summary.total_lines * 100)
+      else
+        extracted_report.lines_pct = 0
+      end
+      
+      extracted_report.total_functions = coverage_data.summary.total_functions or 0
+      extracted_report.covered_functions = coverage_data.summary.covered_functions or 0
+      
+      -- Safe calculation of function percentage
+      if coverage_data.summary.total_functions and coverage_data.summary.total_functions > 0 then
+        extracted_report.functions_pct = ((coverage_data.summary.covered_functions or 0) / 
+                                        coverage_data.summary.total_functions * 100)
+      else
+        extracted_report.functions_pct = 0
+      end
+      
+      extracted_report.files = coverage_data.files or {}
+    end
+    
+    return extracted_report
+  end)
   
-  -- Extract data from coverage_data if available
-  if coverage_data and coverage_data.summary then
-    report.overall_pct = coverage_data.summary.overall_percent or 0
-    report.total_files = coverage_data.summary.total_files or 0
-    report.covered_files = coverage_data.summary.covered_files or 0
-    report.files_pct = coverage_data.summary.total_files > 0 and
-                      ((coverage_data.summary.covered_files or 0) / coverage_data.summary.total_files * 100) or 0
+  if extract_success then
+    report = extract_result
+  else
+    -- If data extraction fails, log the error and use safe defaults
+    local err = error_handler.runtime_error(
+      "Failed to extract coverage data for HTML report",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.html",
+        has_summary = coverage_data and coverage_data.summary ~= nil
+      },
+      extract_result -- On failure, extract_result contains the error
+    )
+    logger.error(err.message, err.context)
     
-    report.total_lines = coverage_data.summary.total_lines or 0 
-    report.covered_lines = coverage_data.summary.covered_lines or 0
-    report.lines_pct = coverage_data.summary.total_lines > 0 and
-                     ((coverage_data.summary.covered_lines or 0) / coverage_data.summary.total_lines * 100) or 0
-    
-    report.total_functions = coverage_data.summary.total_functions or 0
-    report.covered_functions = coverage_data.summary.covered_functions or 0
-    report.functions_pct = coverage_data.summary.total_functions > 0 and
-                         ((coverage_data.summary.covered_functions or 0) / coverage_data.summary.total_functions * 100) or 0
-    
-    report.files = coverage_data.files or {}
+    -- Use safe default values
+    report = {
+      overall_pct = 0,
+      files_pct = 0,
+      lines_pct = 0,
+      functions_pct = 0,
+      total_files = 0,
+      covered_files = 0,
+      total_lines = 0,
+      covered_lines = 0,
+      total_functions = 0,
+      covered_functions = 0,
+      files = {}
+    }
   end
   
   -- Get theme CSS based on configuration
@@ -1286,8 +1490,33 @@ function M.format_coverage(coverage_data)
   return html
 end
 
--- Generate HTML quality report
+-- Generate HTML quality report with error handling
 function M.format_quality(quality_data)
+  -- Validate input parameters
+  if not quality_data then
+    local err = error_handler.validation_error(
+      "Missing required quality_data parameter",
+      {
+        operation = "format_quality",
+        module = "reporting.formatters.html"
+      }
+    )
+    logger.error(err.message, err.context)
+    -- Create a basic error page as a fallback
+    return [[<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Quality Report Error</title>
+</head>
+<body>
+  <h1>Error Generating Quality Report</h1>
+  <p>Missing or invalid quality data.</p>
+</body>
+</html>]]
+  end
+  
+  -- Log debugging information with structured logging
   logger.debug("Generating HTML quality report", {
     has_data = quality_data ~= nil,
     level = quality_data and quality_data.level or "nil",
@@ -1337,24 +1566,61 @@ function M.format_quality(quality_data)
 ]]
   end
   
-  -- Create a basic report structure
-  local report = {
-    level = 0,
-    level_name = "unknown",
-    tests_analyzed = 0,
-    tests_passing = 0,
-    quality_pct = 0,
-    issues = {}
-  }
+  -- Create a basic report structure with error handling
+  local report
+  local extract_success, extract_result = error_handler.try(function()
+    local extracted_report = {
+      level = 0,
+      level_name = "unknown",
+      tests_analyzed = 0,
+      tests_passing = 0,
+      quality_pct = 0,
+      issues = {}
+    }
+    
+    -- Extract data if available
+    if quality_data then
+      extracted_report.level = quality_data.level or 0
+      extracted_report.level_name = quality_data.level_name or "unknown"
+      extracted_report.tests_analyzed = quality_data.summary and quality_data.summary.tests_analyzed or 0
+      extracted_report.tests_passing = quality_data.summary and quality_data.summary.tests_passing_quality or 0
+      extracted_report.quality_pct = quality_data.summary and quality_data.summary.quality_percent or 0
+      
+      -- Safely extract issues array
+      if quality_data.summary and quality_data.summary.issues and type(quality_data.summary.issues) == "table" then
+        extracted_report.issues = quality_data.summary.issues
+      else
+        extracted_report.issues = {}
+      end
+    end
+    
+    return extracted_report
+  end)
   
-  -- Extract data if available
-  if quality_data then
-    report.level = quality_data.level or 0
-    report.level_name = quality_data.level_name or "unknown"
-    report.tests_analyzed = quality_data.summary and quality_data.summary.tests_analyzed or 0
-    report.tests_passing = quality_data.summary and quality_data.summary.tests_passing_quality or 0
-    report.quality_pct = quality_data.summary and quality_data.summary.quality_percent or 0
-    report.issues = quality_data.summary and quality_data.summary.issues or {}
+  if extract_success then
+    report = extract_result
+  else
+    -- If data extraction fails, log the error and use safe defaults
+    local err = error_handler.runtime_error(
+      "Failed to extract quality data for HTML report",
+      {
+        operation = "format_quality",
+        module = "reporting.formatters.html",
+        has_summary = quality_data and quality_data.summary ~= nil
+      },
+      extract_result -- On failure, extract_result contains the error
+    )
+    logger.error(err.message, err.context)
+    
+    -- Use safe default values
+    report = {
+      level = 0,
+      level_name = "unknown",
+      tests_analyzed = 0,
+      tests_passing = 0,
+      quality_pct = 0,
+      issues = {"Error extracting quality data"}
+    }
   end
   
   -- Start building HTML report
@@ -1432,13 +1698,54 @@ function M.format_quality(quality_data)
   return html
 end
 
--- Register formatters
+-- Register formatters with error handling
 return function(formatters)
-  -- Initialize coverage and quality formatters if they don't exist
-  formatters.coverage = formatters.coverage or {}
-  formatters.quality = formatters.quality or {}
+  -- Validate parameters
+  if not formatters then
+    local err = error_handler.validation_error(
+      "Missing required formatters parameter",
+      {
+        operation = "register_html_formatters",
+        module = "reporting.formatters.html"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
   
-  -- Register our formatters
-  formatters.coverage.html = M.format_coverage
-  formatters.quality.html = M.format_quality
+  -- Use try/catch pattern for the registration
+  local success, result, err = error_handler.try(function()
+    -- Initialize coverage and quality formatters if they don't exist
+    formatters.coverage = formatters.coverage or {}
+    formatters.quality = formatters.quality or {}
+    
+    -- Register our formatters
+    formatters.coverage.html = M.format_coverage
+    formatters.quality.html = M.format_quality
+    
+    -- Log successful registration
+    logger.debug("HTML formatters registered successfully", {
+      formatter_types = {"coverage", "quality"},
+      module = "reporting.formatters.html"
+    })
+    
+    return true
+  end)
+  
+  if not success then
+    -- Create a structured error object with context
+    local registration_error = error_handler.runtime_error(
+      "Failed to register HTML formatters",
+      {
+        operation = "register_html_formatters",
+        module = "reporting.formatters.html",
+        formatters_type = type(formatters)
+      },
+      result -- On failure, result contains the error
+    )
+    logger.error(registration_error.message, registration_error.context)
+    return false, registration_error
+  end
+  
+  return true
 end

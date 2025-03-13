@@ -4,6 +4,9 @@ local M = {}
 local logging = require("lib.tools.logging")
 local logger = logging.get_logger("Reporting:Cobertura")
 
+-- Add error_handler dependency
+local error_handler = require("lib.tools.error_handler")
+
 -- Configure module logging
 logging.configure_from_config("Reporting:Cobertura")
 
@@ -22,102 +25,256 @@ local DEFAULT_CONFIG = {
 -- Get configuration for Cobertura formatter
 local function get_config()
   -- Try to load the reporting module for configuration access
-  local ok, reporting = pcall(require, "lib.reporting")
-  if ok and reporting.get_formatter_config then
-    local formatter_config = reporting.get_formatter_config("cobertura")
-    if formatter_config then
-      logger.debug("Using configuration from reporting module")
-      return formatter_config
+  local success, result, err = error_handler.try(function()
+    local reporting = require("lib.reporting")
+    if reporting.get_formatter_config then
+      local formatter_config = reporting.get_formatter_config("cobertura")
+      if formatter_config then
+        logger.debug("Using configuration from reporting module")
+        return formatter_config
+      end
     end
+    return nil
+  end)
+  
+  if success and result then
+    return result
   end
   
   -- If we can't get from reporting module, try central_config directly
-  local success, central_config = pcall(require, "lib.core.central_config")
-  if success then
+  local config_success, config_result = error_handler.try(function()
+    local central_config = require("lib.core.central_config")
     local formatter_config = central_config.get("reporting.formatters.cobertura")
     if formatter_config then
       logger.debug("Using configuration from central_config")
       return formatter_config
     end
+    return nil
+  end)
+  
+  if config_success and config_result then
+    return config_result
   end
   
   -- Fall back to default configuration
-  logger.debug("Using default configuration")
+  logger.debug("Using default configuration", {
+    reason = "Could not load from reporting or central_config",
+    module = "reporting.formatters.cobertura"
+  })
+  
   return DEFAULT_CONFIG
 end
 
 -- Function to indent XML if formatting is enabled
 local function format_xml(xml, config)
-  if not config.format_output then
+  if not config or not config.format_output then
     return xml
   end
   
-  -- Replace newlines with nothing to normalize the string
-  local normalized = xml:gsub("\r\n", "\n"):gsub("\r", "\n")
+  local success, formatted_result = error_handler.try(function()
+    -- Replace newlines with nothing to normalize the string
+    local normalized = xml:gsub("\r\n", "\n"):gsub("\r", "\n")
+    
+    -- Initialize variables
+    local formatted = ""
+    local indent = 0
+    
+    -- Process each line
+    for line in normalized:gmatch("[^\n]+") do
+      local content = line:match("%s*(.-)%s*$")
+      
+      -- Detect if the line is an opening tag, a closing tag, or both
+      local is_end_tag = content:match("^</")
+      local is_self_closing = content:match("/>%s*$")
+      local is_start_tag = content:match("^<[^/]") and not is_self_closing
+      
+      -- Adjust indentation based on tag type
+      if is_end_tag then
+        indent = indent - 1
+      end
+      
+      -- Add indentation and content
+      if indent > 0 then
+        formatted = formatted .. string.rep("  ", indent)
+      end
+      formatted = formatted .. content .. "\n"
+      
+      -- Adjust indentation for next line
+      if is_start_tag then
+        indent = indent + 1
+      end
+    end
+    
+    return formatted
+  end)
   
-  -- Initialize variables
-  local formatted = ""
-  local indent = 0
-  
-  -- Process each line
-  for line in normalized:gmatch("[^\n]+") do
-    local content = line:match("%s*(.-)%s*$")
-    
-    -- Detect if the line is an opening tag, a closing tag, or both
-    local is_end_tag = content:match("^</")
-    local is_self_closing = content:match("/>%s*$")
-    local is_start_tag = content:match("^<[^/]") and not is_self_closing
-    
-    -- Adjust indentation based on tag type
-    if is_end_tag then
-      indent = indent - 1
-    end
-    
-    -- Add indentation and content
-    if indent > 0 then
-      formatted = formatted .. string.rep("  ", indent)
-    end
-    formatted = formatted .. content .. "\n"
-    
-    -- Adjust indentation for next line
-    if is_start_tag then
-      indent = indent + 1
-    end
+  if success then
+    return formatted_result
+  else
+    -- If formatting fails, log the error and return the original XML
+    local err = error_handler.runtime_error(
+      "Failed to format XML output",
+      {
+        operation = "format_xml",
+        xml_length = #xml,
+        module = "reporting.formatters.cobertura"
+      },
+      formatted_result
+    )
+    logger.warn(err.message, err.context)
+    return xml  -- Return unformatted XML as fallback
   end
-  
-  return formatted
 end
 
 -- Helper function to escape XML special characters
 local function escape_xml(str)
+  -- Handle nil or non-string values safely
   if type(str) ~= "string" then
-    return tostring(str or "")
+    local safe_str = tostring(str or "")
+    logger.debug("Converting non-string value to string for XML escaping", {
+      original_type = type(str),
+      result_length = #safe_str
+    })
+    str = safe_str
   end
   
-  return str:gsub("&", "&amp;")
-            :gsub("<", "&lt;")
-            :gsub(">", "&gt;")
-            :gsub("\"", "&quot;")
-            :gsub("'", "&apos;")
+  -- Use error handling for the string operations
+  local success, result = error_handler.try(function()
+    return str:gsub("&", "&amp;")
+              :gsub("<", "&lt;")
+              :gsub(">", "&gt;")
+              :gsub("\"", "&quot;")
+              :gsub("'", "&apos;")
+  end)
+  
+  if success then
+    return result
+  else
+    -- If string operations fail, log the error and return a safe alternative
+    local err = error_handler.runtime_error(
+      "Failed to escape XML string",
+      {
+        operation = "escape_xml",
+        module = "reporting.formatters.cobertura",
+        string_length = #str
+      },
+      result -- On failure, result contains the error
+    )
+    logger.warn(err.message, err.context)
+    
+    -- Use fallback with individual replacements for better robustness
+    local fallback_success, fallback_result = error_handler.try(function()
+      local result = str
+      result = result:gsub("&", "&amp;")
+      result = result:gsub("<", "&lt;")
+      result = result:gsub(">", "&gt;")
+      result = result:gsub("\"", "&quot;")
+      result = result:gsub("'", "&apos;")
+      return result
+    end)
+    
+    if fallback_success then
+      return fallback_result
+    else
+      -- If even the fallback fails, return a sanitized string
+      logger.error("XML escaping fallback also failed, using basic sanitization", {
+        error = error_handler.format_error(fallback_result)
+      })
+      -- Return the original string with basic sanitization
+      return "(sanitized content)"
+    end
+  end
 end
 
 -- Get current timestamp in ISO format
 local function get_timestamp()
-  local current_time = os.time()
-  return os.date("%Y-%m-%dT%H:%M:%S", current_time)
+  local success, result = error_handler.try(function()
+    local current_time = os.time()
+    return os.date("%Y-%m-%dT%H:%M:%S", current_time)
+  end)
+  
+  if success then
+    return result
+  else
+    -- If timestamp generation fails, use a safe default
+    logger.warn("Failed to generate timestamp, using default", {
+      error = error_handler.format_error(result)
+    })
+    return "1970-01-01T00:00:00"
+  end
 end
 
 -- Helper function to calculate line rate
 local function calculate_line_rate(covered, total)
-  if total == 0 then return 1.0 end
-  return covered / total
+  local success, result = error_handler.try(function()
+    -- Validate inputs
+    covered = tonumber(covered) or 0
+    total = tonumber(total) or 0
+    
+    if total == 0 then 
+      return 1.0 
+    end
+    
+    return covered / total
+  end)
+  
+  if success then
+    return result
+  else
+    -- If calculation fails, log the error and return a safe default
+    local err = error_handler.runtime_error(
+      "Failed to calculate line rate",
+      {
+        operation = "calculate_line_rate",
+        covered = covered,
+        total = total,
+        module = "reporting.formatters.cobertura"
+      },
+      result
+    )
+    logger.warn(err.message, err.context)
+    
+    -- Return a safe default value
+    return 0.0
+  end
 end
 
 -- Generate Cobertura XML coverage report
 -- Format specification: https://github.com/cobertura/cobertura/wiki/XML-Format
 function M.format_coverage(coverage_data)
-  -- Get formatter configuration
-  local config = get_config()
+  -- Validate input parameter
+  if not coverage_data then
+    local err = error_handler.validation_error(
+      "Missing coverage data parameter",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.cobertura"
+      }
+    )
+    logger.warn(err.message, err.context)
+    -- Continue with empty report generation
+  end
+  
+  -- Get formatter configuration with error handling
+  local config_success, config, config_err = error_handler.try(function()
+    return get_config()
+  end)
+  
+  local config = DEFAULT_CONFIG
+  if config_success and config then
+    -- Use the successfully retrieved config
+  else
+    -- Log error and use default config
+    local err = error_handler.runtime_error(
+      "Failed to get Cobertura formatter configuration",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.cobertura"
+      },
+      config -- On failure, config contains the error
+    )
+    logger.warn(err.message, err.context)
+  end
   
   logger.debug("Generating Cobertura XML coverage report", {
     has_data = coverage_data ~= nil,
@@ -132,222 +289,520 @@ function M.format_coverage(coverage_data)
   
   -- Validate input
   if not coverage_data or not coverage_data.summary then
-    logger.warn("Missing or invalid coverage data for Cobertura report, generating empty report")
+    logger.warn("Missing or invalid coverage data for Cobertura report, generating empty report", {
+      has_data = coverage_data ~= nil,
+      has_summary = coverage_data and coverage_data.summary ~= nil
+    })
     
-    -- Build empty report with configuration options
-    local xml = {}
+    -- Build empty report with configuration options using error handling
+    local empty_report_success, empty_report = error_handler.try(function()
+      local xml = {}
+      
+      -- Add XML declaration if configured
+      if config.add_xml_declaration then
+        table.insert(xml, '<?xml version="1.0" encoding="UTF-8"?>')
+      end
+      
+      -- Add DOCTYPE for specified schema version
+      table.insert(xml, string.format('<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-%s.dtd">', 
+                                      config.schema_version))
+                                      
+      -- Root coverage element
+      local timestamp_value = tostring(os.time())
+      local safe_timestamp = error_handler.try(function() return os.time() end)
+      if safe_timestamp then
+        timestamp_value = tostring(safe_timestamp)
+      end
+      
+      table.insert(xml, '<coverage lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" ' ..
+                         'branches-covered="0" branch-rate="0" timestamp="' .. timestamp_value .. '" complexity="0" ' ..
+                         'version="' .. escape_xml(config.schema_version) .. '">')
+      
+      -- Add sources if configured
+      if config.include_sources then
+        table.insert(xml, '  <sources><source>.</source></sources>')
+      end
+      
+      -- Add empty packages
+      table.insert(xml, '  <packages></packages>')
+      table.insert(xml, '</coverage>')
+      
+      -- Format output if configured
+      local output = table.concat(xml, '\n')
+      if config.format_output then
+        return format_xml(output, config)
+      end
+      
+      return output
+    end)
     
-    -- Add XML declaration if configured
-    if config.add_xml_declaration then
-      table.insert(xml, '<?xml version="1.0" encoding="UTF-8"?>')
+    if empty_report_success then
+      return empty_report
+    else
+      -- If empty report generation fails, return a minimal valid XML document
+      local err = error_handler.runtime_error(
+        "Failed to generate empty Cobertura report",
+        {
+          operation = "format_coverage",
+          module = "reporting.formatters.cobertura"
+        },
+        empty_report
+      )
+      logger.error(err.message, err.context)
+      
+      return '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-4.0.dtd">\n<coverage lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" branches-covered="0" branch-rate="0" timestamp="0" complexity="0" version="4.0"><packages></packages></coverage>'
     end
-    
-    -- Add DOCTYPE for specified schema version
-    table.insert(xml, string.format('<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-%s.dtd">', 
-                                    config.schema_version))
-                                    
-    -- Root coverage element
-    table.insert(xml, '<coverage lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" ' ..
-                       'branches-covered="0" branch-rate="0" timestamp="' .. os.time() .. '" complexity="0" ' ..
-                       'version="' .. config.schema_version .. '">')
-    
-    -- Add sources if configured
-    if config.include_sources then
-      table.insert(xml, '  <sources><source>.</source></sources>')
+  end
+  
+  -- Safe file count calculation
+  local files_count = 0
+  local count_success, count_result = error_handler.try(function()
+    local count = 0
+    if coverage_data.files then
+      for _ in pairs(coverage_data.files) do
+        count = count + 1
+      end
     end
-    
-    -- Add empty packages
-    table.insert(xml, '  <packages></packages>')
-    table.insert(xml, '</coverage>')
-    
-    -- Format output if configured
-    local output = table.concat(xml, '\n')
-    if config.format_output then
-      return format_xml(output, config)
-    end
-    
-    return output
+    return count
+  end)
+  
+  if count_success then
+    files_count = count_result
   end
   
   logger.debug("Formatting Cobertura XML for coverage data", {
     total_lines = coverage_data.summary.total_lines or 0,
     covered_lines = coverage_data.summary.covered_lines or 0,
     total_files = coverage_data.summary.total_files or 0,
-    files_count = (function()
-      -- Count files in a safer way than using deprecated table.getn
-      local count = 0
-      if coverage_data.files then
-        for _ in pairs(coverage_data.files) do
-          count = count + 1
-        end
-      end
-      return count
-    end)()
+    files_count = files_count
   })
   
-  -- Get summary data
-  local summary = coverage_data.summary
-  local total_lines = summary.total_lines or 0
-  local covered_lines = summary.covered_lines or 0
-  local line_rate = calculate_line_rate(covered_lines, total_lines)
-  
-  -- Start building XML
-  local output = {}
-  
-  -- Add XML declaration if configured
-  if config.add_xml_declaration then
-    table.insert(output, '<?xml version="1.0" encoding="UTF-8"?>')
-  end
-  
-  -- Add DOCTYPE for specified schema version
-  table.insert(output, string.format('<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-%s.dtd">', 
-                                    config.schema_version))
-  
-  -- Create coverage element with attributes based on configuration
-  local coverage_attrs = {}
-  
-  -- Add line coverage attributes if configured
-  if config.include_line_counts then
-    table.insert(coverage_attrs, string.format('lines-valid="%d"', total_lines))
-    table.insert(coverage_attrs, string.format('lines-covered="%d"', covered_lines))
-    table.insert(coverage_attrs, string.format('line-rate="%.4f"', line_rate))
-  end
-  
-  -- Add branch coverage attributes if configured 
-  if config.include_branches then
-    local branch_valid = coverage_data.summary.total_branches or 0
-    local branch_covered = coverage_data.summary.covered_branches or 0
-    local branch_rate = branch_valid > 0 and (branch_covered / branch_valid) or 0
+  -- Extract summary data with error handling
+  local extract_success, summary_data = error_handler.try(function()
+    -- Get summary data
+    local summary = coverage_data.summary or {}
+    local total_lines = tonumber(summary.total_lines) or 0
+    local covered_lines = tonumber(summary.covered_lines) or 0
     
-    table.insert(coverage_attrs, string.format('branches-valid="%d"', branch_valid))
-    table.insert(coverage_attrs, string.format('branches-covered="%d"', branch_covered))
-    table.insert(coverage_attrs, string.format('branch-rate="%.4f"', branch_rate))
+    -- Safely calculate line rate
+    local line_rate = calculate_line_rate(covered_lines, total_lines)
+    
+    return {
+      total_lines = total_lines,
+      covered_lines = covered_lines,
+      line_rate = line_rate
+    }
+  end)
+  
+  local summary = { total_lines = 0, covered_lines = 0, line_rate = 0 }
+  if extract_success and summary_data then
+    summary = summary_data
   else
-    -- Add zeros if branches not available
-    table.insert(coverage_attrs, 'branches-valid="0"')
-    table.insert(coverage_attrs, 'branches-covered="0"')
-    table.insert(coverage_attrs, 'branch-rate="0"')
+    -- If extraction fails, log the error
+    local err = error_handler.runtime_error(
+      "Failed to extract summary data for Cobertura report",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.cobertura",
+        has_summary = coverage_data and coverage_data.summary ~= nil
+      },
+      summary_data
+    )
+    logger.warn(err.message, err.context)
   end
   
-  -- Add timestamp and version
-  table.insert(coverage_attrs, string.format('timestamp="%d"', os.time()))
-  table.insert(coverage_attrs, 'complexity="0"')
-  table.insert(coverage_attrs, string.format('version="%s"', config.schema_version))
-  
-  -- Create the coverage element
-  table.insert(output, '<coverage ' .. table.concat(coverage_attrs, ' ') .. '>')
-  
-  -- Add sources section if configured
-  if config.include_sources then
-    table.insert(output, '  <sources>')
-    table.insert(output, '    <source>.</source>')
-    table.insert(output, '  </sources>')
-  end
-  
-  -- Start packages section
-  table.insert(output, '  <packages>')
-  
-  -- Group files by "package" (directory)
-  local packages = {}
-  for filepath, file_data in pairs(coverage_data.files or {}) do
-    -- Extract package (directory) from file path
-    local package_path = "."
+  -- Start building XML with error handling
+  local xml_success, output_elements = error_handler.try(function()
+    local output = {}
     
-    -- Normalize path based on configuration
-    local normalized_path = filepath
-    if config.normalize_paths then
-      normalized_path = filepath:gsub("\\", "/") -- Convert Windows paths to Unix style
-      -- Remove ./ at the beginning if present
-      normalized_path = normalized_path:gsub("^%./", "")
+    -- Add XML declaration if configured
+    if config.add_xml_declaration then
+      table.insert(output, '<?xml version="1.0" encoding="UTF-8"?>')
+    end
+    
+    -- Add DOCTYPE for specified schema version
+    table.insert(output, string.format('<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-%s.dtd">', 
+                                      escape_xml(config.schema_version)))
+    
+    -- Create coverage element with attributes based on configuration
+    local coverage_attrs = {}
+    
+    -- Add line coverage attributes if configured
+    if config.include_line_counts then
+      table.insert(coverage_attrs, string.format('lines-valid="%d"', summary.total_lines))
+      table.insert(coverage_attrs, string.format('lines-covered="%d"', summary.covered_lines))
+      table.insert(coverage_attrs, string.format('line-rate="%.4f"', summary.line_rate))
+    end
+    
+    -- Add branch coverage attributes if configured 
+    if config.include_branches then
+      local branch_valid = tonumber(coverage_data.summary.total_branches) or 0
+      local branch_covered = tonumber(coverage_data.summary.covered_branches) or 0
+      local branch_rate = 0
+      
+      -- Safe branch rate calculation
+      if branch_valid > 0 then
+        local calc_success, br_rate = error_handler.try(function()
+          return branch_covered / branch_valid
+        end)
+        
+        if calc_success then
+          branch_rate = br_rate
+        end
+      end
+      
+      table.insert(coverage_attrs, string.format('branches-valid="%d"', branch_valid))
+      table.insert(coverage_attrs, string.format('branches-covered="%d"', branch_covered))
+      table.insert(coverage_attrs, string.format('branch-rate="%.4f"', branch_rate))
     else
-      normalized_path = filepath
+      -- Add zeros if branches not available
+      table.insert(coverage_attrs, 'branches-valid="0"')
+      table.insert(coverage_attrs, 'branches-covered="0"')
+      table.insert(coverage_attrs, 'branch-rate="0"')
     end
     
-    if normalized_path:find("/") then
-      package_path = normalized_path:match("^(.+)/[^/]+$") or "."
+    -- Add timestamp and version
+    local timestamp = "0"
+    local timestamp_success, timestamp_result = error_handler.try(function()
+      return tostring(os.time())
+    end)
+    
+    if timestamp_success then
+      timestamp = timestamp_result
     end
     
-    -- Skip package grouping if not configured
-    if not config.include_packages then
-      package_path = "default"
+    table.insert(coverage_attrs, 'timestamp="' .. timestamp .. '"')
+    table.insert(coverage_attrs, 'complexity="0"')
+    table.insert(coverage_attrs, 'version="' .. escape_xml(config.schema_version) .. '"')
+    
+    -- Create the coverage element
+    local attrs_join_success, attrs_str = error_handler.try(function()
+      return table.concat(coverage_attrs, ' ')
+    end)
+    
+    if attrs_join_success then
+      table.insert(output, '<coverage ' .. attrs_str .. '>')
+    else
+      -- Fallback if joining fails
+      table.insert(output, '<coverage lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" branches-covered="0" branch-rate="0" timestamp="0" complexity="0" version="' .. escape_xml(config.schema_version) .. '">')
     end
     
-    if not packages[package_path] then
-      packages[package_path] = {
-        files = {},
-        total_lines = 0,
-        covered_lines = 0
-      }
+    -- Add sources section if configured
+    if config.include_sources then
+      table.insert(output, '  <sources>')
+      table.insert(output, '    <source>.</source>')
+      table.insert(output, '  </sources>')
     end
     
-    -- Add file to package
-    packages[package_path].files[filepath] = file_data
-    packages[package_path].total_lines = packages[package_path].total_lines + (file_data.total_lines or 0)
-    packages[package_path].covered_lines = packages[package_path].covered_lines + (file_data.covered_lines or 0)
+    return output
+  end)
+  
+  local output = {}
+  if xml_success and output_elements then
+    output = output_elements
+  else
+    -- If XML building fails, log the error and start with a minimal valid document
+    local err = error_handler.runtime_error(
+      "Failed to build basic XML structure for Cobertura report",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.cobertura"
+      },
+      output_elements
+    )
+    logger.error(err.message, err.context)
+    
+    -- Create minimal valid XML structure
+    if config.add_xml_declaration then
+      table.insert(output, '<?xml version="1.0" encoding="UTF-8"?>')
+    end
+    table.insert(output, '<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-4.0.dtd">')
+    table.insert(output, '<coverage lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" branches-covered="0" branch-rate="0" timestamp="0" complexity="0" version="4.0">')
+    if config.include_sources then
+      table.insert(output, '  <sources><source>.</source></sources>')
+    end
   end
   
-  -- Generate XML for each package
-  for package_path, package_data in pairs(packages) do
-    local package_line_rate = calculate_line_rate(package_data.covered_lines, package_data.total_lines)
+  -- Process packages with error handling
+  local packages_success, packages_xml = error_handler.try(function()
+    -- Start packages section
+    local packages_elements = {'  <packages>'}
     
-    table.insert(output, '    <package name="' .. escape_xml(package_path) .. 
-                        '" line-rate="' .. string.format("%.4f", package_line_rate) .. 
-                        '" branch-rate="0" complexity="0">')
-    table.insert(output, '      <classes>')
-    
-    -- Add class (file) information
-    for filepath, file_data in pairs(package_data.files) do
-      local filename = filepath:match("([^/]+)$") or filepath
-      local file_line_rate = calculate_line_rate(file_data.covered_lines or 0, file_data.total_lines or 0)
+    -- Group files by "package" (directory)
+    local packages = {}
+    for filepath, file_data in pairs(coverage_data.files or {}) do
+      -- Skip if file_data is nil
+      if not file_data then
+        logger.warn("Nil file data encountered, skipping file", {
+          filepath = filepath
+        })
+        goto continue
+      end
       
-      table.insert(output, '        <class name="' .. escape_xml(filename) .. 
-                          '" filename="' .. escape_xml(filepath) .. 
-                          '" line-rate="' .. string.format("%.4f", file_line_rate) .. 
-                          '" branch-rate="0" complexity="0">')
+      -- Extract package (directory) from file path
+      local package_path = "."
       
-      -- Add methods section (empty for now since we don't track method-level coverage)
-      table.insert(output, '          <methods/>')
+      -- Normalize path based on configuration
+      local normalized_path = filepath
+      if config.normalize_paths then
+        -- Normalize with error handling
+        local normalize_success, norm_result = error_handler.try(function()
+          local result = filepath:gsub("\\", "/") -- Convert Windows paths to Unix style
+          -- Remove ./ at the beginning if present
+          result = result:gsub("^%./", "")
+          return result
+        end)
+        
+        if normalize_success then
+          normalized_path = norm_result
+        else
+          logger.warn("Path normalization failed, using original path", {
+            filepath = filepath,
+            error = error_handler.format_error(norm_result)
+          })
+        end
+      end
       
-      -- Add lines section
-      table.insert(output, '          <lines>')
+      -- Extract package path with error handling
+      local extract_pkg_success, pkg_path = error_handler.try(function()
+        if normalized_path:find("/") then
+          return normalized_path:match("^(.+)/[^/]+$") or "."
+        end
+        return "."
+      end)
       
-      -- Add line hits
-      local line_hits = {}
-      for line_num, is_covered in pairs(file_data.lines or {}) do
-        table.insert(line_hits, {
-          line = line_num,
-          hits = is_covered and 1 or 0
+      if extract_pkg_success then
+        package_path = pkg_path
+      else
+        package_path = "."
+      end
+      
+      -- Skip package grouping if not configured
+      if not config.include_packages then
+        package_path = "default"
+      end
+      
+      -- Initialize package data
+      if not packages[package_path] then
+        packages[package_path] = {
+          files = {},
+          total_lines = 0,
+          covered_lines = 0
+        }
+      end
+      
+      -- Add file to package with error handling
+      local add_file_success, _ = error_handler.try(function()
+        packages[package_path].files[filepath] = file_data
+        packages[package_path].total_lines = packages[package_path].total_lines + (tonumber(file_data.total_lines) or 0)
+        packages[package_path].covered_lines = packages[package_path].covered_lines + (tonumber(file_data.covered_lines) or 0)
+        return true
+      end)
+      
+      if not add_file_success then
+        logger.warn("Failed to add file to package, skipping file", {
+          filepath = filepath,
+          package_path = package_path
         })
       end
       
-      -- Sort lines by number
-      table.sort(line_hits, function(a, b) return a.line < b.line end)
-      
-      -- Add lines to XML
-      for _, line_info in ipairs(line_hits) do
-        table.insert(output, '            <line number="' .. line_info.line .. 
-                            '" hits="' .. line_info.hits .. 
-                            '" branch="false"/>')
-      end
-      
-      table.insert(output, '          </lines>')
-      table.insert(output, '        </class>')
+      ::continue::
     end
     
-    table.insert(output, '      </classes>')
-    table.insert(output, '    </package>')
+    -- Generate XML for each package
+    for package_path, package_data in pairs(packages) do
+      -- Calculate package line rate with error handling
+      local package_line_rate = calculate_line_rate(package_data.covered_lines, package_data.total_lines)
+      
+      -- Add package element
+      local pkg_format_success, pkg_element = error_handler.try(function()
+        return string.format('    <package name="%s" line-rate="%.4f" branch-rate="0" complexity="0">',
+          escape_xml(package_path),
+          package_line_rate)
+      end)
+      
+      if pkg_format_success then
+        table.insert(packages_elements, pkg_element)
+      else
+        -- Use fallback if formatting fails
+        table.insert(packages_elements, '    <package name="' .. escape_xml(package_path) .. 
+                         '" line-rate="0" branch-rate="0" complexity="0">')
+      end
+      
+      table.insert(packages_elements, '      <classes>')
+      
+      -- Add class (file) information
+      for filepath, file_data in pairs(package_data.files) do
+        -- Skip if file_data is nil
+        if not file_data then goto continue_file end
+        
+        -- Extract filename with error handling
+        local filename = filepath
+        local extract_name_success, name_result = error_handler.try(function()
+          return filepath:match("([^/]+)$") or filepath
+        end)
+        
+        if extract_name_success then
+          filename = name_result
+        end
+        
+        -- Calculate file line rate with error handling
+        local file_line_rate = calculate_line_rate(
+          tonumber(file_data.covered_lines) or 0, 
+          tonumber(file_data.total_lines) or 0
+        )
+        
+        -- Format class element with error handling
+        local class_format_success, class_element = error_handler.try(function()
+          return string.format('        <class name="%s" filename="%s" line-rate="%.4f" branch-rate="0" complexity="0">',
+            escape_xml(filename),
+            escape_xml(filepath),
+            file_line_rate)
+        end)
+        
+        if class_format_success then
+          table.insert(packages_elements, class_element)
+        else
+          -- Use fallback if formatting fails
+          table.insert(packages_elements, '        <class name="' .. escape_xml(filename) .. 
+                           '" filename="' .. escape_xml(filepath) .. 
+                           '" line-rate="0" branch-rate="0" complexity="0">')
+        end
+        
+        -- Add methods section
+        table.insert(packages_elements, '          <methods/>')
+        
+        -- Add lines section
+        table.insert(packages_elements, '          <lines>')
+        
+        -- Add line hits with error handling
+        local add_lines_success, lines_elements = error_handler.try(function()
+          local line_elements = {}
+          local line_hits = {}
+          
+          -- Collect line hits
+          if file_data.lines then
+            for line_num, is_covered in pairs(file_data.lines) do
+              table.insert(line_hits, {
+                line = tonumber(line_num) or 0,
+                hits = is_covered and 1 or 0
+              })
+            end
+            
+            -- Sort lines by number
+            table.sort(line_hits, function(a, b) return a.line < b.line end)
+            
+            -- Format line elements
+            for _, line_info in ipairs(line_hits) do
+              table.insert(line_elements, string.format('            <line number="%d" hits="%d" branch="false"/>',
+                line_info.line,
+                line_info.hits))
+            end
+          end
+          
+          return line_elements
+        end)
+        
+        if add_lines_success and lines_elements then
+          -- Add all line elements
+          for _, line_element in ipairs(lines_elements) do
+            table.insert(packages_elements, line_element)
+          end
+        else
+          -- Add placeholder if line addition fails
+          logger.warn("Failed to add line hits for file", {
+            filepath = filepath,
+            error = error_handler.format_error(lines_elements)
+          })
+          table.insert(packages_elements, '            <!-- Failed to process line information -->')
+        end
+        
+        table.insert(packages_elements, '          </lines>')
+        table.insert(packages_elements, '        </class>')
+        
+        ::continue_file::
+      end
+      
+      table.insert(packages_elements, '      </classes>')
+      table.insert(packages_elements, '    </package>')
+    end
+    
+    -- Add closing packages element
+    table.insert(packages_elements, '  </packages>')
+    
+    return packages_elements
+  end)
+  
+  if packages_success and packages_xml then
+    -- Add package elements to output
+    for _, element in ipairs(packages_xml) do
+      table.insert(output, element)
+    end
+  else
+    -- Add empty packages section if processing fails
+    local err = error_handler.runtime_error(
+      "Failed to process packages for Cobertura report",
+      {
+        operation = "format_coverage",
+        module = "reporting.formatters.cobertura",
+        files_count = coverage_data.files and table.concat(coverage_data.files) or 0
+      },
+      packages_xml
+    )
+    logger.error(err.message, err.context)
+    
+    table.insert(output, '  <packages>')
+    table.insert(output, '    <!-- Failed to process packages -->')
+    table.insert(output, '  </packages>')
   end
   
-  -- Close XML
-  table.insert(output, '  </packages>')
+  -- Close coverage element
   table.insert(output, '</coverage>')
   
-  -- Join all lines and apply formatting if configured
-  local result = table.concat(output, '\n')
+  -- Join all lines and apply formatting with error handling
+  local join_success, result = error_handler.try(function()
+    return table.concat(output, '\n')
+  end)
+  
+  if not join_success or not result then
+    -- If joining fails, log the error and return a minimal valid document
+    local err = error_handler.runtime_error(
+      "Failed to join XML elements for Cobertura report",
+      {
+        operation = "format_coverage",
+        element_count = #output,
+        module = "reporting.formatters.cobertura"
+      },
+      result
+    )
+    logger.error(err.message, err.context)
+    
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-4.0.dtd">\n<coverage lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" branches-covered="0" branch-rate="0" timestamp="0" complexity="0" version="4.0"><packages></packages></coverage>'
+  end
   
   -- Apply XML formatting if enabled
   if config.format_output then
-    return format_xml(result, config)
+    local format_success, formatted_output = error_handler.try(function()
+      return format_xml(result, config)
+    end)
+    
+    if format_success then
+      return formatted_output
+    else
+      -- If formatting fails, log the error and return the unformatted output
+      local err = error_handler.runtime_error(
+        "Failed to format XML output for Cobertura report",
+        {
+          operation = "format_coverage",
+          output_length = #result,
+          module = "reporting.formatters.cobertura"
+        },
+        formatted_output
+      )
+      logger.warn(err.message, err.context)
+      
+      return result  -- Return unformatted output as fallback
+    end
   end
   
   return result
@@ -355,5 +810,46 @@ end
 
 -- Register formatter
 return function(formatters)
-  formatters.coverage.cobertura = M.format_coverage
+  -- Validate parameters
+  if not formatters then
+    local err = error_handler.validation_error(
+      "Missing required formatters parameter",
+      {
+        operation = "register_cobertura_formatter",
+        module = "reporting.formatters.cobertura"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  -- Use try/catch pattern for the registration
+  local success, result = error_handler.try(function()
+    -- Initialize coverage formatters if needed
+    formatters.coverage = formatters.coverage or {}
+    formatters.coverage.cobertura = M.format_coverage
+    
+    logger.debug("Cobertura formatter registered successfully", {
+      formatter_type = "coverage",
+      module = "reporting.formatters.cobertura"
+    })
+    
+    return true
+  end)
+  
+  if not success then
+    -- If registration fails, log the error and return false
+    local err = error_handler.runtime_error(
+      "Failed to register Cobertura formatter",
+      {
+        operation = "register_cobertura_formatter",
+        module = "reporting.formatters.cobertura"
+      },
+      result -- On failure, result contains the error
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  return true
 end

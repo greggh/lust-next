@@ -367,6 +367,6 @@ function M.register_all(formatters)
   
   -- Even with some errors, return the formatters if at least one loaded
   return formatters
-}
+end
 
 return M
