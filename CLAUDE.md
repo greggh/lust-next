@@ -5,30 +5,163 @@ lust-next is an enhanced Lua testing framework that provides comprehensive testi
 
 ## Essential Commands
 
+### Testing Commands
+
 - Run All Tests: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua tests/`
 - Run Specific Test: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua tests/reporting_test.lua`
 - Run Tests by Pattern: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua --pattern=coverage tests/`
 - Run Tests with Coverage: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua --coverage tests/`
 - Run Tests with Watch Mode: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua --watch tests/`
+- Run Tests with Quality Validation: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua --quality tests/`
 - Run Example: `env -C /home/gregg/Projects/lua-library/lust-next lua examples/report_example.lua`
 
-> **Note:** We have transitioned to a more standardized test system where all tests run through the new `test.lua` utility in the project root (which forwards to the enhanced `scripts/runner.lua`). The older test runners (run_all_tests.lua, etc.) are being phased out.
+### Test Command Format
+
+The standard test command format follows this pattern:
+```
+lua test.lua [options] [path]
+```
+
+Where:
+- `[options]` are command-line flags like `--coverage`, `--watch`, `--pattern=coverage`
+- `[path]` is a file or directory path (the system automatically detects which)
+
+Common options include:
+- `--coverage`: Enable coverage tracking
+- `--quality`: Enable quality validation
+- `--pattern=<pattern>`: Filter test files by pattern
+- `--watch`: Enable watch mode for continuous testing
+- `--verbose`: Show more detailed output
+- `--help`: Show all available options
+
+> **Note:** We have completed the transition to a standardized test system where all tests run through the `test.lua` utility in the project root. All special-purpose runners have been removed in favor of this unified approach.
 
 ## Important Testing Notes
 
+### Test Implementation Guidelines
+
 - NEVER use `lust.run()` - this function DOES NOT EXIST
 - NEVER use `lust()` to run tests - this is not a correct method
-- Tests are run by external runner scripts:
-  - Use `scripts/runner.lua` for running individual test files during development
-  - Use `run_all_tests.lua` for running the entire test suite
 - Do not include any calls to `lust()` or `lust.run()` in test files
 - Use proper lifecycle hooks: `before`/`after` (NOT `before_all`/`after_all`, which don't exist)
 - Import test functions correctly: `local describe, it, expect = lust.describe, lust.it, lust.expect`
 - For test lifecycle, use: `local before, after = lust.before, lust.after`
+
+### Assertion Style Guide
+
+lust-next uses expect-style assertions rather than assert-style assertions:
+
+```lua
+-- CORRECT: lust-next expect-style assertions
+expect(value).to.exist()
+expect(actual).to.equal(expected)
+expect(value).to.be.a("string")
+expect(value).to.be_truthy()
+expect(value).to.match("pattern")
+expect(fn).to.fail()
+
+-- INCORRECT: busted-style assert assertions (don't use these)
+assert.is_not_nil(value)         -- wrong
+assert.equals(expected, actual)  -- wrong
+assert.type_of(value, "string")  -- wrong
+assert.is_true(value)            -- wrong
+```
+
+Note that the parameter order for equality assertions is the opposite of busted:
+- In busted: `assert.equals(expected, actual)`
+- In lust-next: `expect(actual).to.equal(expected)`
+
+For negating assertions, use `to_not` rather than separate functions:
+```lua
+expect(value).to_not.equal(other_value)
+expect(value).to_not.be_truthy()
+expect(value).to_not.be.a("number")
+```
+
+### Common Assertion Mistakes to Avoid
+
+1. **Incorrect negation syntax**:
+   ```lua
+   -- WRONG:
+   expect(value).not_to.equal(other_value)  -- "not_to" is not valid
+   
+   -- CORRECT:
+   expect(value).to_not.equal(other_value)  -- use "to_not" instead
+   ```
+
+2. **Incorrect member access syntax**:
+   ```lua
+   -- WRONG:
+   expect(value).to_be(true)  -- "to_be" is not a valid method
+   expect(number).to_be_greater_than(5)  -- underscore methods need dot access
+   
+   -- CORRECT:
+   expect(value).to.be(true)  -- use "to.be" not "to_be"
+   expect(number).to.be_greater_than(5)  -- this is correct because it's a method
+   ```
+
+3. **Inconsistent operator order**:
+   ```lua
+   -- WRONG:
+   expect(expected).to.equal(actual)  -- parameters reversed
+   
+   -- CORRECT:
+   expect(actual).to.equal(expected)  -- what you have, what you expect
+   ```
+
+### Complete Assertion Pattern Mapping
+
+If you're coming from a busted-style background, use this mapping to convert assertions:
+
+| busted-style                       | lust-next style                     | Notes                             |
+|------------------------------------|-------------------------------------|-----------------------------------|
+| `assert.is_not_nil(value)`         | `expect(value).to.exist()`          | Checks if a value is not nil      |
+| `assert.is_nil(value)`             | `expect(value).to_not.exist()`      | Checks if a value is nil          |
+| `assert.equals(expected, actual)`  | `expect(actual).to.equal(expected)` | Note the reversed parameter order! |
+| `assert.is_true(value)`            | `expect(value).to.be_truthy()`      | Checks if a value is truthy       |
+| `assert.is_false(value)`           | `expect(value).to_not.be_truthy()`  | Checks if a value is falsey       |
+| `assert.type_of(value, "string")`  | `expect(value).to.be.a("string")`   | Checks the type of a value        |
+| `assert.is_string(value)`          | `expect(value).to.be.a("string")`   | Type check                        |
+| `assert.is_number(value)`          | `expect(value).to.be.a("number")`   | Type check                        |
+| `assert.is_table(value)`           | `expect(value).to.be.a("table")`    | Type check                        |
+| `assert.same(expected, actual)`    | `expect(actual).to.equal(expected)` | Deep equality check               |
+| `assert.matches(pattern, value)`   | `expect(value).to.match(pattern)`   | String pattern matching           |
+| `assert.has_error(fn)`             | `expect(fn).to.fail()`              | Checks if a function throws error |
+
+For more comprehensive assertions and detailed examples, see `docs/coverage_repair/assertion_pattern_mapping.md`.
+
+### Test Directory Structure
+
+Tests are organized in a logical directory structure by component:
+```
+tests/
+├── core/            # Core framework tests 
+├── coverage/        # Coverage-related tests
+│   ├── instrumentation/  # Instrumentation-specific tests
+│   └── hooks/           # Debug hook tests
+├── quality/         # Quality validation tests
+├── reporting/       # Reporting framework tests
+│   └── formatters/      # Formatter-specific tests
+├── tools/           # Utility module tests
+│   ├── filesystem/      # Filesystem module tests
+│   ├── logging/         # Logging system tests
+│   └── watcher/         # File watcher tests
+└── ...
+```
+
+### Test Execution
+
+- Tests are run using the standardized command: `lua test.lua [path]`
+- For a single test file: `lua test.lua tests/reporting_test.lua`
+- For a directory of tests: `lua test.lua tests/coverage/`
+- For all tests: `lua test.lua tests/`
+
+### Other Useful Commands
+
 - Fix Markdown Files: `env -C /home/gregg/Projects/lua-library/lust-next lua scripts/fix_markdown.lua docs`
 - Fix Specific Markdown Files: `env -C /home/gregg/Projects/lua-library/lust-next lua scripts/fix_markdown.lua README.md CHANGELOG.md`
-- Debug Report Generation: `env -C /home/gregg/Projects/lust-next-testbed lua run_tests.lua --coverage -cf html tests/coverage_tests/coverage_formats_test.lua`
-- Test Quality Validation: `env -C /home/gregg/Projects/lust-next-testbed lua run_tests.lua --quality --quality-level 2 tests/coverage_tests/coverage_quality_integration_test.lua`
+- Debug Report Generation: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua --coverage --format=html tests/reporting_test.lua`
+- Test Quality Validation: `env -C /home/gregg/Projects/lua-library/lust-next lua test.lua --quality --quality-level=2 tests/quality_test.lua`
 
 ## Project Structure
 
