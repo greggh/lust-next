@@ -1,94 +1,79 @@
--- Configuration management module for lust-next
--- Handles loading configuration from .lust-next-config.lua and applying it to the framework
+-- DEPRECATED: Legacy configuration bridge module
+-- This module is deprecated and will be removed in a future version
+-- Please use lib.core.central_config directly instead
 
--- Import filesystem module for file operations
-local fs = require("lib.tools.filesystem")
+local function try_require(name)
+  local ok, mod = pcall(require, name)
+  if ok then
+    return mod
+  else
+    return nil
+  end
+end
 
+-- Attempt to load the centralized configuration system
+local central_config = try_require("lib.core.central_config")
+local logging = try_require("lib.tools.logging")
+local logger
+
+-- Initialize logger if possible
+if logging then
+  logger = logging.get_logger("config")
+  logger.warn("DEPRECATED: lib.core.config module is deprecated and will be removed in a future version", {
+    recommendation = "Use lib.core.central_config directly instead"
+  })
+else
+  print("WARNING: lib.core.config module is deprecated and will be removed in a future version.")
+  print("Please use lib.core.central_config directly instead.")
+end
+
+-- If central_config is not available, we can't do anything
+if not central_config then
+  if logger then
+    logger.error("Cannot load central_config module - please ensure it exists", {
+      file = "lib/core/central_config.lua"
+    })
+  else
+    print("ERROR: Cannot load central_config module. Please ensure lib/core/central_config.lua exists.")
+  end
+  error("Failed to load central_config module")
+end
+
+-- Create a proxy that forwards all operations to central_config
 local config = {}
 
--- Default configuration file path
-config.default_config_path = ".lust-next-config.lua"
-
--- Store loaded configuration
-config.loaded = nil
-
--- Default configuration values
-config.defaults = {
-  coverage = {
-    control_flow_keywords_executable = true -- Default to strict coverage (control flow keywords are executable)
-  },
-  logging = {
-    level = 3, -- Default to INFO level
-    modules = {}, -- Module-specific log levels
-    timestamps = true, -- Include timestamps in log entries
-    use_colors = true, -- Use colors in console output
-    output_file = "lust-next.log", -- Default log filename
-    log_dir = "logs", -- Directory for log files
-    max_file_size = 50 * 1024, -- 50KB default size limit per log file (small for testing, would be ~10MB in production)
-    max_log_files = 5, -- Number of rotated log files to keep
-    date_pattern = "%Y-%m-%d" -- Date pattern for log filenames
-  }
-}
-
--- Deep merge two tables
-local function deep_merge(target, source)
-  for k, v in pairs(source) do
-    if type(v) == "table" and type(target[k]) == "table" then
-      deep_merge(target[k], v)
-    else
-      target[k] = v
-    end
-  end
-  return target
-end
-
--- Attempt to load a configuration file from the given path
-function config.load_from_file(path)
-  path = path or config.default_config_path
-  
-  -- Check if the config file exists using filesystem module
-  if not fs.file_exists(path) then
-    return nil, "Config file not found: " .. path
-  end
-  
-  -- Try to load the configuration file
-  local ok, user_config = pcall(dofile, path)
-  if not ok then
-    return nil, "Error loading config file: " .. tostring(user_config)
-  end
-  
-  if type(user_config) ~= "table" then
-    return nil, "Invalid config format: expected a table, got " .. type(user_config)
-  end
-  
-  -- Store the loaded configuration
-  config.loaded = user_config
-  
-  return user_config
-end
-
--- Get the loaded config or load it from the default path
-function config.get()
-  if not config.loaded then
-    local user_config, err = config.load_from_file()
-    if not user_config then
-      -- No config file found, create new with defaults
-      config.loaded = {}
-      -- Apply defaults
-      for section, values in pairs(config.defaults) do
-        config.loaded[section] = config.loaded[section] or {}
-        for k, v in pairs(values) do
-          config.loaded[section][k] = v
+-- Function to forward all calls to the central_config module
+local function forward_to_central_config()
+  -- Forward all methods from central_config to config
+  for name, func in pairs(central_config) do
+    if type(func) == "function" then
+      config[name] = function(...)
+        if logger then
+          logger.debug("Forwarding deprecated call to central_config", {
+            method = name
+          })
         end
+        return func(...)
       end
+    else
+      config[name] = func
     end
   end
-  
-  return config.loaded
 end
 
--- Apply configuration to a lust-next instance
-function config.apply_to_lust(lust_next)
+-- Forward all operations
+forward_to_central_config()
+
+-- Add legacy function names for backward compatibility
+config.load_from_file = central_config.load_from_file
+config.apply_to_lust = function(lust_next)
+  if logger then
+    logger.warn("DEPRECATED: config.apply_to_lust is deprecated", {
+      recommendation = "Update your code to use central_config directly"
+    })
+  end
+  
+  -- We still need to apply the configuration to maintain compatibility
   if not lust_next then
     error("Cannot apply configuration: lust_next is nil", 2)
   end
@@ -118,18 +103,15 @@ function config.apply_to_lust(lust_next)
     end
     
     -- Apply default format if specified
-    if cfg.format.default_format then
-      if cfg.format.default_format == "dot" then
-        lust_next.format({ dot_mode = true })
-      elseif cfg.format.default_format == "compact" then
-        lust_next.format({ compact = true, show_success_detail = false })
-      elseif cfg.format.default_format == "summary" then
-        lust_next.format({ summary_only = true })
-      elseif cfg.format.default_format == "detailed" then
-        lust_next.format({ show_success_detail = true, show_trace = true })
-      elseif cfg.format.default_format == "plain" then
-        lust_next.format({ use_color = false })
-      end
+    if cfg.format.default_format and lust_next.format then
+      lust_next.format({
+        dot_mode = cfg.format.default_format == "dot",
+        compact = cfg.format.default_format == "compact",
+        summary_only = cfg.format.default_format == "summary",
+        show_success_detail = cfg.format.default_format == "detailed",
+        show_trace = cfg.format.default_format == "detailed",
+        use_color = cfg.format.default_format ~= "plain"
+      })
     end
   end
   
@@ -154,42 +136,17 @@ function config.apply_to_lust(lust_next)
   
   -- Apply coverage configuration
   if cfg.coverage and lust_next.coverage_options then
-    -- Handle special cases for include/exclude patterns and source_dirs
-    if cfg.coverage.include then
-      if cfg.coverage.use_default_patterns == false then
-        -- Replace entire include array
-        lust_next.coverage_options.include = cfg.coverage.include
-      else
-        -- Append to existing include patterns
-        lust_next.coverage_options.include = lust_next.coverage_options.include or {}
-        for _, pattern in ipairs(cfg.coverage.include) do
-          table.insert(lust_next.coverage_options.include, pattern)
-        end
-      end
-    end
-    
-    if cfg.coverage.exclude then
-      if cfg.coverage.use_default_patterns == false then
-        -- Replace entire exclude array
-        lust_next.coverage_options.exclude = cfg.coverage.exclude
-      else
-        -- Append to existing exclude patterns
-        lust_next.coverage_options.exclude = lust_next.coverage_options.exclude or {}
-        for _, pattern in ipairs(cfg.coverage.exclude) do
-          table.insert(lust_next.coverage_options.exclude, pattern)
-        end
-      end
-    end
-    
-    if cfg.coverage.source_dirs then
-      -- Always replace source_dirs array
-      lust_next.coverage_options.source_dirs = cfg.coverage.source_dirs
-    end
-    
-    -- Copy other options directly
+    -- Handle coverage settings in a compatible way
     for k, v in pairs(cfg.coverage) do
       if k ~= "include" and k ~= "exclude" and k ~= "source_dirs" then
         lust_next.coverage_options[k] = v
+      end
+    end
+    
+    -- Handle special cases for arrays
+    for _, key in ipairs({"include", "exclude", "source_dirs"}) do
+      if cfg.coverage[key] then
+        lust_next.coverage_options[key] = cfg.coverage[key]
       end
     end
     
@@ -206,161 +163,66 @@ function config.apply_to_lust(lust_next)
     end
   end
   
-  -- Apply logging configuration
-  if cfg.logging and lust_next.logging then
-    if type(lust_next.logging.configure) == "function" then
-      lust_next.logging.configure({
-        level = cfg.logging.level,
-        module_levels = cfg.logging.modules,
-        timestamps = cfg.logging.timestamps,
-        use_colors = cfg.logging.use_colors,
-        output_file = cfg.logging.output_file,
-        log_dir = cfg.logging.log_dir,
-        max_file_size = cfg.logging.max_file_size,
-        max_log_files = cfg.logging.max_log_files,
-        date_pattern = cfg.logging.date_pattern
-      })
-    end
-  end
-  
-  -- Apply codefix configuration
-  if cfg.codefix and lust_next.codefix_options then
-    -- Handle top-level options
-    for k, v in pairs(cfg.codefix) do
-      if k ~= "custom_fixers" then
+  -- Apply other module configurations
+  for module_name, module_config in pairs(cfg) do
+    if module_name == "logging" and lust_next.logging and type(lust_next.logging.configure) == "function" then
+      lust_next.logging.configure(module_config)
+    elseif module_name == "codefix" and lust_next.codefix_options then
+      for k, v in pairs(module_config) do
         lust_next.codefix_options[k] = v
       end
-    end
-    
-    -- Handle custom fixers sub-table
-    if cfg.codefix.custom_fixers and lust_next.codefix_options.custom_fixers then
-      for k, v in pairs(cfg.codefix.custom_fixers) do
-        lust_next.codefix_options.custom_fixers[k] = v
+    elseif module_name == "reporting" and lust_next.report_config then
+      for k, v in pairs(module_config) do
+        lust_next.report_config[k] = v
       end
-    end
-  end
-  
-  -- Apply reporting configuration
-  if cfg.reporting then
-    -- Store the configuration for later use
-    lust_next.report_config = lust_next.report_config or {}
-    
-    if cfg.reporting.report_dir then
-      lust_next.report_config.report_dir = cfg.reporting.report_dir
-    end
-    
-    if cfg.reporting.report_suffix ~= nil then
-      lust_next.report_config.report_suffix = cfg.reporting.report_suffix
-    end
-    
-    if cfg.reporting.timestamp_format then
-      lust_next.report_config.timestamp_format = cfg.reporting.timestamp_format
-    end
-    
-    if cfg.reporting.verbose ~= nil then
-      lust_next.report_config.verbose = cfg.reporting.verbose
-    end
-    
-    -- Apply templates
-    if cfg.reporting.templates then
-      if cfg.reporting.templates.coverage then
-        lust_next.report_config.coverage_path_template = cfg.reporting.templates.coverage
-      end
-      
-      if cfg.reporting.templates.quality then
-        lust_next.report_config.quality_path_template = cfg.reporting.templates.quality
-      end
-      
-      if cfg.reporting.templates.results then
-        lust_next.report_config.results_path_template = cfg.reporting.templates.results
-      end
-    end
-  end
-  
-  -- Apply watch mode configuration
-  if cfg.watch and lust_next.watcher then
-    if cfg.watch.dirs and #cfg.watch.dirs > 0 then
-      lust_next.watcher.dirs = cfg.watch.dirs
-    end
-    
-    if cfg.watch.ignore and #cfg.watch.ignore > 0 then
-      lust_next.watcher.ignore_patterns = cfg.watch.ignore
-    end
-    
-    if cfg.watch.debounce then
-      lust_next.watcher.set_debounce_time(cfg.watch.debounce)
-    end
-    
-    if cfg.watch.clear_console ~= nil then
-      lust_next.watcher.clear_console = cfg.watch.clear_console
-    end
-  end
-  
-  -- Apply interactive CLI configuration
-  if cfg.interactive and lust_next.interactive then
-    if cfg.interactive.history_size then
-      lust_next.interactive.history_size = cfg.interactive.history_size
-    end
-    
-    if cfg.interactive.prompt then
-      lust_next.interactive.prompt = cfg.interactive.prompt
-    end
-    
-    if cfg.interactive.default_dir then
-      lust_next.interactive.default_dir = cfg.interactive.default_dir
-    end
-    
-    if cfg.interactive.default_pattern then
-      lust_next.interactive.default_pattern = cfg.interactive.default_pattern
-    end
-  end
-  
-  -- Apply custom formatters configuration
-  if cfg.formatters then
-    if cfg.formatters.coverage then
-      lust_next.coverage_format = cfg.formatters.coverage
-    end
-    
-    if cfg.formatters.quality then
-      lust_next.quality_format = cfg.formatters.quality
-    end
-    
-    if cfg.formatters.results then
-      lust_next.results_format = cfg.formatters.results
-    end
-    
-    -- Load custom formatter module if specified
-    if cfg.formatters.module and lust_next.reporting then
-      local ok, custom_formatters = pcall(require, cfg.formatters.module)
-      if ok and custom_formatters then
-        lust_next.reporting.load_formatters(custom_formatters)
-      end
-    end
-  end
-  
-  -- Apply module reset configuration
-  if cfg.module_reset and lust_next.module_reset then
-    if cfg.module_reset.enabled ~= nil then
-      lust_next.module_reset.enabled = cfg.module_reset.enabled
-    end
-    
-    if cfg.module_reset.track_memory ~= nil then
-      lust_next.module_reset.track_memory = cfg.module_reset.track_memory
-    end
-    
-    if cfg.module_reset.protected_modules and #cfg.module_reset.protected_modules > 0 then
-      -- Merge with existing protected modules
-      for _, mod in ipairs(cfg.module_reset.protected_modules) do
-        if not lust_next.module_reset.is_protected(mod) then
-          lust_next.module_reset.add_protected_module(mod)
+    elseif module_name == "watch" and lust_next.watcher then
+      for k, v in pairs(module_config) do
+        if k == "dirs" and #v > 0 then
+          lust_next.watcher.dirs = v
+        elseif k == "ignore" and #v > 0 then
+          lust_next.watcher.ignore_patterns = v
+        elseif k == "debounce" then
+          lust_next.watcher.set_debounce_time(v)
+        elseif k == "clear_console" then
+          lust_next.watcher.clear_console = v
         end
       end
-    end
-    
-    if cfg.module_reset.exclude_patterns and #cfg.module_reset.exclude_patterns > 0 then
-      -- Merge with existing exclude patterns
-      for _, pattern in ipairs(cfg.module_reset.exclude_patterns) do
-        lust_next.module_reset.add_exclude_pattern(pattern)
+    elseif module_name == "interactive" and lust_next.interactive then
+      for k, v in pairs(module_config) do
+        lust_next.interactive[k] = v
+      end
+    elseif module_name == "formatters" then
+      if module_config.coverage then
+        lust_next.coverage_format = module_config.coverage
+      end
+      if module_config.quality then
+        lust_next.quality_format = module_config.quality
+      end
+      if module_config.results then
+        lust_next.results_format = module_config.results
+      end
+    elseif module_name == "module_reset" and lust_next.module_reset then
+      for k, v in pairs(module_config) do
+        if k ~= "protected_modules" and k ~= "exclude_patterns" then
+          lust_next.module_reset[k] = v
+        end
+      end
+      
+      -- Handle arrays separately
+      if module_config.protected_modules and #module_config.protected_modules > 0 then
+        for _, mod in ipairs(module_config.protected_modules) do
+          if lust_next.module_reset.add_protected_module then
+            lust_next.module_reset.add_protected_module(mod)
+          end
+        end
+      end
+      
+      if module_config.exclude_patterns and #module_config.exclude_patterns > 0 then
+        for _, pattern in ipairs(module_config.exclude_patterns) do
+          if lust_next.module_reset.add_exclude_pattern then
+            lust_next.module_reset.add_exclude_pattern(pattern)
+          end
+        end
       end
     end
   end
@@ -368,10 +230,24 @@ function config.apply_to_lust(lust_next)
   return lust_next
 end
 
--- Register the config module with lust-next
-function config.register_with_lust(lust_next)
+config.register_with_lust = function(lust_next)
+  if logger then
+    logger.warn("DEPRECATED: config.register_with_lust is deprecated", {
+      recommendation = "Update your code to use central_config directly"
+    })
+  end
+  
   -- Store reference to lust-next
   config.lust_next = lust_next
+  
+  -- Register lust-next version with central_config
+  central_config.register_module("lust-next", {
+    field_types = {
+      version = "string"
+    }
+  }, {
+    version = lust_next.version
+  })
   
   -- Add config functionality to lust-next
   lust_next.config = config
@@ -391,9 +267,18 @@ function config.register_with_lust(lust_next)
         local arg = args[i]
         if arg == "--config" and args[i+1] then
           -- Load the specified config file
-          local user_config, err = config.load_from_file(args[i+1])
+          local config_path = args[i+1]
+          local user_config, err = central_config.load_from_file(config_path)
+          
           if not user_config then
-            print("Warning: " .. err)
+            if logger then
+              logger.warn("Failed to load config file", {
+                path = config_path,
+                error = err and err.message or "unknown error"
+              })
+            else
+              print("Warning: Failed to load config file: " .. config_path)
+            end
           else
             -- Apply the configuration
             config.apply_to_lust(lust_next)
@@ -403,6 +288,9 @@ function config.register_with_lust(lust_next)
           i = i + 1
         end
       end
+      
+      -- Process CLI args as config options
+      central_config.configure_from_options(options)
       
       return options
     end
@@ -428,7 +316,7 @@ function config.register_with_lust(lust_next)
       for i, arg in ipairs(args) do
         if arg == "--create-config" then
           -- Create a default config file
-          config.create_default_config()
+          central_config.save_to_file()
           return true
         end
       end
@@ -441,55 +329,13 @@ function config.register_with_lust(lust_next)
   return lust_next
 end
 
--- Create a default config file by copying the template
-function config.create_default_config()
-  -- Try to find the template file
-  local template_path = ".lust-next-config.lua.template"
-  local template_content = nil
-  
-  -- First try to read from the current directory
-  if fs.file_exists(template_path) then
-    template_content, err = fs.read_file(template_path)
-    if not template_content then
-      print("Error reading template file: " .. (err or "unknown error"))
-      return false
-    end
-  else
-    -- Try to find the template in the package path
-    local function find_in_path(path)
-      for dir in string.gmatch(package.path, "[^;]+") do
-        local file_path = dir:gsub("?", path)
-        if fs.file_exists(file_path) then
-          return file_path
-        end
-      end
-      return nil
-    end
-    
-    template_path = find_in_path("lust-next-config.lua.template")
-    if template_path then
-      template_content, err = fs.read_file(template_path)
-      if not template_content then
-        print("Error reading template file: " .. (err or "unknown error"))
-        return false
-      end
-    end
+config.create_default_config = function()
+  if logger then
+    logger.warn("DEPRECATED: config.create_default_config is deprecated", {
+      recommendation = "Use central_config.save_to_file() instead"
+    })
   end
-  
-  if not template_content then
-    print("Error: Config template file not found")
-    return false
-  end
-  
-  -- Write to the config file using filesystem module
-  local success, err = fs.write_file(config.default_config_path, template_content)
-  if not success then
-    print("Error: Could not create config file at " .. config.default_config_path .. ": " .. (err or "unknown error"))
-    return false
-  end
-  
-  print("Default configuration file created at " .. config.default_config_path)
-  return true
+  return central_config.save_to_file()
 end
 
 return config
