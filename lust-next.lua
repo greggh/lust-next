@@ -15,15 +15,59 @@
 -- * Code coverage analysis and reporting
 -- * Watch mode for continuous testing
 
+-- Load required modules directly (without try/catch - these are required)
+local error_handler = require("lib.tools.error_handler")
+
 -- Try to require optional modules
 local function try_require(name)
-  local ok, mod = pcall(require, name)
-  if ok then
+  local success, mod, err = error_handler.try(function()
+    return require(name)
+  end)
+  
+  if success then
     return mod
   else
+    -- Only log errors for modules that should exist but failed to load
+    -- (Don't log errors for optional modules that might not exist)
+    if name:match("^lib%.") then
+      -- This is an internal module that should exist
+      local logger = error_handler.get_logger and error_handler.get_logger() or nil
+      -- We can't use the centralized logger here because this function runs before 
+      -- we load the logger module. This would create a circular dependency, so we
+      -- need to keep the conditional check in this specific place.
+      if logger then
+        logger.warn("Failed to load module", {
+          module = name,
+          error = error_handler.format_error(mod)
+        })
+      end
+    end
     return nil
   end
 end
+
+-- Load filesystem module (required for basic operations)
+local fs = try_require("lib.tools.filesystem")
+if not fs then
+  error_handler.throw(
+    "Required module 'lib.tools.filesystem' could not be loaded", 
+    error_handler.CATEGORY.CONFIGURATION, 
+    error_handler.SEVERITY.FATAL,
+    {module = "lust-next"}
+  )
+end
+
+-- Load logging module (required for proper error reporting)
+local logging = try_require("lib.tools.logging")
+if not logging then
+  error_handler.throw(
+    "Required module 'lib.tools.logging' could not be loaded", 
+    error_handler.CATEGORY.CONFIGURATION, 
+    error_handler.SEVERITY.FATAL,
+    {module = "lust-next"}
+  )
+end
+local logger = logging.get_logger("lust-core")
 
 -- Optional modules for advanced features
 local coverage = try_require("lib.coverage")
@@ -37,8 +81,47 @@ local async_module = try_require("lib.async")
 local interactive = try_require("lib.tools.interactive")
 local discover_module = try_require("scripts.discover")
 local parallel_module = try_require("lib.tools.parallel")
-local config_module = try_require("lib.core.config")
+-- Use central_config for configuration
+local central_config = try_require("lib.core.central_config")
 local module_reset_module = try_require("lib.core.module_reset")
+
+-- Configure logging (now a required component)
+local success, err = error_handler.try(function()
+  logging.configure_from_config("lust-core")
+end)
+
+if not success then
+  local context = {
+    module = "lust-core",
+    operation = "configure_logging"
+  }
+  
+  -- Log warning but continue - configuration might fail but logging still works
+  logger.warn("Failed to configure logging", {
+    error = error_handler.format_error(err),
+    context = context
+  })
+end
+
+logger.debug("Logging system initialized", {
+  module = "lust-core",
+  modules_loaded = {
+    error_handler = true, -- Always true as this is now required
+    filesystem = fs ~= nil, -- Always true as this is now required
+    logging = true, -- Always true as this is now required
+    coverage = coverage ~= nil,
+    quality = quality ~= nil,
+    codefix = codefix ~= nil,
+    reporting = reporting ~= nil,
+    watcher = watcher ~= nil,
+    async = async_module ~= nil,
+    interactive = interactive ~= nil,
+    discover = discover_module ~= nil,
+    parallel = parallel_module ~= nil,
+    central_config = central_config ~= nil,
+    module_reset = module_reset_module ~= nil
+  }
+})
 
 local lust_next = {}
 lust_next.level = 0
@@ -91,70 +174,398 @@ if parallel_module then
   parallel_module.register_with_lust(lust_next)
 end
 
--- Register configuration module if available
-if config_module then
-  config_module.register_with_lust(lust_next)
-end
-
--- Register module reset functionality if available
-if module_reset_module then
-  module_reset_module.register_with_lust(lust_next)
+-- Register configuration
+if central_config then
+  -- Register lust-next core with central_config
+  central_config.register_module("lust-next", {
+    field_types = {
+      version = "string"
+    }
+  }, {
+    version = lust_next.version
+  })
+  
+  -- Register additional core modules
+  central_config.register_module("test_discovery", {
+    field_types = {
+      dir = "string",
+      pattern = "string"
+    }
+  }, {
+    dir = "./tests",
+    pattern = "*_test.lua"
+  })
+  
+  central_config.register_module("format", {
+    field_types = {
+      default_format = "string",
+      use_color = "boolean",
+      show_success_detail = "boolean",
+      show_trace = "boolean",
+      dot_mode = "boolean",
+      compact = "boolean",
+      summary_only = "boolean"
+    }
+  }, {
+    use_color = true,
+    show_success_detail = false,
+    show_trace = false
+  })
+  
+  -- Store reference to configuration in lust_next
+  lust_next.config = central_config
+  
+  -- Try to load default configuration if it exists
+  central_config.load_from_file()
 end
 
 -- Add test discovery functionality
 if discover_module then
-  -- Simple test file discovery function
+  -- Test file discovery function with improved error handling
   function lust_next.discover(dir, pattern)
+    -- Parameter validation
+    if dir ~= nil and type(dir) ~= "string" then
+      local err = error_handler.validation_error(
+        "Directory must be a string",
+        {
+          parameter = "dir",
+          provided_type = type(dir),
+          function_name = "discover"
+        }
+      )
+      
+      logger.error("Parameter validation failed", {
+        error = error_handler.format_error(err),
+        operation = "discover"
+      })
+      return {}, err
+    end
+    
+    if pattern ~= nil and type(pattern) ~= "string" then
+      local err = error_handler.validation_error(
+        "Pattern must be a string",
+        {
+          parameter = "pattern",
+          provided_type = type(pattern),
+          function_name = "discover"
+        }
+      )
+      
+      logger.error("Parameter validation failed", {
+        error = error_handler.format_error(err),
+        operation = "discover"
+      })
+      return {}, err
+    end
+    
     dir = dir or "./tests"
     pattern = pattern or "*_test.lua"
     
-    -- Platform-specific command to find test files
-    local command
-    if package.config:sub(1,1) == '\\' then
-      -- Windows
-      command = 'dir /s /b "' .. dir .. '\\' .. pattern .. '" > lust_temp_files.txt'
-    else
-      -- Unix
-      command = 'find "' .. dir .. '" -name "' .. pattern .. '" -type f > lust_temp_files.txt'
-    end
+    logger.debug("Discovering test files", {
+      directory = dir,
+      pattern = pattern
+    })
     
-    -- Execute the command
-    os.execute(command)
-    
-    -- Read the results from the temporary file
-    local files = {}
-    local file = io.open("lust_temp_files.txt", "r")
-    if file then
-      for line in file:lines() do
-        if line:match(pattern:gsub("*", ".*"):gsub("?", ".")) then
-          table.insert(files, line)
-        end
+    -- Use discover_files from filesystem module if available
+    if fs and fs.discover_files then
+      local files, err = fs.discover_files(dir, pattern)
+      
+      if not files then
+        logger.error("Failed to discover test files", {
+          directory = dir,
+          pattern = pattern,
+          error = error_handler.format_error(err)
+        })
+        return {}, err
       end
-      file:close()
-      os.remove("lust_temp_files.txt")
+      
+      logger.debug("Test files discovered", {
+        directory = dir,
+        pattern = pattern,
+        count = #files
+      })
+      
+      return files
+    else
+      -- Fallback method - this is deprecated and should be removed in future
+      logger.warn("Using deprecated test discovery method", {
+        reason = "fs.discover_files not available"
+      })
+      
+      -- Platform-specific command to find test files
+      local command
+      if package.config:sub(1,1) == '\\' then
+        -- Windows
+        command = 'dir /s /b "' .. dir .. '\\' .. pattern .. '" > lust_temp_files.txt'
+      else
+        -- Unix
+        command = 'find "' .. dir .. '" -name "' .. pattern .. '" -type f > lust_temp_files.txt'
+      end
+      
+      -- Execute the command with error handling
+      local success, exec_err = error_handler.try(function()
+        return os.execute(command)
+      end)
+      
+      if not success or exec_err == 0 then
+        local err = error_handler.io_error(
+          "Failed to execute command for file discovery",
+          {
+            command = command,
+            directory = dir,
+            pattern = pattern
+          },
+          exec_err
+        )
+        
+        logger.error("Failed to execute command for file discovery", {
+          error = error_handler.format_error(err),
+          command = command
+        })
+        
+        return {}, err
+      end
+      
+      -- Read the results from the temporary file
+      local files = {}
+      
+      local content, read_err = error_handler.safe_io_operation(
+        function() return fs.read_file("lust_temp_files.txt") end,
+        "lust_temp_files.txt",
+        {operation = "read_temp_file", context = "discover"}
+      )
+      
+      if content then
+        for line in content:gmatch("[^\r\n]+") do
+          if line:match(pattern:gsub("*", ".*"):gsub("?", ".")) then
+            table.insert(files, line)
+          end
+        end
+        
+        -- Clean up temporary file
+        local remove_success = error_handler.try(function()
+          os.remove("lust_temp_files.txt")
+          return true
+        end)
+        
+        if not remove_success then
+          logger.warn("Failed to remove temporary file", {
+            file = "lust_temp_files.txt"
+          })
+        end
+      else
+        logger.error("Failed to read temporary file list", {
+          file = "lust_temp_files.txt",
+          error = error_handler.format_error(read_err)
+        })
+        return {}, read_err
+      end
+      
+      logger.debug("Test files discovered (fallback method)", {
+        directory = dir,
+        pattern = pattern,
+        count = #files
+      })
+      
+      return files
     end
-    
-    return files
   end
   
-  -- Run all discovered test files
-  function lust_next.run_discovered(dir, pattern)
-    local files = lust_next.discover(dir, pattern)
-    local success = true
-    
-    if #files == 0 then
-      print("No test files found in " .. (dir or "./tests"))
-      return false
+  -- Run a single test file with improved error handling
+  function lust_next.run_file(file)
+    -- Parameter validation
+    if not file then
+      local err = error_handler.validation_error(
+        "File path cannot be nil",
+        {
+          parameter = "file",
+          function_name = "run_file"
+        }
+      )
+      
+      logger.error("Parameter validation failed", {
+        error = error_handler.format_error(err),
+        operation = "run_file"
+      })
+      return {success = false, errors = 1}, err
     end
     
+    if type(file) ~= "string" then
+      local err = error_handler.validation_error(
+        "File path must be a string",
+        {
+          parameter = "file",
+          provided_type = type(file),
+          function_name = "run_file"
+        }
+      )
+      
+      logger.error("Parameter validation failed", {
+        error = error_handler.format_error(err),
+        operation = "run_file"
+      })
+      return {success = false, errors = 1}, err
+    end
+    
+    -- Reset test state
+    lust_next.reset()
+    
+    logger.debug("Running test file", {
+      file = file
+    })
+    
+    -- Load the test file using error_handler.try
+    local success, result, load_err = error_handler.try(function()
+      -- First check if the file exists
+      local exists, exists_err = fs.file_exists(file)
+      if not exists then
+        return nil, error_handler.io_error(
+          "Test file does not exist",
+          {
+            file = file
+          },
+          exists_err
+        )
+      end
+      
+      -- Attempt to load the file
+      local chunk, err = loadfile(file)
+      if not chunk then
+        return nil, error_handler.parse_error(
+          "Failed to load test file",
+          {
+            file = file,
+            parse_error = err
+          }
+        )
+      end
+      
+      -- Execute the test file in a protected call
+      local ok, result = pcall(chunk)
+      if not ok then
+        return nil, error_handler.runtime_error(
+          "Error executing test file",
+          {
+            file = file
+          },
+          result
+        )
+      end
+      
+      return true
+    end)
+    
+    if not success or not result then
+      local err = result -- In case of failure, result contains the error
+      
+      logger.error("Failed to run test file", {
+        file = file,
+        error = error_handler.format_error(err)
+      })
+      
+      return {
+        success = false,
+        errors = 1,
+        file = file
+      }, err
+    end
+    
+    -- Determine if tests passed based on error count
+    local test_results = {
+      success = lust_next.errors == 0,
+      passes = lust_next.passes,
+      errors = lust_next.errors,
+      skipped = lust_next.skipped,
+      file = file
+    }
+    
+    if test_results.success then
+      logger.debug("Test file completed successfully", {
+        file = file,
+        passes = test_results.passes,
+        skipped = test_results.skipped
+      })
+    else
+      logger.warn("Test file completed with errors", {
+        file = file,
+        errors = test_results.errors,
+        passes = test_results.passes,
+        skipped = test_results.skipped
+      })
+    end
+    
+    return test_results
+  end
+  
+  -- Run all discovered test files with improved error handling
+  function lust_next.run_discovered(dir, pattern)
+    local files, err = lust_next.discover(dir, pattern)
+    
+    -- Handle discovery errors
+    if err then
+      logger.error("Failed to discover test files", {
+        directory = dir or "./tests",
+        pattern = pattern,
+        error = error_handler.format_error(err)
+      })
+      return false, err
+    end
+    
+    -- Handle empty result
+    if #files == 0 then
+      local warning_context = {
+        directory = dir or "./tests",
+        pattern = pattern or "*_test.lua"
+      }
+      
+      logger.warn("No test files found", warning_context)
+      
+      return false, error_handler.create(
+        "No test files found",
+        error_handler.CATEGORY.CONFIGURATION,
+        error_handler.SEVERITY.WARNING,
+        warning_context
+      )
+    end
+    
+    logger.debug("Running discovered test files", {
+      count = #files,
+      directory = dir or "./tests",
+      pattern = pattern or "*_test.lua"
+    })
+    
+    local success = true
+    local error_files = {}
+    
     for _, file in ipairs(files) do
-      local file_results = lust_next.run_file(file)
-      if not file_results.success or file_results.errors > 0 then
+      local file_results, file_err = lust_next.run_file(file)
+      
+      if file_err then
+        logger.error("Failed to run test file", {
+          file = file,
+          error = error_handler.format_error(file_err)
+        })
+        table.insert(error_files, {file = file, error = file_err})
+        success = false
+      elseif not file_results.success or file_results.errors > 0 then
         success = false
       end
     end
     
-    return success
+    if #error_files > 0 then
+      logger.error("Some test files could not be executed", {
+        error_count = #error_files,
+        total_files = #files
+      })
+    end
+    
+    return success, (#error_files > 0) and 
+      error_handler.create(
+        string.format("%d of %d test files failed to execute", #error_files, #files),
+        error_handler.CATEGORY.RUNTIME,
+        error_handler.SEVERITY.ERROR,
+        {error_files = error_files}
+      ) or nil
   end
   
   -- CLI runner function for command-line usage
@@ -296,19 +707,28 @@ if discover_module then
     if options.formatter_module and reporting then
       local ok, custom_formatters = pcall(require, options.formatter_module)
       if ok and custom_formatters then
-        print("Loading custom formatters from module: " .. options.formatter_module)
+        logger.info("Loading custom formatters", {
+          module = options.formatter_module
+        })
         
         local count = reporting.load_formatters(custom_formatters)
-        print("Registered " .. count .. " custom formatters")
+        
+        logger.info("Registered custom formatters", {
+          count = count
+        })
         
         -- Get list of available formatters for display
         local formatters = reporting.get_available_formatters()
-        print("Available formatters:")
-        print("  Coverage: " .. table.concat(formatters.coverage, ", "))
-        print("  Quality: " .. table.concat(formatters.quality, ", "))
-        print("  Results: " .. table.concat(formatters.results, ", "))
+        logger.info("Available formatters", {
+          coverage = table.concat(formatters.coverage, ", "),
+          quality = table.concat(formatters.quality, ", "),
+          results = table.concat(formatters.results, ", ")
+        })
       else
-        print("WARNING: Failed to load custom formatter module '" .. options.formatter_module .. "'")
+        logger.error("Failed to load custom formatter module", {
+          module = options.formatter_module,
+          error = custom_formatters
+        })
       end
     end
     
@@ -383,11 +803,16 @@ if discover_module then
       run_tests()
       
       -- Watch loop
-      print("Watching for changes. Press Ctrl+C to exit.")
+      logger.info("Watching for changes", {
+        message = "Press Ctrl+C to exit"
+      })
+      
       while true do
         local changes = watcher.check_for_changes()
         if changes then
-          print("\nFile changes detected. Re-running tests...")
+          logger.info("File changes detected", {
+            action = "re-running tests"
+          })
           run_tests()
         end
         os.execute("sleep 0.5")
@@ -426,7 +851,10 @@ else
   end
   
   function lust_next.cli_run()
-    print("Test discovery not available.")
+    logger.error("Test discovery not available", {
+      reason = "Required module not found",
+      component = "discover"
+    })
     return false
   end
 end
@@ -536,39 +964,260 @@ end
 
 -- Disable colors (for non-terminal output or color-blind users)
 function lust_next.nocolor()
-  lust_next.format_options.use_color = false
-  red, green, yellow, blue, magenta, cyan, normal = '', '', '', '', '', '', ''
+  -- No need for parameter validation as this function takes no parameters
+  
+  logger.debug("Disabling colors in output", {
+    function_name = "nocolor"
+  })
+
+  -- Apply change with error handling in case of any terminal-related issues
+  local success, err = error_handler.try(function() 
+    lust_next.format_options.use_color = false
+    red, green, yellow, blue, magenta, cyan, normal = '', '', '', '', '', '', ''
+    return true
+  end)
+  
+  if not success then
+    logger.error("Failed to disable colors", {
+      error = error_handler.format_error(err),
+      function_name = "nocolor"
+    })
+    error_handler.throw(
+      "Failed to disable colors: " .. error_handler.format_error(err),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "nocolor"}
+    )
+  end
+  
   return lust_next
 end
 
 -- Configure output formatting options
 function lust_next.format(options)
-  for k, v in pairs(options) do
-    if lust_next.format_options[k] ~= nil then
-      lust_next.format_options[k] = v
-    else
-      error("Unknown format option: " .. k)
+  -- Parameter validation
+  if options == nil then
+    local err = error_handler.validation_error(
+      "Options cannot be nil",
+      {
+        parameter = "options",
+        function_name = "format"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "format"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(options) ~= "table" then
+    local err = error_handler.validation_error(
+      "Options must be a table",
+      {
+        parameter = "options",
+        provided_type = type(options),
+        function_name = "format"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "format"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  logger.debug("Configuring format options", {
+    function_name = "format",
+    option_count = (options and type(options) == "table") and #options or 0
+  })
+  
+  -- Apply format options with error handling
+  local unknown_options = {}
+  local success, apply_err = error_handler.try(function()
+    for k, v in pairs(options) do
+      if lust_next.format_options[k] ~= nil then
+        lust_next.format_options[k] = v
+      else
+        table.insert(unknown_options, k)
+      end
     end
+    return true
+  end)
+  
+  -- Handle unknown options
+  if #unknown_options > 0 then
+    local err = error_handler.validation_error(
+      "Unknown format option(s): " .. table.concat(unknown_options, ", "),
+      {
+        function_name = "format",
+        unknown_options = unknown_options,
+        valid_options = (function()
+          local opts = {}
+          for k, _ in pairs(lust_next.format_options) do
+            table.insert(opts, k)
+          end
+          return table.concat(opts, ", ")
+        end)()
+      }
+    )
+    
+    logger.error("Unknown format options provided", {
+      error = error_handler.format_error(err),
+      operation = "format",
+      unknown_options = unknown_options
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  -- Handle general application errors
+  if not success then
+    logger.error("Failed to apply format options", {
+      error = error_handler.format_error(apply_err),
+      operation = "format"
+    })
+    
+    error_handler.throw(
+      "Failed to apply format options: " .. error_handler.format_error(apply_err),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "format"}
+    )
   end
   
   -- Update colors if needed
-  if not lust_next.format_options.use_color then
-    lust_next.nocolor()
-  else
-    red = string.char(27) .. '[31m'
-    green = string.char(27) .. '[32m'
-    yellow = string.char(27) .. '[33m'
-    blue = string.char(27) .. '[34m'
-    magenta = string.char(27) .. '[35m'
-    cyan = string.char(27) .. '[36m'
-    normal = string.char(27) .. '[0m'
+  local color_success, color_err = error_handler.try(function()
+    if not lust_next.format_options.use_color then
+      -- Call nocolor but catch errors explicitly here
+      lust_next.format_options.use_color = false
+      red, green, yellow, blue, magenta, cyan, normal = '', '', '', '', '', '', ''
+    else
+      red = string.char(27) .. '[31m'
+      green = string.char(27) .. '[32m'
+      yellow = string.char(27) .. '[33m'
+      blue = string.char(27) .. '[34m'
+      magenta = string.char(27) .. '[35m'
+      cyan = string.char(27) .. '[36m'
+      normal = string.char(27) .. '[0m'
+    end
+    return true
+  end)
+  
+  if not color_success then
+    logger.error("Failed to update color settings", {
+      error = error_handler.format_error(color_err),
+      operation = "format",
+      use_color = lust_next.format_options.use_color
+    })
+    
+    error_handler.throw(
+      "Failed to update color settings: " .. error_handler.format_error(color_err),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "format", use_color = lust_next.format_options.use_color}
+    )
   end
+  
+  logger.debug("Format options configured successfully", {
+    function_name = "format",
+    use_color = lust_next.format_options.use_color,
+    show_trace = lust_next.format_options.show_trace,
+    indent_char = lust_next.format_options.indent_char == '\t' and "tab" or "space"
+  })
   
   return lust_next
 end
 
 -- The main describe function with support for focus and exclusion
 function lust_next.describe(name, fn, options)
+  -- Parameter validation
+  if name == nil then
+    local err = error_handler.validation_error(
+      "Describe name cannot be nil",
+      {
+        parameter = "name",
+        function_name = "describe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "describe"
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid describe block (missing name)")
+    return
+  end
+  
+  if type(name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Describe name must be a string",
+      {
+        parameter = "name",
+        provided_type = type(name),
+        function_name = "describe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "describe"
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid describe name (must be string)")
+    return
+  end
+  
+  if fn == nil then
+    local err = error_handler.validation_error(
+      "Describe function cannot be nil",
+      {
+        parameter = "fn",
+        describe_name = name,
+        function_name = "describe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "describe",
+      describe_name = name
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid describe block '" .. name .. "' (missing function)")
+    return
+  end
+  
+  if type(fn) ~= "function" then
+    local err = error_handler.validation_error(
+      "Describe requires a function",
+      {
+        parameter = "fn",
+        provided_type = type(fn),
+        describe_name = name,
+        function_name = "describe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "describe",
+      describe_name = name
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid describe block '" .. name .. "' (fn must be function)")
+    return
+  end
+  
   if type(options) == 'function' then
     -- Handle case where options is actually a function (support for tags("tag")(fn) syntax)
     fn = options
@@ -600,6 +1249,13 @@ function lust_next.describe(name, fn, options)
     return
   end
   
+  logger.trace("Entering describe block", {
+    name = name,
+    level = lust_next.level + 1,
+    focused = focused,
+    tags = #lust_next.current_tags > 0 and table.concat(lust_next.current_tags, ", ") or nil
+  })
+  
   lust_next.level = lust_next.level + 1
   
   -- Save current tags and focus state to restore them after the describe block
@@ -611,9 +1267,10 @@ function lust_next.describe(name, fn, options)
   -- Store the current focus state at this level
   local prev_focused = options._parent_focused or focused
   
-  -- Run the function with updated context
-  local success, err = pcall(function()
+  -- Run the function with improved error handling
+  local success, err = error_handler.try(function()
     fn()
+    return true
   end)
   
   -- Reset current tags to what they were before the describe block
@@ -623,120 +1280,699 @@ function lust_next.describe(name, fn, options)
   lust_next.afters[lust_next.level] = {}
   lust_next.level = lust_next.level - 1
   
+  logger.trace("Exiting describe block", {
+    name = name,
+    level = lust_next.level,
+    success = success
+  })
+  
   -- If there was an error in the describe block, report it
   if not success then
     lust_next.errors = lust_next.errors + 1
     
+    -- Convert error to structured error if it's not already
+    if not error_handler.is_error(err) then
+      err = error_handler.runtime_error(
+        tostring(err),
+        {
+          describe = name,
+          level = lust_next.level
+        }
+      )
+    end
+    
+    logger.error("Error in describe block", {
+      describe = name,
+      error = error_handler.format_error(err),
+      level = lust_next.level
+    })
+    
+    -- Display error according to format options
     if not lust_next.format_options.summary_only then
       print(indent() .. red .. "ERROR" .. normal .. " in describe '" .. name .. "'")
       
       if lust_next.format_options.show_trace then
         -- Show the full stack trace
-        print(indent(lust_next.level + 1) .. red .. debug.traceback(err, 2) .. normal)
+        print(indent(lust_next.level + 1) .. red .. (err.traceback or debug.traceback(tostring(err), 2)) .. normal)
       else
         -- Show just the error message
-        print(indent(lust_next.level + 1) .. red .. tostring(err) .. normal)
+        print(indent(lust_next.level + 1) .. red .. error_handler.format_error(err) .. normal)
       end
     elseif lust_next.format_options.dot_mode then
       -- In dot mode, print an 'E' for error
       io.write(red .. "E" .. normal)
     end
   end
-end
+end -- End of describe function
 
 -- Focused version of describe
 function lust_next.fdescribe(name, fn)
-  return lust_next.describe(name, fn, {focused = true})
+  -- Parameter validation
+  if name == nil then
+    local err = error_handler.validation_error(
+      "Name cannot be nil",
+      {
+        parameter = "name",
+        function_name = "fdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Name must be a string",
+      {
+        parameter = "name",
+        provided_type = type(name),
+        function_name = "fdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if fn == nil then
+    local err = error_handler.validation_error(
+      "Function cannot be nil",
+      {
+        parameter = "fn",
+        function_name = "fdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(fn) ~= "function" then
+    local err = error_handler.validation_error(
+      "Second parameter must be a function",
+      {
+        parameter = "fn",
+        provided_type = type(fn),
+        function_name = "fdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  logger.debug("Creating focused describe block", {
+    function_name = "fdescribe",
+    name = name
+  })
+  
+  local success, result, err = error_handler.try(function()
+    return lust_next.describe(name, fn, {focused = true})
+  end)
+  
+  if not success then
+    logger.error("Failed to create focused describe block", {
+      error = error_handler.format_error(result),
+      function_name = "fdescribe",
+      name = name
+    })
+    
+    error_handler.throw(
+      "Failed to create focused describe block: " .. error_handler.format_error(result),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "fdescribe", name = name}
+    )
+  end
+  
+  return result
 end
 
 -- Excluded version of describe
 function lust_next.xdescribe(name, fn)
-  -- Use an empty function to ensure none of the tests within it ever run
-  -- This is more robust than just marking it excluded
-  return lust_next.describe(name, function() end, {excluded = true})
+  -- Parameter validation
+  if name == nil then
+    local err = error_handler.validation_error(
+      "Name cannot be nil",
+      {
+        parameter = "name",
+        function_name = "xdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "xdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Name must be a string",
+      {
+        parameter = "name",
+        provided_type = type(name),
+        function_name = "xdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "xdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  -- fn can be nil for xdescribe since we're skipping it anyway
+  if fn ~= nil and type(fn) ~= "function" then
+    local err = error_handler.validation_error(
+      "Second parameter must be a function if provided",
+      {
+        parameter = "fn",
+        provided_type = type(fn),
+        function_name = "xdescribe"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "xdescribe"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  logger.debug("Creating excluded describe block", {
+    function_name = "xdescribe",
+    name = name
+  })
+  
+  local success, result, err = error_handler.try(function()
+    -- Use an empty function to ensure none of the tests within it ever run
+    -- This is more robust than just marking it excluded
+    return lust_next.describe(name, function() end, {excluded = true})
+  end)
+  
+  if not success then
+    logger.error("Failed to create excluded describe block", {
+      error = error_handler.format_error(result),
+      function_name = "xdescribe",
+      name = name
+    })
+    
+    error_handler.throw(
+      "Failed to create excluded describe block: " .. error_handler.format_error(result),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "xdescribe", name = name}
+    )
+  end
+  
+  return result
 end
 
 -- Set tags for the current describe block or test
 function lust_next.tags(...)
   local tags_list = {...}
   
-  -- Allow both tags("one", "two") and tags("one")("two") syntax
-  if #tags_list == 1 and type(tags_list[1]) == "string" then
-    -- Handle tags("tag1", "tag2", ...) syntax
-    lust_next.current_tags = tags_list
-    
-    -- Return a function that can be called again to allow tags("tag1")("tag2")(fn) syntax
-    return function(fn_or_tag)
-      if type(fn_or_tag) == "function" then
-        -- If it's a function, it's the test/describe function
-        return fn_or_tag
-      else
-        -- If it's another tag, add it
-        table.insert(lust_next.current_tags, fn_or_tag)
-        -- Return itself again to allow chaining
-        return lust_next.tags()
+  logger.debug("Setting tags", {
+    function_name = "tags",
+    tag_count = #tags_list,
+    tags = #tags_list > 0 and table.concat(tags_list, ", ") or "none"
+    })
+  
+  -- Validate the tags
+  local success, err = error_handler.try(function()
+    -- Validate each tag is a string
+    for i, tag in ipairs(tags_list) do
+      if type(tag) ~= "string" then
+        error_handler.throw(
+          "Tag must be a string",
+          error_handler.CATEGORY.VALIDATION,
+          error_handler.SEVERITY.ERROR,
+          {
+            tag_index = i,
+            provided_type = type(tag),
+            function_name = "tags"
+          }
+        )
       end
     end
-  else
-    -- Store the tags
-    lust_next.current_tags = tags_list
-    return lust_next
+    
+    -- Allow both tags("one", "two") and tags("one")("two") syntax
+    if #tags_list == 1 and type(tags_list[1]) == "string" then
+      -- Handle tags("tag1", "tag2", ...) syntax
+      lust_next.current_tags = tags_list
+      
+      -- Return a function that can be called again to allow tags("tag1")("tag2")(fn) syntax
+      return function(fn_or_tag)
+        if type(fn_or_tag) == "function" then
+          -- If it's a function, it's the test/describe function
+          return fn_or_tag
+        else
+          -- Validate the tag
+          if type(fn_or_tag) ~= "string" then
+            error_handler.throw(
+              "Tag must be a string",
+              error_handler.CATEGORY.VALIDATION,
+              error_handler.SEVERITY.ERROR,
+              {
+                provided_type = type(fn_or_tag),
+                function_name = "tags(chain)"
+              }
+            )
+          end
+          
+          -- If it's another tag, add it
+          table.insert(lust_next.current_tags, fn_or_tag)
+          -- Return itself again to allow chaining
+          return lust_next.tags()
+        end
+      end
+    else
+      -- Store the tags
+      lust_next.current_tags = tags_list
+      return lust_next
+    end
+  end)
+  
+  -- Handle errors
+  if not success then
+    logger.error("Failed to set tags", {
+      error = error_handler.format_error(err),
+      function_name = "tags"
+    })
+    
+    error_handler.throw(
+      "Failed to set tags: " .. error_handler.format_error(err),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "tags"}
+    )
   end
+  
+  return lust_next
 end
 
 -- Filter tests to only run those matching specific tags
 function lust_next.only_tags(...)
   local tags = {...}
-  lust_next.active_tags = tags
+  
+  logger.debug("Filtering by tags", {
+      function_name = "only_tags",
+      tag_count = #tags,
+      tags = #tags > 0 and table.concat(tags, ", ") or "none"
+    })
+  
+  -- Validate the tags
+  local success, err = error_handler.try(function()
+    -- Validate each tag is a string
+    for i, tag in ipairs(tags) do
+      if type(tag) ~= "string" then
+        error_handler.throw(
+          "Tag must be a string",
+          error_handler.CATEGORY.VALIDATION,
+          error_handler.SEVERITY.ERROR,
+          {
+            tag_index = i,
+            provided_type = type(tag),
+            function_name = "only_tags"
+          }
+        )
+      end
+    end
+    
+    -- Set the active tags
+    lust_next.active_tags = tags
+    return true
+  end)
+  
+  -- Handle errors
+  if not success then
+    logger.error("Failed to set tag filter", {
+      error = error_handler.format_error(err),
+      function_name = "only_tags"
+    })
+    
+    error_handler.throw(
+      "Failed to set tag filter: " .. error_handler.format_error(err),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "only_tags"}
+    )
+  end
+  
   return lust_next
 end
 
 -- Filter tests by name pattern
 function lust_next.filter(pattern)
-  lust_next.filter_pattern = pattern
+  -- Parameter validation
+  if pattern == nil then
+    local err = error_handler.validation_error(
+      "Pattern cannot be nil",
+      {
+        parameter = "pattern",
+        function_name = "filter"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "filter"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(pattern) ~= "string" then
+    local err = error_handler.validation_error(
+      "Pattern must be a string",
+      {
+        parameter = "pattern",
+        provided_type = type(pattern),
+        function_name = "filter"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "filter"
+      })
+
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  logger.debug("Setting test filter pattern", {
+    function_name = "filter",
+    pattern = pattern
+  })
+  
+  -- Apply the filter with error handling
+  local success, err = error_handler.try(function()
+    -- Verify the pattern is a valid Lua pattern
+    -- This may raise an error if the pattern is invalid
+    string.match("test", pattern)
+    
+    lust_next.filter_pattern = pattern
+    return true
+  end)
+  
+  -- Handle errors
+  if not success then
+    local validation_err = error_handler.validation_error(
+      "Invalid filter pattern: " .. error_handler.format_error(err),
+      {
+        pattern = pattern,
+        function_name = "filter",
+        error = error_handler.format_error(err)
+      }
+    )
+    
+    logger.error("Invalid filter pattern", {
+      error = error_handler.format_error(validation_err),
+      pattern = pattern,
+      function_name = "filter"
+    })
+    
+    error_handler.throw(
+      validation_err.message,
+      validation_err.category,
+      validation_err.severity,
+      validation_err.context
+    )
+  end
+  
   return lust_next
 end
 
 -- Reset all filters
 function lust_next.reset_filters()
-  lust_next.active_tags = {}
-  lust_next.filter_pattern = nil
+  logger.debug("Resetting all filters", {
+    function_name = "reset_filters",
+    had_tags = #lust_next.active_tags > 0,
+    had_pattern = lust_next.filter_pattern ~= nil
+  })
+  
+  -- Apply reset with error handling
+  local success, err = error_handler.try(function()
+    lust_next.active_tags = {}
+    lust_next.filter_pattern = nil
+    return true
+  end)
+  
+  -- Handle errors
+  if not success then
+    logger.error("Failed to reset filters", {
+      error = error_handler.format_error(err),
+      function_name = "reset_filters"
+    })
+    
+    error_handler.throw(
+      "Failed to reset filters: " .. error_handler.format_error(err),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "reset_filters"}
+    )
+  end
+  
   return lust_next
 end
 
 -- Check if a test should run based on tags and pattern filtering
 local function should_run_test(name, tags)
-  -- If no filters are set, run everything
-  if #lust_next.active_tags == 0 and not lust_next.filter_pattern then
-    return true
+  -- Parameter validation
+  if name == nil then
+    logger.error("Test name cannot be nil", {
+      function_name = "should_run_test"
+    })
+    error_handler.throw(
+      "Test name cannot be nil", 
+      error_handler.CATEGORY.VALIDATION, 
+      error_handler.SEVERITY.ERROR,
+      {function_name = "should_run_test"}
+    )
   end
   
-  -- Check pattern filter
-  if lust_next.filter_pattern and not name:match(lust_next.filter_pattern) then
-    return false
+  if type(name) ~= "string" then
+    logger.error("Test name must be a string", {
+      function_name = "should_run_test",
+      provided_type = type(name)
+    })
+    error_handler.throw(
+      "Test name must be a string", 
+      error_handler.CATEGORY.VALIDATION, 
+      error_handler.SEVERITY.ERROR,
+      {function_name = "should_run_test", provided_type = type(name)}
+    )
   end
   
-  -- If we have tags filter but no tags on this test, skip it
-  if #lust_next.active_tags > 0 and #tags == 0 then
-    return false
+  if tags == nil then
+    logger.error("Tags cannot be nil", {
+      function_name = "should_run_test"
+    })
+    error_handler.throw(
+      "Tags cannot be nil", 
+      error_handler.CATEGORY.VALIDATION, 
+      error_handler.SEVERITY.ERROR,
+      {function_name = "should_run_test"}
+    )
   end
   
-  -- Check tag filters
-  if #lust_next.active_tags > 0 then
-    for _, activeTag in ipairs(lust_next.active_tags) do
-      for _, testTag in ipairs(tags) do
-        if activeTag == testTag then
-          return true
-        end
+  if type(tags) ~= "table" then
+    logger.error("Tags must be a table", {
+      function_name = "should_run_test",
+      provided_type = type(tags)
+    })
+    error_handler.throw(
+      "Tags must be a table", 
+      error_handler.CATEGORY.VALIDATION, 
+      error_handler.SEVERITY.ERROR,
+      {function_name = "should_run_test", provided_type = type(tags)}
+    )
+  end
+  
+  -- Use error_handler.try for the implementation
+  local success, result, err = error_handler.try(function()
+    -- If no filters are set, run everything
+    if #lust_next.active_tags == 0 and not lust_next.filter_pattern then
+      return true
+    end
+    
+    -- Check pattern filter
+    if lust_next.filter_pattern then
+      local pattern_match_success, pattern_match_result = pcall(function()
+        return name:match(lust_next.filter_pattern)
+      end)
+      
+      if not pattern_match_success then
+        error_handler.throw(
+          "Error matching pattern: " .. tostring(pattern_match_result),
+          error_handler.CATEGORY.RUNTIME,
+          error_handler.SEVERITY.ERROR,
+          {
+            function_name = "should_run_test",
+            pattern = lust_next.filter_pattern,
+            name = name
+          }
+        )
+      end
+      
+      if not pattern_match_result then
+        return false
       end
     end
-    return false
+    
+    -- If we have tags filter but no tags on this test, skip it
+    if #lust_next.active_tags > 0 and #tags == 0 then
+      return false
+    end
+    
+    -- Check tag filters
+    if #lust_next.active_tags > 0 then
+      for _, activeTag in ipairs(lust_next.active_tags) do
+        for _, testTag in ipairs(tags) do
+          if activeTag == testTag then
+            return true
+          end
+        end
+      end
+      return false
+    end
+    
+    return true
+  end)
+  
+  -- Handle errors
+  if not success then
+    logger.error("Failed to check if test should run", {
+      error = error_handler.format_error(result),
+      function_name = "should_run_test",
+      name = name,
+      tag_count = #tags
+    })
+    
+    error_handler.throw(
+      "Failed to check if test should run: " .. error_handler.format_error(result),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {
+        function_name = "should_run_test",
+        name = name,
+        tag_count = #tags
+      }
+    )
   end
   
-  return true
+  return result
 end
 
 function lust_next.it(name, fn, options)
+  -- Parameter validation
+  if name == nil then
+    local err = error_handler.validation_error(
+      "Test name cannot be nil",
+      {
+        parameter = "name",
+        function_name = "it"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "it"
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid test (missing name)")
+    return
+  end
+  
+  if type(name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Test name must be a string",
+      {
+        parameter = "name",
+        provided_type = type(name),
+        function_name = "it"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "it"
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid test name (must be string)")
+    return
+  end
+  
+  if fn == nil then
+    local err = error_handler.validation_error(
+      "Test function cannot be nil",
+      {
+        parameter = "fn",
+        test_name = name,
+        function_name = "it"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "it",
+      test_name = name
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Missing function for test '" .. name .. "'")
+    return
+  end
+  
+  if type(fn) ~= "function" and type(fn) ~= "table" then
+    -- We allow tables because async tests may return a table with promises
+    local err = error_handler.validation_error(
+      "Test requires a function or async result",
+      {
+        parameter = "fn",
+        provided_type = type(fn),
+        test_name = name,
+        function_name = "it"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "it",
+      test_name = name
+    })
+    
+    lust_next.errors = lust_next.errors + 1
+    print(indent() .. red .. "ERROR" .. normal .. " Invalid function for test '" .. name .. "'")
+    return
+  end
+
   options = options or {}
   local focused = options.focused or false
   local excluded = options.excluded or false
@@ -765,13 +2001,20 @@ function lust_next.it(name, fn, options)
     -- Skip test but still print it as skipped
     lust_next.skipped = lust_next.skipped + 1
     
+    local skip_reason = ""
+    if excluded then
+      skip_reason = " (excluded)"
+    elseif lust_next.focus_mode and not focused then
+      skip_reason = " (not focused)"
+    end
+    
+    logger.debug("Skipping test", {
+      test = name,
+      reason = skip_reason:gsub("^%s+", ""),
+      level = lust_next.level
+    })
+    
     if not lust_next.format_options.summary_only and not lust_next.format_options.dot_mode then
-      local skip_reason = ""
-      if excluded then
-        skip_reason = " (excluded)"
-      elseif lust_next.focus_mode and not focused then
-        skip_reason = " (not focused)"
-      end
       print(indent() .. yellow .. 'SKIP' .. normal .. ' ' .. name .. skip_reason)
     elseif lust_next.format_options.dot_mode then
       -- In dot mode, print an 'S' for skipped
@@ -780,28 +2023,126 @@ function lust_next.it(name, fn, options)
     return
   end
   
-  -- Run before hooks
+  logger.trace("Running test", {
+      test = name,
+      level = lust_next.level,
+      focused = focused,
+      tags = #test_tags > 0 and table.concat(test_tags, ", ") or nil
+    })
+
+  
+  -- Run before hooks with error handling
+  local before_errors = {}
   for level = 1, lust_next.level do
     if lust_next.befores[level] then
       for i = 1, #lust_next.befores[level] do
-        lust_next.befores[level][i](name)
+        local before_fn = lust_next.befores[level][i]
+        
+        -- Skip invalid before hooks
+        if type(before_fn) ~= "function" then
+          table.insert(before_errors, error_handler.validation_error(
+            "Invalid before hook (not a function)",
+            {
+              level = level,
+              index = i,
+              provided_type = type(before_fn)
+            }
+          ))
+          goto continue_befores
+        end
+        
+        -- Run before hook with error handling
+        local before_success, before_err = error_handler.try(function()
+          before_fn(name)
+          return true
+        end)
+        
+        if not before_success then
+          -- Create structured error
+          if not error_handler.is_error(before_err) then
+            before_err = error_handler.runtime_error(
+              "Error in before hook: " .. tostring(before_err),
+              {
+                test = name,
+                level = level,
+                hook_index = i
+              }
+            )
+          end
+          
+          table.insert(before_errors, before_err)
+          
+          logger.error("Error in before hook", {
+            test = name,
+            level = level,
+            hook_index = i,
+            error = error_handler.format_error(before_err)
+          })
+        end
+        
+        ::continue_befores::
       end
     end
   end
   
+  -- Check if we had any errors in before hooks
+  local had_before_errors = #before_errors > 0
+  
   -- Handle both regular and async tests
   local success, err
-  if type(fn) == "function" then
-    success, err = pcall(fn)
+  
+  if not had_before_errors then
+    -- Only run the test if before hooks succeeded
+    if type(fn) == "function" then
+      -- Run test with proper error handling
+      success, err = error_handler.try(function()
+        fn()
+        return true
+      end)
+    else
+      -- If it's not a function, it might be the result of an async test that already completed
+      success, err = true, fn
+    end
   else
-    -- If it's not a function, it might be the result of an async test that already completed
-    success, err = true, fn
+    -- Before hooks failed, so we can't run the test
+    success = false
+    err = error_handler.runtime_error(
+      "Test not run due to errors in before hooks",
+      {
+        test = name,
+        error_count = #before_errors
+      },
+      before_errors[1] -- Chain to the first error
+    )
   end
   
+  -- Convert error to structured error if needed
+  if not success and not error_handler.is_error(err) then
+    err = error_handler.runtime_error(
+      tostring(err),
+      {
+        test = name,
+        level = lust_next.level
+      }
+    )
+  end
+  
+  -- Update test counters
   if success then
     lust_next.passes = lust_next.passes + 1
+    
+    logger.debug("Test passed", {
+      test = name,
+      level = lust_next.level
+    })
   else
     lust_next.errors = lust_next.errors + 1
+    
+    logger.error("Test failed", {
+      test = name,
+      error = error_handler.format_error(err),
+      level = lust_next.level
+    })
   end
   
   -- Output based on format options
@@ -830,21 +2171,80 @@ function lust_next.it(name, fn, options)
     -- Show error details
     if err and not success then
       if lust_next.format_options.show_trace then
-        -- Show the full stack trace
-        print(indent(lust_next.level + 1) .. red .. debug.traceback(err, 2) .. normal)
+        -- Show the full stack trace with proper formatting
+        local traceback = err.traceback or debug.traceback(tostring(err), 2)
+        print(indent(lust_next.level + 1) .. red .. traceback .. normal)
       else
-        -- Show just the error message
-        print(indent(lust_next.level + 1) .. red .. tostring(err) .. normal)
+        -- Show just the error message with proper formatting
+        print(indent(lust_next.level + 1) .. red .. error_handler.format_error(err, false) .. normal)
+      end
+      
+      -- Show any before hook errors if they exist and aren't already displayed
+      if had_before_errors and not err.message:match("errors in before hooks") then
+        print(indent(lust_next.level + 1) .. red .. "Before hook errors:" .. normal)
+        for i, hook_err in ipairs(before_errors) do
+          print(indent(lust_next.level + 2) .. red .. i .. ": " .. error_handler.format_error(hook_err, false) .. normal)
+        end
       end
     end
   end
   
-  -- Run after hooks
+  -- Run after hooks with error handling
+  local after_errors = {}
   for level = 1, lust_next.level do
     if lust_next.afters[level] then
       for i = 1, #lust_next.afters[level] do
-        lust_next.afters[level][i](name)
+        local after_fn = lust_next.afters[level][i]
+        
+        -- Skip invalid after hooks
+        if type(after_fn) ~= "function" then
+          logger.warn("Invalid after hook (not a function)", {
+            level = level,
+            index = i,
+            provided_type = type(after_fn)
+          })
+          goto continue_afters
+        end
+        
+        -- Run after hook with error handling
+        local after_success, after_err = error_handler.try(function()
+          after_fn(name)
+          return true
+        end)
+        
+        if not after_success then
+          -- Create structured error
+          if not error_handler.is_error(after_err) then
+            after_err = error_handler.runtime_error(
+              "Error in after hook: " .. tostring(after_err),
+              {
+                test = name,
+                level = level,
+                hook_index = i
+              }
+            )
+          end
+          
+          table.insert(after_errors, after_err)
+          
+          logger.error("Error in after hook", {
+            test = name,
+            level = level,
+            hook_index = i,
+            error = error_handler.format_error(after_err)
+          })
+        end
+        
+        ::continue_afters::
       end
+    end
+  end
+  
+  -- If we had after hook errors, display them
+  if #after_errors > 0 and not lust_next.format_options.summary_only then
+    print(indent() .. red .. "ERRORS IN AFTER HOOKS:" .. normal)
+    for i, after_err in ipairs(after_errors) do
+      print(indent(lust_next.level + 1) .. red .. i .. ": " .. error_handler.format_error(after_err, false) .. normal)
     end
   end
   
@@ -854,14 +2254,188 @@ end
 
 -- Focused version of it
 function lust_next.fit(name, fn)
-  return lust_next.it(name, fn, {focused = true})
+  -- Parameter validation
+  if name == nil then
+    local err = error_handler.validation_error(
+      "Name cannot be nil",
+      {
+        parameter = "name",
+        function_name = "fit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Name must be a string",
+      {
+        parameter = "name",
+        provided_type = type(name),
+        function_name = "fit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if fn == nil then
+    local err = error_handler.validation_error(
+      "Function cannot be nil",
+      {
+        parameter = "fn",
+        function_name = "fit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(fn) ~= "function" then
+    local err = error_handler.validation_error(
+      "Second parameter must be a function",
+      {
+        parameter = "fn",
+        provided_type = type(fn),
+        function_name = "fit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "fit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  logger.debug("Creating focused test", {
+    function_name = "fit",
+    name = name
+  })
+  
+  local success, result, err = error_handler.try(function()
+    return lust_next.it(name, fn, {focused = true})
+  end)
+  
+  if not success then
+    logger.error("Failed to create focused test", {
+      error = error_handler.format_error(result),
+      function_name = "fit",
+      name = name
+    })
+    
+    error_handler.throw(
+      "Failed to create focused test: " .. error_handler.format_error(result),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "fit", name = name}
+    )
+  end
+  
+  return result
 end
 
 -- Excluded version of it
 function lust_next.xit(name, fn)
-  -- Important: Replace the function with a dummy that never runs
-  -- This ensures the test is completely skipped, not just filtered
-  return lust_next.it(name, function() end, {excluded = true})
+  -- Parameter validation
+  if name == nil then
+    local err = error_handler.validation_error(
+      "Name cannot be nil",
+      {
+        parameter = "name",
+        function_name = "xit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "xit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  if type(name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Name must be a string",
+      {
+        parameter = "name",
+        provided_type = type(name),
+        function_name = "xit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "xit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  -- fn can be nil for xit since we're skipping it anyway
+  if fn ~= nil and type(fn) ~= "function" then
+    local err = error_handler.validation_error(
+      "Second parameter must be a function if provided",
+      {
+        parameter = "fn",
+        provided_type = type(fn),
+        function_name = "xit"
+      }
+    )
+    
+    logger.error("Parameter validation failed", {
+      error = error_handler.format_error(err),
+      operation = "xit"
+    })
+    
+    error_handler.throw(err.message, err.category, err.severity, err.context)
+  end
+  
+  logger.debug("Creating excluded test", {
+    function_name = "xit",
+    name = name
+  })
+  
+  local success, result, err = error_handler.try(function()
+    -- Important: Replace the function with a dummy that never runs
+    -- This ensures the test is completely skipped, not just filtered
+    return lust_next.it(name, function() end, {excluded = true})
+  end)
+  
+  if not success then
+    logger.error("Failed to create excluded test", {
+      error = error_handler.format_error(result),
+      function_name = "xit",
+      name = name
+    })
+    
+    error_handler.throw(
+      "Failed to create excluded test: " .. error_handler.format_error(result),
+      error_handler.CATEGORY.RUNTIME,
+      error_handler.SEVERITY.ERROR,
+      {function_name = "xit", name = name}
+    )
+  end
+  
+  return result
 end
 
 -- Asynchronous version of it
@@ -935,15 +2509,65 @@ local function has(t, x)
 end
 
 local function eq(t1, t2, eps)
-  if type(t1) ~= type(t2) then return false end
-  if type(t1) == 'number' then return math.abs(t1 - t2) <= (eps or 0) end
-  if type(t1) ~= 'table' then return t1 == t2 end
-  for k, _ in pairs(t1) do
-    if not eq(t1[k], t2[k], eps) then return false end
+  -- Special case for strings and numbers
+  if (type(t1) == 'string' and type(t2) == 'number') or
+     (type(t1) == 'number' and type(t2) == 'string') then
+    -- Try string comparison
+    if tostring(t1) == tostring(t2) then
+      return true
+    end
+    
+    -- Try number comparison if possible
+    local n1 = type(t1) == 'string' and tonumber(t1) or t1
+    local n2 = type(t2) == 'string' and tonumber(t2) or t2
+    
+    if type(n1) == 'number' and type(n2) == 'number' then
+      local ok, result = pcall(function()
+        return math.abs(n1 - n2) <= (eps or 0)
+      end)
+      if ok then return result end
+    end
+    
+    return false
   end
-  for k, _ in pairs(t2) do
-    if not eq(t2[k], t1[k], eps) then return false end
+  
+  -- If types are different, return false
+  if type(t1) ~= type(t2) then
+    return false
   end
+  
+  -- For numbers, do epsilon comparison
+  if type(t1) == 'number' then
+    local ok, result = pcall(function()
+      return math.abs(t1 - t2) <= (eps or 0)
+    end)
+    
+    -- If comparison failed (e.g., NaN), fall back to direct equality
+    if not ok then
+      return t1 == t2
+    end
+    
+    return result
+  end
+  
+  -- For non-tables, simple equality
+  if type(t1) ~= 'table' then
+    return t1 == t2
+  end
+  
+  -- For tables, recursive equality check
+  for k, v in pairs(t1) do
+    if not eq(v, t2[k], eps) then
+      return false
+    end
+  end
+  
+  for k, v in pairs(t2) do
+    if t1[k] == nil then
+      return false
+    end
+  end
+  
   return true
 end
 
@@ -1724,6 +3348,25 @@ function lust_next.parse_args(args)
     elseif args[i] == "--filter" and args[i+1] then
       options.filter = args[i+1]
       i = i + 2
+    elseif args[i] == "--config" and args[i+1] then
+      -- Load configuration from file
+      if central_config then
+        local config_path = args[i+1]
+        local user_config, err = central_config.load_from_file(config_path)
+        if not user_config and logger then
+          logger.warn("Failed to load config file", {
+            path = config_path,
+            error = err and err.message or "unknown error"
+          })
+        end
+      end
+      i = i + 2
+    elseif args[i] == "--create-config" then
+      -- Create default configuration file
+      if central_config then
+        central_config.save_to_file()
+      end
+      i = i + 1
     elseif args[i] == "--help" or args[i] == "-h" then
       lust_next.show_help()
       os.exit(0)
@@ -1799,6 +3442,10 @@ function lust_next.show_help()
   print("\nRuntime Mode Options:")
   print("  --interactive, -i Start interactive CLI mode")
   print("  --watch, -w      Watch for file changes and automatically re-run tests")
+  
+  print("\nConfiguration Options:")
+  print("  --config FILE    Load configuration from specified file")
+  print("  --create-config  Create default configuration file (.lust-next-config.lua)")
   
   print("\nReport Configuration Options:")
   print("  --output-dir DIR       Base directory for all reports (default: ./coverage-reports)")
@@ -2083,6 +3730,14 @@ local module = setmetatable({
         end
         return true
       end
+      
+      -- Add type_or_nil assertion
+      lust_next.assert.is_type_or_nil = function(value, expected_type, message)
+        if value ~= nil and type(value) ~= expected_type then
+          error(message or ("Expected value to be of type '" .. expected_type .. "' or nil, got '" .. type(value) .. "'"), 2)
+        end
+        return true
+      end
     end
     
     -- Expose lust.assert namespace and global assert for convenience
@@ -2121,6 +3776,13 @@ local module = setmetatable({
       -- Start interactive mode if requested
       if options.interactive then
         if interactive then
+          logger.info("Starting interactive mode", {
+            options = {
+              test_dir = options.dir,
+              pattern = options.files[1] or "*_test.lua",
+              watch_mode = options.watch
+            }
+          })
           interactive.start(lust_next, {
             test_dir = options.dir,
             pattern = options.files[1] or "*_test.lua",
@@ -2128,6 +3790,11 @@ local module = setmetatable({
           })
           return lust_next
         else
+          logger.error("Interactive mode not available", {
+            reason = "Required module not found",
+            component = "interactive",
+            action = "exiting with error"
+          })
           print("Error: Interactive mode not available. Make sure src/interactive.lua exists.")
           os.exit(1)
         end
@@ -2159,7 +3826,11 @@ local module = setmetatable({
       -- Handle watch mode
       if options.watch then
         if watcher then
-          print("Starting watch mode...")
+          logger.info("Starting watch mode", {
+            interval = 2,
+            paths = {"."},
+            excludes = {"node_modules", "%.git"}
+          })
           
           -- Set up watcher
           watcher.set_check_interval(2) -- 2 seconds
@@ -2170,11 +3841,18 @@ local module = setmetatable({
             lust_next.reset()
             if #options.files > 0 then
               -- Run specific files
+              logger.debug("Running specific test files", {
+                count = #options.files,
+                files = options.files
+              })
               for _, file in ipairs(options.files) do
                 lust_next.run_file(file)
               end
             else
               -- Run all discovered tests
+              logger.debug("Running all discovered tests", {
+                directory = options.dir
+              })
               lust_next.run_discovered(options.dir)
             end
           end
@@ -2183,11 +3861,17 @@ local module = setmetatable({
           run_tests()
           
           -- Watch loop
-          print("Watching for changes. Press Ctrl+C to exit.")
+          logger.info("Watching for changes", {
+            message = "Press Ctrl+C to exit"
+          })
+          
           while true do
             local changes = watcher.check_for_changes()
             if changes then
-              print("\nFile changes detected. Re-running tests...")
+              logger.info("File changes detected", {
+                action = "re-running tests",
+                changed_files = changes
+              })
               run_tests()
             end
             os.execute("sleep 0.5")
@@ -2195,6 +3879,11 @@ local module = setmetatable({
           
           return lust_next
         else
+          logger.error("Watch mode not available", {
+            reason = "Required module not found",
+            component = "watcher",
+            action = "exiting with error"
+          })
           print("Error: Watch mode not available. Make sure src/watcher.lua exists.")
           os.exit(1)
         end
@@ -2226,5 +3915,11 @@ local module = setmetatable({
 }, {
   __index = lust_next
 })
+
+-- Register module reset functionality if available
+-- This must be done after all methods (including reset) are defined
+if module_reset_module then
+  module_reset_module.register_with_lust(lust_next)
+end
 
 return module
