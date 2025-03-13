@@ -8,7 +8,7 @@
 cd "$(dirname "$0")"
 
 # Default to running all tests if no file specified
-TEST_FILE=${1:-"run_all_tests.lua"}
+TEST_PATH=${1:-"tests/"}
 
 # If the first argument is a test file, shift it off and pass remaining args
 if [ -n "$1" ]; then
@@ -16,7 +16,7 @@ if [ -n "$1" ]; then
 fi
 
 # Run the test with all remaining arguments
-lua scripts/runner.lua "$TEST_FILE" "$@"
+lua test.lua "$TEST_PATH" "$@"
 
 # Display completion message
 echo ""
