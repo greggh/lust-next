@@ -3,14 +3,8 @@
 
 local M = {}
 
--- Try to import filesystem module (might not be available during first load)
-local fs
-local function get_fs()
-  if not fs then
-    fs = require("lib.tools.filesystem")
-  end
-  return fs
-end
+-- Require filesystem module - fail if not available
+local fs = require("lib.tools.filesystem")
 
 -- Try to import JSON module if available
 local json
@@ -297,11 +291,6 @@ end
 function M.create_platform_file(log_file, platform, output_file, options)
   options = options or {}
   
-  local fs = get_fs()
-  if not fs then
-    return nil, "Filesystem module not available"
-  end
-  
   -- Check if source file exists
   if not fs.file_exists(log_file) then
     return nil, "Log file does not exist: " .. log_file
@@ -399,8 +388,6 @@ function M.create_platform_file(log_file, platform, output_file, options)
   -- Get JSON module
   local json = get_json()
   if not json then
-    source_file:close()
-    output:close()
     return nil, "JSON module not available and fallback failed"
   end
   
@@ -432,6 +419,15 @@ function M.create_platform_file(log_file, platform, output_file, options)
     end
   end
   
+  -- Ensure parent directory exists
+  local parent_dir = fs.get_directory_name(output_file)
+  if parent_dir and parent_dir ~= "" then
+    local success, err = fs.ensure_directory_exists(parent_dir)
+    if not success then
+      return nil, "Failed to create parent directory: " .. (err or "unknown error")
+    end
+  end
+  
   -- Write the complete output content to file
   local success, write_err = fs.write_file(output_file, output_content)
   if not success then
@@ -455,27 +451,21 @@ function M.create_platform_config(platform, output_file, options)
     return nil, "Unsupported platform: " .. platform
   end
   
-  -- Get filesystem module
-  local fs = get_fs()
-  if not fs then
-    return nil, "Filesystem module not available"
-  end
-  
   -- Ensure parent directory exists
-  local parent_dir = output_file:match("(.+)/[^/]+$")
-  if parent_dir then
-    fs.ensure_directory_exists(parent_dir)
+  local parent_dir = fs.get_directory_name(output_file)
+  if parent_dir and parent_dir ~= "" then
+    local success, err = fs.ensure_directory_exists(parent_dir)
+    if not success then
+      return nil, "Failed to create parent directory: " .. (err or "unknown error")
+    end
   end
   
-  -- Create output file
-  local output, err = io.open(output_file, "w")
-  if not output then
-    return nil, "Failed to create output file: " .. (err or "unknown error")
-  end
+  -- Prepare config content
+  local config_content = ""
   
-  -- Write platform-specific configuration
+  -- Generate platform-specific configuration content
   if platform == "logstash" then
-    output:write([[
+    config_content = [[
 input {
   file {
     path => "logs/lust-next.json"
@@ -517,9 +507,9 @@ output {
     # stdout { codec => rubydebug }
   }
 }
-]])
+]]
   elseif platform == "elasticsearch" then
-    output:write([[
+    config_content = [[
 {
   "index_patterns": ["lust-next-*"],
   "template": {
@@ -542,9 +532,9 @@ output {
     }
   }
 }
-]])
+]]
   elseif platform == "splunk" then
-    output:write([[
+    config_content = [[
 [lust_logs]
 DATETIME_CONFIG = 
 INDEXED_EXTRACTIONS = json
@@ -556,9 +546,9 @@ disabled = false
 pulldown_type = true
 TIME_FORMAT = %Y-%m-%dT%H:%M:%S
 TIME_PREFIX = "time":"
-]])
+]]
   elseif platform == "datadog" then
-    output:write([[
+    config_content = [[
 # Datadog Agent configuration for lust-next logs
 logs:
   - type: file
@@ -577,9 +567,9 @@ logs:
       ddtags: ddtags
       hostname: hostname
       level: level
-]])
+]]
   elseif platform == "loki" then
-    output:write([[
+    config_content = [[
 auth_enabled: false
 
 server:
@@ -626,14 +616,16 @@ chunk_store_config:
 table_manager:
   retention_deletes_enabled: false
   retention_period: 0s
-]])
+]]
   else
-    output:close()
     return nil, "No configuration template available for platform: " .. platform
   end
   
-  -- Close output file
-  output:close()
+  -- Write the configuration to file
+  local success, err = fs.write_file(output_file, config_content)
+  if not success then
+    return nil, "Failed to write configuration file: " .. (err or "unknown error")
+  end
   
   return {
     config_file = output_file,

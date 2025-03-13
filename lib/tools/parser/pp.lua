@@ -342,11 +342,11 @@ function M.print(t)
   assert(type(t) == "table")
   local log = get_logger()
   
-  -- If logger is available, use it, otherwise fall back to print
+  -- If logger is available, use it, otherwise fall back to io.write
   if log then
-    log.debug(M.tostring(t))
+    log.debug("AST structure", {ast_string = M.tostring(t)})
   else
-    print(M.tostring(t))
+    io.write("AST structure: " .. M.tostring(t) .. "\n")
   end
 end
 
@@ -392,7 +392,7 @@ end
 function M.log_dump(t)
   local log = get_logger()
   if log then
-    log.debug("AST dump: \n" .. M.dump(t, 0, true))
+    log.debug("AST detailed dump", {ast_dump = M.dump(t, 0, true)})
   else
     M.dump(t)
   end

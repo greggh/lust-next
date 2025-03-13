@@ -17,6 +17,9 @@ Design principles:
 - Platform neutral: Works identically on all platforms
 ]]
 
+-- Import error_handler for proper error handling
+local error_handler = require("lib.tools.error_handler")
+
 local fs = {}
 
 -- Internal utility functions
@@ -359,28 +362,39 @@ end
 --- Join path components
 -- @param ... (string) Path components to join
 -- @return joined (string) Joined path
+-- @return error (string) Error message if joining failed
 function fs.join_paths(...)
     local args = {...}
     if #args == 0 then return "" end
     
-    local result = fs.normalize_path(args[1] or "")
-    for i = 2, #args do
-        local component = fs.normalize_path(args[i] or "")
-        if component and component ~= "" then
-            if result ~= "" and result:sub(-1) ~= "/" then
-                result = result .. "/"
+    -- Use proper pattern for handling error_handler.try results
+    local success, result, err = error_handler.try(function()
+        local result = fs.normalize_path(args[1] or "")
+        for i = 2, #args do
+            local component = fs.normalize_path(args[i] or "")
+            if component and component ~= "" then
+                if result ~= "" and result:sub(-1) ~= "/" then
+                    result = result .. "/"
+                end
+                
+                -- If component starts with slash and result isn't empty, remove leading slash
+                if component:sub(1, 1) == "/" and result ~= "" then
+                    component = component:sub(2)
+                end
+                
+                result = result .. component
             end
-            
-            -- If component starts with slash and result isn't empty, remove leading slash
-            if component:sub(1, 1) == "/" and result ~= "" then
-                component = component:sub(2)
-            end
-            
-            result = result .. component
         end
-    end
+        
+        return result
+    end)
     
-    return result
+    -- Properly handle the result of error_handler.try
+    if success then
+        return result
+    else
+        return nil, result  -- On failure, result contains the error object
+    end
 end
 
 --- Extract directory part
@@ -425,71 +439,104 @@ end
 --- Extract file name
 -- @param path (string) Path to process
 -- @return filename (string) File name component of path
+-- @return error (string) Error message if extraction failed
 function fs.get_file_name(path)
     if not path then return nil end
     
-    -- Check for a trailing slash in the original path
-    if path:match("/$") then
-        return ""
+    -- Use proper pattern for handling error_handler.try results
+    local success, result, err = error_handler.try(function()
+        -- Check for a trailing slash in the original path
+        if path:match("/$") then
+            return ""
+        end
+        
+        -- Normalize the path
+        local normalized = fs.normalize_path(path)
+        
+        -- Handle empty paths
+        if normalized == "" then
+            return ""
+        end
+        
+        -- Find filename after last slash
+        local filename = normalized:match("[^/]+$")
+        
+        -- If nothing found, the path might be empty
+        if not filename then
+            return ""
+        end
+        
+        return filename
+    end)
+    
+    -- Properly handle the result of error_handler.try
+    if success then
+        return result
+    else
+        return nil, result  -- On failure, result contains the error object
     end
-    
-    -- Normalize the path
-    local normalized = fs.normalize_path(path)
-    
-    -- Handle empty paths
-    if normalized == "" then
-        return ""
-    end
-    
-    -- Find filename after last slash
-    local filename = normalized:match("[^/]+$")
-    
-    -- If nothing found, the path might be empty
-    if not filename then
-        return ""
-    end
-    
-    return filename
 end
 
 --- Get file extension
 -- @param path (string) Path to process
 -- @return extension (string) Extension of the file, or empty string if none
+-- @return error (string) Error message if extraction failed
 function fs.get_extension(path)
     if not path then return nil end
     
-    local filename = fs.get_file_name(path)
-    if not filename or filename == "" then
-        return ""
+    -- Use proper pattern for handling error_handler.try results
+    local success, result, err = error_handler.try(function()
+        local filename = fs.get_file_name(path)
+        if not filename or filename == "" then
+            return ""
+        end
+        
+        -- Find extension after last dot
+        local extension = filename:match("%.([^%.]+)$")
+        
+        -- If no extension found, return empty string
+        if not extension then
+            return ""
+        end
+        
+        return extension
+    end)
+    
+    -- Properly handle the result of error_handler.try
+    if success then
+        return result
+    else
+        return nil, result  -- On failure, result contains the error object
     end
-    
-    -- Find extension after last dot
-    local extension = filename:match("%.([^%.]+)$")
-    
-    -- If no extension found, return empty string
-    if not extension then
-        return ""
-    end
-    
-    return extension
 end
 
 --- Convert to absolute path
 -- @param path (string) Path to convert
 -- @return absolute (string) Absolute path
+-- @return error (string) Error message if conversion failed
 function fs.get_absolute_path(path)
     if not path then return nil end
     
-    -- If already absolute, return normalized path
-    if path:sub(1, 1) == "/" or (is_windows() and path:match("^%a:")) then
-        return fs.normalize_path(path)
+    -- Use proper pattern for handling error_handler.try results
+    local success, result, err = error_handler.try(function()
+        -- If already absolute, return normalized path
+        if path:sub(1, 1) == "/" or (is_windows() and path:match("^%a:")) then
+            return fs.normalize_path(path)
+        end
+        
+        -- Get current directory
+        local current_dir = os.getenv("PWD") or io.popen("cd"):read("*l")
+        
+        -- Join with the provided path
+        return fs.join_paths(current_dir, path)
+    end)
+    
+    -- Properly handle the result of error_handler.try
+    if success then
+        return result
+    else
+        return nil, result  -- On failure, result contains the error object
     end
-    
-    -- Get current directory
-    local current_dir = os.getenv("PWD") or io.popen("cd"):read("*l")
-    
-    -- Join with the provided path
-    return fs.join_paths(current_dir, path)
 end
 
 --- Convert to relative path
@@ -595,32 +642,43 @@ end
 -- @param path (string) Path to test
 -- @param pattern (string) Glob pattern to match against
 -- @return matches (boolean) True if path matches pattern
+-- @return error (string) Error message if matching failed
 function fs.matches_pattern(path, pattern)
     if not path or not pattern then return false end
     
-    -- Direct match for simple cases
-    if pattern == path then
-        return true
-    end
-    
-    -- Check if it's a glob pattern that needs conversion
-    local contains_glob = pattern:match("%*") or pattern:match("%?") or pattern:match("%[")
-    
-    if contains_glob then
-        -- Convert glob to Lua pattern and perform matching
-        local lua_pattern = fs.glob_to_pattern(pattern)
-        
-        -- For simple extension matching (e.g., *.lua)
-        if pattern == "*.lua" and path:match("%.lua$") then
+    -- Use proper pattern for handling error_handler.try results
+    local success, result, err = error_handler.try(function()
+        -- Direct match for simple cases
+        if pattern == path then
             return true
         end
         
-        -- Test the pattern match
-        local match = path:match(lua_pattern) ~= nil
-        return match
+        -- Check if it's a glob pattern that needs conversion
+        local contains_glob = pattern:match("%*") or pattern:match("%?") or pattern:match("%[")
+        
+        if contains_glob then
+            -- Convert glob to Lua pattern and perform matching
+            local lua_pattern = fs.glob_to_pattern(pattern)
+            
+            -- For simple extension matching (e.g., *.lua)
+            if pattern == "*.lua" and path:match("%.lua$") then
+                return true
+            end
+            
+            -- Test the pattern match
+            local match = path:match(lua_pattern) ~= nil
+            return match
+        else
+            -- Direct string comparison for non-glob patterns
+            return path == pattern
+        end
+    end)
+    
+    -- Properly handle the result of error_handler.try
+    if success then
+        return result
     else
-        -- Direct string comparison for non-glob patterns
-        return path == pattern
+        return nil, result  -- On failure, result contains the error object
     end
 end
 
@@ -629,85 +687,96 @@ end
 -- @param patterns (table) List of patterns to match
 -- @param exclude_patterns (table) List of patterns to exclude
 -- @return matches (table) List of matching file paths
+-- @return error (string) Error message if discovery failed
 function fs.discover_files(directories, patterns, exclude_patterns)
     if not directories or #directories == 0 then return {} end
     
-    -- Default patterns if none provided
-    patterns = patterns or {"*"}
-    exclude_patterns = exclude_patterns or {}
-    
-    local matches = {}
-    local processed = {}
-    
-    -- Process a single directory
-    local function process_directory(dir, current_path)
-        -- Avoid infinite loops from symlinks
-        local absolute_path = fs.get_absolute_path(current_path)
-        if processed[absolute_path] then return end
-        processed[absolute_path] = true
+    -- Use proper pattern for handling error_handler.try results
+    local success, result, err = error_handler.try(function()
+        -- Default patterns if none provided
+        patterns = patterns or {"*"}
+        exclude_patterns = exclude_patterns or {}
         
-        -- Get directory contents
-        local contents, err = fs.get_directory_contents(current_path)
-        if not contents then return end
+        local matches = {}
+        local processed = {}
         
-        for _, item in ipairs(contents) do
-            local item_path = fs.join_paths(current_path, item)
+        -- Process a single directory
+        local function process_directory(dir, current_path)
+            -- Avoid infinite loops from symlinks
+            local absolute_path = fs.get_absolute_path(current_path)
+            if processed[absolute_path] then return end
+            processed[absolute_path] = true
             
-            -- Skip if we can't access the path
-            local is_dir = fs.is_directory(item_path)
-            local is_file = not is_dir and fs.file_exists(item_path)
+            -- Get directory contents
+            local contents, err = fs.get_directory_contents(current_path)
+            if not contents then return end
             
-            -- Recursively process directories
-            if is_dir then
-                process_directory(dir, item_path)
-            elseif is_file then  -- Only process if it's a valid file we can access
-                -- Special handling for exact file extension matches
-                local file_ext = fs.get_extension(item_path)
+            for _, item in ipairs(contents) do
+                local item_path = fs.join_paths(current_path, item)
                 
-                -- Check if file matches any include pattern
-                local match = false
-                for _, pattern in ipairs(patterns) do
-                    -- Simple extension pattern matching (common case)
-                    if pattern == "*." .. file_ext then
-                        match = true
-                        break
-                    end
+                -- Skip if we can't access the path
+                local is_dir = fs.is_directory(item_path)
+                local is_file = not is_dir and fs.file_exists(item_path)
+                
+                -- Recursively process directories
+                if is_dir then
+                    process_directory(dir, item_path)
+                elseif is_file then  -- Only process if it's a valid file we can access
+                    -- Special handling for exact file extension matches
+                    local file_ext = fs.get_extension(item_path)
                     
-                    -- More complex pattern matching
-                    local item_name = fs.get_file_name(item_path)
-                    if fs.matches_pattern(item_name, pattern) then
-                        match = true
-                        break
-                    end
-                end
-                
-                -- Check if file matches any exclude pattern
-                if match then
-                    for _, ex_pattern in ipairs(exclude_patterns) do
-                        local rel_path = fs.get_relative_path(item_path, dir)
-                        if rel_path and fs.matches_pattern(rel_path, ex_pattern) then
-                            match = false
+                    -- Check if file matches any include pattern
+                    local match = false
+                    for _, pattern in ipairs(patterns) do
+                        -- Simple extension pattern matching (common case)
+                        if pattern == "*." .. file_ext then
+                            match = true
+                            break
+                        end
+                        
+                        -- More complex pattern matching
+                        local item_name = fs.get_file_name(item_path)
+                        if fs.matches_pattern(item_name, pattern) then
+                            match = true
                             break
                         end
                     end
-                end
-                
-                -- Add matching file to results
-                if match then
-                    table.insert(matches, item_path)
+                    
+                    -- Check if file matches any exclude pattern
+                    if match then
+                        for _, ex_pattern in ipairs(exclude_patterns) do
+                            local rel_path = fs.get_relative_path(item_path, dir)
+                            if rel_path and fs.matches_pattern(rel_path, ex_pattern) then
+                                match = false
+                                break
+                            end
+                        end
+                    end
+                    
+                    -- Add matching file to results
+                    if match then
+                        table.insert(matches, item_path)
+                    end
                 end
             end
         end
-    end
-    
-    -- Process each starting directory
-    for _, dir in ipairs(directories) do
-        if fs.directory_exists(dir) then
-            process_directory(dir, dir)
+        
+        -- Process each starting directory
+        for _, dir in ipairs(directories) do
+            if fs.directory_exists(dir) then
+                process_directory(dir, dir)
+            end
         end
-    end
+        
+        return matches
+    end)
     
-    return matches
+    -- Properly handle the result of error_handler.try
+    if success then
+        return result
+    else
+        return nil, result  -- On failure, result contains the error object
+    end
 end
 
 --- List all files in directory

@@ -2,7 +2,11 @@
 -- Based on lua-parser (https://github.com/andremm/lua-parser)
 -- MIT License
 
-local M = {}
+local M = {
+  -- Module version
+  _VERSION = "1.0.0"
+}
+
 local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
 
@@ -13,8 +17,16 @@ logging.configure_from_config("parser")
 -- Load LPegLabel first to ensure it's available
 local has_lpeglabel, lpeg = pcall(require, "lib.tools.vendor.lpeglabel")
 if not has_lpeglabel then
+  logger.error("Failed to load required dependency", {
+    module = "LPegLabel",
+    error = tostring(lpeg)
+  })
   error("LPegLabel is required for the parser module")
 end
+
+logger.debug("LPegLabel loaded successfully", {
+  module = "parser"
+})
 
 -- Import parser components
 local parser = require("lib.tools.parser.grammar")
@@ -47,18 +59,39 @@ local scope_util = {
 function M.parse(source, name)
   name = name or "input"
   
+  logger.debug("Parsing Lua source", {
+    source_name = name,
+    source_length = source and #source or 0
+  })
+  
   if type(source) ~= "string" then
-    return nil, "Expected string source, got " .. type(source)
+    local error_msg = "Expected string source, got " .. type(source)
+    logger.error("Invalid source type", {
+      expected = "string",
+      actual = type(source)
+    })
+    return nil, error_msg
   end
   
   -- Safety limit for source size INCREASED to 1MB
   if #source > 1024000 then -- 1MB limit
-    return nil, "Source too large for parsing: " .. (#source/1024) .. "KB"
+    local error_msg = "Source too large for parsing: " .. (#source/1024) .. "KB"
+    logger.error("Source size limit exceeded", {
+      size_kb = (#source/1024),
+      limit_kb = 1024,
+      source_name = name
+    })
+    return nil, error_msg
   end
   
   -- Add timeout protection with INCREASED limits
   local start_time = os.clock()
   local MAX_PARSE_TIME = 10.0 -- 10 second timeout for parsing
+  
+  logger.debug("Starting parse with timeout protection", {
+    timeout_seconds = MAX_PARSE_TIME,
+    source_name = name
+  })
   
   -- Create a thread to handle parsing with timeout
   local co = coroutine.create(function()
@@ -71,7 +104,13 @@ function M.parse(source, name)
   while coroutine.status(co) ~= "dead" do
     -- Check if we've exceeded the time limit
     if os.clock() - start_time > MAX_PARSE_TIME then
-      return nil, "Parse timeout exceeded (" .. MAX_PARSE_TIME .. "s)"
+      local timeout_error = "Parse timeout exceeded (" .. MAX_PARSE_TIME .. "s)"
+      logger.error("Parse timeout", {
+        timeout_seconds = MAX_PARSE_TIME,
+        source_name = name,
+        elapsed = os.clock() - start_time
+      })
+      return nil, timeout_error
     end
     
     -- Resume the coroutine for a bit
@@ -79,7 +118,12 @@ function M.parse(source, name)
     
     -- If coroutine failed, return the error
     if not status then
-      return nil, "Parser error: " .. tostring(result)
+      local parse_error = "Parser error: " .. tostring(result)
+      logger.error("Parser coroutine failed", {
+        error = tostring(result),
+        source_name = name
+      })
+      return nil, parse_error
     end
     
     -- Brief yield to allow other processes
@@ -91,13 +135,27 @@ function M.parse(source, name)
   -- Check the parse result
   local ast = result
   if not ast then
+    logger.error("Parse returned no AST", {
+      error = error_msg or "Unknown parse error",
+      source_name = name
+    })
     return nil, error_msg or "Parse error"
   end
   
   -- Verify the AST is a valid table to avoid crashes
   if type(ast) ~= "table" then
+    logger.error("Invalid AST type", {
+      expected = "table",
+      actual = type(ast),
+      source_name = name
+    })
     return nil, "Invalid AST returned (not a table)"
   end
+  
+  logger.debug("Successfully parsed Lua source", {
+    source_name = name,
+    parse_time = os.clock() - start_time
+  })
   
   return ast
 end
@@ -107,14 +165,30 @@ end
 -- @return (table) The AST representing the Lua code, or nil if there was an error
 -- @return (string) Error message in case of failure
 function M.parse_file(file_path)
+  logger.debug("Parsing Lua file", {
+    file_path = file_path
+  })
+  
   if not fs.file_exists(file_path) then
+    logger.error("File not found for parsing", {
+      file_path = file_path
+    })
     return nil, "File not found: " .. file_path
   end
   
-  local source = fs.read_file(file_path)
+  local source, read_error = fs.read_file(file_path)
   if not source then
+    logger.error("Failed to read file for parsing", {
+      file_path = file_path,
+      error = read_error or "Unknown read error"
+    })
     return nil, "Failed to read file: " .. file_path
   end
+  
+  logger.debug("File read successfully for parsing", {
+    file_path = file_path,
+    source_length = #source
+  })
   
   return M.parse(source, file_path)
 end
@@ -309,9 +383,18 @@ end
 function M.create_code_map(source, name)
   name = name or "input"
   
+  logger.debug("Creating code map from source", {
+    source_name = name,
+    source_length = source and #source or 0
+  })
+  
   -- Parse the source
   local ast, err = M.parse(source, name)
   if not ast then
+    logger.error("Failed to parse source for code map", {
+      source_name = name,
+      error = err
+    })
     return {
       error = err,
       source = source,
@@ -327,14 +410,37 @@ function M.create_code_map(source, name)
     table.insert(lines, line)
   end
   
+  logger.debug("Source split into lines", {
+    source_name = name,
+    line_count = #lines
+  })
+  
+  -- Get executable lines
+  local executable_lines = M.get_executable_lines(ast, source)
+  
+  -- Count executable lines for logging
+  local executable_count = 0
+  for _ in pairs(executable_lines) do
+    executable_count = executable_count + 1
+  end
+  
+  -- Get functions
+  local functions = M.get_functions(ast, source)
+  
+  logger.debug("Code analysis complete", {
+    source_name = name,
+    executable_lines = executable_count,
+    function_count = #functions
+  })
+  
   -- Build the code map
   local code_map = {
     source = source,
     ast = ast,
     lines = lines,
     source_lines = #lines,
-    executable_lines = M.get_executable_lines(ast),
-    functions = M.get_functions(ast),
+    executable_lines = executable_lines,
+    functions = functions,
     valid = true
   }
   
@@ -345,22 +451,55 @@ end
 -- @param file_path (string) Path to the Lua file
 -- @return (table) Code map with detailed information
 function M.create_code_map_from_file(file_path)
+  logger.debug("Creating code map from file", {
+    file_path = file_path
+  })
+  
   if not fs.file_exists(file_path) then
+    logger.error("File not found for code map creation", {
+      file_path = file_path
+    })
     return {
       error = "File not found: " .. file_path,
       valid = false
     }
   end
   
-  local source = fs.read_file(file_path)
+  local source, read_error = fs.read_file(file_path)
   if not source then
+    logger.error("Failed to read file for code map creation", {
+      file_path = file_path,
+      error = read_error or "Unknown read error"
+    })
     return {
       error = "Failed to read file: " .. file_path,
       valid = false
     }
   end
   
-  return M.create_code_map(source, file_path)
+  logger.debug("File read successfully for code map creation", {
+    file_path = file_path,
+    source_length = #source
+  })
+  
+  local code_map = M.create_code_map(source, file_path)
+  
+  logger.debug("Code map created", {
+    file_path = file_path,
+    valid = code_map.valid,
+    executable_lines = code_map.executable_lines and table.concat(
+      (function()
+        local keys = {}
+        for k, _ in pairs(code_map.executable_lines) do
+          table.insert(keys, tostring(k))
+        end
+        return keys
+      end)(), ","
+    ),
+    function_count = code_map.functions and #code_map.functions or 0
+  })
+  
+  return code_map
 end
 
 return M

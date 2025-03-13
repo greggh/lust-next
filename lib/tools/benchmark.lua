@@ -2,6 +2,11 @@
 -- Provides utilities for measuring and analyzing test performance
 
 local benchmark = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("benchmark")
+logging.configure_from_config("benchmark")
 
 -- Default configuration
 benchmark.options = {
@@ -175,10 +180,15 @@ function benchmark.suite(suite_def, options)
     options = deep_clone(options)
   }
   
-  -- Print header
-  print("\n" .. string.rep("-", 80))
-  print("Running benchmark suite: " .. suite_name)
-  print(string.rep("-", 80))
+  -- Log suite start
+  logger.info("Running benchmark suite", {name = suite_name})
+  
+  -- Print header for console output
+  if not options.quiet then
+    io.write("\n" .. string.rep("-", 80) .. "\n")
+    io.write("Running benchmark suite: " .. suite_name .. "\n")
+    io.write(string.rep("-", 80) .. "\n")
+  end
   
   -- Run each benchmark
   for _, benchmark_def in ipairs(benchmarks) do
@@ -193,7 +203,13 @@ function benchmark.suite(suite_def, options)
     end
     bench_options.label = name
     
-    print("\nRunning: " .. name)
+    -- Log benchmark start
+    logger.debug("Running benchmark", {name = name})
+    
+    -- Print to console if not quiet
+    if not options.quiet then
+      io.write("\nRunning: " .. name .. "\n")
+    end
     
     -- Execute the benchmark
     local benchmark_result = benchmark.measure(func, args, bench_options)
@@ -207,11 +223,20 @@ function benchmark.suite(suite_def, options)
   results.end_time = os.time()
   results.duration = results.end_time - results.start_time
   
-  -- Print suite summary
-  print("\n" .. string.rep("-", 80))
-  print("Suite complete: " .. suite_name)
-  print("Total runtime: " .. results.duration .. " seconds")
-  print(string.rep("-", 80))
+  -- Log suite completion
+  logger.info("Benchmark suite completed", {
+    name = suite_name,
+    duration_seconds = results.duration,
+    benchmark_count = #results.benchmarks
+  })
+  
+  -- Print suite summary to console if not quiet
+  if not options.quiet then
+    io.write("\n" .. string.rep("-", 80) .. "\n")
+    io.write("Suite complete: " .. suite_name .. "\n")
+    io.write("Total runtime: " .. results.duration .. " seconds\n")
+    io.write(string.rep("-", 80) .. "\n")
+  end
   
   return results
 end
@@ -245,33 +270,45 @@ function benchmark.compare(benchmark1, benchmark2, options)
       or (memory_ratio - 1) * 100
   }
   
-  -- Print comparison
+  -- Log comparison results
+  logger.info("Benchmark comparison", {
+    benchmark1 = label1,
+    benchmark2 = label2,
+    time_ratio = time_ratio,
+    memory_ratio = memory_ratio,
+    faster = comparison.faster,
+    time_percent = comparison.time_percent,
+    less_memory = comparison.less_memory,
+    memory_percent = comparison.memory_percent
+  })
+  
+  -- Print comparison to console if not silent
   if not options.silent then
-    print("\n" .. string.rep("-", 80))
-    print("Benchmark Comparison: " .. label1 .. " vs " .. label2)
-    print(string.rep("-", 80))
+    io.write("\n" .. string.rep("-", 80) .. "\n")
+    io.write("Benchmark Comparison: " .. label1 .. " vs " .. label2 .. "\n")
+    io.write(string.rep("-", 80) .. "\n")
     
-    print("\nExecution Time:")
-    print(string.format("  %s: %s", label1, format_time(benchmark1.time_stats.mean)))
-    print(string.format("  %s: %s", label2, format_time(benchmark2.time_stats.mean)))
-    print(string.format("  Ratio: %.2fx", time_ratio))
-    print(string.format("  %s is %.1f%% %s", 
+    io.write("\nExecution Time:\n")
+    io.write(string.format("  %s: %s\n", label1, format_time(benchmark1.time_stats.mean)))
+    io.write(string.format("  %s: %s\n", label2, format_time(benchmark2.time_stats.mean)))
+    io.write(string.format("  Ratio: %.2fx\n", time_ratio))
+    io.write(string.format("  %s is %.1f%% %s\n", 
       comparison.faster,
       comparison.time_percent,
       time_ratio < 1 and "faster" or "slower"
     ))
     
-    print("\nMemory Usage:")
-    print(string.format("  %s: %.2f KB", label1, benchmark1.memory_stats.mean))
-    print(string.format("  %s: %.2f KB", label2, benchmark2.memory_stats.mean))
-    print(string.format("  Ratio: %.2fx", memory_ratio))
-    print(string.format("  %s uses %.1f%% %s memory", 
+    io.write("\nMemory Usage:\n")
+    io.write(string.format("  %s: %.2f KB\n", label1, benchmark1.memory_stats.mean))
+    io.write(string.format("  %s: %.2f KB\n", label2, benchmark2.memory_stats.mean))
+    io.write(string.format("  Ratio: %.2fx\n", memory_ratio))
+    io.write(string.format("  %s uses %.1f%% %s memory\n", 
       comparison.less_memory,
       comparison.memory_percent,
       memory_ratio < 1 and "less" or "more"
     ))
     
-    print(string.rep("-", 80))
+    io.write(string.rep("-", 80) .. "\n")
   end
   
   return comparison
@@ -281,20 +318,36 @@ end
 function benchmark.print_result(result, options)
   options = options or {}
   local precision = options.precision or benchmark.options.precision
-  local report_memory = options.report_memory !== nil and options.report_memory or benchmark.options.report_memory
-  local report_stats = options.report_stats !== nil and options.report_stats or benchmark.options.report_stats
+  local report_memory = options.report_memory ~= nil and options.report_memory or benchmark.options.report_memory
+  local report_stats = options.report_stats ~= nil and options.report_stats or benchmark.options.report_stats
+  local quiet = options.quiet or false
   
   local label = result.label or "Benchmark"
   
+  -- Log benchmark results
+  logger.debug("Benchmark result", {
+    label = label,
+    mean_time_seconds = result.time_stats.mean,
+    min_time_seconds = result.time_stats.min,
+    max_time_seconds = result.time_stats.max,
+    std_dev_seconds = result.time_stats.std_dev,
+    mean_memory_kb = result.memory_stats.mean,
+    min_memory_kb = result.memory_stats.min,
+    max_memory_kb = result.memory_stats.max
+  })
+  
+  -- If quiet mode, don't print to console
+  if quiet then return end
+  
   -- Basic execution time
-  print(string.format("  Mean execution time: %s", format_time(result.time_stats.mean)))
+  io.write(string.format("  Mean execution time: %s\n", format_time(result.time_stats.mean)))
   
   if report_stats then
-    print(string.format("  Min: %s  Max: %s", 
+    io.write(string.format("  Min: %s  Max: %s\n", 
       format_time(result.time_stats.min), 
       format_time(result.time_stats.max)
     ))
-    print(string.format("  Std Dev: %s (%.1f%%)", 
+    io.write(string.format("  Std Dev: %s (%.1f%%)\n", 
       format_time(result.time_stats.std_dev),
       (result.time_stats.std_dev / result.time_stats.mean) * 100
     ))
@@ -302,16 +355,22 @@ function benchmark.print_result(result, options)
   
   -- Memory stats
   if report_memory then
-    print(string.format("  Mean memory delta: %.2f KB", result.memory_stats.mean))
+    io.write(string.format("  Mean memory delta: %.2f KB\n", result.memory_stats.mean))
     
     if report_stats then
-      print(string.format("  Memory Min: %.2f KB  Max: %.2f KB", 
+      io.write(string.format("  Memory Min: %.2f KB  Max: %.2f KB\n", 
         result.memory_stats.min, 
         result.memory_stats.max
       ))
     end
   end
 end
+
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+logger.debug("Filesystem module loaded successfully", {
+  version = fs._VERSION
+})
 
 -- Generate benchmark data for large test suites
 function benchmark.generate_large_test_suite(options)
@@ -321,59 +380,91 @@ function benchmark.generate_large_test_suite(options)
   local nesting_level = options.nesting_level or 3
   local output_dir = options.output_dir or "./benchmark_tests"
   
+  logger.debug("Generating benchmark test suite", {
+    file_count = file_count,
+    tests_per_file = tests_per_file,
+    nesting_level = nesting_level,
+    output_dir = output_dir
+  })
+  
   -- Ensure output directory exists
-  os.execute("mkdir -p " .. output_dir)
+  local success, err = fs.ensure_directory_exists(output_dir)
+  if not success then
+    logger.error("Failed to create output directory", {
+      directory = output_dir,
+      error = err
+    })
+    return nil, "Failed to create output directory: " .. (err or "unknown error")
+  end
   
   -- Create test files
   for i = 1, file_count do
-    local file_path = output_dir .. "/test_" .. i .. ".lua"
-    local file = io.open(file_path, "w")
+    local file_path = fs.join_paths(output_dir, "test_" .. i .. ".lua")
     
-    if file then
-      -- Write test file header
-      file:write("-- Generated large test suite file #" .. i .. "\n")
-      file:write("local lust = require('lust-next')\n")
-      file:write("local describe, it, expect = lust.describe, lust.it, lust.expect\n\n")
+    -- Generate the test file content
+    local content = "-- Generated large test suite file #" .. i .. "\n" ..
+                   "local lust = require('lust-next')\n" ..
+                   "local describe, it, expect = lust.describe, lust.it, lust.expect\n\n"
+    
+    -- Create nested tests
+    local function generate_tests(level, prefix)
+      if level <= 0 then return "" end
       
-      -- Create nested tests
-      local function generate_tests(level, prefix)
-        if level <= 0 then return end
-        
-        local tests_at_level = level == nesting_level and tests_per_file or math.ceil(tests_per_file / level)
-        
-        for j = 1, tests_at_level do
-          if level == nesting_level then
-            -- Leaf test case
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("it('test " .. prefix .. "." .. j .. "', function()\n")
-            file:write(string.rep("  ", nesting_level - level + 1))
-            file:write("expect(1 + 1).to.equal(2)\n")
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("end)\n\n")
-          else
-            -- Nested describe block
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("describe('suite " .. prefix .. "." .. j .. "', function()\n")
-            generate_tests(level - 1, prefix .. "." .. j)
-            file:write(string.rep("  ", nesting_level - level))
-            file:write("end)\n\n")
-          end
+      local tests_at_level = level == nesting_level and tests_per_file or math.ceil(tests_per_file / level)
+      local test_content = ""
+      
+      for j = 1, tests_at_level do
+        if level == nesting_level then
+          -- Leaf test case
+          test_content = test_content .. string.rep("  ", nesting_level - level)
+          test_content = test_content .. "it('test " .. prefix .. "." .. j .. "', function()\n"
+          test_content = test_content .. string.rep("  ", nesting_level - level + 1)
+          test_content = test_content .. "expect(1 + 1).to.equal(2)\n"
+          test_content = test_content .. string.rep("  ", nesting_level - level)
+          test_content = test_content .. "end)\n\n"
+        else
+          -- Nested describe block
+          test_content = test_content .. string.rep("  ", nesting_level - level)
+          test_content = test_content .. "describe('suite " .. prefix .. "." .. j .. "', function()\n"
+          test_content = test_content .. generate_tests(level - 1, prefix .. "." .. j)
+          test_content = test_content .. string.rep("  ", nesting_level - level)
+          test_content = test_content .. "end)\n\n"
         end
       end
       
-      -- Start the top level describe block
-      file:write("describe('benchmark test file " .. i .. "', function()\n")
-      generate_tests(nesting_level, i)
-      file:write("end)\n")
-      
-      file:close()
-    else
-      print("Error: Failed to create test file " .. file_path)
+      return test_content
+    end
+    
+    -- Start the top level describe block
+    content = content .. "describe('benchmark test file " .. i .. "', function()\n"
+    content = content .. generate_tests(nesting_level, i)
+    content = content .. "end)\n"
+    
+    -- Write the file
+    logger.debug("Writing benchmark test file", {
+      file_path = file_path,
+      content_size = #content
+    })
+    
+    local success = fs.write_file(file_path, content)
+    
+    if not success then
+      logger.error("Failed to create test file", {path = file_path})
     end
   end
   
-  print("Generated " .. file_count .. " test files with approximately " .. 
-        (file_count * tests_per_file) .. " total tests in " .. output_dir)
+  -- Log test generation results
+  logger.info("Generated test files for benchmark", {
+    file_count = file_count,
+    test_count = file_count * tests_per_file,
+    output_dir = output_dir
+  })
+  
+  -- Print to console if not silent
+  if not options.silent then
+    io.write("Generated " .. file_count .. " test files with approximately " .. 
+          (file_count * tests_per_file) .. " total tests in " .. output_dir .. "\n")
+  end
   
   return {
     output_dir = output_dir,

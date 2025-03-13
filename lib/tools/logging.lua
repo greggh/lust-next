@@ -10,6 +10,42 @@ local function get_fs()
   return fs
 end
 
+-- Load optional components (lazy loading to avoid circular dependencies)
+local search_module, export_module, formatter_integration_module
+
+-- Function to get the search module
+local function get_search()
+  if not search_module then
+    local success, module = pcall(require, "lib.tools.logging.search")
+    if success then
+      search_module = module
+    end
+  end
+  return search_module
+end
+
+-- Function to get the export module
+local function get_export()
+  if not export_module then
+    local success, module = pcall(require, "lib.tools.logging.export")
+    if success then
+      export_module = module
+    end
+  end
+  return export_module
+end
+
+-- Function to get the formatter integration module
+local function get_formatter_integration()
+  if not formatter_integration_module then
+    local success, module = pcall(require, "lib.tools.logging.formatter_integration")
+    if success then
+      formatter_integration_module = module
+    end
+  end
+  return formatter_integration_module
+end
+
 -- Log levels
 M.LEVELS = {
   FATAL = 0,
@@ -430,27 +466,39 @@ local function flush_buffer()
     return
   end
   
+  local fs = get_fs()
+  
   -- Regular log file
   if config.output_file then
     local log_path = get_log_file_path()
-    local file = io.open(log_path, "a")
-    if file then
-      for _, entry in ipairs(buffer.entries) do
-        file:write(entry.text .. "\n")
-      end
-      file:close()
+    
+    -- Build content string
+    local content = ""
+    for _, entry in ipairs(buffer.entries) do
+      content = content .. entry.text .. "\n"
+    end
+    
+    -- Append to log file
+    local success, err = fs.append_file(log_path, content)
+    if not success then
+      print("Warning: Failed to write to log file: " .. (err or "unknown error"))
     end
   end
   
   -- JSON log file
   if config.json_file then
     local json_log_path = get_json_log_file_path()
-    local file = io.open(json_log_path, "a")
-    if file then
-      for _, entry in ipairs(buffer.entries) do
-        file:write(entry.json .. "\n")
-      end
-      file:close()
+    
+    -- Build JSON content string
+    local json_content = ""
+    for _, entry in ipairs(buffer.entries) do
+      json_content = json_content .. entry.json .. "\n"
+    end
+    
+    -- Append to JSON log file
+    local success, err = fs.append_file(json_log_path, json_content)
+    if not success then
+      print("Warning: Failed to write to JSON log file: " .. (err or "unknown error"))
     end
   end
   
@@ -507,10 +555,10 @@ local function log(level, module_name, message, params)
   end
   
   -- Direct file output (no buffering)
+  local fs = get_fs()
   
   -- Output to regular text log file if configured
   if config.output_file then
-    local fs = get_fs()
     local log_path = get_log_file_path()
     
     -- Ensure log directory exists
@@ -524,19 +572,15 @@ local function log(level, module_name, message, params)
       end
     end
     
-    -- Write to the log file
-    local file = io.open(log_path, "a")
-    if file then
-      file:write(formatted_text .. "\n")
-      file:close()
-    else
-      print("Warning: Failed to write to log file: " .. log_path)
+    -- Append to the log file
+    local success, err = fs.append_file(log_path, formatted_text .. "\n")
+    if not success then
+      print("Warning: Failed to write to log file: " .. (err or "unknown error"))
     end
   end
   
   -- Output to JSON log file if configured
   if config.json_file then
-    local fs = get_fs()
     local json_log_path = get_json_log_file_path()
     
     -- Ensure log directory exists
@@ -550,13 +594,10 @@ local function log(level, module_name, message, params)
       end
     end
     
-    -- Write to the JSON log file
-    local file = io.open(json_log_path, "a")
-    if file then
-      file:write(formatted_json .. "\n")
-      file:close()
-    else
-      print("Warning: Failed to write to JSON log file: " .. json_log_path)
+    -- Append to the JSON log file
+    local success, err = fs.append_file(json_log_path, formatted_json .. "\n")
+    if not success then
+      print("Warning: Failed to write to JSON log file: " .. (err or "unknown error"))
     end
   end
 end
@@ -846,16 +887,15 @@ function M.configure_from_options(module_name, options)
 end
 
 -- Configure logging for a module using the global config system
--- This method directly accesses the core config module if available
 function M.configure_from_config(module_name)
   -- First try to load the global config
   local log_level = M.LEVELS.INFO
   local config_obj
   
-  -- Try to load config module and get config
-  local success, core_config = pcall(require, "lib.core.config")
-  if success and core_config then
-    config_obj = core_config.get()
+  -- Try to load central_config module and get config
+  local success, central_config = pcall(require, "lib.core.central_config")
+  if success and central_config then
+    config_obj = central_config.get()
     
     -- Set log level based on global debug/verbose settings
     if config_obj and config_obj.debug then
@@ -1007,6 +1047,72 @@ end
 
 function M.log_verbose(message, module_name)
   log(M.LEVELS.VERBOSE, module_name, message)
+end
+
+-- Expose advanced functionality through submodules
+function M.search()
+  local search = get_search()
+  if not search then
+    error("Log search module not available")
+  end
+  return search
+end
+
+function M.export()
+  local export = get_export()
+  if not export then
+    error("Log export module not available")
+  end
+  return export
+end
+
+function M.formatter_integration()
+  local formatter_integration = get_formatter_integration()
+  if not formatter_integration then
+    error("Formatter integration module not available")
+  end
+  return formatter_integration
+end
+
+-- Create a buffered logger for high-volume logging
+function M.create_buffered_logger(module_name, options)
+  options = options or {}
+  
+  -- Apply buffering configuration
+  local buffer_size = options.buffer_size or 100
+  local flush_interval = options.flush_interval or 5 -- seconds
+  
+  -- Configure a buffered logger
+  local buffered_config = {
+    buffer_size = buffer_size,
+    buffer_flush_interval = flush_interval
+  }
+  
+  -- If output_file specified, use it
+  if options.output_file then
+    buffered_config.output_file = options.output_file
+  end
+  
+  -- Apply the configuration
+  M.configure(buffered_config)
+  
+  -- Create a logger with the specified module name
+  local logger = M.get_logger(module_name)
+  
+  -- Add flush method to this logger instance
+  logger.flush = function()
+    M.flush()
+    return logger
+  end
+  
+  -- Add auto-flush on shutdown
+  local mt = getmetatable(logger) or {}
+  mt.__gc = function()
+    logger.flush()
+  end
+  setmetatable(logger, mt)
+  
+  return logger
 end
 
 return M

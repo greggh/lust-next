@@ -1,31 +1,318 @@
 -- File watcher module for lust-next
 local watcher = {}
 local logging = require("lib.tools.logging")
+local fs = require("lib.tools.filesystem")
 
 -- Initialize module logger
 local logger = logging.get_logger("watcher")
-logging.configure_from_config("watcher")
 
--- List of file patterns to watch
-local watch_patterns = {
-  "%.lua$",           -- Lua source files
-  "%.txt$",           -- Text files
-  "%.json$",          -- JSON files
+-- Default configuration
+local DEFAULT_CONFIG = {
+  check_interval = 1.0, -- seconds
+  watch_patterns = {
+    "%.lua$",           -- Lua source files
+    "%.txt$",           -- Text files
+    "%.json$",          -- JSON files
+  },
+  default_directory = ".",
+  debug = false,
+  verbose = false
 }
+
+-- Current configuration
+local config = {
+  check_interval = DEFAULT_CONFIG.check_interval,
+  watch_patterns = {},
+  default_directory = DEFAULT_CONFIG.default_directory,
+  debug = DEFAULT_CONFIG.debug,
+  verbose = DEFAULT_CONFIG.verbose
+}
+
+-- Copy default watch patterns
+for _, pattern in ipairs(DEFAULT_CONFIG.watch_patterns) do
+  table.insert(config.watch_patterns, pattern)
+end
 
 -- Variables to track file state
 local file_timestamps = {}
 local last_check_time = 0
-local check_interval = 1.0 -- seconds
+
+-- Lazy loading of central_config to avoid circular dependencies
+local _central_config
+
+local function get_central_config()
+  if not _central_config then
+    -- Use pcall to safely attempt loading central_config
+    local success, central_config = pcall(require, "lib.core.central_config")
+    if success then
+      _central_config = central_config
+      
+      -- Register this module with central_config
+      _central_config.register_module("watcher", {
+        -- Schema
+        field_types = {
+          check_interval = "number",
+          watch_patterns = "table",
+          default_directory = "string",
+          debug = "boolean",
+          verbose = "boolean"
+        },
+        field_ranges = {
+          check_interval = {min = 0.1, max = 60}
+        }
+      }, DEFAULT_CONFIG)
+      
+      logger.debug("Successfully loaded central_config", {
+        module = "watcher"
+      })
+    else
+      logger.debug("Failed to load central_config", {
+        error = tostring(central_config)
+      })
+    end
+  end
+  
+  return _central_config
+end
+
+-- Set up change listener for central configuration
+local function register_change_listener()
+  local central_config = get_central_config()
+  if not central_config then
+    logger.debug("Cannot register change listener - central_config not available")
+    return false
+  end
+  
+  -- Register change listener for watcher configuration
+  central_config.on_change("watcher", function(path, old_value, new_value)
+    logger.debug("Configuration change detected", {
+      path = path,
+      changed_by = "central_config"
+    })
+    
+    -- Update local configuration from central_config
+    local watcher_config = central_config.get("watcher")
+    if watcher_config then
+      -- Update check_interval
+      if watcher_config.check_interval ~= nil and watcher_config.check_interval ~= config.check_interval then
+        config.check_interval = watcher_config.check_interval
+        logger.debug("Updated check_interval from central_config", {
+          check_interval = config.check_interval
+        })
+      end
+      
+      -- Update watch_patterns
+      if watcher_config.watch_patterns ~= nil then
+        -- Clear existing patterns and copy new ones
+        config.watch_patterns = {}
+        for _, pattern in ipairs(watcher_config.watch_patterns) do
+          table.insert(config.watch_patterns, pattern)
+        end
+        logger.debug("Updated watch_patterns from central_config", {
+          pattern_count = #config.watch_patterns
+        })
+      end
+      
+      -- Update default_directory
+      if watcher_config.default_directory ~= nil and watcher_config.default_directory ~= config.default_directory then
+        config.default_directory = watcher_config.default_directory
+        logger.debug("Updated default_directory from central_config", {
+          default_directory = config.default_directory
+        })
+      end
+      
+      -- Update debug setting
+      if watcher_config.debug ~= nil and watcher_config.debug ~= config.debug then
+        config.debug = watcher_config.debug
+        logger.debug("Updated debug setting from central_config", {
+          debug = config.debug
+        })
+      end
+      
+      -- Update verbose setting
+      if watcher_config.verbose ~= nil and watcher_config.verbose ~= config.verbose then
+        config.verbose = watcher_config.verbose
+        logger.debug("Updated verbose setting from central_config", {
+          verbose = config.verbose
+        })
+      end
+      
+      -- Update logging configuration
+      logging.configure_from_options("watcher", {
+        debug = config.debug,
+        verbose = config.verbose
+      })
+      
+      logger.debug("Applied configuration changes from central_config")
+    end
+  end)
+  
+  logger.debug("Registered change listener for central configuration")
+  return true
+end
+
+-- Configure the module
+function watcher.configure(options)
+  options = options or {}
+  
+  logger.debug("Configuring watcher module", {
+    options = options
+  })
+  
+  -- Check for central configuration first
+  local central_config = get_central_config()
+  if central_config then
+    -- Get existing central config values
+    local watcher_config = central_config.get("watcher")
+    
+    -- Apply central configuration (with defaults as fallback)
+    if watcher_config then
+      logger.debug("Using central_config values for initialization", {
+        check_interval = watcher_config.check_interval,
+        has_watch_patterns = watcher_config.watch_patterns ~= nil
+      })
+      
+      -- Apply check_interval
+      config.check_interval = watcher_config.check_interval ~= nil
+                           and watcher_config.check_interval
+                           or DEFAULT_CONFIG.check_interval
+      
+      -- Apply default_directory
+      config.default_directory = watcher_config.default_directory ~= nil
+                              and watcher_config.default_directory
+                              or DEFAULT_CONFIG.default_directory
+      
+      -- Apply debug and verbose settings
+      config.debug = watcher_config.debug ~= nil
+                    and watcher_config.debug
+                    or DEFAULT_CONFIG.debug
+                    
+      config.verbose = watcher_config.verbose ~= nil
+                      and watcher_config.verbose
+                      or DEFAULT_CONFIG.verbose
+      
+      -- Apply watch_patterns if available
+      if watcher_config.watch_patterns then
+        config.watch_patterns = {}
+        for _, pattern in ipairs(watcher_config.watch_patterns) do
+          table.insert(config.watch_patterns, pattern)
+        end
+      else
+        -- Reset to defaults
+        config.watch_patterns = {}
+        for _, pattern in ipairs(DEFAULT_CONFIG.watch_patterns) do
+          table.insert(config.watch_patterns, pattern)
+        end
+      end
+    else
+      logger.debug("No central_config values found, using defaults")
+      -- Reset to defaults
+      config.check_interval = DEFAULT_CONFIG.check_interval
+      config.default_directory = DEFAULT_CONFIG.default_directory
+      config.debug = DEFAULT_CONFIG.debug
+      config.verbose = DEFAULT_CONFIG.verbose
+      
+      config.watch_patterns = {}
+      for _, pattern in ipairs(DEFAULT_CONFIG.watch_patterns) do
+        table.insert(config.watch_patterns, pattern)
+      end
+    end
+    
+    -- Register change listener if not already done
+    register_change_listener()
+  else
+    logger.debug("central_config not available, using defaults")
+    -- Apply defaults
+    config.check_interval = DEFAULT_CONFIG.check_interval
+    config.default_directory = DEFAULT_CONFIG.default_directory
+    config.debug = DEFAULT_CONFIG.debug
+    config.verbose = DEFAULT_CONFIG.verbose
+    
+    config.watch_patterns = {}
+    for _, pattern in ipairs(DEFAULT_CONFIG.watch_patterns) do
+      table.insert(config.watch_patterns, pattern)
+    end
+  end
+  
+  -- Apply user options (highest priority) and update central config
+  if options.check_interval ~= nil then
+    config.check_interval = options.check_interval
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("watcher.check_interval", options.check_interval)
+    end
+  end
+  
+  if options.default_directory ~= nil then
+    config.default_directory = options.default_directory
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("watcher.default_directory", options.default_directory)
+    end
+  end
+  
+  if options.debug ~= nil then
+    config.debug = options.debug
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("watcher.debug", options.debug)
+    end
+  end
+  
+  if options.verbose ~= nil then
+    config.verbose = options.verbose
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("watcher.verbose", options.verbose)
+    end
+  end
+  
+  if options.watch_patterns ~= nil then
+    -- Replace watch patterns
+    config.watch_patterns = {}
+    for _, pattern in ipairs(options.watch_patterns) do
+      table.insert(config.watch_patterns, pattern)
+    end
+    
+    -- Update central_config if available
+    if central_config then
+      central_config.set("watcher.watch_patterns", options.watch_patterns)
+    end
+  end
+  
+  -- Configure logging
+  logging.configure_from_options("watcher", {
+    debug = config.debug,
+    verbose = config.verbose
+  })
+  
+  logger.debug("Watcher module configuration complete", {
+    check_interval = config.check_interval,
+    watch_patterns_count = #config.watch_patterns,
+    default_directory = config.default_directory,
+    debug = config.debug,
+    verbose = config.verbose,
+    using_central_config = central_config ~= nil
+  })
+  
+  return watcher
+end
+
+-- Initialize the module
+watcher.configure()
 
 -- Function to check if a file matches any of the watch patterns
 local function should_watch_file(filename)
-  for _, pattern in ipairs(watch_patterns) do
+  for _, pattern in ipairs(config.watch_patterns) do
     if filename:match(pattern) then
       logger.debug("File matches watch pattern", {
-    filename = filename,
-    pattern = pattern
-  })
+        filename = filename,
+        pattern = pattern
+      })
       return true
     end
   end
@@ -35,19 +322,10 @@ end
 
 -- Get file modification time
 local function get_file_mtime(path)
-  local cmd = string.format('stat -c "%%Y" "%s" 2>/dev/null || stat -f "%%m" "%s" 2>/dev/null', path, path)
-  local file = io.popen(cmd)
-  if not file then
-    logger.warn("Failed to get modification time", {path = path})
-    return nil 
-  end
-  
-  local mtime = file:read("*n")
-  file:close()
-  
+  local mtime, err = fs.get_modified_time(path)
   if not mtime then
-    logger.warn("Could not read modification time", {path = path})
-    return nil
+    logger.warn("Failed to get modification time", {path = path, error = err})
+    return nil 
   end
   
   logger.debug("File modification time", {path = path, mtime = mtime})
@@ -73,19 +351,16 @@ function watcher.init(directories, exclude_patterns)
   for _, dir in ipairs(directories) do
     logger.info("Watching directory", {directory = dir})
     
-    -- Use find to get all files (Linux/macOS compatible)
-    local cmd = 'find "' .. dir .. '" -type f 2>/dev/null'
-    logger.debug("Executing find command", {command = cmd})
-    local pipe = io.popen(cmd)
+    -- Use filesystem module to scan directory recursively
+    logger.debug("Scanning directory recursively", {directory = dir})
+    local files = fs.scan_directory(dir, true)
     
-    if pipe then
-      local file_count = 0
+    if files then
+      local file_count = #files
       local exclude_count = 0
       local watch_count = 0
       
-      for path in pipe:lines() do
-        file_count = file_count + 1
-        
+      for _, path in ipairs(files) do
         -- Check if file should be excluded
         local exclude = false
         for _, exclude_func in ipairs(excludes) do
@@ -113,10 +388,8 @@ function watcher.init(directories, exclude_patterns)
         files_excluded = exclude_count,
         files_watched = watch_count
       })
-      
-      pipe:close()
     else
-      logger.error("Failed to open pipe for directory scan", {directory = dir})
+      logger.error("Failed to scan directory", {directory = dir})
     end
   end
   
@@ -132,10 +405,10 @@ end
 function watcher.check_for_changes()
   -- Don't check too frequently
   local current_time = os.time()
-  if current_time - last_check_time < check_interval then
+  if current_time - last_check_time < config.check_interval then
     logger.verbose("Skipping file check", {
       elapsed = current_time - last_check_time,
-      required_interval = check_interval
+      required_interval = config.check_interval
     })
     return nil
   end
@@ -166,13 +439,13 @@ function watcher.check_for_changes()
   end
   
   -- Check for new files
-  for _, dir in ipairs({"."}) do  -- Default to current directory
-    local cmd = 'find "' .. dir .. '" -type f -name "*.lua" 2>/dev/null'
-    logger.debug("Checking for new files", {command = cmd})
-    local pipe = io.popen(cmd)
+  local dirs = {config.default_directory}
+  for _, dir in ipairs(dirs) do
+    logger.debug("Checking for new files", {directory = dir})
+    local files = fs.scan_directory(dir, true)
     
-    if pipe then
-      for path in pipe:lines() do
+    if files then
+      for _, path in ipairs(files) do
         if should_watch_file(path) and not file_timestamps[path] then
           local mtime = get_file_mtime(path)
           if mtime then
@@ -182,9 +455,8 @@ function watcher.check_for_changes()
           end
         end
       end
-      pipe:close()
     else
-      logger.warn("Failed to execute find command", {purpose = "new file check"})
+      logger.warn("Failed to scan directory for new files", {directory = dir})
     end
   end
   
@@ -201,14 +473,109 @@ end
 function watcher.add_patterns(patterns)
   for _, pattern in ipairs(patterns) do
     logger.info("Adding watch pattern", {pattern = pattern})
-    table.insert(watch_patterns, pattern)
+    table.insert(config.watch_patterns, pattern)
+    
+    -- Update central_config if available
+    local central_config = get_central_config()
+    if central_config then
+      -- Get current patterns
+      local current_patterns = central_config.get("watcher.watch_patterns") or {}
+      -- Add new pattern
+      table.insert(current_patterns, pattern)
+      -- Update central config
+      central_config.set("watcher.watch_patterns", current_patterns)
+      
+      logger.debug("Updated watch_patterns in central_config", {
+        pattern_count = #current_patterns
+      })
+    end
   end
+  
+  return watcher
 end
 
 -- Set check interval
 function watcher.set_check_interval(interval)
   logger.info("Setting check interval", {seconds = interval})
-  check_interval = interval
+  config.check_interval = interval
+  
+  -- Update central_config if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.set("watcher.check_interval", interval)
+    logger.debug("Updated check_interval in central_config", {
+      check_interval = interval
+    })
+  end
+  
+  return watcher
+end
+
+-- Reset the module configuration to defaults
+function watcher.reset()
+  logger.debug("Resetting watcher module configuration to defaults")
+  
+  -- Reset check_interval and default_directory
+  config.check_interval = DEFAULT_CONFIG.check_interval
+  config.default_directory = DEFAULT_CONFIG.default_directory
+  config.debug = DEFAULT_CONFIG.debug
+  config.verbose = DEFAULT_CONFIG.verbose
+  
+  -- Reset watch_patterns
+  config.watch_patterns = {}
+  for _, pattern in ipairs(DEFAULT_CONFIG.watch_patterns) do
+    table.insert(config.watch_patterns, pattern)
+  end
+  
+  return watcher
+end
+
+-- Fully reset both local and central configuration
+function watcher.full_reset()
+  -- Reset local configuration
+  watcher.reset()
+  
+  -- Reset central configuration if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.reset("watcher")
+    logger.debug("Reset central configuration for watcher module")
+  end
+  
+  return watcher
+end
+
+-- Debug helper to show current configuration
+function watcher.debug_config()
+  local debug_info = {
+    local_config = {
+      check_interval = config.check_interval,
+      default_directory = config.default_directory,
+      debug = config.debug,
+      verbose = config.verbose,
+      watch_patterns = config.watch_patterns
+    },
+    using_central_config = false,
+    central_config = nil,
+    file_count = 0
+  }
+  
+  -- Count monitored files
+  for _ in pairs(file_timestamps) do
+    debug_info.file_count = debug_info.file_count + 1
+  end
+  
+  -- Check for central_config
+  local central_config = get_central_config()
+  if central_config then
+    debug_info.using_central_config = true
+    debug_info.central_config = central_config.get("watcher")
+  end
+  
+  -- Display configuration
+  logger.info("Watcher module configuration", debug_info)
+  
+  return debug_info
 end
 
 return watcher

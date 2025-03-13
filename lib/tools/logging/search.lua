@@ -3,14 +3,8 @@
 
 local M = {}
 
--- Try to import filesystem module (might not be available during first load)
-local fs
-local function get_fs()
-  if not fs then
-    fs = require("lib.tools.filesystem")
-  end
-  return fs
-end
+-- Require filesystem module - fail if not available
+local fs = require("lib.tools.filesystem")
 
 -- Parse a log line (text format)
 local function parse_text_log_line(line)
@@ -185,11 +179,6 @@ end
 function M.get_log_stats(log_file, options)
   options = options or {}
   
-  local fs = get_fs()
-  if not fs then
-    return nil, "Filesystem module not available"
-  end
-  
   -- Check if file exists
   if not fs.file_exists(log_file) then
     return nil, "Log file does not exist: " .. log_file
@@ -198,10 +187,10 @@ function M.get_log_stats(log_file, options)
   -- Determine log format (text or JSON)
   local is_json = log_file:match("%.json$") or options.format == "json"
   
-  -- Open log file
-  local file, err = io.open(log_file, "r")
-  if not file then
-    return nil, "Failed to open log file: " .. (err or "unknown error")
+  -- Read log file
+  local content, err = fs.read_file(log_file)
+  if not content then
+    return nil, "Failed to read log file: " .. (err or "unknown error")
   end
   
   -- Initialize statistics
@@ -215,8 +204,8 @@ function M.get_log_stats(log_file, options)
     last_timestamp = nil
   }
   
-  -- Process log file
-  for line in file:lines() do
+  -- Process log file line by line
+  for line in content:gmatch("([^\r\n]+)[\r\n]*") do
     local log_entry
     
     -- Parse based on format
@@ -260,9 +249,6 @@ function M.get_log_stats(log_file, options)
     end
   end
   
-  -- Close file
-  file:close()
-  
   -- Add file size information
   stats.file_size = fs.get_file_size(log_file)
   
@@ -273,11 +259,6 @@ end
 function M.export_logs(log_file, output_file, format, options)
   options = options or {}
   
-  local fs = get_fs()
-  if not fs then
-    return nil, "Filesystem module not available"
-  end
-  
   -- Check if source file exists
   if not fs.file_exists(log_file) then
     return nil, "Log file does not exist: " .. log_file
@@ -286,30 +267,30 @@ function M.export_logs(log_file, output_file, format, options)
   -- Determine source log format (text or JSON)
   local is_json_source = log_file:match("%.json$") or options.source_format == "json"
   
-  -- Open source log file
-  local source_file, err = io.open(log_file, "r")
-  if not source_file then
-    return nil, "Failed to open source log file: " .. (err or "unknown error")
+  -- Read source log file
+  local source_content, err = fs.read_file(log_file)
+  if not source_content then
+    return nil, "Failed to read source log file: " .. (err or "unknown error")
   end
   
-  -- Create output file
-  local output, err = io.open(output_file, "w")
-  if not output then
-    source_file:close()
-    return nil, "Failed to create output file: " .. (err or "unknown error")
+  -- Ensure output directory exists
+  local output_dir = fs.get_directory_name(output_file)
+  if output_dir and output_dir ~= "" then
+    local success, err = fs.ensure_directory_exists(output_dir)
+    if not success then
+      return nil, "Failed to create output directory: " .. (err or "unknown error")
+    end
   end
   
-  -- Function to write CSV header
-  local function write_csv_header()
-    output:write("timestamp,level,module,message\n")
-  end
+  -- Prepare output content
+  local output_content = ""
   
-  -- Write format-specific header
+  -- Add format-specific header
   if format == "csv" then
-    write_csv_header()
+    output_content = output_content .. "timestamp,level,module,message\n"
   elseif format == "html" then
-    -- Write HTML header
-    output:write([[
+    -- Add HTML header
+    output_content = output_content .. [[
 <!DOCTYPE html>
 <html>
 <head>
@@ -338,12 +319,12 @@ function M.export_logs(log_file, output_file, format, options)
       <th>Module</th>
       <th>Message</th>
     </tr>
-]])
+]]
   end
   
   -- Process each line
   local count = 0
-  for line in source_file:lines() do
+  for line in source_content:gmatch("([^\r\n]+)[\r\n]*") do
     local log_entry
     
     -- Parse based on format
@@ -357,30 +338,29 @@ function M.export_logs(log_file, output_file, format, options)
     if log_entry then
       count = count + 1
       
-      -- Write entry in the output format
+      -- Add entry in the output format
       if format == "json" and not is_json_source then
         -- Convert text log to JSON format
-        output:write(string.format(
+        output_content = output_content .. string.format(
           '{"timestamp":"%s","level":"%s","module":"%s","message":"%s"}',
           log_entry.timestamp or "",
           log_entry.level or "",
           log_entry.module or "",
           (log_entry.message or ""):gsub('"', '\\"')
-        ))
-        output:write("\n")
+        ) .. "\n"
       elseif format == "csv" then
-        -- Write as CSV
-        output:write(string.format(
+        -- Add as CSV
+        output_content = output_content .. string.format(
           '"%s","%s","%s","%s"\n',
           log_entry.timestamp or "",
           log_entry.level or "",
           log_entry.module or "",
           (log_entry.message or ""):gsub('"', '""')  -- Escape quotes in CSV
-        ))
+        )
       elseif format == "html" then
-        -- Write as HTML table row
+        -- Add as HTML table row
         local level_class = log_entry.level and log_entry.level:lower() or ""
-        output:write(string.format(
+        output_content = output_content .. string.format(
           '    <tr class="%s">\n      <td>%s</td>\n      <td class="%s">%s</td>\n      <td>%s</td>\n      <td>%s</td>\n    </tr>\n',
           log_entry.level and log_entry.level:lower() == "fatal" and "fatal" or "",
           log_entry.timestamp or "",
@@ -388,7 +368,7 @@ function M.export_logs(log_file, output_file, format, options)
           log_entry.level or "",
           log_entry.module or "",
           (log_entry.message or ""):gsub("<", "&lt;"):gsub(">", "&gt;")  -- Escape HTML
-        ))
+        )
       elseif format == "text" and is_json_source then
         -- Convert JSON log to text format
         local text = string.format(
@@ -398,27 +378,29 @@ function M.export_logs(log_file, output_file, format, options)
           log_entry.module or "",
           log_entry.message or ""
         )
-        output:write(text .. "\n")
+        output_content = output_content .. text .. "\n"
       else
         -- Copy as-is
-        output:write(log_entry.raw .. "\n")
+        output_content = output_content .. log_entry.raw .. "\n"
       end
     end
   end
   
-  -- Write format-specific footer
+  -- Add format-specific footer
   if format == "html" then
-    output:write([[
+    output_content = output_content .. [[
   </table>
   <p>Total entries: ]] .. count .. [[</p>
 </body>
 </html>
-]])
+]]
   end
   
-  -- Close files
-  source_file:close()
-  output:close()
+  -- Write the complete output content to file
+  local success, write_err = fs.write_file(output_file, output_content)
+  if not success then
+    return nil, "Failed to write output file: " .. (write_err or "unknown error")
+  end
   
   return {
     entries_processed = count,
@@ -520,15 +502,29 @@ function M.get_log_processor(options)
   
   -- Add file output if configured
   if options.output_file then
-    local file = io.open(options.output_file, "a")
-    if file then
-      table.insert(outputs, {
-        type = "file",
-        format = options.format or "text",
-        file = file,
-        close = function() file:close() end
-      })
+    -- Ensure output directory exists
+    local dir = fs.get_directory_name(options.output_file)
+    if dir and dir ~= "" then
+      fs.ensure_directory_exists(dir)
     end
+    
+    -- Create an output handler
+    table.insert(outputs, {
+      type = "file",
+      format = options.format or "text",
+      path = options.output_file,
+      buffer = "",
+      flush_interval = options.flush_interval or 10, -- Seconds
+      last_flush = os.time(),
+      flush = function(self)
+        if self.buffer and self.buffer ~= "" then
+          fs.append_file(self.path, self.buffer)
+          self.buffer = ""
+          self.last_flush = os.time()
+        end
+      end,
+      close = function(self) self:flush() end
+    })
   end
   
   -- Add adapter output if configured
@@ -587,38 +583,42 @@ function M.get_log_processor(options)
       if include then
         for _, output in ipairs(outputs) do
           if output.type == "file" then
+            local line
             if output.format == "json" then
-              -- Write as JSON
-              output.file:write(string.format(
+              -- Format as JSON
+              line = string.format(
                 '{"timestamp":"%s","level":"%s","module":"%s","message":"%s"}',
                 log_entry.timestamp or "",
                 log_entry.level or "",
                 log_entry.module or "",
                 (log_entry.message or ""):gsub('"', '\\"')
-              ))
-              output.file:write("\n")
-              output.file:flush()
+              ) .. "\n"
             elseif output.format == "csv" then
-              -- Write as CSV
-              output.file:write(string.format(
+              -- Format as CSV
+              line = string.format(
                 '"%s","%s","%s","%s"\n',
                 log_entry.timestamp or "",
                 log_entry.level or "",
                 log_entry.module or "",
                 (log_entry.message or ""):gsub('"', '""')  -- Escape quotes in CSV
-              ))
-              output.file:flush()
+              )
             else
-              -- Write as text
-              local text = string.format(
+              -- Format as text
+              line = string.format(
                 "%s | %s | %s | %s",
                 log_entry.timestamp or "",
                 log_entry.level or "",
                 log_entry.module or "",
                 log_entry.message or ""
-              )
-              output.file:write(text .. "\n")
-              output.file:flush()
+              ) .. "\n"
+            end
+            
+            -- Add to buffer
+            output.buffer = output.buffer .. line
+            
+            -- Check if it's time to flush
+            if os.time() - output.last_flush >= output.flush_interval then
+              output:flush()
             end
           elseif output.type == "adapter" then
             -- Process through adapter
@@ -642,7 +642,7 @@ function M.get_log_processor(options)
     close = function()
       for _, output in ipairs(outputs) do
         if output.type == "file" and output.close then
-          output.close()
+          output:close()
         end
       end
     end

@@ -3,7 +3,16 @@ This module implements a validator for the AST
 Based on lua-parser by Andre Murbach Maidl (https://github.com/andremm/lua-parser)
 ]]
 
-local M = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("validator")
+logging.configure_from_config("validator")
+
+local M = {
+  -- Module version
+  _VERSION = "1.0.0"
+}
 
 -- Utility functions for scope management
 local scope_util = {}
@@ -71,6 +80,15 @@ end
 local function syntaxerror(errorinfo, pos, msg)
   local l, c = scope_util.lineno(errorinfo.subject, pos)
   local error_msg = "%s:%d:%d: syntax error, %s"
+  
+  logger.error("Syntax error in source", {
+    filename = errorinfo.filename,
+    line = l,
+    column = c,
+    message = msg,
+    position = pos
+  })
+  
   return string.format(error_msg, errorinfo.filename, l, c, msg)
 end
 
@@ -85,15 +103,33 @@ end
 
 -- Set a label in the current scope
 local function set_label(env, label, pos)
+  logger.debug("Setting label in current scope", {
+    label = label,
+    scope = env.scope,
+    position = pos
+  })
+  
   local scope = env.scope
   local l = env[scope]["label"][label]
+  
   if not l then
     env[scope]["label"][label] = { name = label, pos = pos }
+    logger.debug("Label set successfully", {
+      label = label,
+      scope = scope
+    })
     return true
   else
-    local msg = "label '%s' already defined at line %d"
     local line = scope_util.lineno(env.errorinfo.subject, l.pos)
+    local msg = "label '%s' already defined at line %d"
     msg = string.format(msg, label, line)
+    
+    logger.error("Label already defined", {
+      label = label,
+      existing_line = line,
+      new_position = pos
+    })
+    
     return nil, syntaxerror(env.errorinfo, pos, msg)
   end
 end
@@ -101,21 +137,56 @@ end
 -- Set a pending goto statement
 local function set_pending_goto(env, stm)
   local scope = env.scope
+  
+  logger.debug("Setting pending goto statement", {
+    label = stm[1],
+    scope = scope,
+    position = stm.pos
+  })
+  
   table.insert(env[scope]["goto"], stm)
   return true
 end
 
 -- Verify all pending goto statements
 local function verify_pending_gotos(env)
+  logger.debug("Verifying all pending goto statements", {
+    max_scope = env.maxscope
+  })
+  
+  local goto_count = 0
+  for s=env.maxscope, 0, -1 do
+    goto_count = goto_count + #env[s]["goto"]
+  end
+  
+  logger.debug("Found pending goto statements", {
+    count = goto_count
+  })
+  
   for s=env.maxscope, 0, -1 do
     for k, v in ipairs(env[s]["goto"]) do
+      logger.debug("Checking goto statement", {
+        label = v[1],
+        scope = s,
+        index = k
+      })
+      
       if not exist_label(env, s, v) then
         local msg = "no visible label '%s' for <goto>"
         msg = string.format(msg, v[1])
+        
+        logger.error("No visible label for goto", {
+          label = v[1],
+          scope = s,
+          position = v.pos
+        })
+        
         return nil, syntaxerror(env.errorinfo, v.pos, msg)
       end
     end
   end
+  
+  logger.debug("All goto statements verified successfully")
   return true
 end
 
@@ -189,10 +260,24 @@ end
 
 -- Traverse a vararg expression
 local function traverse_vararg(env, exp)
+  logger.debug("Traversing vararg expression", {
+    position = exp.pos,
+    function_scope = env.fscope
+  })
+  
   if not env["function"][env.fscope].is_vararg then
     local msg = "cannot use '...' outside a vararg function"
+    
+    logger.error("Invalid vararg usage", {
+      position = exp.pos,
+      function_scope = env.fscope,
+      is_vararg = false
+    })
+    
     return nil, syntaxerror(env.errorinfo, exp.pos, msg)
   end
+  
+  logger.debug("Vararg expression is valid")
   return true
 end
 
@@ -229,10 +314,25 @@ end
 
 -- Traverse a break statement
 local function traverse_break(env, stm)
+  logger.debug("Traversing break statement", {
+    position = stm.pos,
+    inside_loop = scope_util.insideloop(env),
+    loop_count = env.loop
+  })
+  
   if not scope_util.insideloop(env) then
     local msg = "<break> not inside a loop"
+    
+    logger.error("Invalid break statement", {
+      position = stm.pos,
+      inside_loop = false,
+      loop_count = env.loop
+    })
+    
     return nil, syntaxerror(env.errorinfo, stm.pos, msg)
   end
+  
+  logger.debug("Break statement is valid")
   return true
 end
 
@@ -467,8 +567,11 @@ end
 
 -- Validate an AST
 function M.validate(ast, errorinfo)
+  logger.debug("Starting AST validation")
+  
   assert(type(ast) == "table")
   assert(type(errorinfo) == "table")
+  
   local env = { 
     errorinfo = errorinfo, 
     ["function"] = {}, 
@@ -477,18 +580,46 @@ function M.validate(ast, errorinfo)
     fscope = -1, 
     loop = 0 
   }
+  
+  logger.debug("Initialized validation environment", {
+    has_errorinfo = errorinfo ~= nil,
+    ast_type = type(ast)
+  })
+  
   scope_util.new_function(env)
   set_vararg(env, true)
+  
+  logger.debug("Starting block traversal")
   local status, msg = traverse_block(env, ast)
-  if not status then return status, msg end
+  if not status then 
+    logger.error("Block traversal failed", {
+      error = msg
+    })
+    return status, msg 
+  end
+  
   scope_util.end_function(env)
+  
+  logger.debug("Verifying pending goto statements")
   status, msg = verify_pending_gotos(env)
-  if not status then return status, msg end
+  if not status then 
+    logger.error("Goto verification failed", {
+      error = msg
+    })
+    return status, msg 
+  end
+  
+  logger.debug("AST validation completed successfully")
   return ast
 end
 
 -- Helper function for creating syntax error messages
 function M.syntaxerror(errorinfo, pos, msg)
+  logger.error("Syntax error encountered", {
+    filename = errorinfo and errorinfo.filename or "unknown",
+    position = pos,
+    message = msg
+  })
   return syntaxerror(errorinfo, pos, msg)
 end
 

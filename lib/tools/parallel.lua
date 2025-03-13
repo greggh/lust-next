@@ -2,9 +2,14 @@
 -- Provides functionality to run test files in parallel for better resource utilization
 
 local parallel = {}
+local logging = require("lib.tools.logging")
+local fs = require("lib.tools.filesystem")
+
+-- Initialize module logger
+local logger = logging.get_logger("parallel")
 
 -- Default configuration
-parallel.options = {
+local DEFAULT_CONFIG = {
   workers = 4,                 -- Default number of worker processes
   timeout = 60,                -- Default timeout in seconds per test file
   output_buffer_size = 10240,  -- Buffer size for capturing output
@@ -12,7 +17,190 @@ parallel.options = {
   show_worker_output = true,   -- Show output from worker processes
   fail_fast = false,           -- Stop on first failure
   aggregate_coverage = true,   -- Combine coverage data from all workers
+  debug = false,               -- Debug mode
 }
+
+-- Current configuration (will be synchronized with central config)
+parallel.options = {
+  workers = DEFAULT_CONFIG.workers,
+  timeout = DEFAULT_CONFIG.timeout,
+  output_buffer_size = DEFAULT_CONFIG.output_buffer_size,
+  verbose = DEFAULT_CONFIG.verbose,
+  show_worker_output = DEFAULT_CONFIG.show_worker_output,
+  fail_fast = DEFAULT_CONFIG.fail_fast,
+  aggregate_coverage = DEFAULT_CONFIG.aggregate_coverage,
+  debug = DEFAULT_CONFIG.debug,
+}
+
+-- Lazy loading of central_config to avoid circular dependencies
+local _central_config
+
+local function get_central_config()
+  if not _central_config then
+    -- Use pcall to safely attempt loading central_config
+    local success, central_config = pcall(require, "lib.core.central_config")
+    if success then
+      _central_config = central_config
+      
+      -- Register this module with central_config
+      _central_config.register_module("parallel", {
+        -- Schema
+        field_types = {
+          workers = "number",
+          timeout = "number",
+          output_buffer_size = "number",
+          verbose = "boolean",
+          show_worker_output = "boolean",
+          fail_fast = "boolean",
+          aggregate_coverage = "boolean",
+          debug = "boolean"
+        },
+        field_ranges = {
+          workers = {min = 1, max = 64},
+          timeout = {min = 1},
+          output_buffer_size = {min = 1024}
+        }
+      }, DEFAULT_CONFIG)
+      
+      logger.debug("Successfully loaded central_config", {
+        module = "parallel"
+      })
+    else
+      logger.debug("Failed to load central_config", {
+        error = tostring(central_config)
+      })
+    end
+  end
+  
+  return _central_config
+end
+
+-- Set up change listener for central configuration
+local function register_change_listener()
+  local central_config = get_central_config()
+  if not central_config then
+    logger.debug("Cannot register change listener - central_config not available")
+    return false
+  end
+  
+  -- Register change listener for parallel configuration
+  central_config.on_change("parallel", function(path, old_value, new_value)
+    logger.debug("Configuration change detected", {
+      path = path,
+      changed_by = "central_config"
+    })
+    
+    -- Update local configuration from central_config
+    local parallel_config = central_config.get("parallel")
+    if parallel_config then
+      -- Update configuration values
+      for key, value in pairs(parallel_config) do
+        if parallel.options[key] ~= nil and parallel.options[key] ~= value then
+          parallel.options[key] = value
+          logger.debug("Updated configuration from central_config", {
+            key = key,
+            value = value
+          })
+        end
+      end
+      
+      -- Update logging configuration if debug/verbose changed
+      if parallel.options.debug ~= nil or parallel.options.verbose ~= nil then
+        logging.configure_from_options("parallel", {
+          debug = parallel.options.debug,
+          verbose = parallel.options.verbose
+        })
+      end
+      
+      logger.debug("Applied configuration changes from central_config")
+    end
+  end)
+  
+  logger.debug("Registered change listener for central configuration")
+  return true
+end
+
+-- Configure the module
+function parallel.configure(options)
+  options = options or {}
+  
+  logger.debug("Configuring parallel module", {
+    options = options
+  })
+  
+  -- Check for central configuration first
+  local central_config = get_central_config()
+  if central_config then
+    -- Get existing central config values
+    local parallel_config = central_config.get("parallel")
+    
+    -- Apply central configuration (with defaults as fallback)
+    if parallel_config then
+      logger.debug("Using central_config values for initialization", {
+        workers = parallel_config.workers,
+        timeout = parallel_config.timeout
+      })
+      
+      -- Apply each configuration option with fallbacks to defaults
+      for key, default_value in pairs(DEFAULT_CONFIG) do
+        parallel.options[key] = parallel_config[key] ~= nil
+                              and parallel_config[key]
+                              or default_value
+      end
+    else
+      logger.debug("No central_config values found, using defaults")
+      -- Reset to defaults
+      for key, value in pairs(DEFAULT_CONFIG) do
+        parallel.options[key] = value
+      end
+    end
+    
+    -- Register change listener if not already done
+    register_change_listener()
+  else
+    logger.debug("central_config not available, using defaults")
+    -- Apply defaults
+    for key, value in pairs(DEFAULT_CONFIG) do
+      parallel.options[key] = value
+    end
+  end
+  
+  -- Apply user options (highest priority) and update central config
+  for key, value in pairs(options) do
+    if parallel.options[key] ~= nil then
+      -- Apply local option
+      parallel.options[key] = value
+      
+      -- Update central_config if available
+      if central_config then
+        central_config.set("parallel." .. key, value)
+      end
+    end
+  end
+  
+  -- Configure logging
+  logging.configure_from_options("parallel", {
+    debug = parallel.options.debug,
+    verbose = parallel.options.verbose
+  })
+  
+  logger.debug("Parallel module configuration complete", {
+    workers = parallel.options.workers,
+    timeout = parallel.options.timeout,
+    output_buffer_size = parallel.options.output_buffer_size,
+    verbose = parallel.options.verbose,
+    show_worker_output = parallel.options.show_worker_output,
+    fail_fast = parallel.options.fail_fast,
+    aggregate_coverage = parallel.options.aggregate_coverage,
+    debug = parallel.options.debug,
+    using_central_config = central_config ~= nil
+  })
+  
+  return parallel
+end
+
+-- Initialize the module
+parallel.configure()
 
 -- Store reference to lust-next
 parallel.lust_next = nil
@@ -137,7 +325,11 @@ local function run_test_file(file, options)
   cmd = cmd .. " > " .. result_file .. " 2>&1"
   
   if options.verbose then
-    print("Running: " .. cmd)
+    logger.debug("Running test file", {command = cmd, file = file})
+    -- Keep console output for verbose mode
+    io.write("Running: " .. cmd .. "\n")
+  else
+    logger.debug("Running test file", {file = file})
   end
   
   -- Execute the command
@@ -146,11 +338,19 @@ local function run_test_file(file, options)
   
   -- Read the command output
   local output = ""
-  local f = io.open(result_file, "r")
-  if f then
-    output = f:read("*a")
-    f:close()
-    os.remove(result_file)
+  local content, err = fs.read_file(result_file)
+  if content then
+    output = content
+    -- Use filesystem module to delete the file instead of os.remove
+    local delete_success, delete_err = fs.delete_file(result_file)
+    if not delete_success then
+      logger.warn("Failed to delete temporary result file", {
+        file = result_file,
+        error = delete_err
+      })
+    end
+  else
+    logger.warn("Failed to read result file", {file = result_file, error = err})
   end
   
   -- Parse the JSON results from the output
@@ -222,8 +422,15 @@ function parallel.run_tests(files, options)
     end
   end
   
+  logger.info("Starting parallel test execution", {
+    file_count = #files,
+    worker_count = options.workers,
+    timeout = options.timeout,
+    fail_fast = options.fail_fast
+  })
+  
   if options.verbose then
-    print("Running " .. #files .. " test files with " .. options.workers .. " workers")
+    io.write("Running " .. #files .. " test files with " .. options.workers .. " workers\n")
   end
   
   -- Create results object
@@ -244,17 +451,25 @@ function parallel.run_tests(files, options)
       active_workers = active_workers + 1
       
       if options.verbose then
-        print("Starting worker for: " .. file)
+        logger.debug("Starting worker", {file = file, worker_id = active_workers})
+        io.write("Starting worker for: " .. file .. "\n")
       end
       
       -- Run the test file and process results
       local worker_result = run_test_file(file, options)
       
+      -- Log worker completion
+      logger.debug("Worker completed", {
+        file = file,
+        success = worker_result.success,
+        elapsed = worker_result.elapsed
+      })
+      
       -- Show worker output if requested
       if options.show_worker_output then
-        print("\n--- Output from " .. file .. " ---")
-        print(worker_result.output)
-        print("--- End output from " .. file .. " ---\n")
+        io.write("\n--- Output from " .. file .. " ---\n")
+        io.write(worker_result.output .. "\n")
+        io.write("--- End output from " .. file .. " ---\n\n")
       end
       
       -- Add results to aggregated results
@@ -264,8 +479,14 @@ function parallel.run_tests(files, options)
       if not worker_result.success then
         failures = failures + 1
         if options.fail_fast and failures > 0 then
+          logger.warn("Stopping parallel execution due to failure", {
+            fail_fast = true,
+            failure_count = failures,
+            file = file
+          })
+          
           if options.verbose then
-            print("Stopping due to failure (fail_fast is enabled)")
+            io.write("Stopping due to failure (fail_fast is enabled)\n")
           end
           break
         end
@@ -335,21 +556,61 @@ function parallel.register_with_lust(lust_next)
           i = i + 1
         elseif arg == "--workers" or arg == "-w" and args[i+1] then
           parallel_options.workers = tonumber(args[i+1]) or parallel.options.workers
+          -- Update central_config if available
+          local central_config = get_central_config()
+          if central_config and parallel_options.workers then
+            central_config.set("parallel.workers", parallel_options.workers)
+            logger.debug("Updated workers in central_config from CLI", {
+              workers = parallel_options.workers
+            })
+          end
           i = i + 2
         elseif arg == "--timeout" and args[i+1] then
           parallel_options.timeout = tonumber(args[i+1]) or parallel.options.timeout
+          -- Update central_config if available
+          local central_config = get_central_config()
+          if central_config and parallel_options.timeout then
+            central_config.set("parallel.timeout", parallel_options.timeout)
+            logger.debug("Updated timeout in central_config from CLI", {
+              timeout = parallel_options.timeout
+            })
+          end
           i = i + 2
         elseif arg == "--verbose-parallel" then
           parallel_options.verbose = true
+          -- Update central_config if available
+          local central_config = get_central_config()
+          if central_config then
+            central_config.set("parallel.verbose", true)
+            logger.debug("Updated verbose in central_config from CLI")
+          end
           i = i + 1
         elseif arg == "--no-worker-output" then
           parallel_options.show_worker_output = false
+          -- Update central_config if available
+          local central_config = get_central_config()
+          if central_config then
+            central_config.set("parallel.show_worker_output", false)
+            logger.debug("Updated show_worker_output in central_config from CLI")
+          end
           i = i + 1
         elseif arg == "--fail-fast" then
           parallel_options.fail_fast = true
+          -- Update central_config if available
+          local central_config = get_central_config()
+          if central_config then
+            central_config.set("parallel.fail_fast", true)
+            logger.debug("Updated fail_fast in central_config from CLI")
+          end
           i = i + 1
         elseif arg == "--no-aggregate-coverage" then
           parallel_options.aggregate_coverage = false
+          -- Update central_config if available
+          local central_config = get_central_config()
+          if central_config then
+            central_config.set("parallel.aggregate_coverage", false)
+            logger.debug("Updated aggregate_coverage in central_config from CLI")
+          end
           i = i + 1
         else
           i = i + 1
@@ -373,11 +634,21 @@ function parallel.register_with_lust(lust_next)
       end
       
       if #files == 0 then
-        print("No test files found")
+        logger.warn("No test files found for parallel execution")
+        io.write("No test files found\n")
         return false
       end
       
-      print("Running " .. #files .. " test files in parallel with " .. parallel_options.workers .. " workers")
+      logger.info("Starting CLI parallel test execution", {
+        file_count = #files,
+        worker_count = parallel_options.workers,
+        timeout = parallel_options.timeout,
+        coverage_enabled = options.coverage,
+        tags = options.tags,
+        filter = options.filter
+      })
+      
+      io.write("Running " .. #files .. " test files in parallel with " .. parallel_options.workers .. " workers\n")
       
       -- Run tests in parallel
       local results = parallel.run_tests(files, {
@@ -392,24 +663,47 @@ function parallel.register_with_lust(lust_next)
         filter = options.filter
       })
       
-      -- Display summary
-      print("\nParallel Test Summary:")
-      print("  Files tested: " .. #results.files_run)
-      print("  Total tests: " .. results.total)
-      print("  Passed: " .. results.passed)
-      print("  Failed: " .. results.failed)
-      print("  Skipped: " .. results.skipped)
-      print("  Pending: " .. results.pending)
-      print("  Total time: " .. string.format("%.2f", results.elapsed) .. " seconds")
+      -- Log summary results
+      logger.info("Parallel test execution completed", {
+        files_tested = #results.files_run,
+        total = results.total,
+        passed = results.passed,
+        failed = results.failed,
+        skipped = results.skipped,
+        pending = results.pending,
+        elapsed_seconds = results.elapsed,
+        error_count = #results.errors
+      })
       
-      -- Display errors
+      -- Display summary for console
+      io.write("\nParallel Test Summary:\n")
+      io.write("  Files tested: " .. #results.files_run .. "\n")
+      io.write("  Total tests: " .. results.total .. "\n")
+      io.write("  Passed: " .. results.passed .. "\n")
+      io.write("  Failed: " .. results.failed .. "\n")
+      io.write("  Skipped: " .. results.skipped .. "\n")
+      io.write("  Pending: " .. results.pending .. "\n")
+      io.write("  Total time: " .. string.format("%.2f", results.elapsed) .. " seconds\n")
+      
+      -- Log and display errors
       if #results.errors > 0 then
-        print("\nErrors:")
+        -- Log errors with detailed information
         for i, err in ipairs(results.errors) do
-          print("  " .. i .. ". In file: " .. err.file)
-          print("     " .. err.message)
+          logger.error("Test failure in parallel execution", {
+            index = i,
+            file = err.file, 
+            message = err.message,
+            traceback = err.traceback
+          })
+        end
+        
+        -- Display errors in console
+        io.write("\nErrors:\n")
+        for i, err in ipairs(results.errors) do
+          io.write("  " .. i .. ". In file: " .. err.file .. "\n")
+          io.write("     " .. err.message .. "\n")
           if parallel_options.verbose and err.traceback then
-            print("     " .. err.traceback)
+            io.write("     " .. err.traceback .. "\n")
           end
         end
       end
@@ -432,8 +726,14 @@ function parallel.register_with_lust(lust_next)
         -- Generate reports
         if lust_next.reporting then
           local report_config = lust_next.report_config or {}
+          
+          logger.info("Generating coverage reports from parallel execution", {
+            report_config = report_config,
+            files_to_report = coverage_data.summary.total_files
+          })
+          
           lust_next.reporting.auto_save_reports(coverage_data, nil, nil, report_config)
-          print("\nCoverage reports generated from parallel execution")
+          io.write("\nCoverage reports generated from parallel execution\n")
         end
       end
       
@@ -579,18 +879,73 @@ function parallel.register_with_lust(lust_next)
     lust_next.show_help = function()
       original_show_help()
       
-      print("\nParallel Execution Options:")
-      print("  --parallel, -p            Run tests in parallel")
-      print("  --workers, -w <num>       Number of worker processes (default: 4)")
-      print("  --timeout <seconds>       Timeout for each test file (default: 60)")
-      print("  --verbose-parallel        Show verbose output from parallel execution")
-      print("  --no-worker-output        Hide output from worker processes")
-      print("  --fail-fast               Stop on first test failure")
-      print("  --no-aggregate-coverage   Don't combine coverage data from workers")
+      logger.debug("Displaying parallel execution help options")
+      
+      logging.info("\nParallel Execution Options:")
+      logging.info("  --parallel, -p            Run tests in parallel")
+      logging.info("  --workers, -w <num>       Number of worker processes (default: 4)")
+      logging.info("  --timeout <seconds>       Timeout for each test file (default: 60)")
+      logging.info("  --verbose-parallel        Show verbose output from parallel execution")
+      logging.info("  --no-worker-output        Hide output from worker processes")
+      logging.info("  --fail-fast               Stop on first test failure")
+      logging.info("  --no-aggregate-coverage   Don't combine coverage data from workers")
     end
   end
   
   return lust_next
+end
+
+-- Reset the module configuration to defaults
+function parallel.reset()
+  logger.debug("Resetting parallel module configuration to defaults")
+  
+  -- Reset configuration to defaults
+  for key, value in pairs(DEFAULT_CONFIG) do
+    parallel.options[key] = value
+  end
+  
+  return parallel
+end
+
+-- Fully reset both local and central configuration
+function parallel.full_reset()
+  -- Reset local configuration
+  parallel.reset()
+  
+  -- Reset central configuration if available
+  local central_config = get_central_config()
+  if central_config then
+    central_config.reset("parallel")
+    logger.debug("Reset central configuration for parallel module")
+  end
+  
+  return parallel
+end
+
+-- Debug helper to show current configuration
+function parallel.debug_config()
+  local debug_info = {
+    local_config = {},
+    using_central_config = false,
+    central_config = nil
+  }
+  
+  -- Copy local configuration
+  for key, value in pairs(parallel.options) do
+    debug_info.local_config[key] = value
+  end
+  
+  -- Check for central_config
+  local central_config = get_central_config()
+  if central_config then
+    debug_info.using_central_config = true
+    debug_info.central_config = central_config.get("parallel")
+  end
+  
+  -- Display configuration
+  logger.info("Parallel module configuration", debug_info)
+  
+  return debug_info
 end
 
 -- Return the module

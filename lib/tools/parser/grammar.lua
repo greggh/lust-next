@@ -5,7 +5,16 @@ and generates an Abstract Syntax Tree.
 Based on lua-parser by Andre Murbach Maidl (https://github.com/andremm/lua-parser)
 ]]
 
-local M = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("grammar")
+logging.configure_from_config("grammar")
+
+local M = {
+  -- Module version
+  _VERSION = "1.0.0"
+}
 
 -- UTF-8 char polyfill for pre-5.3 Lua versions
 -- Based on PR #19 from lua-parser: https://github.com/andremm/lua-parser/pull/19
@@ -161,11 +170,20 @@ local labels = {
 
 local function throw(label)
   label = "Err" .. label
+  
+  logger.debug("Throwing syntax error", {
+    label = label
+  })
+  
   for i, labelinfo in ipairs(labels) do
     if labelinfo[1] == label then
       return T(i)
     end
   end
+  
+  logger.error("Error label not found", {
+    requested_label = label
+  })
   
   error("Label not found: " .. label)
 end
@@ -479,22 +497,54 @@ end
 local function syntaxerror(errorinfo, pos, msg)
   local l, c = calcline(errorinfo.subject, pos)
   local error_msg = "%s:%d:%d: syntax error, %s"
+  
+  logger.error("Syntax error in source", {
+    filename = errorinfo.filename or "input",
+    line = l,
+    column = c,
+    position = pos,
+    message = msg
+  })
+  
   return string.format(error_msg, errorinfo.filename or "input", l, c, msg)
 end
 
 -- Parse a Lua source string
 function M.parse(subject, filename)
+  logger.debug("Parsing Lua source", {
+    filename = filename or "input",
+    subject_length = subject and #subject or 0
+  })
+  
   local errorinfo = { subject = subject, filename = filename or "input" }
   
   -- Set a high max stack size to help with deeply nested tables and complex expressions
   -- This complements the 'cut' function in chainOp to prevent "subcapture nesting too deep" errors
   lpeg.setmaxstack(1000)
   
+  logger.debug("Starting LPeg parse with max stack size 1000")
   local ast, label, errorpos = lpeg.match(G, subject, nil, errorinfo)
+  
   if not ast then
     local errmsg = labels[label][2]
-    return nil, syntaxerror(errorinfo, errorpos, errmsg)
+    local error_message = syntaxerror(errorinfo, errorpos, errmsg)
+    
+    logger.error("Parsing failed", {
+      filename = filename or "input",
+      error_label = labels[label][1],
+      error_position = errorpos,
+      error_message = errmsg
+    })
+    
+    return nil, error_message
   end
+  
+  logger.debug("Parsing completed successfully", {
+    filename = filename or "input",
+    ast_type = type(ast),
+    has_ast = ast ~= nil
+  })
+  
   return ast
 end
 

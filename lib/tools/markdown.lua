@@ -12,7 +12,10 @@ local logger = logging.get_logger("Markdown")
 -- Configure module logging
 logging.configure_from_config("Markdown")
 
-local markdown = {}
+local markdown = {
+  -- Module version
+  _VERSION = "1.0.0"
+}
 
 -- Find all markdown files in a directory
 function markdown.find_markdown_files(dir)
@@ -29,11 +32,18 @@ function markdown.find_markdown_files(dir)
   -- Find all markdown files using filesystem discovery
   files = fs.discover_files({dir}, patterns, exclude_patterns)
   
-  -- Debug output for tests
-  logger.debug("Found " .. #files .. " files for dir: " .. dir)
+  -- Debug output for tests using structured logging
+  logger.debug("Found markdown files", {
+    count = #files,
+    directory = dir
+  })
+  
   if logger.is_verbose_enabled() then
     for i, file in ipairs(files) do
-      logger.verbose("  " .. i .. ": " .. file)
+      logger.verbose("Discovered markdown file", {
+        index = i,
+        file_path = file
+      })
     end
   end
   
@@ -580,37 +590,71 @@ function markdown.fix_all_in_directory(dir)
   local files = markdown.find_markdown_files(dir)
   local fixed_count = 0
   
-  print("Processing " .. #files .. " markdown files...")
+  logger.info("Processing markdown files", {
+    count = #files,
+    directory = dir
+  })
   
-  for _, file_path in ipairs(files) do
-    local file = io.open(file_path, "r")
-    if file then
-      local content = file:read("*all")
-      file:close()
-      
+  for i, file_path in ipairs(files) do
+    logger.debug("Examining markdown file", {
+      index = i,
+      file_path = file_path
+    })
+    
+    local content, err = fs.read_file(file_path)
+    if not content then
+      logger.error("Failed to read markdown file", {
+        file_path = file_path,
+        error = err
+      })
+    else
       -- Apply fixes
       local fixed = markdown.fix_comprehensive(content)
       
       -- Only write back if content changed
       if fixed ~= content then
-        file = io.open(file_path, "w")
-        if file then
-          file:write(fixed)
-          file:close()
+        local success, write_err = fs.write_file(file_path, fixed)
+        if not success then
+          logger.error("Failed to write markdown file", {
+            file_path = file_path,
+            error = write_err
+          })
+        else
           fixed_count = fixed_count + 1
-          print("Fixed: " .. file_path)
+          logger.info("Fixed markdown formatting", {
+            file_path = file_path
+          })
         end
+      else
+        logger.debug("No changes needed", {
+          file_path = file_path
+        })
       end
     end
   end
   
-  print("Markdown fixing complete. Fixed " .. fixed_count .. " of " .. #files .. " files.")
+  logger.info("Markdown fixing completed", {
+    fixed_count = fixed_count,
+    total_files = #files,
+    directory = dir
+  })
+  
   return fixed_count
 end
 
 -- Register with codefix module if available
 function markdown.register_with_codefix(codefix)
-  if not codefix then return end
+  if not codefix then 
+    logger.warn("Codefix module not provided for registration", {
+      module = "markdown"
+    })
+    return 
+  end
+  
+  logger.debug("Registering markdown fixer with codefix module", {
+    fixer_id = "markdown",
+    pattern = "%.md$"
+  })
   
   -- Register markdown fixer
   codefix.register_custom_fixer("markdown", {
@@ -618,6 +662,10 @@ function markdown.register_with_codefix(codefix)
     description = "Fixes common markdown formatting issues",
     file_pattern = "%.md$",
     fix = function(content, file_path)
+      logger.debug("Applying markdown fixes via codefix", {
+        file_path = file_path,
+        content_length = #content
+      })
       return markdown.fix_comprehensive(content)
     end
   })

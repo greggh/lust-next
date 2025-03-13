@@ -80,38 +80,47 @@ end
 
 -- Get the operating system name
 local function get_os()
-  local os_name
+  -- Use path separator to detect OS type (cross-platform approach)
+  local is_windows = package.config:sub(1,1) == '\\'
   
-  -- Try using io.popen to get the OS name
-  local popen_cmd
-  if package.config:sub(1,1) == '\\' then
-    -- Windows uses backslash as directory separator
-    os_name = "windows"
-    popen_cmd = "echo %OS%"
+  if is_windows then
+    return "windows"
   else
-    -- Unix-like systems use forward slash
-    popen_cmd = "uname -s"
+    -- For Unix-like systems, we can differentiate further if needed
+    -- but for most purposes, knowing it's not Windows is sufficient
+    if fs then
+      -- Try to use a non-io.popen method if possible
+      local platform = fs._PLATFORM
+      if platform then
+        if platform:match("darwin") then
+          return "macos"
+        elseif platform:match("linux") then
+          return "linux"
+        elseif platform:match("bsd") then
+          return "bsd"
+        end
+      end
+    end
+    
+    -- Fall back to uname command for Unix-like systems
+    local popen_cmd = "uname -s"
     local handle = io.popen(popen_cmd)
     if handle then
-      os_name = handle:read("*l"):lower()
+      local os_name = handle:read("*l"):lower()
       handle:close()
-    end
-  end
-  
-  if os_name then
-    if os_name:match("darwin") then
-      return "macos"
-    elseif os_name:match("linux") then
-      return "linux"
-    elseif os_name:match("windows") or os_name:match("win32") or os_name:match("win64") then
-      return "windows"
-    elseif os_name:match("bsd") then
-      return "bsd"
+      
+      if os_name:match("darwin") then
+        return "macos"
+      elseif os_name:match("linux") then
+        return "linux"
+      elseif os_name:match("bsd") then
+        return "bsd"
+      end
     end
   end
   
   -- Default to detecting based on path separator
-  return package.config:sub(1,1) == '\\' and "windows" or "unix"
+  return is_windows and "windows" or "unix"
 end
 
 -- Logger functions - redirected to central logging system
@@ -136,49 +145,31 @@ local function log_error(msg)
 end
 
 local function log_success(msg)
-  logger.info(msg) -- Success messages are info level but will print to console
-  -- Also print to console for user feedback
-  print("[SUCCESS] " .. msg)
+  -- Log at info level
+  logger.info(msg)
+  -- Also print to console for user feedback with [SUCCESS] prefix
+  io.write("[SUCCESS] " .. msg .. "\n")
 end
+
+-- Load the filesystem module
+local fs = require("lib.tools.filesystem")
+logger.debug("Filesystem module loaded successfully", {
+  version = fs._VERSION
+})
 
 -- Check if a file exists
 local function file_exists(path)
-  local file = io.open(path, "r")
-  if file then
-    file:close()
-    return true
-  end
-  return false
+  return fs.file_exists(path)
 end
 
 -- Read a file into a string
 local function read_file(path)
-  local file = io.open(path, "r")
-  if not file then
-    return nil, "Cannot open file: " .. path
-  end
-  
-  local content = file:read("*a")
-  file:close()
-  
-  return content
+  return fs.read_file(path)
 end
 
 -- Write a string to a file
 local function write_file(path, content)
-  local file = io.open(path, "w")
-  if not file then
-    return false, "Cannot open file for writing: " .. path
-  end
-  
-  local success, err = file:write(content)
-  file:close()
-  
-  if not success then
-    return false, err
-  end
-  
-  return true
+  return fs.write_file(path, content)
 end
 
 -- Create a backup of a file
@@ -187,17 +178,25 @@ local function backup_file(path)
     return true
   end
   
-  local content, err = read_file(path)
-  if not content then
-    return false, err
-  end
+  logger.debug("Creating backup of file", {
+    path = path,
+    backup_ext = M.config.backup_ext
+  })
   
   local backup_path = path .. M.config.backup_ext
-  local success, err = write_file(backup_path, content)
+  local success, err = fs.copy_file(path, backup_path)
   if not success then
+    logger.error("Failed to create backup file", {
+      path = path, 
+      backup_path = backup_path,
+      error = err
+    })
     return false, err
   end
   
+  logger.debug("Backup file created successfully", {
+    path = backup_path
+  })
   return true
 end
 
@@ -221,90 +220,118 @@ local function find_config_file(filename, start_dir)
   start_dir = start_dir or "."
   local current_dir = start_dir
   
-  -- Convert to absolute path if needed
-  if not current_dir:match("^/") and get_os() ~= "windows" then
-    local pwd_result = execute_command("pwd")
-    if pwd_result then
-      current_dir = pwd_result:gsub("%s+$", "") .. "/" .. current_dir
+  logger.debug("Searching for config file", {
+    filename = filename,
+    start_dir = start_dir
+  })
+  
+  -- Use filesystem module's get_absolute_path if available
+  if fs then
+    current_dir = fs.get_absolute_path(current_dir) or current_dir
+  else
+    -- Convert to absolute path if needed
+    if not current_dir:match("^/") and get_os() ~= "windows" then
+      local pwd_result = execute_command("pwd")
+      if pwd_result then
+        current_dir = pwd_result:gsub("%s+$", "") .. "/" .. current_dir
+      end
     end
   end
   
+  logger.debug("Starting config file search from directory", {
+    absolute_dir = current_dir
+  })
+  
   while current_dir and current_dir ~= "" do
-    local config_path = current_dir .. "/" .. filename
+    local config_path
+    
+    if fs then
+      config_path = fs.join_paths(current_dir, filename)
+    else
+      config_path = current_dir .. "/" .. filename
+    end
+    
     if file_exists(config_path) then
+      logger.debug("Found config file", {
+        path = config_path
+      })
       return config_path
     end
     
     -- Move up one directory
-    local parent_dir = current_dir:match("(.+)/[^/]+$")
+    local parent_dir
+    
+    if fs then
+      parent_dir = fs.get_directory_name(current_dir)
+    else
+      parent_dir = current_dir:match("(.+)/[^/]+$")
+    end
+    
     if current_dir == parent_dir then
       break
     end
     current_dir = parent_dir
   end
   
+  logger.debug("Config file not found", {
+    filename = filename
+  })
   return nil
 end
 
 -- Find files matching patterns
 local function find_files(include_patterns, exclude_patterns, start_dir)
   start_dir = start_dir or "."
+  
+  logger.debug("Using filesystem module to find files", {
+    directory = start_dir,
+    include_patterns = include_patterns,
+    exclude_patterns = exclude_patterns
+  })
+  
+  -- Normalize path
+  start_dir = fs.normalize_path(start_dir)
+  
+  -- Get absolute path
+  start_dir = fs.get_absolute_path(start_dir)
+  
+  logger.debug("Finding files in normalized directory", {
+    directory = start_dir
+  })
+  
+  -- Use filesystem discover_files function
+  local files = fs.discover_files({start_dir}, include_patterns, exclude_patterns)
+  
+  logger.info("Found files using filesystem module", {
+    file_count = #files,
+    directory = start_dir
+  })
+  
+  return files
+end
+
+-- Implementation of Lua-based file finding using filesystem module
+local function find_files_lua(include_patterns, exclude_patterns, dir)
+  logger.debug("Using filesystem module for Lua-based file discovery", {
+    directory = dir,
+    include_patterns = include_patterns,
+    exclude_patterns = exclude_patterns
+  })
+  
+  -- Normalize directory path
+  dir = fs.normalize_path(dir)
+  
+  -- Use scan_directory to get all files recursively
+  local all_files = fs.scan_directory(dir, true)
   local files = {}
   
-  -- Normalize the start_dir path
-  if start_dir:sub(-1) == "/" or start_dir:sub(-1) == "\\" then
-    start_dir = start_dir:sub(1, -2)
-  end
-  
-  -- Convert relative path to absolute if possible
-  if not start_dir:match("^[/\\]") and not start_dir:match("^%a:") then
-    local pwd_result = execute_command("pwd")
-    if pwd_result then
-      start_dir = pwd_result:gsub("%s+$", "") .. "/" .. start_dir
-    end
-  end
-  
-  log_debug("Finding files in directory: " .. start_dir)
-  
-  local find_cmd
-  local os_name = get_os()
-  
-  -- Check if fd or find or other tools are available
-  local use_fd = command_exists("fd")
-  local use_find = command_exists("find")
-  
-  if use_fd then
-    -- Use fd for more efficient file finding (if available)
-    -- fd automatically follows symbolic links but doesn't recurse into hidden directories
-    find_cmd = string.format('fd -t f -L . "%s"', start_dir)
-  elseif os_name == "windows" then
-    -- Windows dir command with recursive search
-    find_cmd = string.format('dir /b /s /a-d "%s"', start_dir)
-  elseif use_find then
-    -- Unix find command with symbolic link following
-    find_cmd = string.format('find -L "%s" -type f', start_dir)
-  else
-    -- Fallback method for systems without find/fd
-    log_warning("No efficient file finding tool available, using Lua-based file discovery")
-    return find_files_lua(include_patterns, exclude_patterns, start_dir)
-  end
-  
-  log_debug("Executing find command: " .. find_cmd)
-  local result, success = execute_command(find_cmd)
-  if not success or not result then
-    log_error("Failed to find files: " .. (result or "unknown error"))
-    return {}
-  end
-  
-  -- Process the output and filter by patterns
-  for file in result:gmatch("[^\r\n]+") do
-    -- Normalize path separators
-    local normalized_file = file:gsub("\\", "/")
+  -- Filter files using include and exclude patterns
+  for _, file_path in ipairs(all_files) do
     local include_file = false
     
     -- Check include patterns
     for _, pattern in ipairs(include_patterns) do
-      if normalized_file:match(pattern) then
+      if file_path:match(pattern) then
         include_file = true
         break
       end
@@ -313,7 +340,8 @@ local function find_files(include_patterns, exclude_patterns, start_dir)
     -- Check exclude patterns
     if include_file then
       for _, pattern in ipairs(exclude_patterns) do
-        if normalized_file:match(pattern) then
+        local rel_path = fs.get_relative_path(file_path, dir)
+        if rel_path and rel_path:match(pattern) then
           include_file = false
           break
         end
@@ -321,74 +349,18 @@ local function find_files(include_patterns, exclude_patterns, start_dir)
     end
     
     if include_file then
-      log_debug("Including file: " .. file)
-      table.insert(files, file)
+      logger.debug("Including file in results", {
+        file = file_path
+      })
+      table.insert(files, file_path)
     end
   end
   
-  log_info(string.format("Found %d matching files", #files))
-  return files
-end
-
--- Pure Lua implementation of file finding for systems without find/fd
-local function find_files_lua(include_patterns, exclude_patterns, dir)
-  local files = {}
+  logger.info("Found files using filesystem module Lua-based method", {
+    file_count = #files,
+    directory = dir
+  })
   
-  -- Helper function to recursively scan directories
-  local function scan_dir(current_dir)
-    log_debug("Scanning directory: " .. current_dir)
-    local handle, err = io.popen('ls -la "' .. current_dir .. '" 2>/dev/null')
-    if not handle then
-      log_error("Failed to list directory: " .. current_dir .. ", error: " .. (err or "unknown"))
-      return
-    end
-    
-    local result = handle:read("*a")
-    handle:close()
-    
-    for entry in result:gmatch("[^\r\n]+") do
-      -- Parse ls -la output: match permissions, links, owner, group, size, date, name
-      local name = entry:match("^.+%s+%d+%s+%S+%s+%S+%s+%d+%s+%S+%s+%d+%s+%d+:?%d*%s+(.+)$")
-      if name and name ~= "." and name ~= ".." then
-        local full_path = current_dir .. "/" .. name
-        
-        -- Check if it's a directory
-        local is_dir = entry:sub(1, 1) == "d"
-        
-        if is_dir then
-          scan_dir(full_path) -- Recurse into subdirectory
-        else
-          local include_file = false
-          
-          -- Check include patterns
-          for _, pattern in ipairs(include_patterns) do
-            if full_path:match(pattern) then
-              include_file = true
-              break
-            end
-          end
-          
-          -- Check exclude patterns
-          if include_file then
-            for _, pattern in ipairs(exclude_patterns) do
-              if full_path:match(pattern) then
-                include_file = false
-                break
-              end
-            end
-          end
-          
-          if include_file then
-            log_debug("Including file: " .. full_path)
-            table.insert(files, full_path)
-          end
-        end
-      end
-    end
-  end
-  
-  scan_dir(dir)
-  log_info(string.format("Found %d matching files with Lua-based scanner", #files))
   return files
 end
 
@@ -1045,13 +1017,20 @@ function M.fix_lua_files(directory, options)
     end
     
     local report_file = options.report_file or "codefix_report.json"
-    local file = io.open(report_file, "w")
-    if file then
-      file:write(json.encode(report))
-      file:close()
+    local json_content = json.encode(report)
+    
+    logger.debug("Generating report file", {
+      report_file = report_file,
+      report_size = #json_content,
+      successful_files = report.successful,
+      failed_files = report.failed
+    })
+    
+    local success, err = fs.write_file(report_file, json_content)
+    if success then
       log_info("Wrote detailed report to " .. report_file)
     else
-      log_error("Failed to write report to " .. report_file)
+      log_error("Failed to write report to " .. report_file .. ": " .. (err or "unknown error"))
     end
   end
   
@@ -1181,36 +1160,41 @@ function M.run_cli(args)
     else
       log_info(string.format("Found %d matching files:", #files))
       for _, file in ipairs(files) do
-        print(file)
+        -- Log at debug level, but use direct io.write for console output
+        logger.debug("Found matching file", {path = file})
+        io.write(file .. "\n")
       end
     end
     
     return true
   elseif command == "help" then
-    print("lust-next codefix usage:")
-    print("  fix [directory or file] - Fix Lua files")
-    print("  check [directory or file] - Check Lua files without fixing")
-    print("  find [directory] - Find Lua files matching patterns")
-    print("  help - Show this help message")
-    print("")
-    print("Options:")
-    print("  --verbose, -v       - Enable verbose output")
-    print("  --debug, -d         - Enable debug output")
-    print("  --no-backup, -nb    - Disable backup files")
-    print("  --no-stylua, -ns    - Disable StyLua formatting")
-    print("  --no-luacheck, -nl  - Disable Luacheck verification")
-    print("  --sort-by-mtime, -s - Sort files by modification time (newest first)")
-    print("  --generate-report, -r - Generate a JSON report file")
-    print("  --report-file FILE  - Specify report file name (default: codefix_report.json)")
-    print("  --limit N, -l N     - Limit processing to N files")
-    print("  --include PATTERN, -i PATTERN - Add file pattern to include (can be used multiple times)")
-    print("  --exclude PATTERN, -e PATTERN - Add file pattern to exclude (can be used multiple times)")
-    print("")
-    print("Examples:")
-    print("  fix src/ --no-stylua")
-    print("  check src/ --include \"%.lua$\" --exclude \"_spec%.lua$\"")
-    print("  fix . --sort-by-mtime --limit 10")
-    print("  fix . --generate-report --report-file codefix_results.json")
+    logger.debug("Displaying codefix help text")
+    
+    -- Use the logging module's info function for consistent help text display
+    logging.info("lust-next codefix usage:")
+    logging.info("  fix [directory or file] - Fix Lua files")
+    logging.info("  check [directory or file] - Check Lua files without fixing")
+    logging.info("  find [directory] - Find Lua files matching patterns")
+    logging.info("  help - Show this help message")
+    logging.info("")
+    logging.info("Options:")
+    logging.info("  --verbose, -v       - Enable verbose output")
+    logging.info("  --debug, -d         - Enable debug output")
+    logging.info("  --no-backup, -nb    - Disable backup files")
+    logging.info("  --no-stylua, -ns    - Disable StyLua formatting")
+    logging.info("  --no-luacheck, -nl  - Disable Luacheck verification")
+    logging.info("  --sort-by-mtime, -s - Sort files by modification time (newest first)")
+    logging.info("  --generate-report, -r - Generate a JSON report file")
+    logging.info("  --report-file FILE  - Specify report file name (default: codefix_report.json)")
+    logging.info("  --limit N, -l N     - Limit processing to N files")
+    logging.info("  --include PATTERN, -i PATTERN - Add file pattern to include (can be used multiple times)")
+    logging.info("  --exclude PATTERN, -e PATTERN - Add file pattern to exclude (can be used multiple times)")
+    logging.info("")
+    logging.info("Examples:")
+    logging.info("  fix src/ --no-stylua")
+    logging.info("  check src/ --include \"%.lua$\" --exclude \"_spec%.lua$\"")
+    logging.info("  fix . --sort-by-mtime --limit 10")
+    logging.info("  fix . --generate-report --report-file codefix_results.json")
     return true
   else
     log_error("Unknown command: " .. command)
@@ -1261,11 +1245,19 @@ function M.register_with_lust(lust)
         return
       end
       
+      logger.debug("Codefix reporter initialized", {
+        test_count = #results.tests,
+        options = options
+      })
+      
       -- Find all source files in the test files
       local test_files = {}
       for _, test in ipairs(results.tests) do
         if test.source_file and not test_files[test.source_file] then
           test_files[test.source_file] = true
+          logger.debug("Found source file in test results", {
+            source_file = test.source_file
+          })
         end
       end
       
@@ -1277,16 +1269,41 @@ function M.register_with_lust(lust)
       
       -- Run codefix on all test files
       if #files_to_fix > 0 then
-        print(string.format("\nRunning codefix on %d source files...", #files_to_fix))
+        io.write(string.format("\nRunning codefix on %d source files...\n", #files_to_fix))
         M.config.enabled = true
         M.config.verbose = options.verbose or false
+        
+        logger.info("Running codefix on test source files", {
+          file_count = #files_to_fix,
+          verbose = M.config.verbose
+        })
         
         local success, fix_results = M.fix_files(files_to_fix)
         
         if success then
-          print("✅ All files fixed successfully")
+          logger.info("All files fixed successfully", {
+            file_count = #files_to_fix
+          })
+          io.write("✅ All files fixed successfully\n")
         else
-          print("⚠️ Some files could not be fixed")
+          -- Count successful and failed files
+          local successful = 0
+          local failed = 0
+          
+          for _, result in ipairs(fix_results or {}) do
+            if result.success then
+              successful = successful + 1
+            else
+              failed = failed + 1
+            end
+          end
+          
+          logger.warn("Some files could not be fixed", {
+            total_files = #files_to_fix,
+            successful_files = successful,
+            failed_files = failed
+          })
+          io.write("⚠️ Some files could not be fixed\n")
         end
       end
     end)
@@ -1317,7 +1334,7 @@ function M.register_with_lust(lust)
   if ok and markdown then
     markdown.register_with_codefix(M)
     if M.config.verbose then
-      print("Registered markdown fixing capabilities")
+      logger.info("Registered markdown fixing capabilities")
     end
   end
 
