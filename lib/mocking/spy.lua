@@ -1,6 +1,15 @@
 -- spy.lua - Function spying implementation for lust-next
 
-local spy = {}
+local logging = require("lib.tools.logging")
+
+-- Initialize module logger
+local logger = logging.get_logger("spy")
+logging.configure_from_config("spy")
+
+local spy = {
+  -- Module version
+  _VERSION = "1.0.0"
+}
 
 -- Helper functions
 local function is_spy(obj)
@@ -63,6 +72,10 @@ end
 
 -- Create a new spy function
 function spy.new(fn)
+  logger.debug("Creating new spy function", {
+    fn_type = type(fn)
+  })
+  
   fn = fn or function() end
   
   local spy_obj = {
@@ -85,6 +98,11 @@ function spy.new(fn)
     table.insert(spy_obj.calls, args)
     table.insert(spy_obj.call_history, args)
     
+    logger.debug("Spy function called", {
+      call_count = spy_obj.call_count,
+      arg_count = #args
+    })
+    
     -- Sequence tracking for order verification
     if not _G._lust_next_sequence_counter then
       _G._lust_next_sequence_counter = 0
@@ -94,6 +112,10 @@ function spy.new(fn)
     -- Store sequence number
     local sequence_number = _G._lust_next_sequence_counter
     table.insert(spy_obj.call_sequence, sequence_number)
+    
+    logger.debug("Calling original function through spy", {
+      sequence_number = sequence_number
+    })
     
     -- Call the original function
     return fn(...)
@@ -262,15 +284,33 @@ end
 
 -- Create a spy on an object method
 function spy.on(obj, method_name)
+  logger.debug("Creating spy on object method", {
+    obj_type = type(obj),
+    method_name = method_name
+  })
+  
   if type(obj) ~= "table" then
+    logger.error("Invalid object type for spy.on", {
+      expected = "table",
+      actual = type(obj)
+    })
     error("spy.on requires a table as its first argument")
   end
   
   if type(obj[method_name]) ~= "function" then
+    logger.error("Method not found or not a function", {
+      method_name = method_name,
+      actual_type = type(obj[method_name])
+    })
     error("spy.on requires a method name that exists on the object")
   end
   
   local original_fn = obj[method_name]
+  
+  logger.debug("Creating spy on existing method", {
+    method_name = method_name,
+    has_original = original_fn ~= nil
+  })
   
   local spy_obj = spy.new(original_fn)
   spy_obj.target = obj
@@ -279,6 +319,11 @@ function spy.on(obj, method_name)
   
   -- Add restore method
   function spy_obj:restore()
+    logger.debug("Restoring original method", {
+      target_type = type(self.target),
+      method_name = self.name
+    })
+    
     if self.target and self.name then
       self.target[self.name] = self.original
     end
