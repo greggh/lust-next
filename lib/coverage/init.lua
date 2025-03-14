@@ -221,7 +221,155 @@ function M.track_file(file_path)
   end
 end
 
--- Track line coverage through instrumentation
+-- Track execution without marking as covered - for distinguishing execution from coverage
+function M.track_execution(file_path, line_num)
+  if not active or not config.enabled then
+    logger.debug("Coverage not active or disabled, ignoring track_execution", {
+      file_path = file_path,
+      line_num = line_num
+    })
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" then
+    local err = error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "track_execution"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(line_num) ~= "number" then
+    local err = error_handler.validation_error(
+      "Line number must be a number",
+      {
+        provided_type = type(line_num),
+        operation = "track_execution"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if line_num <= 0 then
+    local err = error_handler.validation_error(
+      "Line number must be a positive number",
+      {
+        provided_value = line_num,
+        operation = "track_execution"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  -- Normalize path to prevent issues with path formatting (double slashes, etc.)
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  
+  -- Enhanced logging to trace coverage issues
+  logger.debug("Track execution called", {
+    file_path = normalized_path,
+    line_num = line_num,
+    operation = "track_execution"
+  })
+  
+  -- Initialize file data if needed using debug_hook's centralized API
+  if not debug_hook.has_file(normalized_path) then
+    local success, err = error_handler.try(function()
+      return debug_hook.initialize_file(normalized_path)
+    end)
+    
+    if not success then
+      logger.error("Failed to initialize file for execution tracking: " .. error_handler.format_error(err))
+      return false, err
+    end
+    
+    -- Ensure file is properly discovered and tracked
+    local coverage_data = debug_hook.get_coverage_data()
+    if coverage_data and coverage_data.files then
+      -- Use normalized path - important fix for consistency!
+      local normalized_key = fs.normalize_path(normalized_path)
+      if normalized_key and coverage_data.files[normalized_key] then
+        coverage_data.files[normalized_key].discovered = true
+        
+        -- Try to get file content if not already present
+        if not coverage_data.files[normalized_key].source_text then
+          local success, content = error_handler.safe_io_operation(
+            function() return fs.read_file(normalized_path) end,
+            normalized_path,
+            {operation = "track_execution.read_file"}
+          )
+          
+          if success and content then
+            coverage_data.files[normalized_key].source_text = content
+          end
+        end
+      end
+    end
+  end
+  
+  -- Track the line as executed only, not covered
+  local success, err = error_handler.try(function()
+    -- Mark as executed without marking as covered
+    local exe_result = debug_hook.set_line_executed(normalized_path, line_num, true)
+    
+    -- Ensure line is marked as executable if it is a code line
+    local is_executable = true
+    
+    -- Try to determine if this line is executable using static analysis if available
+    if static_analyzer then
+      -- Lazily load static analyzer if needed
+      if not static_analyzer then
+        static_analyzer = require("lib.coverage.static_analyzer")
+      end
+      
+      -- Get or create file data
+      local file_data = debug_hook.get_file_data(normalized_path)
+      if file_data and file_data.code_map then
+        is_executable = static_analyzer.is_line_executable(file_data.code_map, line_num)
+      elseif file_data and file_data.source and file_data.source[line_num] then
+        -- If we don't have a code map, use the simple classifier
+        is_executable = static_analyzer.classify_line_simple(file_data.source[line_num], config)
+      end
+    end
+    
+    -- Always mark as executable if we're explicitly tracking it
+    -- This makes sure the line is counted in reports
+    local exec_result = debug_hook.set_line_executable(normalized_path, line_num, is_executable)
+    
+    -- Add line to the global executed_lines tracking
+    local normalized_key = fs.normalize_path(normalized_path)
+    local line_key = normalized_key .. ":" .. line_num
+    local coverage_data = debug_hook.get_coverage_data()
+    coverage_data.executed_lines[line_key] = true
+    
+    return exe_result and exec_result
+  end)
+  
+  if not success then
+    logger.error("Failed to track execution: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  -- Set this file as active for reporting
+  local success, err = error_handler.try(function()
+    return debug_hook.activate_file(normalized_path)
+  end)
+  
+  if not success then
+    logger.error("Failed to activate file for execution tracking: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  return true
+end
+
+-- Track line coverage through instrumentation (marks as both executed and covered)
 function M.track_line(file_path, line_num)
   if not active or not config.enabled then
     logger.debug("Coverage not active or disabled, ignoring track_line", {
@@ -318,6 +466,14 @@ function M.track_line(file_path, line_num)
     local track_result = debug_hook.track_line(normalized_path, line_num)
     local exe_result = debug_hook.set_line_executable(normalized_path, line_num, true)
     local cov_result = debug_hook.set_line_covered(normalized_path, line_num, true)
+    
+    -- Add line to the global covered_lines tracking
+    local normalized_key = fs.normalize_path(normalized_path)
+    local line_key = normalized_key .. ":" .. line_num
+    local coverage_data = debug_hook.get_coverage_data()
+    coverage_data.covered_lines[line_key] = true
+    coverage_data.executed_lines[line_key] = true
+    
     return track_result and exe_result and cov_result
   end)
   
@@ -975,6 +1131,58 @@ function M.full_reset()
   return M
 end
 
+-- Get raw coverage data for debugging and analysis
+function M.get_raw_data()
+  local success, result, err = error_handler.try(function()
+    -- Get data directly from debug_hook
+    local data = debug_hook.get_coverage_data()
+    if not data or type(data) ~= "table" then
+      return nil, error_handler.runtime_error(
+        "Invalid coverage data from debug_hook",
+        {operation = "get_raw_data"}
+      )
+    end
+    
+    -- Structure the data to clearly separate execution from coverage
+    local raw_data = {
+      files = data.files or {},
+      executed_lines = data.executed_lines or {},
+      covered_lines = data.covered_lines or {},
+      functions = {
+        all = data.functions and data.functions.all or {},
+        executed = data.functions and data.functions.executed or {},
+        covered = data.functions and data.functions.covered or {}
+      },
+      blocks = {
+        all = data.blocks and data.blocks.all or {},
+        executed = data.blocks and data.blocks.executed or {},
+        covered = data.blocks and data.blocks.covered or {}
+      },
+      conditions = {
+        all = data.conditions and data.conditions.all or {},
+        executed = data.conditions and data.conditions.executed or {},
+        true_outcome = data.conditions and data.conditions.true_outcome or {},
+        false_outcome = data.conditions and data.conditions.false_outcome or {},
+        fully_covered = data.conditions and data.conditions.fully_covered or {}
+      },
+      performance = debug_hook.get_performance_metrics and debug_hook.get_performance_metrics() or {}
+    }
+    
+    return raw_data
+  end)
+  
+  if not success then
+    logger.error("Failed to get raw coverage data: " .. error_handler.format_error(result))
+    return {
+      files = {},
+      executed_lines = {},
+      covered_lines = {}
+    }
+  end
+  
+  return result
+end
+
 -- Get report data with statistics calculations
 function M.get_report_data()
   local success, result, err = error_handler.try(function()
@@ -1020,10 +1228,12 @@ function M.get_report_data()
       normalized_files[file_path] = {
         source = file_data.source_text or "",
         lines = {},
+        executed_lines = file_data._executed_lines or {}, -- Add executed lines tracking
         functions = file_data.functions or {},
         blocks = file_data.blocks or {},
         total_lines = 0,
         covered_lines = 0,
+        executed_lines_count = 0, -- Add executed lines count
         line_coverage_percent = 0,
         total_functions = 0,
         covered_functions = 0,
@@ -1049,7 +1259,9 @@ function M.get_report_data()
         covered_files = 0,
         total_lines = 0,
         covered_lines = 0,
+        executed_lines = 0, -- Add executed lines summary
         line_coverage_percent = 0,
+        execution_coverage_percent = 0, -- Add execution coverage percentage
         total_functions = 0,
         covered_functions = 0,
         function_coverage_percent = 0,
@@ -1064,6 +1276,7 @@ function M.get_report_data()
     local covered_files = 0
     local total_lines = 0
     local covered_lines = 0
+    local executed_lines = 0 -- Track executed lines
     local total_functions = 0
     local covered_functions = 0
     local total_blocks = 0
@@ -1077,6 +1290,7 @@ function M.get_report_data()
       -- Calculate lines for this file
       local file_total_lines = 0
       local file_covered_lines = 0
+      local file_executed_lines = 0 -- Track executed lines for this file
       
       -- We'll consider a file "covered" if at least one line is covered
       local is_file_covered = false
@@ -1092,6 +1306,9 @@ function M.get_report_data()
               if line_data.covered then
                 file_covered_lines = file_covered_lines + 1
                 is_file_covered = true
+              end
+              if line_data.executed then
+                file_executed_lines = file_executed_lines + 1
               end
             end
           elseif type(line_data) == "boolean" then
@@ -1109,14 +1326,50 @@ function M.get_report_data()
                 file_covered_lines = file_covered_lines + 1
                 is_file_covered = true
               end
+              
+              -- Check if it was executed (might be executed but not covered)
+              if file_data.executed_lines and file_data.executed_lines[line_num] then
+                file_executed_lines = file_executed_lines + 1
+              end
             end
           elseif type(line_data) == "number" then
             -- Number format: non-zero means covered and executable
             file_total_lines = file_total_lines + 1
             if line_data > 0 then
               file_covered_lines = file_covered_lines + 1
+              file_executed_lines = file_executed_lines + 1
               is_file_covered = true
             end
+          end
+        end
+      end
+      
+      -- Check _executed_lines separately to count lines that were executed but not covered
+      if file_data.executed_lines then
+        for line_num, executed in pairs(file_data.executed_lines) do
+          if executed then
+            -- Only count executable lines that weren't already counted
+            local is_executable = true
+            
+            -- Check executable_lines table if available
+            if file_data.executable_lines and file_data.executable_lines[line_num] ~= nil then
+              is_executable = file_data.executable_lines[line_num]
+            end
+            
+            -- Skip non-executable lines
+            if not is_executable then
+              goto continue_executed
+            end
+            
+            -- If we already counted this line as covered, skip it
+            if file_data.lines and file_data.lines[line_num] then
+              goto continue_executed
+            end
+            
+            -- This line was executed but not covered (only execution)
+            file_executed_lines = file_executed_lines + 1
+            
+            ::continue_executed::
           end
         end
       end
@@ -1124,8 +1377,12 @@ function M.get_report_data()
       -- Store per-file statistics
       file_data.total_lines = file_total_lines
       file_data.covered_lines = file_covered_lines
+      file_data.executed_lines_count = file_executed_lines
       file_data.line_coverage_percent = file_total_lines > 0 
         and (file_covered_lines / file_total_lines) * 100 
+        or 0
+      file_data.execution_coverage_percent = file_total_lines > 0
+        and (file_executed_lines / file_total_lines) * 100
         or 0
         
       -- Count functions
@@ -1171,6 +1428,7 @@ function M.get_report_data()
       -- Accumulate totals
       total_lines = total_lines + file_total_lines
       covered_lines = covered_lines + file_covered_lines
+      executed_lines = executed_lines + file_executed_lines
       total_functions = total_functions + file_total_functions
       covered_functions = covered_functions + file_covered_functions
       total_blocks = total_blocks + file_total_blocks
@@ -1190,8 +1448,12 @@ function M.get_report_data()
         or 0,
       total_lines = total_lines,
       covered_lines = covered_lines,
+      executed_lines = executed_lines, -- Add executed lines count
       line_coverage_percent = total_lines > 0 
         and (covered_lines / total_lines) * 100 
+        or 0,
+      execution_coverage_percent = total_lines > 0
+        and (executed_lines / total_lines) * 100
         or 0,
       total_functions = total_functions,
       covered_functions = covered_functions,
@@ -1202,7 +1464,8 @@ function M.get_report_data()
       covered_blocks = covered_blocks,
       block_coverage_percent = total_blocks > 0 
         and (covered_blocks / total_blocks) * 100 
-        or 0
+        or 0,
+      performance = debug_hook.get_performance_metrics and debug_hook.get_performance_metrics() or {}
     }
     
     return report_data
@@ -1218,7 +1481,9 @@ function M.get_report_data()
         file_coverage_percent = 0,
         total_lines = 0,
         covered_lines = 0,
+        executed_lines = 0,
         line_coverage_percent = 0,
+        execution_coverage_percent = 0,
         total_functions = 0,
         covered_functions = 0,
         function_coverage_percent = 0,
