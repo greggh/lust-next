@@ -40,8 +40,8 @@ The coverage module repair project has made significant progress:
 1. **Static Analyzer Improvements**
    - [✓] Complete the line classification system
    - [✓] Enhance function detection accuracy
-   - [ ] Perfect block boundary identification
-   - [ ] Finalize condition expression tracking
+   - [✓] Perfect block boundary identification
+   - [✓] Finalize condition expression tracking
 
 2. **Debug Hook Enhancements**
    - [ ] Fix data collection and representation
@@ -142,6 +142,73 @@ The line classification system was successfully enhanced with the following key 
    - Added configuration-specific tests
 
 See `session_summaries/session_summary_2025-03-14_static_analyzer_line_classification.md` and `session_summaries/session_summary_2025-03-14_function_detection_enhancement.md` for detailed implementation notes.
+
+### Block Boundary Identification System Implementation (Completed)
+
+The block boundary identification system was successfully implemented with these key features:
+
+1. **Stack-Based Block Tracking**:
+   - Implemented recursive AST traversal for comprehensive block detection
+   - Added special case handling for different block types (if, while, repeat, for, function)
+   - Created specialized block processors for each control structure type
+
+2. **Block Metadata**:
+   - Added detailed block information including type, boundaries, and relationships
+   - Included condition tracking for control structures
+   - Added branch tracking for if/else and loop bodies
+
+3. **Nested Structure Support**:
+   - Implemented proper parent-child relationship tracking
+   - Created a hierarchy building system for nested blocks
+   - Added special handling for complex AST patterns
+
+4. **AST Pattern Recognition**:
+   - Enhanced detection of Lua control structures in AST
+   - Added support for method declarations and colon syntax
+   - Implemented proper handling of function declarations and assignments
+
+5. **Test Suite**:
+   - Created comprehensive tests for all block types
+   - Added specific tests for nested structures
+   - Included boundary verification tests
+
+See `session_summaries/session_summary_2025-03-14_block_boundary_implementation.md` for detailed implementation notes.
+
+### Condition Expression Tracking Implementation (Completed)
+
+The condition expression tracking system was successfully implemented with these key features:
+
+1. **Comprehensive Condition Extraction**:
+   - Implemented recursive extraction of conditions from AST nodes
+   - Added support for compound conditions (AND, OR) and their components
+   - Created tracking for NOT operations and their nested conditions
+   - Developed condition type identification and classification
+
+2. **Compound Condition Analysis**:
+   - Created parent-child relationships between composite conditions and components
+   - Implemented component tracking to understand condition structure
+   - Added metadata for condition types, operators, and relationships
+   - Built a condition graph to represent logical relationships
+
+3. **Condition-Block Integration**:
+   - Linked conditions to their containing blocks
+   - Enhanced block processors for if, while, repeat, and for loops
+   - Added condition extraction in control structure processing
+   - Integrated condition tracking with the code map generation
+
+4. **Outcome Tracking**:
+   - Added support for tracking true/false execution outcomes
+   - Implemented execution count tracking for conditions
+   - Created enhanced statistical functions for condition coverage
+   - Added detailed metrics by condition type
+
+5. **Comprehensive Testing**:
+   - Created tests for simple and compound conditions
+   - Implemented tests for complex nested conditions
+   - Added test cases for all control structures
+   - Validated correct parent-child relationships
+
+See `session_summaries/session_summary_2025-03-16_condition_expression_tracking.md` for detailed implementation notes.
 
 ### Assertion Module Implementation (Completed)
 
