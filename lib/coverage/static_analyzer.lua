@@ -273,7 +273,28 @@ function M.update_multiline_comment_cache(file_path)
 end
 
 -- Check if a specific line is in a multiline comment
-function M.is_in_multiline_comment(file_path, line_num)
+function M.is_in_multiline_comment(file_path, line_num, content)
+  -- Handle case where content is provided directly (for AST-based analysis)
+  if content and line_num and line_num > 0 then
+    -- Process content directly to find multiline comments
+    local context = M.create_multiline_comment_context()
+    
+    -- Split content into lines for processing
+    local lines = {}
+    for line in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+      table.insert(lines, line)
+    end
+    
+    -- Process each line to mark comment status up to our target line
+    for i = 1, math.min(line_num, #lines) do
+      M.process_line_for_comments(lines[i], i, context)
+    end
+    
+    -- Return the status for our target line
+    return context.line_status[line_num] or false
+  end
+  
+  -- Traditional file-based approach
   -- Validate inputs
   if not file_path or not line_num or line_num <= 0 then
     return false
@@ -605,13 +626,138 @@ local NON_EXECUTABLE_TAGS = {
   Boolean = true, Nil = true, Dots = true
 }
 
+-- Simple classification for when full AST analysis isn't available
+function M.classify_line_simple(line_text, options)
+  -- Handle nil input
+  if not line_text then
+    return false
+  end
+  
+  options = options or {}
+  
+  -- Strip whitespace for easier pattern matching
+  local trimmed = line_text:match("^%s*(.-)%s*$") or ""
+  
+  -- Empty lines are not executable
+  if trimmed == "" then
+    return false
+  end
+  
+  -- Check for comments (entire line is comment)
+  if trimmed:match("^%-%-") then
+    return false
+  end
+  
+  -- Check for multi-line string content (not the declaration line)
+  -- This is a simplistic check - AST-based analysis is more accurate
+  if not trimmed:match("^[\"'%[]") and not trimmed:match("[\"'%]]%s*$") and 
+     not trimmed:match("=") and not trimmed:match("%(") and not trimmed:match("%)") then
+    -- Might be content of a multi-line string
+    return false
+  end
+  
+  -- Control flow keywords
+  local is_control_flow_keyword = false
+  for _, pattern in ipairs({
+    "^end%s*$",       -- Standalone end keyword
+    "^end[,)]",       -- End followed by comma or closing parenthesis
+    "^else%s*$",      -- Standalone else keyword
+    "^until%s",       -- until lines
+    "^[]}]%s*$",      -- Closing brackets/braces
+    "^then%s*$",      -- Standalone then keyword
+    "^do%s*$",        -- Standalone do keyword
+    "^repeat%s*$",    -- Standalone repeat keyword
+    "^elseif%s*$"     -- Standalone elseif keyword
+  }) do
+    if trimmed:match(pattern) then
+      is_control_flow_keyword = true
+      break
+    end
+  end
+  
+  if is_control_flow_keyword then
+    -- Use the configuration to decide if control flow keywords are executable
+    local use_config = options.control_flow_keywords_executable
+    if use_config == nil then
+      -- Default to the module config if not specified in options
+      use_config = config.control_flow_keywords_executable
+    end
+    return use_config
+  end
+  
+  -- Common executable line patterns
+  for _, pattern in ipairs({
+    "=",                 -- Assignment
+    "local%s+",          -- Local declaration
+    "function",          -- Function declaration
+    "return",            -- Return statement
+    "if%s+",             -- If statement
+    "for%s+",            -- For loop
+    "while%s+",          -- While loop
+    "repeat%s+",         -- Repeat loop
+    "%w+%s*%(.-%)%s*$",  -- Function call end
+    "%w+[%.:]%w+",       -- Method/property access
+    "break",             -- Break statement
+    "goto%s+",           -- Goto statement
+    "require%s*%("       -- Require statement
+  }) do
+    if trimmed:match(pattern) then
+      return true
+    end
+  end
+  
+  -- Default to true for anything else - we assume it's executable unless proven otherwise
+  -- This is a conservative approach to avoid missing coverage
+  return true
+end
+
 -- Determine if a line is executable based on AST nodes that intersect with it
 -- With optimized lookup tables and time limit
 local function is_line_executable(nodes, line_num, content)
-  -- First check if this is a control flow keyword that should be executable
-  if config.control_flow_keywords_executable and content then
-    local line = content:match("[^\n]*", line_num) or ""
-    local line_text = line:match("^%s*(.-)%s*$") or ""
+  -- Quick check for empty or nil content
+  if not content or #content == 0 then
+    return false
+  end
+  
+  -- Get the actual line text
+  local line_text = nil
+  local line_mapping = build_line_mappings(content)
+  if line_mapping and line_mapping.line_starts[line_num] and line_mapping.line_ends[line_num] then
+    local start_pos = line_mapping.line_starts[line_num]
+    local end_pos = line_mapping.line_ends[line_num]
+    if start_pos and end_pos and start_pos <= #content and end_pos <= #content then
+      line_text = content:sub(start_pos, end_pos)
+    end
+  end
+  
+  -- If we couldn't extract the line text properly, use the content:match approach
+  if not line_text then
+    local all_lines = {}
+    for l in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+      table.insert(all_lines, l)
+    end
+    line_text = all_lines[line_num] or ""
+  end
+  
+  -- Check if line is inside a multiline comment
+  if M.is_in_multiline_comment(nil, line_num, content) then
+    return false
+  end
+  
+  -- Check for single-line comments or empty lines
+  if line_text:match("^%s*$") or line_text:match("^%s*%-%-") then
+    return false
+  end
+  
+  -- Check for lines that only have comments
+  local code_part = line_text:match("^(.-)%s*%-%-%s")
+  if code_part and code_part:match("^%s*$") then
+    return false
+  end
+  
+  -- Check if this is a control flow keyword that should be executable
+  if config.control_flow_keywords_executable then
+    local trimmed = line_text:match("^%s*(.-)%s*$") or ""
     
     -- Check if this line matches a control flow keyword pattern
     for _, pattern in ipairs({
@@ -626,11 +772,34 @@ local function is_line_executable(nodes, line_num, content)
       "^%s*repeat%s*$",   -- Standalone repeat keyword
       "^%s*elseif%s*$"    -- Standalone elseif keyword
     }) do
-      if line_text:match(pattern) then
+      if trimmed:match(pattern) then
         -- This is a control flow keyword and config says they're executable
         return true
       end
     end
+  end
+  
+  -- Multi-line string detection
+  -- Check if we're in a multi-line string (not the declaration line)
+  local in_multiline_string = false
+  for i = 1, line_num - 1 do
+    local prev_line = content:match("[^\r\n]*", i) or ""
+    if prev_line:match("%[%[") and not prev_line:match("%]%]") then
+      -- A multi-line string started and didn't end
+      in_multiline_string = true
+    elseif prev_line:match("%]%]") and in_multiline_string then
+      -- The multi-line string ended
+      in_multiline_string = false
+    end
+  end
+  
+  if in_multiline_string and not line_text:match("%]%]") then
+    -- Line is inside a multi-line string and doesn't end it
+    return false
+  elseif in_multiline_string and line_text:match("%]%]") then
+    -- Line ends a multi-line string
+    local after_closing = line_text:match("%]%](.*)$")
+    return after_closing and not after_closing:match("^%s*$") and not after_closing:match("^%s*%-%-")
   end
   
   -- Add time limit protection
@@ -706,6 +875,13 @@ local function is_line_executable(nodes, line_num, content)
     local node_end_line = get_line_for_position(content, node.end_pos)
     
     if node_start_line <= line_num and node_end_line >= line_num then
+      -- Check for nodes that might contain non-executable parts
+      if node.tag == "String" then
+        -- Multi-line strings - only the declaration line is executable
+        if node_start_line < line_num and node_end_line > line_num then
+          return false
+        end
+      end
       return true
     end
 
@@ -867,13 +1043,151 @@ local function collect_nodes(ast, nodes)
   return nodes
 end
 
+-- Extract full identifier from an Index node, handling nested table access
+local function extract_full_identifier(node)
+  if not node or type(node) ~= "table" then
+    return nil
+  end
+  
+  -- Handle direct identifiers
+  if node.tag == "Id" then
+    return node[1]
+  end
+  
+  -- Handle table indexes (a.b)
+  if node.tag == "Index" then
+    local base_name = extract_full_identifier(node[1])
+    if not base_name then return nil end
+    
+    -- Handle string keys 
+    if node[2].tag == "String" then
+      -- Check if this is a method call (using colon syntax)
+      if node.is_method then
+        return base_name .. ":" .. node[2][1]
+      else
+        return base_name .. "." .. node[2][1]
+      end
+    end
+    
+    -- Handle other key types (less common)
+    if node[2].tag == "Id" then
+      return base_name .. "." .. node[2][1]
+    end
+  end
+  
+  return nil
+end
+
+-- Extract full identifier from an Index node
+local function extract_full_identifier(node)
+  if not node or type(node) ~= "table" then
+    return nil
+  end
+  
+  -- Handle direct identifiers
+  if node.tag == "Id" then
+    return node[1]
+  end
+  
+  -- Handle table indexes (a.b)
+  if node.tag == "Index" then
+    local base_name
+    
+    -- Check if base is an identifier or another index
+    if node[1].tag == "Id" then
+      base_name = node[1][1]
+    else
+      base_name = extract_full_identifier(node[1])
+    end
+    
+    if not base_name then return nil end
+    
+    -- Handle string keys 
+    if node[2].tag == "String" then
+      -- Check if this is a method (with colon)
+      local method_name = node[2][1]
+      
+      -- Check for explicitly marked method node or colon in the name
+      if node.is_method or method_name:find(":", 1, true) then
+        return base_name .. ":" .. method_name:gsub(":", "")
+      else
+        return base_name .. "." .. method_name
+      end
+    end
+    
+    -- Handle other key types (less common)
+    if node[2].tag == "Id" then
+      return base_name .. "." .. node[2][1]
+    end
+  end
+  
+  return nil
+end
+
+-- Detect method declarations in the AST 
+local function detect_method_declarations(ast)
+  if type(ast) ~= "table" then 
+    return 
+  end
+  
+  local to_process = {ast}
+  local processed = 0
+  
+  while #to_process > 0 do
+    local current = table.remove(to_process)
+    processed = processed + 1
+    
+    if type(current) == "table" then
+      -- Look for common method declaration patterns
+      
+      -- Pattern 1: function obj:method()
+      if current.tag == "Set" and current[1].tag == "VarList" and current[2].tag == "ExpList" then
+        for i, var in ipairs(current[1]) do
+          if var.tag == "Index" and var[1].tag == "Id" and var[2].tag == "String" then
+            -- Check for colon in method name or if first parameter is 'self'
+            local method_name = var[2][1]
+            if method_name:find(":", 1, true) or
+               (current[2][i] and current[2][i].tag == "Function" and 
+                current[2][i][1] and current[2][i][1].tag == "ParList" and
+                current[2][i][1][1] and current[2][i][1][1].tag == "Id" and
+                current[2][i][1][1][1] == "self") then
+              
+              -- Mark this as a method declaration
+              var.is_method = true
+              
+              -- If there's a colon in name, clean it
+              if method_name:find(":", 1, true) then
+                var[2][1] = method_name:gsub(":", "")
+              end
+            end
+          end
+        end
+      end
+      
+      -- Add children to processing queue
+      for k, v in pairs(current) do
+        if type(k) == "number" then
+          table.insert(to_process, v)
+        end
+      end
+    end
+    
+    -- Safety check
+    if processed > 100000 then break end
+  end
+end
+
 -- Find all function definitions in the AST using non-recursive approach
 local function find_functions(ast, functions, context)
   functions = functions or {}
   context = context or {}
   
+  -- Pre-process to detect method declarations 
+  detect_method_declarations(ast)
+  
   local to_process = {ast}
   local processed = 0
+  local function_count = 0
   
   while #to_process > 0 do
     local current = table.remove(to_process)
@@ -887,23 +1201,149 @@ local function find_functions(ast, functions, context)
           if expr.tag == "Function" then
             -- Get function name from the left side
             if current[1][i] and current[1][i].tag == "Id" then
+              -- Simple variable assignment (e.g., `foo = function()`)
               expr.name = current[1][i][1]
+              expr.type = "global" -- Global function
             elseif current[1][i] and current[1][i].tag == "Index" then
-              -- Handle module.function or table.key style
-              if current[1][i][1].tag == "Id" and current[1][i][2].tag == "String" then
-                expr.name = current[1][i][1][1] .. "." .. current[1][i][2][1]
+              -- Handle complex name extraction (table.field, module.function, obj:method)
+              local full_name = extract_full_identifier(current[1][i])
+              
+              -- Check for method syntax (obj:method)
+              if full_name and full_name:find(":", 1, true) then
+                expr.name = full_name
+                expr.type = "method" -- Method definition
+              elseif full_name then
+                expr.name = full_name
+                expr.type = "module" -- Module/table field
+              else
+                -- Fallback for complex cases
+                expr.name = "anonymous_" .. function_count
+              end
+            else
+              -- Unknown pattern, create a generic name
+              expr.name = "anonymous_" .. function_count
+            end
+            
+            function_count = function_count + 1
+            
+            -- Extract parameter information
+            if expr[1] and expr[1].tag == "ParList" then
+              expr.params = {}
+              expr.has_varargs = false
+              
+              for p = 1, #expr[1] do
+                if expr[1][p] == "..." then
+                  table.insert(expr.params, "...")
+                  expr.has_varargs = true
+                elseif expr[1][p].tag == "Id" then
+                  table.insert(expr.params, expr[1][p][1])
+                end
               end
             end
+            
+            -- Try to extract function positions
+            if expr.pos and expr.endpos then
+              -- If we have line mapping, convert positions to line numbers
+              if context and context.lines then
+                -- Look for line mapping
+                local line_start, line_end
+                
+                -- Try direct line mapping first
+                if context.pos_to_line and context.pos_to_line[expr.pos] then
+                  line_start = context.pos_to_line[expr.pos]
+                end
+                
+                if context.pos_to_line and context.pos_to_line[expr.endpos] then
+                  line_end = context.pos_to_line[expr.endpos]
+                end
+                
+                -- Fallback to computing line numbers from content
+                if not line_start or not line_end then
+                  if context.content then
+                    line_start = get_line_for_position(context.content, expr.pos)
+                    line_end = get_line_for_position(context.content, expr.endpos)
+                  end
+                end
+                
+                -- Store the line positions
+                if line_start then
+                  expr.line_start = line_start
+                end
+                
+                if line_end then
+                  expr.line_end = line_end
+                end
+              end
+            end
+            
             table.insert(functions, expr)
           end
         end
       elseif current.tag == "Localrec" and #current >= 2 and current[1].tag == "Id" and current[2].tag == "Function" then
-        -- Handle local function definition
+        -- Handle local function definition (e.g., `local function foo()`)
         current[2].name = current[1][1]  -- Copy the name to the function
+        current[2].type = "local" -- Local function
+        
+        -- Extract parameter information
+        if current[2][1] and current[2][1].tag == "ParList" then
+          current[2].params = {}
+          current[2].has_varargs = false
+          
+          for p = 1, #current[2][1] do
+            if current[2][1][p] == "..." then
+              table.insert(current[2].params, "...")
+              current[2].has_varargs = true
+            elseif current[2][1][p].tag == "Id" then
+              table.insert(current[2].params, current[2][1][p][1])
+            end
+          end
+        end
+        
+        -- Try to extract function end position
+        if current[2].pos and current[2].endpos then
+          -- Convert pos/endpos to line numbers if available
+          local pos_to_line = context.pos_to_line
+          if pos_to_line then
+            current[2].line_start = pos_to_line[current[2].pos]
+            current[2].line_end = pos_to_line[current[2].endpos]
+          end
+        end
+        
         table.insert(functions, current[2])
+        function_count = function_count + 1
       elseif current.tag == "Function" then
         -- Standalone function (e.g., anonymous, or already part of a larger structure)
+        if not current.name then
+          current.name = "<anonymous>"
+        end
+        
+        -- Extract parameter information (if not already extracted)
+        if not current.params and current[1] and current[1].tag == "ParList" then
+          current.params = {}
+          current.has_varargs = false
+          
+          for p = 1, #current[1] do
+            if current[1][p] == "..." then
+              table.insert(current.params, "...")
+              current.has_varargs = true
+            elseif current[1][p].tag == "Id" then
+              table.insert(current.params, current[1][p][1])
+            end
+          end
+        end
+        
+        -- Try to extract function end position (if not already extracted)
+        if not current.line_end and current.pos and current.endpos then
+          -- Convert pos/endpos to line numbers if available
+          local pos_to_line = context.pos_to_line
+          if pos_to_line then
+            current.line_start = pos_to_line[current.pos]
+            current.line_end = pos_to_line[current.endpos]
+          end
+        end
+        
         table.insert(functions, current)
+        function_count = function_count + 1
       end
       
       -- Add numerical children to processing queue
@@ -953,6 +1393,52 @@ local CONDITION_TAGS = {
   Nil = true,    -- Nil values in conditions
   Boolean = true, -- Boolean literals
 }
+
+-- Public wrapper for is_line_executable to expose it in the module API
+function M.is_line_executable(code_map, line_num)
+  if not code_map or not line_num then
+    return false
+  end
+  
+  -- Make sure we have content and AST nodes
+  local content = code_map.content
+  local nodes = code_map.nodes
+  
+  if not content or not nodes then
+    return false
+  end
+  
+  -- Delegate to the internal implementation
+  return is_line_executable(nodes, line_num, content)
+end
+
+-- Get all executable lines for a file based on its code map
+function M.get_executable_lines(code_map)
+  if not code_map or not code_map.content then
+    return {}
+  end
+  
+  local content = code_map.content
+  local nodes = code_map.nodes
+  
+  if not nodes then
+    return {}
+  end
+  
+  -- Count the number of lines in the content
+  local line_count = 0
+  for _ in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+    line_count = line_count + 1
+  end
+  
+  -- Check each line and build a map of executable lines
+  local executable_lines = {}
+  for line_num = 1, line_count do
+    executable_lines[line_num] = is_line_executable(nodes, line_num, content)
+  end
+  
+  return executable_lines
+end
 
 -- Extract conditional expressions from a node
 local function extract_conditions(node, conditions, content, parent_id)
@@ -1306,6 +1792,8 @@ function M.generate_code_map(ast, content)
     functions = {},       -- Function definitions with line ranges
     branches = {},        -- Branch points (if/else, loops)
     blocks = {},          -- Code blocks for block-based coverage
+    content = content,    -- Store the content for line classification
+    nodes = {},           -- Store the AST nodes for line classification
     conditions = {},      -- Conditional expressions for condition coverage
     line_count = count_lines(content)
   }
@@ -1358,6 +1846,9 @@ function M.generate_code_map(ast, content)
     return nil
   end
   
+  -- Store the AST nodes in the code map for line classification
+  code_map.nodes = all_nodes
+  
   -- Add size limit for node collection
   if #all_nodes > 50000 then
     if logger.is_debug_enabled() then
@@ -1374,7 +1865,25 @@ function M.generate_code_map(ast, content)
   -- Collect all functions with time check
   local functions
   success, result = pcall(function()
-    functions = find_functions(ast)
+    -- Create a context for function finding with content for line mapping
+    local function_context = {
+      content = content,
+      lines = content and content:gmatch("[^\n]*\n?"),
+      pos_to_line = {}
+    }
+    
+    -- Build basic position-to-line mapping for key points
+    if content then
+      local line = 1
+      local pos = 1
+      for current_line in content:gmatch("([^\n]*)\n?") do
+        function_context.pos_to_line[pos] = line
+        pos = pos + #current_line + 1
+        line = line + 1
+      end
+    end
+    
+    functions = find_functions(ast, nil, function_context)
     
     -- Check for timeout
     if os.clock() - start_time > MAX_CODEMAP_TIME then
@@ -1477,12 +1986,21 @@ function M.generate_code_map(ast, content)
       break
     end
     
-    local func_start_line = get_line_for_position(content, func.pos)
-    local func_end_line = get_line_for_position(content, func.end_pos)
+    -- Get function start line - prefer pre-computed value if available
+    local func_start_line = func.line_start
+    if not func_start_line and func.pos then
+      func_start_line = get_line_for_position(content, func.pos)
+    end
     
-    -- Get function parameters
-    local params = {}
-    if func[1] and type(func[1]) == "table" then
+    -- Get function end line - prefer pre-computed value if available
+    local func_end_line = func.line_end
+    if not func_end_line and func.endpos then
+      func_end_line = get_line_for_position(content, func.endpos)
+    end
+    
+    -- Get function parameters - prefer pre-computed values if available
+    local params = func.params or {}
+    if #params == 0 and func[1] and type(func[1]) == "table" then
       for _, param in ipairs(func[1]) do
         if param.tag == "Id" then
           table.insert(params, param[1])
@@ -1492,21 +2010,35 @@ function M.generate_code_map(ast, content)
       end
     end
     
-    -- Extract function name (if available)
+    -- Extract function name and type information
     local func_name = func.name 
+    local func_type = func.type or "unknown"
     
-    -- If no explicit name, check for function declaration patterns
+    -- If no explicit name, generate a default anonymous name
     if not func_name then
-      -- We can use a simpler approach here for performance
-      func_name = "anonymous_" .. func_start_line
+      func_name = "anonymous_" .. i
     end
     
-    table.insert(code_map.functions, {
+    -- Create the function record with enhanced information
+    local function_record = {
       start_line = func_start_line,
       end_line = func_end_line,
       name = func_name,
-      params = params
-    })
+      params = params,
+      type = func_type,
+      has_varargs = func.has_varargs or false
+    }
+    
+    -- Copy method information if available
+    if func.method_class then
+      function_record.method_class = func.method_class
+    end
+    
+    if func.method_name then
+      function_record.method_name = func.method_name
+    end
+    
+    table.insert(code_map.functions, function_record)
   end
   
   -- Completely optimized line analysis - faster and more reliable
