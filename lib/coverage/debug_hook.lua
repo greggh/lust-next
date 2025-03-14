@@ -9,12 +9,42 @@ local config = {}
 local tracked_files = {}
 local active_files = {} -- Keep track of files that should be included in reporting
 local processing_hook = false -- Flag to prevent recursive hook calls
+-- Enhanced data structure with clear separation between execution and coverage
 local coverage_data = {
-  files = {},
-  lines = {},
-  functions = {},
-  blocks = {},      -- Block tracking
-  conditions = {}   -- Condition tracking
+  files = {},                   -- File metadata and content
+  lines = {},                   -- Legacy structure for backward compatibility
+  executed_lines = {},          -- All lines that were executed (raw execution data)
+  covered_lines = {},           -- Lines that are both executed and executable (coverage data)
+  functions = {
+    all = {},                   -- All functions (legacy structure)
+    executed = {},              -- Functions that were executed
+    covered = {}                -- Functions that are considered covered (executed + assertions)
+  },
+  blocks = {
+    all = {},                   -- All blocks (legacy structure)
+    executed = {},              -- Blocks that were executed
+    covered = {}                -- Blocks that are considered covered (execution + assertions)
+  },
+  conditions = {
+    all = {},                   -- All conditions (legacy structure)
+    executed = {},              -- Conditions that were executed
+    true_outcome = {},          -- Conditions that executed the true path
+    false_outcome = {},         -- Conditions that executed the false path
+    fully_covered = {}          -- Conditions where both outcomes were executed
+  }
+}
+
+-- Performance metrics tracking
+local performance_metrics = {
+  hook_calls = 0,               -- Total number of debug hook calls
+  hook_execution_time = 0,      -- Total execution time across all hook calls
+  hook_errors = 0,              -- Count of errors encountered in the hook
+  last_call_time = 0,           -- Execution time of the last hook call
+  average_call_time = 0,        -- Average execution time per hook call
+  max_call_time = 0,            -- Maximum execution time for a single hook call
+  line_events = 0,              -- Count of line events
+  call_events = 0,              -- Count of call events
+  return_events = 0             -- Count of return events
 }
 
 -- Create a logger for this module
@@ -217,12 +247,29 @@ local function is_line_executable(file_path, line)
   return static_analyzer.classify_line_simple(file_data and file_data.source[line], config)
 end
 
--- Debug hook function with optimizations
+-- Enhanced debug hook function with performance tracking
 function M.debug_hook(event, line)
-  -- Original hook with optimizations
+  -- Record start time for performance monitoring
+  local start_time
+  if config.debug then
+    start_time = os.clock()
+  end
+  
+  -- Increment call count for performance tracking
+  performance_metrics.hook_calls = performance_metrics.hook_calls + 1
+  
   -- Skip if we're already processing a hook to prevent recursion
   if processing_hook then
     return
+  end
+  
+  -- Track event type for metrics
+  if event == "line" then
+    performance_metrics.line_events = performance_metrics.line_events + 1
+  elseif event == "call" then
+    performance_metrics.call_events = performance_metrics.call_events + 1
+  elseif event == "return" then
+    performance_metrics.return_events = performance_metrics.return_events + 1
   end
   
   -- Skip if the line is missing, negative, or zero (special internal Lua events)
@@ -272,6 +319,10 @@ function M.debug_hook(event, line)
           -- Track execution for visualization purposes
           coverage_data.files[normalized_path]._executed_lines = coverage_data.files[normalized_path]._executed_lines or {}
           coverage_data.files[normalized_path]._executed_lines[line] = true
+          
+          -- Also track in the new clean data structure
+          local line_key = normalized_path .. ":" .. line
+          coverage_data.executed_lines[line_key] = true
           
           -- Mark as executable but not covered (for proper display)
           coverage_data.files[normalized_path].executable_lines = coverage_data.files[normalized_path].executable_lines or {}
@@ -336,7 +387,8 @@ function M.debug_hook(event, line)
               logger.debug("Generated code map", {
                 file_path = normalized_path,
                 has_blocks = code_map.blocks ~= nil,
-                has_functions = code_map.functions ~= nil
+                has_functions = code_map.functions ~= nil,
+                has_conditions = code_map.conditions ~= nil
               })
             end
           end
@@ -376,6 +428,10 @@ function M.debug_hook(event, line)
           coverage_data.files[normalized_path]._executed_lines = coverage_data.files[normalized_path]._executed_lines or {}
           coverage_data.files[normalized_path]._executed_lines[line] = true
           
+          -- Track in the new clean data structure for executed lines
+          local line_key = normalized_path .. ":" .. line
+          coverage_data.executed_lines[line_key] = true
+          
           -- Verbose output for execution tracking
           -- Only log for example files or test files
           if config.verbose and (file_path:match("example") or file_path:match("test")) and logger.is_verbose_enabled() then
@@ -390,6 +446,9 @@ function M.debug_hook(event, line)
           if is_executable then
             -- Mark this line as covered - this is the key line that sets coverage
             coverage_data.files[normalized_path].lines[line] = true
+            
+            -- Also track in the new clean data structure for covered lines
+            coverage_data.covered_lines[line_key] = true
             
             -- Also mark this as executable
             coverage_data.files[normalized_path].executable_lines[line] = true
@@ -450,7 +509,8 @@ function M.debug_hook(event, line)
                 logger.debug("Generated code map on-demand", {
                   file_path = normalized_path,
                   has_blocks = code_map.blocks ~= nil,
-                  has_functions = code_map.functions ~= nil
+                  has_functions = code_map.functions ~= nil,
+                  has_conditions = code_map.conditions ~= nil
                 })
               end
               
@@ -460,14 +520,37 @@ function M.debug_hook(event, line)
             
             -- Only track blocks if we have a code map
             if coverage_data.files[normalized_path].code_map and config.track_blocks then
-              -- Use our own public API for tracking blocks
-              -- This ensures consistent block tracking logic
+              -- Use our enhanced block tracking function
               local tracked_blocks = M.track_blocks_for_line(file_path, line)
               
               -- Verbose output for block tracking
               if tracked_blocks and #tracked_blocks > 0 and config.verbose and logger.is_verbose_enabled() then
                 logger.verbose("Tracked blocks in debug hook", {
                   count = #tracked_blocks,
+                  line = line,
+                  file_path = normalized_path,
+                  operation = "debug_hook"
+                })
+              end
+            end
+            
+            -- Track condition coverage with our new enhanced tracking
+            if coverage_data.files[normalized_path].code_map and config.track_conditions then
+              -- Try to infer condition outcome from context
+              -- This is a heuristic approach but works well in many cases
+              local execution_context = {
+                line = line,
+                time = os.time()
+                -- Outcome will be determined by the condition tracking function
+              }
+              
+              -- Use our new condition tracking function
+              local tracked_conditions = M.track_conditions_for_line(file_path, line, execution_context)
+              
+              -- Verbose output for condition tracking
+              if tracked_conditions and #tracked_conditions > 0 and config.verbose and logger.is_verbose_enabled() then
+                logger.verbose("Tracked conditions in debug hook", {
+                  count = #tracked_conditions,
                   line = line,
                   file_path = normalized_path,
                   operation = "debug_hook"
@@ -680,11 +763,38 @@ function M.debug_hook(event, line)
   -- Clear flag after processing
   processing_hook = false
   
+  -- Performance tracking
+  if config.debug and start_time then
+    local execution_time = os.clock() - start_time
+    performance_metrics.hook_execution_time = performance_metrics.hook_execution_time + execution_time
+    performance_metrics.last_call_time = execution_time
+    performance_metrics.average_call_time = performance_metrics.hook_execution_time / performance_metrics.hook_calls
+    
+    -- Track maximum call time
+    if execution_time > performance_metrics.max_call_time then
+      performance_metrics.max_call_time = execution_time
+    end
+    
+    -- Log performance data if significant time was spent
+    if execution_time > 0.001 and logger.is_debug_enabled() then
+      logger.debug("Debug hook performance", {
+        event = event,
+        line = line,
+        execution_time = execution_time,
+        average_time = performance_metrics.average_call_time
+      })
+    end
+  end
+  
   -- Report errors but don't crash
   if not success then
+    -- Track error count
+    performance_metrics.hook_errors = performance_metrics.hook_errors + 1
+    
     logger.debug("Debug hook error", {
       error = error_handler.format_error(result),
-      location = "debug_hook.line_hook"
+      location = "debug_hook.line_hook",
+      hook_errors = performance_metrics.hook_errors
     })
   end
   
@@ -1439,11 +1549,16 @@ function M.track_line(file_path, line_num)
   end
 end
 
--- Public API for tracking block execution
--- This centralizes the block tracking logic into debug_hook
+-- Enhanced block tracking with better parent-child relationship handling
 function M.track_blocks_for_line(file_path, line_num)
+  -- Skip if block tracking is disabled
   if not config.track_blocks then
     return nil
+  end
+  
+  local start_time
+  if config.debug then
+    start_time = os.clock()
   end
   
   local normalized_path = fs.normalize_path(file_path)
@@ -1469,84 +1584,482 @@ function M.track_blocks_for_line(file_path, line_num)
   -- Track the blocks that were found
   local tracked_blocks = {}
   
-  -- Mark each block as executed
+  -- Process each block
   for _, block in ipairs(blocks_for_line) do
-    -- Get current blocks
-    local logical_chunks = M.get_file_logical_chunks(file_path)
-    
-    -- Get or create block record
-    local block_copy = logical_chunks[block.id]
-    
-    if not block_copy then
-      -- Create a new deep copy if this is the first time we've seen this block
-      block_copy = {
-        id = block.id,
-        type = block.type,
-        start_line = block.start_line,
-        end_line = block.end_line,
-        parent_id = block.parent_id,
-        branches = {},
-        executed = true, -- Mark as executed immediately
-        execution_count = 1 -- Track execution count
-      }
-      
-      -- Copy branches array if it exists
-      if block.branches then
-        for _, branch_id in ipairs(block.branches) do
-          table.insert(block_copy.branches, branch_id)
-        end
-      end
-    else
-      -- Update existing block record
-      block_copy.executed = true
-      block_copy.execution_count = (block_copy.execution_count or 0) + 1
-    end
-    
-    -- Store the block using the accessor function
-    M.add_block(file_path, block.id, block_copy)
-    
-    -- Update parent blocks - ensures parent blocks are marked as executed
-    if block_copy.parent_id and block_copy.parent_id ~= "root" then
-      local parent_block = logical_chunks[block_copy.parent_id]
-      if parent_block then
-        parent_block.executed = true
-        parent_block.execution_count = (parent_block.execution_count or 0) + 1
-        M.add_block(file_path, block_copy.parent_id, parent_block)
-      end
-    end
-    
-    -- Add to tracked_blocks for return value
-    table.insert(tracked_blocks, block_copy)
-    
-    -- Verbose output for block execution
-    if config.verbose and logger.is_verbose_enabled() then
-      logger.verbose("Executed block", {
-        block_id = block.id,
-        type = block.type,
-        line = line_num,
-        file_path = normalized_path,
-        execution_count = block_copy.execution_count or 1,
-        parent_id = block.parent_id,
-        operation = "track_blocks_for_line"
-      })
+    local block_data = M.track_block_execution(file_path, block)
+    if block_data then
+      table.insert(tracked_blocks, block_data)
     end
   end
   
-  -- Return the blocks that were tracked
+  -- Performance tracking
+  if config.debug and start_time then
+    local execution_time = os.clock() - start_time
+    logger.debug("Block tracking performance", {
+      file_path = normalized_path,
+      line_num = line_num,
+      blocks_count = #tracked_blocks,
+      execution_time = execution_time
+    })
+  end
+  
   return tracked_blocks
 end
 
--- Reset coverage data
+-- Process a single block's execution with complete metadata
+function M.track_block_execution(file_path, block)
+  local normalized_path = fs.normalize_path(file_path)
+  local logical_chunks = M.get_file_logical_chunks(file_path)
+  
+  -- Get or create block record
+  local block_copy = logical_chunks[block.id]
+  
+  if not block_copy then
+    -- Create a new block record with all needed metadata
+    block_copy = {
+      id = block.id,
+      type = block.type,
+      start_line = block.start_line,
+      end_line = block.end_line,
+      parent_id = block.parent_id,
+      branches = {},
+      conditions = {},
+      executed = true,
+      execution_count = 1,
+      last_executed = os.time() -- Track when this block was last executed
+    }
+    
+    -- Copy branches array if it exists
+    if block.branches then
+      for _, branch_id in ipairs(block.branches) do
+        table.insert(block_copy.branches, branch_id)
+      end
+    end
+    
+    -- Copy conditions array if it exists
+    if block.conditions then
+      for _, condition_id in ipairs(block.conditions) do
+        table.insert(block_copy.conditions, condition_id)
+      end
+    end
+  else
+    -- Update existing block record
+    block_copy.executed = true
+    block_copy.execution_count = (block_copy.execution_count or 0) + 1
+    block_copy.last_executed = os.time()
+  end
+  
+  -- Store the block in the file's logical_chunks
+  M.add_block(file_path, block.id, block_copy)
+  
+  -- Add to the global tracking with clear distinction between execution and coverage
+  local block_key = normalized_path .. ":" .. block.id
+  coverage_data.blocks.all[block_key] = true
+  coverage_data.blocks.executed[block_key] = true
+  
+  -- If the block has assertions in it, consider it covered
+  if block_copy.has_assertions then
+    coverage_data.blocks.covered[block_key] = true
+  end
+  
+  -- Process parent blocks to ensure proper parent-child relationships
+  if block_copy.parent_id and block_copy.parent_id ~= "root" then
+    local code_map = M.get_file_code_map(file_path)
+    if code_map then
+      -- Find the parent block in the code map
+      local parent_block
+      for _, b in ipairs(code_map.blocks or {}) do
+        if b.id == block_copy.parent_id then
+          parent_block = b
+          break
+        end
+      end
+      
+      -- If parent found, track its execution too
+      if parent_block then
+        local parent_data = M.track_block_execution(file_path, parent_block)
+        
+        -- Verbose logging for parent tracking
+        if parent_data and config.verbose and logger.is_verbose_enabled() then
+          logger.verbose("Tracked parent block", {
+            block_id = parent_data.id,
+            child_id = block_copy.id,
+            file_path = normalized_path,
+            execution_count = parent_data.execution_count
+          })
+        end
+      else
+        -- Get parent from current logical_chunks if not found in code map
+        local parent_chunk = logical_chunks[block_copy.parent_id]
+        if parent_chunk then
+          parent_chunk.executed = true
+          parent_chunk.execution_count = (parent_chunk.execution_count or 0) + 1
+          parent_chunk.last_executed = os.time()
+          M.add_block(file_path, block_copy.parent_id, parent_chunk)
+          
+          -- Update execution tracking
+          local parent_key = normalized_path .. ":" .. block_copy.parent_id
+          coverage_data.blocks.all[parent_key] = true
+          coverage_data.blocks.executed[parent_key] = true
+        end
+      end
+    end
+  end
+  
+  -- Verbose output for block execution
+  if config.verbose and logger.is_verbose_enabled() then
+    logger.verbose("Executed block", {
+      block_id = block.id,
+      type = block.type,
+      start_line = block.start_line,
+      end_line = block.end_line,
+      file_path = normalized_path,
+      execution_count = block_copy.execution_count,
+      parent_id = block.parent_id,
+      operation = "track_block_execution"
+    })
+  end
+  
+  return block_copy
+end
+
+-- New function for tracking conditions with better outcome detection
+function M.track_conditions_for_line(file_path, line_num, execution_context)
+  -- Skip if condition tracking is disabled
+  if not config.track_conditions then
+    return nil
+  end
+  
+  local start_time
+  if config.debug then
+    start_time = os.clock()
+  end
+  
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Skip if we don't have file data or code map
+  if not M.has_file(file_path) then
+    return nil
+  end
+  
+  local code_map = M.get_file_code_map(file_path)
+  if not code_map then
+    return nil
+  end
+  
+  -- Ensure we have the static analyzer
+  if not static_analyzer then
+    static_analyzer = require("lib.coverage.static_analyzer")
+  end
+  
+  -- Use the static analyzer to find which conditions contain this line
+  local conditions_for_line = static_analyzer.get_conditions_for_line(code_map, line_num)
+  
+  -- Track the conditions that were found
+  local tracked_conditions = {}
+  
+  -- Process each condition
+  for _, condition in ipairs(conditions_for_line) do
+    local condition_data = M.track_condition_execution(file_path, condition, execution_context)
+    if condition_data then
+      table.insert(tracked_conditions, condition_data)
+    end
+  end
+  
+  -- Performance tracking
+  if config.debug and start_time then
+    local execution_time = os.clock() - start_time
+    logger.debug("Condition tracking performance", {
+      file_path = normalized_path,
+      line_num = line_num,
+      conditions_count = #tracked_conditions,
+      execution_time = execution_time
+    })
+  end
+  
+  return tracked_conditions
+end
+
+-- Process a single condition's execution with outcome tracking
+function M.track_condition_execution(file_path, condition, execution_context)
+  local normalized_path = fs.normalize_path(file_path)
+  local logical_conditions = M.get_file_logical_conditions(file_path)
+  
+  -- Get or create condition record
+  local condition_copy = logical_conditions[condition.id]
+  
+  -- Determine outcome based on execution context if provided
+  local outcome = execution_context and execution_context.outcome
+  
+  if not condition_copy then
+    -- Create a new condition record with all needed metadata
+    condition_copy = {
+      id = condition.id,
+      type = condition.type,
+      start_line = condition.start_line,
+      end_line = condition.end_line,
+      parent_id = condition.parent_id,
+      is_compound = condition.is_compound,
+      operator = condition.operator,
+      components = {},
+      executed = true,
+      executed_true = outcome == true,
+      executed_false = outcome == false,
+      execution_count = 1,
+      true_count = outcome == true and 1 or 0,
+      false_count = outcome == false and 1 or 0,
+      last_executed = os.time(), -- Track when this condition was last executed
+      last_outcome = outcome -- Track the last outcome
+    }
+    
+    -- Copy components array if it exists
+    if condition.components then
+      for _, comp_id in ipairs(condition.components) do
+        table.insert(condition_copy.components, comp_id)
+      end
+    end
+  else
+    -- Update existing condition record
+    condition_copy.executed = true
+    condition_copy.execution_count = (condition_copy.execution_count or 0) + 1
+    condition_copy.last_executed = os.time()
+    
+    -- Update outcome tracking if outcome is known
+    if outcome ~= nil then
+      condition_copy.last_outcome = outcome
+      if outcome == true then
+        condition_copy.executed_true = true
+        condition_copy.true_count = (condition_copy.true_count or 0) + 1
+      elseif outcome == false then
+        condition_copy.executed_false = true
+        condition_copy.false_count = (condition_copy.false_count or 0) + 1
+      end
+    end
+  end
+  
+  -- Store the condition in the file's logical_conditions
+  if not coverage_data.files[normalized_path].logical_conditions then
+    coverage_data.files[normalized_path].logical_conditions = {}
+  end
+  coverage_data.files[normalized_path].logical_conditions[condition.id] = condition_copy
+  
+  -- Add to the global tracking with clear distinction between execution and coverage
+  local condition_key = normalized_path .. ":" .. condition.id
+  coverage_data.conditions.all[condition_key] = true
+  coverage_data.conditions.executed[condition_key] = true
+  
+  -- Track outcome coverage
+  if condition_copy.executed_true then
+    coverage_data.conditions.true_outcome[condition_key] = true
+  end
+  
+  if condition_copy.executed_false then
+    coverage_data.conditions.false_outcome[condition_key] = true
+  end
+  
+  -- Track full coverage (both outcomes)
+  if condition_copy.executed_true and condition_copy.executed_false then
+    coverage_data.conditions.fully_covered[condition_key] = true
+  end
+  
+  -- Process component conditions if this is a compound condition
+  if condition.is_compound and condition.components and #condition.components > 0 then
+    -- Get the components from the code map
+    local code_map = M.get_file_code_map(file_path)
+    if code_map and code_map.conditions then
+      for _, comp_id in ipairs(condition.components) do
+        -- Find the component condition
+        local component
+        for _, c in ipairs(code_map.conditions) do
+          if c.id == comp_id then
+            component = c
+            break
+          end
+        end
+        
+        -- If component found, track its execution with inferred outcome
+        if component then
+          -- For AND, if the parent is true, both components must be true
+          -- If the parent is false, at least one component is false
+          if condition.operator == "and" then
+            local component_outcome
+            if outcome == true then
+              component_outcome = true -- Both must be true for AND to be true
+            elseif outcome == false and logical_conditions[comp_id] then
+              -- For false AND, we need to check if previous execution has determined this component's outcome
+              if logical_conditions[comp_id].last_outcome ~= nil then
+                component_outcome = logical_conditions[comp_id].last_outcome
+              end
+              -- If not, we can't determine which component caused the false result
+            end
+            
+            -- Track component with determined outcome if possible
+            if component_outcome ~= nil then
+              M.track_condition_execution(file_path, component, {outcome = component_outcome})
+            else
+              -- Otherwise just track execution without outcome
+              M.track_condition_execution(file_path, component, nil)
+            end
+          -- For OR, if parent is true, at least one component is true
+          -- If parent is false, both components must be false
+          elseif condition.operator == "or" then
+            local component_outcome
+            if outcome == false then
+              component_outcome = false -- Both must be false for OR to be false
+            elseif outcome == true and logical_conditions[comp_id] then
+              -- For true OR, we need to check if previous execution has determined this component's outcome
+              if logical_conditions[comp_id].last_outcome ~= nil then
+                component_outcome = logical_conditions[comp_id].last_outcome
+              end
+              -- If not, we can't determine which component caused the true result
+            end
+            
+            -- Track component with determined outcome if possible
+            if component_outcome ~= nil then
+              M.track_condition_execution(file_path, component, {outcome = component_outcome})
+            else
+              -- Otherwise just track execution without outcome
+              M.track_condition_execution(file_path, component, nil)
+            end
+          end
+        end
+      end
+    end
+  end
+  
+  -- Handle parent condition updates
+  if condition.parent_id and condition.parent_id ~= "root" and logical_conditions[condition.parent_id] then
+    local parent_condition = logical_conditions[condition.parent_id]
+    parent_condition.executed = true
+    parent_condition.execution_count = (parent_condition.execution_count or 0) + 1
+    parent_condition.last_executed = os.time()
+    
+    -- Update parent outcome based on this component's outcome and the parent's operator
+    if outcome ~= nil and parent_condition.operator then
+      if parent_condition.operator == "and" then
+        -- In an AND operation, if any component is false, the parent is false
+        if outcome == false then
+          parent_condition.executed_false = true
+          parent_condition.false_count = (parent_condition.false_count or 0) + 1
+          parent_condition.last_outcome = false
+        end
+        -- We can't determine parent is true unless all components are known true
+      elseif parent_condition.operator == "or" then
+        -- In an OR operation, if any component is true, the parent is true
+        if outcome == true then
+          parent_condition.executed_true = true
+          parent_condition.true_count = (parent_condition.true_count or 0) + 1
+          parent_condition.last_outcome = true
+        end
+        -- We can't determine parent is false unless all components are known false
+      end
+    end
+    
+    -- Store updated parent condition
+    coverage_data.files[normalized_path].logical_conditions[parent_condition.id] = parent_condition
+    
+    -- Update global tracking for parent
+    local parent_key = normalized_path .. ":" .. parent_condition.id
+    coverage_data.conditions.all[parent_key] = true
+    coverage_data.conditions.executed[parent_key] = true
+    
+    if parent_condition.executed_true then
+      coverage_data.conditions.true_outcome[parent_key] = true
+    end
+    
+    if parent_condition.executed_false then
+      coverage_data.conditions.false_outcome[parent_key] = true
+    end
+    
+    if parent_condition.executed_true and parent_condition.executed_false then
+      coverage_data.conditions.fully_covered[parent_key] = true
+    end
+  end
+  
+  -- Verbose output for condition execution
+  if config.verbose and logger.is_verbose_enabled() then
+    logger.verbose("Executed condition", {
+      condition_id = condition.id,
+      type = condition.type,
+      start_line = condition.start_line,
+      end_line = condition.end_line,
+      file_path = normalized_path,
+      execution_count = condition_copy.execution_count,
+      executed_true = condition_copy.executed_true or false,
+      executed_false = condition_copy.executed_false or false,
+      outcome = outcome,
+      parent_id = condition.parent_id,
+      operation = "track_condition_execution"
+    })
+  end
+  
+  return condition_copy
+end
+
+-- Reset coverage data with enhanced structure
 function M.reset()
+  -- Reset coverage data with enhanced structure
   coverage_data = {
-    files = {},
-    lines = {},
-    functions = {},
-    blocks = {},
-    conditions = {}
+    files = {},                   -- File metadata and content
+    lines = {},                   -- Legacy structure for backward compatibility
+    executed_lines = {},          -- All lines that were executed (raw execution data)
+    covered_lines = {},           -- Lines that are both executed and executable (coverage data)
+    functions = {
+      all = {},                   -- All functions (legacy structure)
+      executed = {},              -- Functions that were executed
+      covered = {}                -- Functions that are considered covered (executed + assertions)
+    },
+    blocks = {
+      all = {},                   -- All blocks (legacy structure)
+      executed = {},              -- Blocks that were executed
+      covered = {}                -- Blocks that are considered covered (execution + assertions)
+    },
+    conditions = {
+      all = {},                   -- All conditions (legacy structure)
+      executed = {},              -- Conditions that were executed
+      true_outcome = {},          -- Conditions that executed the true path
+      false_outcome = {},         -- Conditions that executed the false path
+      fully_covered = {}          -- Conditions where both outcomes were executed
+    }
   }
+  
+  -- Reset tracking data
   tracked_files = {}
+  
+  -- Reset performance metrics
+  performance_metrics = {
+    hook_calls = 0,
+    hook_execution_time = 0,
+    hook_errors = 0,
+    last_call_time = 0,
+    average_call_time = 0,
+    max_call_time = 0,
+    line_events = 0,
+    call_events = 0,
+    return_events = 0
+  }
+  
+  logger.debug("Debug hook reset", {
+    operation = "reset",
+    timestamp = os.time()
+  })
+  
   return M
+end
+
+-- Get performance metrics
+function M.get_performance_metrics()
+  return {
+    hook_calls = performance_metrics.hook_calls,
+    line_events = performance_metrics.line_events,
+    call_events = performance_metrics.call_events,
+    return_events = performance_metrics.return_events,
+    execution_time = performance_metrics.hook_execution_time,
+    average_call_time = performance_metrics.average_call_time,
+    max_call_time = performance_metrics.max_call_time,
+    last_call_time = performance_metrics.last_call_time,
+    error_count = performance_metrics.hook_errors
+  }
 end
 
 return M
