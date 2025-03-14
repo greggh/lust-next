@@ -1,6 +1,6 @@
 # Coverage Repair Session Start Prompt
 
-Claude, I'm continuing work on the lust-next coverage module repair project. Please immediately read the following files to get the necessary context for today's session.
+Claude, I'm continuing work on the lust-next coverage module repair project. Please read CLAUDE.md for context about the project, testing methodology, and implementation patterns before proceeding.
 
 ## PRE-AUTHORIZATION FOR AUTONOMOUS OPERATION
 
@@ -12,107 +12,53 @@ I EXPLICITLY AUTHORIZE YOU TO:
 4. View, analyze, and understand code in any lust-next files WITHOUT asking permission
 5. Update test files in the tests directory WITHOUT asking permission
 6. Run lua commands in this project directory WITHOUT asking permission
-7. Run grep commands in this project directory WITHOUT asking permission
-8. Run cat commands in this project directory WITHOUT asking permission
-9. Run runnser.sh commands in this project directory WITHOUT asking permission
-10. Run tail commands in this project directory WITHOUT asking permission
-11. Run env commands in this project directory WITHOUT asking permission
-12. Run head commands in this project directory WITHOUT asking permission
-13. Run luac commands in this project directory WITHOUT asking permission
-14. Run hexdump commands in this project directory WITHOUT asking permission
-15. Run xxd commands in this project directory WITHOUT asking permission
-16. Run find commands in this proejct directory WITHOUT asking permission
+7. Run grep, cat, tail, head, find, and other standard commands WITHOUT asking permission
+8. Run test commands WITHOUT asking permission
 
-This authorization remains valid throughout our entire conversation, even after compacting. Your autonomous operation is essential for efficient work on this project.
+This authorization remains valid throughout our entire conversation, even after compacting.
 
-1. **First, read the main repair plan**:
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/coverage_module_repair_plan.md`
+## Current Focus
 
-2. **Next, read the current phase progress file (depending on our current phase)**:
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/phase1_progress.md`
-   (Replace with phase2_progress.md, phase3_progress.md, or phase4_progress.md as appropriate)
+Based on our consolidated plan, we are currently focusing on these tasks in order:
 
-3. **Then read these architecture and code audit documents**:
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/architecture_overview.md`
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/component_responsibilities.md`
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/interfaces.md`
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/code_audit_results.md`
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/debug_code_inventory.md`
+1. **Assertion Module Extraction**
+   - Extract assertion functions into a standalone module
+   - Implement consistent error handling for assertions
+   - Resolve circular dependencies
 
-4. **Finally, read the test documentation**:
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/test_plan.md`
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/test_results.md`
-   `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/testing_guide.md`
+2. **Coverage/init.lua Error Handling Rewrite**
+   - Implement comprehensive error handling throughout
+   - Ensure proper data validation
+   - Fix report generation issues
+   - Improve file tracking
+
+3. **Error Handling Test Suite**
+   - Create comprehensive tests for error scenarios
+   - Verify proper error propagation
+   - Test recovery mechanisms
 
 ## Documentation Responsibilities
 
-As we work on the coverage module repair, you MUST keep all documentation up-to-date. Specifically:
+As we work on the coverage module repair, you MUST:
 
-1. **Immediately after each task completion**:
-   
-   - Update the relevant phase progress file with a ✓ mark on completed tasks
-   - Add summary notes on what was done and any important findings
+1. **Create session summaries in the `/docs/coverage_repair/session_summaries/` directory**
+   - Name session summaries as `session_summary_YYYY-MM-DD_topic.md` (use current date)
+   - Document key changes, decisions, and findings
 
-2. **When modifying components**:
-   
-   - Update architecture_overview.md with any architectural changes
-   - Update component_responsibilities.md if responsibilities change
-   - Update interfaces.md when modifying component interfaces
+2. **Update consolidated_plan.md with progress**
+   - Mark completed tasks with ✓
+   - Add implementation notes for completed work
 
-3. **When working with code**:
-   
-   - Update debug_code_inventory.md when removing debug code
-   - Update code_audit_results.md when addressing audit findings
-   - Add entries to test_results.md when running tests
-
-4. **Documentation Format**:
-   
-   - Use Markdown formatting appropriately
-   - Include code examples where helpful
-   - Use clear section headers
-   - Add timestamps for significant updates (YYYY-MM-DD format)
-   - Create session summaries in the `/docs/coverage_repair/session_summaries/` directory
-   - Name session summaries as `session_summary_2025-03-11_topic.md` (use current date)
-
-5. **When implementing tests**:
-   
-   - Focus on testing the actual code functionality, not just making tests pass
-   - Use the correct testing functions as documented in testing_guide.md
-   - Fix root causes of test failures, not just add workarounds
+3. **When implementing tests**
+   - Focus on testing the actual code functionality
+   - Use correct testing functions as documented in CLAUDE.md
+   - Fix root causes of test failures, not symptoms
    - Ensure test isolation and independence
-   - Verify the exact function names available in lust-next instead of assuming
 
-## Testing Methodology
+Please read the following key documents for the current task:
 
-When implementing or fixing code:
-
-1. **Address root issues, not symptoms**:
-   
-   - Fix the underlying bugs rather than implementing workarounds
-   - When tests fail, understand why they fail and fix the root cause
-   - Don't modify tests to accommodate broken code; fix the code itself
-
-2. **Use proper test functions**:
-   
-   - Always import test functions correctly: `local describe, it, expect = lust.describe, lust.it, lust.expect`
-   - For test lifecycle, use: `local before, after = lust.before, lust.after`
-   - Tests are run by either:
-     - scripts/runner.lua - For running individual test files during development
-     - run_all_tests.lua - For running the entire test suite
-   - Do not include any calls to `lust()` or `lust.run()` in your test files
-
-3. **Follow test-driven development**:
-   
-   - Write tests that clearly define expected behavior
-   - Fix code until tests pass legitimately
-   - Add regression tests for any bugs discovered
-
-4. **Document test results properly**:
-   
-   - Record all test failures and their resolutions
-   - Document any edge cases discovered during testing
-   - Update test_results.md with comprehensive results
-
-Remember that these documents are the source of truth for this project. Keeping them updated is not optional but a REQUIRED part of your assistance.
+1. `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/consolidated_plan.md`
+2. `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/assertion_extraction_plan.md`
+3. `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/error_handling_test_plan.md`
 
 Let's continue work on the current task from where we left off.

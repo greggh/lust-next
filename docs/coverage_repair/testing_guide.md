@@ -33,7 +33,10 @@ Common options include:
 lua test.lua tests/
 
 # Run a specific test file
-lua test.lua tests/reporting_test.lua
+lua test.lua tests/reporting/formatters/html_test.lua
+
+# Run all tests in a directory
+lua test.lua tests/coverage/
 
 # Run tests with coverage
 lua test.lua --coverage tests/
@@ -48,25 +51,51 @@ lua test.lua --watch tests/
 lua test.lua --quality tests/
 ```
 
+### Using runner.lua for Development
+
+For development and debugging of individual test files, you can use the `scripts/runner.lua` utility:
+
+```bash
+lua scripts/runner.lua [test_file_path]
+```
+
+Benefits of using runner.lua:
+- Faster execution for single test files
+- More focused output for debugging
+- Properly isolates test state between runs
+- Doesn't require full test environment setup
+
+Example:
+```bash
+# Run a specific test during development
+lua scripts/runner.lua tests/coverage/debug_hook_test.lua
+```
+
 ### Test Directory Structure
 
 Tests are organized in a logical directory structure by component:
 ```
 tests/
-├── assertions_test.lua       # Basic assertions tests
-├── async_test.lua            # Async functionality tests
-├── codefix_test.lua          # Code quality tool tests
-├── config_test.lua           # Configuration system tests
-├── coverage_module_test.lua  # Coverage module tests
-├── discovery_test.lua        # Test discovery system tests
-├── filesystem_test.lua       # Filesystem module tests
-├── mocking_test.lua          # Mocking system tests
-├── module_reset_test.lua     # Module reset functionality tests
-├── reporting_test.lua        # Report generation tests
-├── fixtures/                 # Test fixtures directory
-│   ├── common_errors.lua     # Error test fixtures
-│   └── modules/              # Test module fixtures
-└── ...
+├── core/            # Core framework tests 
+├── coverage/        # Coverage-related tests
+│   ├── instrumentation/  # Instrumentation-specific tests
+│   └── hooks/           # Debug hook tests
+├── quality/         # Quality validation tests
+├── reporting/       # Reporting framework tests
+│   └── formatters/      # Formatter-specific tests
+├── tools/           # Utility module tests
+│   ├── filesystem/      # Filesystem module tests
+│   ├── logging/         # Logging system tests
+│   └── watcher/         # File watcher tests
+├── assertions/      # Assertion tests
+├── async/           # Async functionality tests
+├── mocking/         # Mocking system tests
+├── parallel/        # Parallel execution tests
+├── performance/     # Performance benchmark tests
+├── discovery/       # Test discovery tests
+├── fixtures/        # Test fixtures directory
+│   └── modules/     # Module fixtures
+└── integration/     # Integration tests
 ```
 
 ## Writing Tests
@@ -156,6 +185,29 @@ describe("Calculator", function()
 end)
 ```
 
+### Focused and Excluded Tests
+
+Use `fit` to focus on specific tests and `xit` to exclude tests:
+
+```lua
+describe("Subsystem", function()
+  -- This test will be skipped
+  xit("should do something complex that's not ready", function()
+    -- Skipped test
+  end)
+  
+  -- Only this test will run if any fit() exists in the file
+  fit("should do the specific thing I'm working on", function()
+    -- Only this test will run
+  end)
+  
+  -- This test would be skipped if there's a fit() in the file
+  it("should do something else", function()
+    -- Normal test
+  end)
+end)
+```
+
 ### Assertion Basics
 
 lust-next uses expect-style assertions:
@@ -166,6 +218,7 @@ expect(value).to.exist()                -- checks value is not nil
 expect(actual).to.equal(expected)       -- checks equality
 expect(value).to.be.a("string")         -- checks type
 expect(value).to.be_truthy()            -- checks boolean truthiness
+expect(string_value).to.match(pattern)  -- checks string matches pattern
 expect(function_to_test).to.fail()      -- checks function throws error
 
 -- Negated assertions
@@ -176,6 +229,37 @@ expect(fn).to_not.fail()                -- checks function doesn't error
 
 For detailed assertion patterns, see [Assertion Pattern Mapping](assertion_pattern_mapping.md).
 
+### Common Assertion Mistakes
+
+1. **Incorrect negation syntax**:
+   ```lua
+   -- WRONG:
+   expect(value).not_to.equal(other_value)  -- "not_to" is not valid
+   
+   -- CORRECT:
+   expect(value).to_not.equal(other_value)  -- use "to_not" instead
+   ```
+
+2. **Incorrect member access syntax**:
+   ```lua
+   -- WRONG:
+   expect(value).to_be(true)  -- "to_be" is not a valid method
+   expect(number).to_be_greater_than(5)  -- underscore methods need dot access
+   
+   -- CORRECT:
+   expect(value).to.be(true)  -- use "to.be" not "to_be"
+   expect(number).to.be_greater_than(5)  -- this is correct because it's a method
+   ```
+
+3. **Inconsistent operator order**:
+   ```lua
+   -- WRONG:
+   expect(expected).to.equal(actual)  -- parameters reversed
+   
+   -- CORRECT:
+   expect(actual).to.equal(expected)  -- what you have, what you expect
+   ```
+
 ## Testing Specific Components
 
 ### Testing with Mocks
@@ -183,10 +267,11 @@ For detailed assertion patterns, see [Assertion Pattern Mapping](assertion_patte
 Use the lust mocking system for isolation:
 
 ```lua
-local mock = lust.mock
-local spy = lust.spy
+-- Import mocking tools
+local mock, spy = lust.mock, lust.spy
 
 describe("Module with dependencies", function()
+  local module_under_test
   local original_dependency
   
   before(function()
@@ -194,19 +279,48 @@ describe("Module with dependencies", function()
     original_dependency = package.loaded["module.dependency"]
     
     -- Create a mock
-    package.loaded["module.dependency"] = mock({
+    package.loaded["module.dependency"] = mock.create({
       some_function = function() return "mocked_value" end
     })
+    
+    -- Load module under test (which will use our mock)
+    module_under_test = require("module.under.test")
   end)
   
   after(function()
     -- Restore original dependency
     package.loaded["module.dependency"] = original_dependency
+    package.loaded["module.under.test"] = nil -- Force reload next time
   end)
   
   it("should use the dependency", function()
     local result = module_under_test.function_that_uses_dependency()
     expect(result).to.equal("processed_mocked_value")
+  end)
+end)
+```
+
+### Testing with Spies
+
+Use spies to track function calls without changing behavior:
+
+```lua
+describe("Function call tracking", function()
+  it("should track method calls", function()
+    local obj = {
+      method = function(self, a, b) return a + b end
+    }
+    
+    -- Create spy on object method
+    local method_spy = spy.on(obj, "method")
+    
+    -- Call the method
+    local result = obj.method(obj, 2, 3)
+    
+    -- Verify call
+    expect(result).to.equal(5) -- Original behavior preserved
+    expect(method_spy).to.be.called_times(1)
+    expect(method_spy).to.be.called_with(obj, 2, 3)
   end)
 end)
 ```
@@ -225,6 +339,18 @@ describe("Async functions", function()
       done() -- Signal test completion
     end)
   end))
+  
+  it("should timeout if operation takes too long", async(function(done)
+    async.set_timeout(100) -- 100ms timeout
+    
+    never_completing_function(function(result)
+      -- This should never be called
+      expect(true).to.equal(false) -- Would fail
+      done()
+    end)
+    
+    -- Test will fail with timeout after 100ms
+  end, 100))
 end)
 ```
 
@@ -232,92 +358,53 @@ end)
 
 When testing the coverage module, special considerations apply:
 
-1. **Isolation from Self-Coverage**: Prevent the coverage module from tracking itself during tests
-
-   ```lua
-   describe("Coverage module", function()
-     local original_tracking_state
-     
-     before(function()
-       -- Disable tracking for tests
-       original_tracking_state = coverage.is_tracking()
-       coverage.stop_tracking()
-     end)
-     
-     after(function()
-       -- Restore original tracking state
-       if original_tracking_state then
-         coverage.start_tracking()
-       end
-     end)
-     
-     -- Tests here
-   end)
-   ```
-
-2. **Testing with Real Files**: Create temporary test files when needed
-
-   ```lua
-   describe("Coverage file tracking", function()
-     local temp_file_path
-     
-     before(function()
-       -- Create a temp file with known content
-       temp_file_path = os.tmpname()
-       local file = io.open(temp_file_path, "w")
-       file:write("local function test() return true end\ntest()\n")
-       file:close()
-     end)
-     
-     after(function()
-       -- Clean up
-       os.remove(temp_file_path)
-     end)
-     
-     it("should track file execution", function()
-       coverage.start_tracking()
-       dofile(temp_file_path)
-       coverage.stop_tracking()
-       
-       local stats = coverage.get_stats()
-       expect(stats[temp_file_path]).to.exist()
-       expect(stats[temp_file_path].executed_lines[1]).to.exist()
-     end)
-   end)
-   ```
-
-3. **Mocking Static Analyzer**: When testing modules that depend on the static analyzer
-
-   ```lua
-   describe("Module using static analyzer", function()
-     local original_static_analyzer
-     
-     before(function()
-       -- Store original module
-       original_static_analyzer = package.loaded["lib.coverage.static_analyzer"]
-       
-       -- Create mock
-       package.loaded["lib.coverage.static_analyzer"] = {
-         analyze_source = function(source, filename)
-           return {
-             executable_lines = {1, 2, 3},
-             functions = {
-               {name = "test", line = 1, last_line = 3}
-             },
-             version = "mock-1.0.0"
-           }
-         end
-       }
-     end)
-     
-     after(function()
-       -- Restore original
-       package.loaded["lib.coverage.static_analyzer"] = original_static_analyzer
-     end)
-     
-     -- Tests here
-   end)
-   ```
+```lua
+describe("Coverage module", function()
+  local coverage = require "lib.coverage"
+  local original_tracking_state
+  local fs = require "lib.tools.filesystem"
+  local temp_dir
+  
+  before(function()
+    -- Create temp directory
+    temp_dir = os.tmpname() .. "_dir"
+    fs.create_directory(temp_dir)
+    
+    -- Disable tracking for tests
+    original_tracking_state = coverage.is_enabled()
+    if original_tracking_state then
+      coverage.stop()
+    end
+  end)
+  
+  after(function()
+    -- Restore original tracking state
+    if original_tracking_state then
+      coverage.start()
+    end
+    
+    -- Clean up temp directory
+    fs.delete_directory(temp_dir)
+  end)
+  
+  it("should track line execution", function()
+    -- Create test file
+    local test_file = temp_dir .. "/test.lua"
+    fs.write_file(test_file, "local x = 1\nreturn x + 1\n")
+    
+    -- Start tracking and run file
+    coverage.start()
+    dofile(test_file)
+    coverage.stop()
+    
+    -- Get results
+    local report_data = coverage.get_report_data()
+    expect(report_data.files[test_file]).to.exist()
+    expect(report_data.files[test_file].lines[1].executed).to.equal(true)
+    expect(report_data.files[test_file].lines[2].executed).to.equal(true)
+  end)
+end)
+```
 
 ### Testing with Filesystem
 
@@ -325,30 +412,66 @@ For tests involving the filesystem module:
 
 ```lua
 describe("Filesystem operations", function()
-  local test_dir = os.tmpname() .. "_dir"
+  local test_dir
   local fs = require "lib.tools.filesystem"
   
   before(function()
     -- Create test directory
-    fs.mkdir(test_dir)
+    test_dir = os.tmpname() .. "_dir"
+    fs.create_directory(test_dir)
   end)
   
   after(function()
-    -- Remove test directory and contents
-    for _, file in ipairs(fs.list_files(test_dir)) do
-      fs.remove_file(file)
-    end
-    fs.remove_dir(test_dir)
+    -- Remove test directory recursively
+    fs.delete_directory(test_dir)
   end)
   
   it("should write and read files", function()
-    local file_path = test_dir .. "/test.txt"
+    local file_path = fs.join_paths(test_dir, "test.txt")
     local content = "Test content"
     
     fs.write_file(file_path, content)
     local read_content = fs.read_file(file_path)
     
     expect(read_content).to.equal(content)
+  end)
+end)
+```
+
+### Testing Error Handling
+
+Test both success and error paths:
+
+```lua
+describe("Error handling", function()
+  local function divide(a, b)
+    if type(a) ~= "number" or type(b) ~= "number" then
+      return nil, "Both arguments must be numbers"
+    end
+    
+    if b == 0 then
+      return nil, "Division by zero"
+    end
+    
+    return a / b
+  end
+  
+  it("should handle valid inputs", function()
+    local result, err = divide(10, 2)
+    expect(result).to.equal(5)
+    expect(err).to_not.exist()
+  end)
+  
+  it("should handle invalid types", function()
+    local result, err = divide("10", 2)
+    expect(result).to_not.exist()
+    expect(err).to.equal("Both arguments must be numbers")
+  end)
+  
+  it("should handle division by zero", function()
+    local result, err = divide(10, 0)
+    expect(result).to_not.exist()
+    expect(err).to.equal("Division by zero")
   end)
 end)
 ```
@@ -404,6 +527,64 @@ end)
 1. **Check Hook Scope**: Hooks are local to their `describe` block
 2. **Check Variable Initialization**: Make sure variables are properly initialized
 3. **Check Cleanup**: Verify resources are properly released
+
+## Advanced Testing Techniques
+
+### Table-Driven Tests
+
+For testing multiple input/output combinations:
+
+```lua
+describe("String utility", function()
+  local test_cases = {
+    { input = "hello", expected = "HELLO" },
+    { input = "Hello", expected = "HELLO" },
+    { input = "123", expected = "123" },
+    { input = "", expected = "" },
+  }
+  
+  for _, test in ipairs(test_cases) do
+    it("should uppercase '" .. test.input .. "'", function()
+      expect(string.upper(test.input)).to.equal(test.expected)
+    end)
+  end
+end)
+```
+
+### Module Reset Testing
+
+When testing modules that need state reset:
+
+```lua
+describe("Module with global state", function()
+  local module_with_state = require("lib.module_with_state")
+  local module_reset = require("lib.core.module_reset")
+  
+  before(function()
+    -- Register module for resetting
+    module_reset.register(module_with_state)
+  end)
+  
+  after(function()
+    -- Reset after each test
+    module_reset.reset(module_with_state)
+  end)
+  
+  it("should initialize with default state", function()
+    expect(module_with_state.get_count()).to.equal(0)
+  end)
+  
+  it("should increment counter", function()
+    module_with_state.increment()
+    expect(module_with_state.get_count()).to.equal(1)
+  end)
+  
+  -- Because of the reset, this test will still see count=0
+  it("should still have default state in next test", function()
+    expect(module_with_state.get_count()).to.equal(0)
+  end)
+end)
+```
 
 ## Conclusion
 

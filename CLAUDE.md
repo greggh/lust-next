@@ -146,6 +146,12 @@ tests/
 │   ├── filesystem/      # Filesystem module tests
 │   ├── logging/         # Logging system tests
 │   └── watcher/         # File watcher tests
+├── error_handling/  # Error handling tests
+│   ├── core/            # Core error handling tests
+│   ├── coverage/        # Coverage error handling tests
+│   ├── reporting/       # Reporting error handling tests
+│   ├── tools/           # Tools error handling tests
+│   └── mocking/         # Mocking error handling tests
 └── ...
 ```
 
@@ -181,261 +187,162 @@ tests/
 - `lust.lua`: Compatibility layer for original lust
 - `run_all_tests.lua`: Improved test runner for proper test state isolation
 
-## Current Focus - Coverage System Enhancements and Hooks-Util Integration
+## Coverage Module Architecture
 
-We've completed the migration of all core files and examples to use our filesystem module instead of direct io.* functions, improving cross-platform compatibility and error handling. Our current focus is on enhancing the coverage system and integrating with the hooks-util project for better pre-commit and CI validation:
+### Components
 
-1. **Implementation Progress**:
-   - ✅ Researched and analyzed five different Lua coverage implementations
-   - ✅ Developed comprehensive implementation plan with modular architecture
-   - ✅ Created modular architecture with separate components:
-     - debug_hook.lua for core line tracking functionality
-     - file_manager.lua for file discovery integrated with filesystem module
-     - patchup.lua for handling non-executable lines
-     - instrumentation.lua for source code transformation approach
-   - ✅ Implemented pure Lua implementation (the first tier of our plan)
-   - ✅ Created comprehensive test suite with real code execution
-   - ✅ Implemented distinction between execution and coverage tracking
-   - ✅ Added visualization for "executed but not covered" state
+1. **Coverage Module (init.lua)**:
+   - Provides public API for coverage tracking
+   - Initializes and configures subsystems
+   - Manages coverage lifecycle (start, stop, reset)
+   - Processes coverage data before reporting
 
-2. **Coverage Module Repair Plan**:
-   - ✅ Created comprehensive coverage module repair plan with 4-phase approach
-   - ✅ Established documentation framework for tracking repair progress in docs/coverage_repair
-   - ✅ Developed initial architecture documentation structure
-   - ✅ Created phase-by-phase implementation tracking
-   - [ ] Phase 1: Clear Architecture Refinement
-     - [ ] Code audit and architecture documentation
-     - [ ] Debug code removal
-     - [ ] Component isolation
-   - [ ] Phase 2: Core Functionality Fixes
-     - [ ] Static analyzer improvements
-     - [ ] Debug hook enhancements
-     - [ ] Data flow correctness
-   - [ ] Phase 3: Reporting and Visualization
-     - [ ] HTML formatter enhancement
-     - [ ] Report validation
-     - [ ] User experience improvements
-   - [ ] Phase 4: Extended Functionality
-     - [ ] Instrumentation approach
-     - [ ] C extensions integration
-     - [ ] Final integration and documentation
+2. **Debug Hook (debug_hook.lua)**:
+   - Sets up and manages Lua debug hooks
+   - Tracks line executions and function calls
+   - Stores execution data
+   - Provides accessor functions for coverage data
 
-3. **Static Analysis Integration**:
-   - ✅ Integrated lua-parser (MIT licensed) for AST generation
-   - ✅ Created vendor integration of LPegLabel dependency
-   - ✅ Implemented build-on-first-use mechanism for C components
-   - ✅ Added fixes from upstream PRs for UTF-8 and table nesting
-   - ✅ Created static_analyzer.lua module for code mapping
-   - ✅ Implemented executable line identification via AST
-   - ✅ Enhanced function detection with parameters and line ranges
-   - ✅ Integrated with coverage module for accurate reporting
-   - ✅ Fixed infinite recursion issues in line position calculation
-   - ✅ Implemented cached line mapping for O(1) lookups
-   - ✅ Added adaptive node-to-line mapping strategies based on file size
-   - ✅ Added timeout and size limits throughout the codebase
-   - ✅ Successfully tested performance with large files (2,000+ lines)
-   - ✅ Implemented block-based coverage tracking for branches and loops
-   - ✅ Added visualization for blocks in HTML reports
-   - ✅ Created weighted coverage metrics combining lines, blocks, and functions
-   - ✅ Successfully tested with over 80% block coverage in examples
-   - ✅ Fixed data flow between analyzer and debug hook
-   - ✅ Added conditional expression tracking for branch coverage
-   - ✅ Enhanced HTML visualization with detailed legend for indicators
-   - ✅ Improved block boundary detection and styling
-   - ✅ Fixed line classification issues for executable vs. non-executable code
-   - ✅ Fixed critical bug where executable lines are incorrectly marked as covered
-   - ✅ Fixed issues with function tracking showing 0% coverage
-   - ✅ Fixed over-reporting issues in certain files
-   - ✅ Implemented proper multiline comment detection and handling
-   - ✅ Resolved separation of concerns between coverage and reporting modules
-   - ✅ Added post-processing verification steps to catch incorrectly marked lines
-   - ✅ Updated statistics calculation to only count executable lines in coverage metrics
-   - ✅ Fixed comparison against nil threshold values
-   - ✅ Removed outdated test files from project root
-   - ✅ Implemented distinction between execution and coverage tracking
-   - ✅ Added visualization for "executed but not covered" state
-   - ✅ Added configuration option for control flow keywords treatment
-   - ✅ Implemented significantly improved comment detection
-   - ✅ Added comprehensive documentation for control flow keywords option
-   - ✅ Created examples demonstrating the impact of different configuration values
-   - ✅ Added detailed guide for configuring coverage settings
+3. **Static Analyzer (static_analyzer.lua)**:
+   - Parses Lua code into AST
+   - Identifies executable and non-executable lines
+   - Tracks code structure (functions, blocks)
+   - Provides information about line executability
 
-4. **Centralized Logging System**:
-   - ✅ Implemented centralized logging module (lib/tools/logging.lua)
-   - ✅ Created robust logging API with multiple severity levels (FATAL, ERROR, WARN, INFO, DEBUG, TRACE)
-   - ✅ Added support for module-specific log configurations
-   - ✅ Implemented colored output and timestamp formatting
-   - ✅ Added file output capabilities for persistent logs
-   - ✅ Added `configure_from_options` helper to reduce code duplication
-   - ✅ Implemented `configure_from_config` for global config integration
-   - ✅ Removed redundant config passing between modules
-   - ✅ Created example demonstrating global config-based logging
-   - ✅ Converted debug print statements in multiple modules
-   - ✅ Added careful wrapper for user-facing debug output
-   - ✅ Implemented comprehensive log rotation system
-   - ✅ Added configuration for log directory, file size limits and rotation count
-   - ✅ Enhanced .gitignore to handle rotated log files
-   - ✅ Created filesystem integration for log directory creation
-   - ✅ Added logging system to global config defaults
-   - ✅ Added detailed documentation for the logging system
-   - ✅ Added log rotation system with size-based rotation
-   - ✅ Converted print statements to logging in fix_expect, formatters, coverage, and watcher modules
-   - ✅ Completely rewrote debug_dump in coverage module to fully use the logging system while preserving console output
-   - ✅ Enhanced interactive.lua to use the logging system
-   - ✅ Updated codefix module to use centralized logging
-   - ✅ Enhanced parser modules to use logging with fallbacks for early loading
-   - ✅ Created test case for log rotation system
-   - ✅ Added logging configuration section to config template
-   - ✅ Updated example to demonstrate config integration with rotation
-   - ✅ Created comprehensive logging guide for contributors and users
-   - ✅ Converted print statements in all script files to use the logging system:
-     - scripts/run_tests.lua, scripts/runner.lua (core test runners)
-     - scripts/fix_markdown.lua, scripts/version_check.lua, scripts/version_bump.lua (utility scripts) 
-     - scripts/test_parser.lua, scripts/test_static_analyzer.lua, scripts/test_lpeglabel.lua, scripts/test_coverage_static_analysis.lua (test scripts)
-   - ✅ Created find_print_statements.lua utility to identify and track remaining print statements
-   - ✅ Added proper logging initialization with fallbacks for early module loading
-   - ✅ Implemented consistent logging patterns across all script modules
-   - ✅ Added logging to core modules including fix_expect, config, coverage, formatters
-   - ✅ Created comprehensive logging style guide (docs/api/logging_style_guide.md)
-   - ✅ Implemented structured parameter-based logging pattern
-   - ✅ Converted key modules to use structured logging:
-     - lib/core/config.lua - Configuration module with proper parameter tables
-     - lib/coverage/init.lua - Coverage module with detailed structured logging
-     - lib/tools/benchmark.lua - Performance benchmarking with structured data
-     - lib/tools/parallel.lua - Parallel execution with robust logging
-     - lib/tools/codefix.lua - Code quality tools with structured output
-     - lib/reporting/init.lua and formatters - All reporting modules
-     - lib/quality/init.lua - Quality module with detailed parameter information
-     - lib/mocking/* - Complete mocking system (init, spy, stub, mock)
-     - lib/tools/markdown.lua - Markdown processing module
-     - lib/tools/parser/* - Parser modules (init, grammar, validator)
-     - lust-next.lua - Main framework file with structured logging
-     - lust.lua - Compatibility layer with structured warnings
-     - test files - Primary test files with structured logging
-   - ✅ Standardized separation of message content from contextual data
-   - ✅ Added detailed parameter information for improved debugging
-   - ✅ Implemented consistent logging patterns across all primary modules
-   - ✅ Enhanced interactive.lua with improved component-based logging
+4. **File Manager (file_manager.lua)**:
+   - Discovers files for coverage analysis
+   - Applies include/exclude patterns
+   - Processes discovered files
 
-5. **Quality Validation Enhancements**:
-   - ✅ Refactored to use new filesystem module
-   - ✅ Increased coverage threshold to 90% from 80%
-   - Integrate AST-based complexity metrics
-   - Implement test-to-code mapping functionality
-   - Add detailed quality recommendations based on AST analysis
-   - Create combined coverage/quality HTML reports
-   - Run level 5 code quality tests
+5. **Patchup (patchup.lua)**:
+   - Fixes coverage data for non-executable lines
+   - Identifies comments and structural code
+   - Patches files based on static analysis
 
-5. **Documentation Enhancement Plan**:
-   - ✅ Create comprehensive documentation for all logging features:
-     - ✅ Document log search and query functionality
-     - ✅ Document external tool integration for popular platforms
-     - ✅ Document test formatter integration
-     - ✅ Explain buffering capabilities and configuration
-   - ✅ Document all filesystem functions with comprehensive examples
-   - ✅ Create usage patterns documentation for common scenarios
-   - ✅ Add cross-platform compatibility notes for all functions
-   - ✅ Create migration guide for replacing io.* functions
-   - Replace io.* functions with filesystem module throughout codebase
-   - Update coverage module documentation with new features
-   - Create tutorials for common use cases across modules
-   - Document test mode feature for coverage module
-   - ✅ Update documentation for structured logging implementation across framework
-   - ✅ Create logging style guide for consistent implementation
+6. **Instrumentation (instrumentation.lua)**:
+   - Transforms Lua code with coverage tracking
+   - Hooks into Lua's loading functions
+   - Generates sourcemaps for error reporting
 
-All major filesystem module work is complete with proper integration throughout the codebase. The static analysis integration is now fully implemented with significant performance optimizations. By fixing critical recursive functions and implementing efficient caching strategies, we've reduced processing time for large files from potential infinite loops to just a few seconds. The system can now reliably process files up to 2,000+ lines, making it suitable for real-world Lua codebases. Our current focus is completing the block-based coverage tracking for even more detailed metrics.
+### Error Handling Guidelines
 
-## Working Environment Setup
-We've implemented the interactive CLI mode for lust-next:
+When working with the coverage module and implementing error handling:
 
-- Interactive CLI mode for running tests: ✅
-  - [x] Full-featured interactive command-line interface
-  - [x] Live configuration of test options (tags, filters, focus)
-  - [x] Command history and navigation
-  - [x] Dynamic test discovery and execution
-  - [x] Status display showing current configuration
-  - [x] Toggle watch mode from within the interface
-  - [x] Integration with codefix module for code quality checks
-  - [x] Comprehensive help system with command reference
-  - [x] Clear, colorized output for better readability
-  - [x] Example script demonstrating interactive mode usage
-We've previously completed these major features:
+1. **Use Structured Error Objects**: Always use error_handler.create() or specialized functions
+   ```lua
+   local err = error_handler.validation_error(
+     "Missing required parameter",
+     {parameter_name = "file_path", operation = "track_file"}
+   )
+   ```
 
-- Fixed expect assertion system: ✅
-  - [x] Fixed issues with expect assertion chains
-  - [x] Added proper test coverage for all assertion types
-  - [x] Corrected path definitions for assertion methods
-  - [x] Ensured reset() function preserves assertion paths
-  - [x] Added comprehensive test suite for expect assertions
-- Watch mode for continuous testing: ✅
-  - [x] Automatic file change detection
-  - [x] Continuous test execution
-  - [x] Configurable directories to watch
-  - [x] Exclusion patterns for ignoring files
-  - [x] Debounce mechanism to prevent multiple runs on rapid changes
-  - [x] Integration with interactive CLI mode
+2. **Proper Error Propagation**: Return nil and error object
+   ```lua
+   if not file_content then
+     return nil, error_handler.io_error(
+       "Failed to read file", 
+       {file_path = file_path, operation = "track_file"}
+     )
+   end
+   ```
 
-## Future Focus
+3. **Try/Catch Pattern**: Use error_handler.try for operations that might throw errors
+   ```lua
+   local success, result, err = error_handler.try(function()
+     return analyze_file(file_path)
+   end)
+   
+   if not success then
+     logger.error("Failed to analyze file", {
+       file_path = file_path,
+       error = error_handler.format_error(result)
+     })
+     return nil, result
+   end
+   ```
 
-- All planned features from our testing plan have been implemented:
-  - ✅ TAP output format support for broader testing ecosystem integration
-  - ✅ CSV output format for spreadsheet and data analysis integration
-  - ✅ Command-line configuration for report file naming and paths
-  - ✅ Runtime configuration options for custom test output formats
-  - ✅ Improved test suite isolation with module reset system
-  - ✅ Benchmarking tools for performance analysis
-  - ✅ Memory usage tracking and optimization
-  - ✅ Parallel test execution across multiple processes
-  - ✅ Results aggregation from parallel test runs
-  - ✅ Coverage data merging from multiple processes
-  - ✅ Configuration file system for customizing defaults (.lust-next-config.lua)
-- ✅ Completed comprehensive filesystem module migration:
-  - ✅ Created standalone filesystem module with platform-independent operations
-  - ✅ Documented all filesystem functions with comprehensive examples
-  - ✅ Added cross-platform compatibility notes for all functions
-  - ✅ Created detailed implementation plan for filesystem migration
-  - ✅ Migrated core modules (codefix.lua, benchmark.lua) to filesystem module
-  - ✅ Migrated script files (fix_markdown.lua, version_check.lua, version_bump.lua)
-  - ✅ Migrated core framework files to use filesystem module
-  - ✅ Updated lust-next.lua (main framework file) to use fs.read_file
-  - ✅ Migrated lib/tools/parallel.lua (test execution module)
-  - ✅ Updated critical test files (logging_test.lua, quality_test.lua, watch_mode_test.lua)
-  - ✅ Migrated all example files to use the filesystem module
-  - ✅ Fixed test assertions to match structured logging output
-- ✅ Implemented comprehensive centralized logging module:
-  - ✅ Added global config integration for logging configuration
-  - ✅ Converted debug print statements to standardized logging
-  - ✅ Converted all script modules to use the logging system
-  - ✅ Created find_print_statements.lua utility for tracking conversion progress
-  - ✅ Implemented structured logging formats (JSON) for monitoring tools
-  - ✅ Added filtering capabilities by module/level for interactive sessions
-  - ✅ Created comprehensive examples for JSON logging and filtering capabilities
-  - ✅ Created comprehensive logging style guide (docs/api/logging_style_guide.md)
-  - ✅ Implemented structured parameter-based logging pattern
-  - ✅ Converted key modules to structured logging (config, coverage, benchmark, codefix)
-  - ✅ Converted reporting modules to structured logging 
-  - ✅ Enhanced interactive.lua with improved component-based structured logging
-- Current Focus - Coverage System Enhancements and Hooks-Util Integration:
-  - Create comprehensive documentation for the filesystem module:
-    - Document cross-platform testing strategies
-    - Create guide for optimizing filesystem operations
-    - Document approaches for replacing io.popen calls
-    - Create performance benchmarking guide for filesystem operations
-  - Enhance AST-based coverage tracking:
-    - Integrate AST-based code analysis for quality metrics
-    - Add hover tooltips for execution count display
-    - Create visualization for block execution frequency
-    - Add function complexity metrics to coverage reports
-  - Integrate with hooks-util project:
-    - Create pre-commit hooks for lust-next projects
-    - Implement automated test execution in Git hooks
-    - Add filesystem module migration checks to hooks
-    - Create CI workflow examples for different platforms
-- Potential future enhancements:
-  - Additional specialized formatters for specific CI/CD pipelines
-  - Stream-based test result processing for extremely large test suites
-  - Distributed test execution across multiple machines
-  - Fully automated performance benchmarking system
+4. **Safe I/O Operations**: Use error_handler.safe_io_operation for file access
+   ```lua
+   local content, err = error_handler.safe_io_operation(
+     function() return fs.read_file(file_path) end,
+     file_path,
+     {operation = "read_coverage_file"}
+   )
+   ```
+
+5. **Validation Functions**: Always validate input parameters
+   ```lua
+   error_handler.assert(type(file_path) == "string", 
+     "file_path must be a string", 
+     error_handler.CATEGORY.VALIDATION,
+     {provided_type = type(file_path)}
+   )
+   ```
+
+## Error Handling Implementation Across Modules
+
+All modules in lust-next follow these consistent error handling patterns:
+
+1. **Input Validation**: Validate all function parameters at the start
+2. **Error Propagation**: Return nil/false and error objects for failures
+3. **Error Types**: Use specialized error types (validation, io, runtime, etc.)
+4. **Error Context**: Include detailed contextual information in error objects
+5. **Try/Catch**: Wrap potentially risky operations in error_handler.try()
+6. **Logging**: Log errors with appropriate severity levels and context
+7. **Safe I/O**: Use safe I/O operations with proper error handling
+8. **Recovery**: Implement recovery mechanisms and fallbacks where appropriate
+
+Complete error handling has been implemented across:
+- All formatters in the reporting system
+- All tools modules (benchmark, codefix, interactive, markdown, watcher)
+- Mocking system (init, spy, mock)
+- Core framework modules (config, coverage components)
+
+## Current Focus and Work Order
+
+Our current priorities in order:
+
+1. **Assertion Module Extraction**
+   - Extract assertion functions into a standalone module (lib/assertion.lua)
+   - Resolve circular dependencies
+   - Implement consistent error handling across assertions
+
+2. **Coverage/init.lua Error Handling Rewrite**
+   - Implement comprehensive error handling throughout
+   - Ensure proper data validation
+   - Fix report generation issues
+   - Improve file tracking
+
+3. **Error Handling Test Suite**
+   - Create a comprehensive test suite for error handling
+   - Test error scenarios across all modules
+   - Verify proper error propagation
+   - Test recovery mechanisms
+
+4. **Static Analyzer and Debug Hook Enhancements**
+   - Improve line classification system
+   - Enhance function detection
+   - Perfect block boundary identification
+   - Fix data flow between components
+
+## Future Enhancements
+
+Once the core coverage system is repaired, we plan to:
+
+1. **Enhance Reporting and Visualization**
+   - Add hover tooltips for execution count
+   - Implement visualization for block execution frequency
+   - Add function complexity metrics to reports
+
+2. **Improve Instrumentation Approach**
+   - Refactor for clarity and stability
+   - Fix sourcemap handling
+   - Enhance module require instrumentation
+
+3. **Integration and Documentation**
+   - Create pre-commit hooks for coverage checks
+   - Add continuous integration examples
+   - Update comprehensive documentation
 
 ## Documentation Links
 

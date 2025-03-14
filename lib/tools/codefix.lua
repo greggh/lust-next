@@ -3,20 +3,49 @@
 
 local M = {}
 local logging = require("lib.tools.logging")
+local error_handler = require("lib.tools.error_handler")
+local fs = require("lib.tools.filesystem")
 
 -- Initialize module logger
 local logger = logging.get_logger("codefix")
 logging.configure_from_config("codefix")
 
--- Try to load JSON module
+-- Try to load JSON module with proper error handling
 local json
-local ok, loaded_json = pcall(require, "lib.reporting.json")
-if ok then
-  json = loaded_json
+local function load_json_module()
+  return error_handler.try(function()
+    -- Try loading JSON module from lust-next first
+    local loaded_json = require("lib.reporting.json")
+    logger.debug("Loaded JSON module from lust-next", {
+      module_path = "lib.reporting.json"
+    })
+    return loaded_json
+  end)
+end
+
+local success, loaded_json_or_error = load_json_module()
+if success then
+  json = loaded_json_or_error
 else
-  ok, loaded_json = pcall(require, "json")
-  if ok then
-    json = loaded_json
+  logger.debug("Failed to load JSON module from lust-next", {
+    error = error_handler.format_error(loaded_json_or_error)
+  })
+  
+  -- Try loading from system libraries
+  success, loaded_json_or_error = error_handler.try(function()
+    local system_json = require("json")
+    logger.debug("Loaded JSON module from system libraries", {
+      module_type = type(system_json)
+    })
+    return system_json
+  end)
+  
+  if success then
+    json = loaded_json_or_error
+  else
+    logger.warn("Failed to load any JSON module, JSON-related features will be unavailable", {
+      error = error_handler.format_error(loaded_json_or_error)
+    })
   end
 end
 
@@ -53,315 +82,990 @@ M.config = {
   backup_ext = ".bak",        -- Extension for backup files
 }
 
--- Helper function to execute shell commands
+-- Helper function to execute shell commands with robust error handling
 local function execute_command(command)
-  if M.config.debug then
-    logger.debug("Executing command: " .. command)
-  end
-
-  local handle = io.popen(command .. " 2>&1", "r")
-  if not handle then
-    logger.error("Failed to execute command: " .. command)
-    return nil, false, -1, "Failed to execute command: " .. command
+  -- Validate required parameters
+  error_handler.assert(command ~= nil and type(command) == "string", 
+    "Command must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {command_type = type(command)}
+  )
+  
+  error_handler.assert(command:len() > 0, 
+    "Command cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {command_length = command:len()}
+  )
+  
+  logger.debug("Executing command", {
+    command = command,
+    debug_mode = M.config.debug
+  })
+  
+  -- Execute command with proper error handling
+  local handle_success, handle, handle_err = error_handler.safe_io_operation(function()
+    return io.popen(command .. " 2>&1", "r")
+  end, "command", {operation = "popen", command = command})
+  
+  if not handle_success or not handle then
+    local err_obj = error_handler.io_error(
+      "Failed to execute command", 
+      error_handler.SEVERITY.ERROR,
+      {
+        command = command,
+        error = handle_err or "I/O operation failed"
+      }
+    )
+    
+    logger.error("Failed to execute command", {
+      command = command,
+      error = error_handler.format_error(err_obj)
+    })
+    
+    return nil, false, -1, err_obj
   end
   
-  local result = handle:read("*a")
-  local success, reason, code = handle:close()
+  -- Read output with error handling
+  local read_success, result, read_err = error_handler.safe_io_operation(function()
+    return handle:read("*a")
+  end, "command_output", {operation = "read", command = command})
+  
+  if not read_success then
+    local err_obj = error_handler.io_error(
+      "Failed to read command output", 
+      error_handler.SEVERITY.ERROR,
+      {
+        command = command,
+        error = read_err or "Read operation failed"
+      }
+    )
+    
+    logger.error("Failed to read command output", {
+      command = command,
+      error = error_handler.format_error(err_obj)
+    })
+    
+    -- Try to close handle to avoid resource leaks
+    error_handler.try(function() handle:close() end)
+    
+    return nil, false, -1, err_obj
+  end
+  
+  -- Close handle with error handling
+  local close_success, close_result, close_err = error_handler.safe_io_operation(function()
+    return handle:close()
+  end, "command_close", {operation = "close", command = command})
+  
+  local success, reason, code
+  
+  if close_success then
+    success, reason, code = table.unpack(close_result)
+  else
+    success = false
+    reason = close_err or "Close operation failed"
+    code = -1
+    
+    logger.warn("Failed to close command handle properly", {
+      command = command,
+      error = reason
+    })
+  end
+  
   code = code or 0
   
-  if M.config.debug then
-    logger.debug("Command: " .. command)
-    logger.debug("Exit code: " .. tostring(code))
-    logger.debug("Output: " .. (result or ""))
-  end
+  logger.debug("Command execution completed", {
+    command = command,
+    exit_code = code,
+    output_length = result and #result or 0,
+    success = success
+  })
   
   return result, success, code, reason
 end
 
--- Get the operating system name
+-- Get the operating system name with error handling
 local function get_os()
   -- Use path separator to detect OS type (cross-platform approach)
-  local is_windows = package.config:sub(1,1) == '\\'
-  
-  if is_windows then
-    return "windows"
-  else
+  local success, os_info = error_handler.try(function()
+    local is_windows = package.config:sub(1,1) == '\\'
+    
+    if is_windows then
+      return {name = "windows", source = "path_separator"}
+    end
+    
     -- For Unix-like systems, we can differentiate further if needed
-    -- but for most purposes, knowing it's not Windows is sufficient
-    if fs then
-      -- Try to use a non-io.popen method if possible
-      local platform = fs._PLATFORM
-      if platform then
-        if platform:match("darwin") then
-          return "macos"
-        elseif platform:match("linux") then
-          return "linux"
-        elseif platform:match("bsd") then
-          return "bsd"
-        end
+    -- Try to use filesystem module for platform detection first
+    if fs and fs._PLATFORM then
+      local platform = fs._PLATFORM:lower()
+      
+      if platform:match("darwin") then
+        return {name = "macos", source = "filesystem_module"}
+      elseif platform:match("linux") then
+        return {name = "linux", source = "filesystem_module"}
+      elseif platform:match("bsd") then
+        return {name = "bsd", source = "filesystem_module"}
       end
     end
     
     -- Fall back to uname command for Unix-like systems
-    local popen_cmd = "uname -s"
-    local handle = io.popen(popen_cmd)
-    if handle then
-      local os_name = handle:read("*l"):lower()
+    local uname_success, result = error_handler.safe_io_operation(function()
+      local popen_cmd = "uname -s"
+      local handle = io.popen(popen_cmd)
+      if not handle then
+        return nil, "Failed to open uname command"
+      end
+      
+      local os_name = handle:read("*l")
       handle:close()
       
-      if os_name:match("darwin") then
-        return "macos"
-      elseif os_name:match("linux") then
-        return "linux"
-      elseif os_name:match("bsd") then
-        return "bsd"
+      if not os_name then
+        return nil, "Failed to read OS name from uname"
+      end
+      
+      return os_name:lower()
+    end, "uname_command", {operation = "get_os_name"})
+    
+    if uname_success and result then
+      if result:match("darwin") then
+        return {name = "macos", source = "uname_command"}
+      elseif result:match("linux") then
+        return {name = "linux", source = "uname_command"}
+      elseif result:match("bsd") then
+        return {name = "bsd", source = "uname_command"}
       end
     end
+    
+    -- Default to detecting based on path separator
+    return {name = "unix", source = "path_separator_fallback"}
+  end)
+  
+  if not success then
+    logger.warn("Failed to detect operating system", {
+      error = error_handler.format_error(os_info),
+      fallback = "unix"
+    })
+    return "unix"
   end
   
-  -- Default to detecting based on path separator
-  return is_windows and "windows" or "unix"
+  logger.debug("Detected operating system", {
+    os = os_info.name,
+    detection_source = os_info.source
+  })
+  
+  return os_info.name
 end
 
--- Logger functions - redirected to central logging system
-local function log_info(msg)
+-- Logger functions - redirected to central logging system with structured logging
+local function log_info(message, context)
   if M.config.verbose or M.config.debug then
-    logger.info(msg)
+    if type(context) == "table" then
+      logger.info(message, context)
+    else
+      logger.info(message, {raw_message = message})
+    end
   end
 end
 
-local function log_debug(msg)
+local function log_debug(message, context)
   if M.config.debug then
-    logger.debug(msg)
+    if type(context) == "table" then
+      logger.debug(message, context)
+    else
+      logger.debug(message, {raw_message = message})
+    end
   end
 end
 
-local function log_warning(msg)
-  logger.warn(msg)
+local function log_warning(message, context)
+  if type(context) == "table" then
+    logger.warn(message, context)
+  else
+    logger.warn(message, {raw_message = message})
+  end
 end
 
-local function log_error(msg)
-  logger.error(msg)
+local function log_error(message, context)
+  if type(context) == "table" then
+    logger.error(message, context)
+  else
+    logger.error(message, {raw_message = message})
+  end
 end
 
-local function log_success(msg)
-  -- Log at info level
-  logger.info(msg)
-  -- Also print to console for user feedback with [SUCCESS] prefix
-  io.write("[SUCCESS] " .. msg .. "\n")
+local function log_success(message, context)
+  -- Log at info level with structured data
+  if type(context) == "table" then
+    logger.info(message, context)
+  else
+    logger.info(message, {raw_message = message, success = true})
+  end
+  
+  -- Also print to console for user feedback with [SUCCESS] prefix using safe I/O
+  error_handler.safe_io_operation(function()
+    io.write("[SUCCESS] " .. message .. "\n")
+  end, "console", {operation = "write_success", message = message})
 end
 
--- Load the filesystem module
-local fs = require("lib.tools.filesystem")
-logger.debug("Filesystem module loaded successfully", {
-  version = fs._VERSION
+-- Filesystem module was already loaded at the top of the file
+logger.debug("Filesystem module configuration", {
+  version = fs._VERSION,
+  platform = fs._PLATFORM,
+  module_path = package.searchpath("lib.tools.filesystem", package.path)
 })
 
--- Check if a file exists
+-- Check if a file exists with error handling
 local function file_exists(path)
-  return fs.file_exists(path)
+  -- Validate required parameters
+  error_handler.assert(path ~= nil and type(path) == "string", 
+    "Path must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_type = type(path)}
+  )
+  
+  error_handler.assert(path:len() > 0, 
+    "Path cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_length = path:len()}
+  )
+  
+  local success, result, err = error_handler.safe_io_operation(function()
+    return fs.file_exists(path)
+  end, path, {operation = "file_exists"})
+  
+  if not success then
+    log_warning("Failed to check if file exists", {
+      path = path,
+      error = error_handler.format_error(result)
+    })
+    return false
+  end
+  
+  return result
 end
 
--- Read a file into a string
+-- Read a file into a string with error handling
 local function read_file(path)
-  return fs.read_file(path)
+  -- Validate required parameters
+  error_handler.assert(path ~= nil and type(path) == "string", 
+    "Path must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_type = type(path)}
+  )
+  
+  error_handler.assert(path:len() > 0, 
+    "Path cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_length = path:len()}
+  )
+  
+  local success, content, err = error_handler.safe_io_operation(function()
+    return fs.read_file(path)
+  end, path, {operation = "read_file"})
+  
+  if not success then
+    local error_obj = error_handler.io_error(
+      "Failed to read file", 
+      error_handler.SEVERITY.ERROR,
+      {
+        path = path,
+        operation = "read_file",
+        error = err
+      }
+    )
+    
+    log_error("Failed to read file", {
+      path = path,
+      error = error_handler.format_error(error_obj)
+    })
+    
+    return nil, error_obj
+  end
+  
+  log_debug("Successfully read file", {
+    path = path,
+    content_size = content and #content or 0
+  })
+  
+  return content
 end
 
--- Write a string to a file
+-- Write a string to a file with error handling
 local function write_file(path, content)
-  return fs.write_file(path, content)
+  -- Validate required parameters
+  error_handler.assert(path ~= nil and type(path) == "string", 
+    "Path must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_type = type(path)}
+  )
+  
+  error_handler.assert(path:len() > 0, 
+    "Path cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_length = path:len()}
+  )
+  
+  error_handler.assert(content ~= nil, 
+    "Content cannot be nil", 
+    error_handler.CATEGORY.VALIDATION,
+    {content_type = type(content)}
+  )
+  
+  local success, result, err = error_handler.safe_io_operation(function()
+    return fs.write_file(path, content)
+  end, path, {operation = "write_file", content_size = type(content) == "string" and #content or 0})
+  
+  if not success then
+    local error_obj = error_handler.io_error(
+      "Failed to write file", 
+      error_handler.SEVERITY.ERROR,
+      {
+        path = path,
+        operation = "write_file",
+        error = err
+      }
+    )
+    
+    log_error("Failed to write file", {
+      path = path,
+      error = error_handler.format_error(error_obj)
+    })
+    
+    return false, error_obj
+  end
+  
+  log_debug("Successfully wrote file", {
+    path = path,
+    content_size = type(content) == "string" and #content or 0
+  })
+  
+  return true
 end
 
--- Create a backup of a file
+-- Create a backup of a file with error handling
 local function backup_file(path)
+  -- Skip if backups are disabled
   if not M.config.backup then
+    log_debug("Backup is disabled, skipping", {
+      path = path
+    })
     return true
   end
   
-  logger.debug("Creating backup of file", {
+  -- Validate required parameters
+  error_handler.assert(path ~= nil and type(path) == "string", 
+    "Path must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_type = type(path)}
+  )
+  
+  error_handler.assert(path:len() > 0, 
+    "Path cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {path_length = path:len()}
+  )
+  
+  error_handler.assert(M.config.backup_ext ~= nil and type(M.config.backup_ext) == "string", 
+    "Backup extension must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {backup_ext_type = type(M.config.backup_ext)}
+  )
+  
+  log_debug("Creating backup of file", {
     path = path,
     backup_ext = M.config.backup_ext
   })
   
-  local backup_path = path .. M.config.backup_ext
-  local success, err = fs.copy_file(path, backup_path)
-  if not success then
-    logger.error("Failed to create backup file", {
-      path = path, 
-      backup_path = backup_path,
-      error = err
+  -- Check if file exists before backing up
+  local file_check_success, file_exists_result = error_handler.try(function()
+    return fs.file_exists(path)
+  end)
+  
+  if not file_check_success or not file_exists_result then
+    local error_obj = error_handler.io_error(
+      "Source file does not exist or cannot be accessed", 
+      error_handler.SEVERITY.ERROR,
+      {
+        path = path,
+        operation = "backup_file"
+      }
+    )
+    
+    log_error("Failed to backup file", {
+      path = path,
+      reason = "source file does not exist or cannot be accessed",
+      error = error_handler.format_error(error_obj)
     })
-    return false, err
+    
+    return false, error_obj
   end
   
-  logger.debug("Backup file created successfully", {
+  -- Create backup with error handling
+  local backup_path = path .. M.config.backup_ext
+  
+  local success, result, err = error_handler.safe_io_operation(function()
+    return fs.copy_file(path, backup_path)
+  end, path, {operation = "copy_file", backup_path = backup_path})
+  
+  if not success then
+    local error_obj = error_handler.io_error(
+      "Failed to create backup file", 
+      error_handler.SEVERITY.ERROR,
+      {
+        path = path,
+        backup_path = backup_path,
+        operation = "backup_file",
+        error = err
+      }
+    )
+    
+    log_error("Failed to create backup file", {
+      path = path, 
+      backup_path = backup_path,
+      error = error_handler.format_error(error_obj)
+    })
+    
+    return false, error_obj
+  end
+  
+  log_debug("Backup file created successfully", {
     path = backup_path
   })
+  
   return true
 end
 
--- Check if a command is available
+-- Check if a command is available with error handling
 local function command_exists(cmd)
-  local os_name = get_os()
+  -- Validate required parameters
+  error_handler.assert(cmd ~= nil and type(cmd) == "string", 
+    "Command must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {cmd_type = type(cmd)}
+  )
+  
+  error_handler.assert(cmd:len() > 0, 
+    "Command cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {cmd_length = cmd:len()}
+  )
+  
+  local command_check_success, os_name_or_err = error_handler.try(function()
+    return get_os()
+  end)
+  
+  if not command_check_success then
+    log_warning("Failed to get OS type for command check", {
+      error = error_handler.format_error(os_name_or_err),
+      cmd = cmd,
+      fallback = "unix"
+    })
+    os_name_or_err = "unix"
+  end
+  
+  local os_name = os_name_or_err
   local test_cmd
   
+  log_debug("Checking if command exists", {
+    cmd = cmd,
+    os = os_name
+  })
+  
+  -- Construct platform-appropriate command check
   if os_name == "windows" then
     test_cmd = string.format('where %s 2>nul', cmd)
   else
     test_cmd = string.format('command -v %s 2>/dev/null', cmd)
   end
   
-  local result, success = execute_command(test_cmd)
-  return success and result and result:len() > 0
+  -- Execute check with error handling
+  local result, success, code, reason = execute_command(test_cmd)
+  
+  -- Check result with proper validation
+  local cmd_exists = success and result and result:len() > 0
+  
+  log_debug("Command existence check result", {
+    cmd = cmd,
+    exists = cmd_exists,
+    exit_code = code,
+    result_length = result and result:len() or 0
+  })
+  
+  return cmd_exists
 end
 
--- Find a configuration file by searching up the directory tree
+-- Find a configuration file by searching up the directory tree with error handling
 local function find_config_file(filename, start_dir)
-  start_dir = start_dir or "."
-  local current_dir = start_dir
+  -- Validate required parameters
+  error_handler.assert(filename ~= nil and type(filename) == "string", 
+    "Filename must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {filename_type = type(filename)}
+  )
   
-  logger.debug("Searching for config file", {
+  error_handler.assert(filename:len() > 0, 
+    "Filename cannot be empty", 
+    error_handler.CATEGORY.VALIDATION,
+    {filename_length = filename:len()}
+  )
+  
+  -- Process optional parameters with defaults
+  start_dir = start_dir or "."
+  
+  error_handler.assert(type(start_dir) == "string", 
+    "Start directory must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {start_dir_type = type(start_dir)}
+  )
+  
+  log_debug("Searching for config file", {
     filename = filename,
     start_dir = start_dir
   })
   
-  -- Use filesystem module's get_absolute_path if available
-  if fs then
-    current_dir = fs.get_absolute_path(current_dir) or current_dir
-  else
-    -- Convert to absolute path if needed
-    if not current_dir:match("^/") and get_os() ~= "windows" then
-      local pwd_result = execute_command("pwd")
-      if pwd_result then
-        current_dir = pwd_result:gsub("%s+$", "") .. "/" .. current_dir
+  -- Use try/catch pattern for the entire search process
+  local search_success, search_result = error_handler.try(function()
+    local current_dir = start_dir
+    
+    -- Get absolute path with error handling
+    local abs_success, abs_path = error_handler.try(function()
+      return fs.get_absolute_path(current_dir)
+    end)
+    
+    if abs_success and abs_path then
+      current_dir = abs_path
+    else
+      -- Fallback for absolute path using shell command if filesystem module fails
+      log_warning("Failed to get absolute path with filesystem module", {
+        dir = current_dir,
+        error = error_handler.format_error(abs_path),
+        fallback = "using shell pwd command"
+      })
+      
+      if not current_dir:match("^[/\\]") and get_os() ~= "windows" then
+        local pwd_result, pwd_success = execute_command("pwd")
+        if pwd_success and pwd_result then
+          current_dir = pwd_result:gsub("%s+$", "") .. "/" .. current_dir
+        end
       end
     end
-  end
-  
-  logger.debug("Starting config file search from directory", {
-    absolute_dir = current_dir
-  })
-  
-  while current_dir and current_dir ~= "" do
-    local config_path
     
-    if fs then
-      config_path = fs.join_paths(current_dir, filename)
-    else
-      config_path = current_dir .. "/" .. filename
+    log_debug("Starting config file search from directory", {
+      absolute_dir = current_dir
+    })
+    
+    local iteration_count = 0
+    local max_iterations = 50 -- Safety limit to prevent infinite loops
+    
+    -- Walk up the directory tree with proper error handling
+    while current_dir and current_dir ~= "" and iteration_count < max_iterations do
+      iteration_count = iteration_count + 1
+      
+      -- Construct config path with error handling
+      local config_path
+      local join_success, joined_path = error_handler.try(function()
+        return fs.join_paths(current_dir, filename)
+      end)
+      
+      if join_success and joined_path then
+        config_path = joined_path
+      else
+        -- Fallback for path joining if filesystem module fails
+        log_warning("Failed to join paths with filesystem module", {
+          dir = current_dir,
+          filename = filename,
+          error = error_handler.format_error(joined_path),
+          fallback = "using string concatenation"
+        })
+        
+        config_path = current_dir .. "/" .. filename
+      end
+      
+      -- Check if file exists with error handling
+      local exists_success, file_exists_result = error_handler.try(function()
+        return file_exists(config_path)
+      end)
+      
+      if exists_success and file_exists_result then
+        log_debug("Found config file", {
+          path = config_path,
+          iterations = iteration_count
+        })
+        return config_path
+      end
+      
+      -- Move up one directory with error handling
+      local parent_success, parent_dir = error_handler.try(function()
+        return fs.get_directory_name(current_dir)
+      end)
+      
+      if not parent_success or not parent_dir then
+        -- Fallback for get_directory_name if filesystem module fails
+        log_warning("Failed to get parent directory with filesystem module", {
+          dir = current_dir,
+          error = error_handler.format_error(parent_dir),
+          fallback = "using string pattern matching"
+        })
+        
+        parent_dir = current_dir:match("(.+)[/\\][^/\\]+$")
+      end
+      
+      -- Check if we've reached the root directory
+      if not parent_dir or current_dir == parent_dir then
+        log_debug("Reached root directory without finding config file", {
+          current_dir = current_dir,
+          filename = filename,
+          iterations = iteration_count
+        })
+        break
+      end
+      
+      current_dir = parent_dir
     end
     
-    if file_exists(config_path) then
-      logger.debug("Found config file", {
-        path = config_path
+    -- Handle hitting max iterations
+    if iteration_count >= max_iterations then
+      log_warning("Hit maximum directory traversal limit without finding config file", {
+        max_iterations = max_iterations,
+        filename = filename,
+        start_dir = start_dir
       })
-      return config_path
     end
     
-    -- Move up one directory
-    local parent_dir
+    -- Not found case
+    log_debug("Config file not found", {
+      filename = filename,
+      start_dir = start_dir,
+      iterations = iteration_count
+    })
     
-    if fs then
-      parent_dir = fs.get_directory_name(current_dir)
-    else
-      parent_dir = current_dir:match("(.+)/[^/]+$")
-    end
-    
-    if current_dir == parent_dir then
-      break
-    end
-    current_dir = parent_dir
+    return nil
+  end)
+  
+  if not search_success then
+    log_error("Error while searching for config file", {
+      filename = filename,
+      start_dir = start_dir,
+      error = error_handler.format_error(search_result)
+    })
+    return nil
   end
   
-  logger.debug("Config file not found", {
-    filename = filename
-  })
-  return nil
+  return search_result
 end
 
--- Find files matching patterns
+-- Find files matching patterns with error handling
 local function find_files(include_patterns, exclude_patterns, start_dir)
+  -- Validate and process parameters
+  error_handler.assert(include_patterns ~= nil, 
+    "Include patterns parameter is required", 
+    error_handler.CATEGORY.VALIDATION,
+    {include_patterns_type = type(include_patterns)}
+  )
+  
+  if type(include_patterns) == "string" then
+    include_patterns = {include_patterns}
+  end
+  
+  error_handler.assert(type(include_patterns) == "table", 
+    "Include patterns must be a table or string", 
+    error_handler.CATEGORY.VALIDATION,
+    {include_patterns_type = type(include_patterns)}
+  )
+  
+  if exclude_patterns ~= nil then
+    if type(exclude_patterns) == "string" then
+      exclude_patterns = {exclude_patterns}
+    end
+    
+    error_handler.assert(type(exclude_patterns) == "table", 
+      "Exclude patterns must be a table or string", 
+      error_handler.CATEGORY.VALIDATION,
+      {exclude_patterns_type = type(exclude_patterns)}
+    )
+  else
+    exclude_patterns = {}
+  end
+  
   start_dir = start_dir or "."
   
-  logger.debug("Using filesystem module to find files", {
+  error_handler.assert(type(start_dir) == "string", 
+    "Start directory must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {start_dir_type = type(start_dir)}
+  )
+  
+  log_debug("Using filesystem module to find files", {
     directory = start_dir,
     include_patterns = include_patterns,
     exclude_patterns = exclude_patterns
   })
   
-  -- Normalize path
-  start_dir = fs.normalize_path(start_dir)
+  -- Use try/catch pattern for the entire file finding process
+  local find_success, result = error_handler.try(function()
+    -- Normalize path with error handling
+    local norm_success, normalized_dir = error_handler.try(function()
+      return fs.normalize_path(start_dir)
+    end)
+    
+    if not norm_success or not normalized_dir then
+      log_warning("Failed to normalize directory path", {
+        directory = start_dir,
+        error = error_handler.format_error(normalized_dir),
+        fallback = "using original path"
+      })
+      normalized_dir = start_dir
+    end
+    
+    -- Get absolute path with error handling
+    local abs_success, absolute_dir = error_handler.try(function()
+      return fs.get_absolute_path(normalized_dir)
+    end)
+    
+    if not abs_success or not absolute_dir then
+      log_warning("Failed to get absolute directory path", {
+        directory = normalized_dir,
+        error = error_handler.format_error(absolute_dir),
+        fallback = "using normalized path"
+      })
+      absolute_dir = normalized_dir
+    end
+    
+    log_debug("Finding files in normalized directory", {
+      normalized_dir = normalized_dir,
+      absolute_dir = absolute_dir
+    })
+    
+    -- Use filesystem discover_files function with error handling
+    local discover_success, files = error_handler.try(function()
+      return fs.discover_files({absolute_dir}, include_patterns, exclude_patterns)
+    end)
+    
+    if not discover_success or not files then
+      local error_obj = error_handler.create(
+        "Failed to discover files using filesystem module", 
+        error_handler.CATEGORY.IO, 
+        error_handler.SEVERITY.ERROR,
+        {
+          directory = absolute_dir,
+          error = error_handler.format_error(files)
+        }
+      )
+      
+      log_error("Failed to discover files", {
+        directory = absolute_dir,
+        error = error_handler.format_error(error_obj),
+        fallback = "falling back to Lua-based file discovery"
+      })
+      
+      -- Try fallback method
+      return find_files_lua(include_patterns, exclude_patterns, absolute_dir)
+    end
+    
+    log_info("Found files using filesystem module", {
+      file_count = #files,
+      directory = absolute_dir
+    })
+    
+    return files
+  end)
   
-  -- Get absolute path
-  start_dir = fs.get_absolute_path(start_dir)
+  if not find_success then
+    log_error("Error during file discovery", {
+      directory = start_dir,
+      error = error_handler.format_error(result),
+      fallback = "returning empty file list"
+    })
+    return {}
+  end
   
-  logger.debug("Finding files in normalized directory", {
-    directory = start_dir
-  })
-  
-  -- Use filesystem discover_files function
-  local files = fs.discover_files({start_dir}, include_patterns, exclude_patterns)
-  
-  logger.info("Found files using filesystem module", {
-    file_count = #files,
-    directory = start_dir
-  })
-  
-  return files
+  return result
 end
 
--- Implementation of Lua-based file finding using filesystem module
+-- Implementation of Lua-based file finding using filesystem module with error handling
 local function find_files_lua(include_patterns, exclude_patterns, dir)
-  logger.debug("Using filesystem module for Lua-based file discovery", {
+  -- Validate and process parameters
+  error_handler.assert(include_patterns ~= nil, 
+    "Include patterns parameter is required", 
+    error_handler.CATEGORY.VALIDATION,
+    {include_patterns_type = type(include_patterns)}
+  )
+  
+  if type(include_patterns) == "string" then
+    include_patterns = {include_patterns}
+  end
+  
+  error_handler.assert(type(include_patterns) == "table", 
+    "Include patterns must be a table or string", 
+    error_handler.CATEGORY.VALIDATION,
+    {include_patterns_type = type(include_patterns)}
+  )
+  
+  if exclude_patterns ~= nil then
+    if type(exclude_patterns) == "string" then
+      exclude_patterns = {exclude_patterns}
+    end
+    
+    error_handler.assert(type(exclude_patterns) == "table", 
+      "Exclude patterns must be a table or string", 
+      error_handler.CATEGORY.VALIDATION,
+      {exclude_patterns_type = type(exclude_patterns)}
+    )
+  else
+    exclude_patterns = {}
+  end
+  
+  error_handler.assert(dir ~= nil and type(dir) == "string", 
+    "Directory must be a string", 
+    error_handler.CATEGORY.VALIDATION,
+    {dir_type = type(dir)}
+  )
+  
+  log_debug("Using filesystem module for Lua-based file discovery", {
     directory = dir,
     include_patterns = include_patterns,
     exclude_patterns = exclude_patterns
   })
   
-  -- Normalize directory path
-  dir = fs.normalize_path(dir)
-  
-  -- Use scan_directory to get all files recursively
-  local all_files = fs.scan_directory(dir, true)
-  local files = {}
-  
-  -- Filter files using include and exclude patterns
-  for _, file_path in ipairs(all_files) do
-    local include_file = false
+  -- Use try/catch pattern for the file finding process
+  local find_success, result = error_handler.try(function()
+    -- Normalize directory path with error handling
+    local norm_success, normalized_dir = error_handler.try(function()
+      return fs.normalize_path(dir)
+    end)
     
-    -- Check include patterns
-    for _, pattern in ipairs(include_patterns) do
-      if file_path:match(pattern) then
-        include_file = true
-        break
-      end
+    if not norm_success or not normalized_dir then
+      log_warning("Failed to normalize directory path", {
+        directory = dir,
+        error = error_handler.format_error(normalized_dir),
+        fallback = "using original path"
+      })
+      normalized_dir = dir
     end
     
-    -- Check exclude patterns
-    if include_file then
-      for _, pattern in ipairs(exclude_patterns) do
-        local rel_path = fs.get_relative_path(file_path, dir)
-        if rel_path and rel_path:match(pattern) then
+    -- Use scan_directory to get all files recursively with error handling
+    local scan_success, all_files = error_handler.try(function()
+      return fs.scan_directory(normalized_dir, true)
+    end)
+    
+    if not scan_success or not all_files then
+      local error_obj = error_handler.io_error(
+        "Failed to scan directory", 
+        error_handler.SEVERITY.ERROR,
+        {
+          directory = normalized_dir,
+          error = error_handler.format_error(all_files)
+        }
+      )
+      
+      log_error("Failed to scan directory for files", {
+        directory = normalized_dir,
+        error = error_handler.format_error(error_obj),
+        fallback = "returning empty file list"
+      })
+      
+      return {}
+    end
+    
+    local files = {}
+    local error_count = 0
+    local max_errors = 10 -- Limit errors to avoid flooding logs
+    
+    -- Filter files using include and exclude patterns
+    for _, file_path in ipairs(all_files) do
+      local include_file = false
+      
+      -- Check include patterns with error handling
+      local include_success, include_result = error_handler.try(function()
+        for _, pattern in ipairs(include_patterns) do
+          if file_path:match(pattern) then
+            return true
+          end
+        end
+        return false
+      end)
+      
+      if not include_success then
+        if error_count < max_errors then
+          log_warning("Error while checking include patterns", {
+            file = file_path,
+            error = error_handler.format_error(include_result)
+          })
+          error_count = error_count + 1
+        elseif error_count == max_errors then
+          log_warning("Too many pattern matching errors, suppressing further messages")
+          error_count = error_count + 1
+        end
+        include_result = false
+      end
+      
+      include_file = include_result
+      
+      -- Check exclude patterns with error handling if file is included
+      if include_file then
+        local exclude_success, exclude_result = error_handler.try(function()
+          for _, pattern in ipairs(exclude_patterns) do
+            -- Get relative path with error handling
+            local rel_path
+            local rel_success, rel_path_result = error_handler.try(function()
+              return fs.get_relative_path(file_path, normalized_dir)
+            end)
+            
+            if rel_success and rel_path_result then
+              rel_path = rel_path_result
+              if rel_path and rel_path:match(pattern) then
+                return true -- Should exclude
+              end
+            end
+          end
+          return false -- Don't exclude
+        end)
+        
+        if not exclude_success then
+          if error_count < max_errors then
+            log_warning("Error while checking exclude patterns", {
+              file = file_path,
+              error = error_handler.format_error(exclude_result)
+            })
+            error_count = error_count + 1
+          elseif error_count == max_errors then
+            log_warning("Too many pattern matching errors, suppressing further messages")
+            error_count = error_count + 1
+          end
+          -- Be conservative on errors - don't include the file
           include_file = false
-          break
+        else
+          -- If exclude_result is true, we should exclude the file
+          include_file = not exclude_result
         end
       end
+      
+      if include_file then
+        log_debug("Including file in results", {
+          file = file_path
+        })
+        table.insert(files, file_path)
+      end
     end
     
-    if include_file then
-      logger.debug("Including file in results", {
-        file = file_path
-      })
-      table.insert(files, file_path)
-    end
+    log_info("Found files using Lua-based file discovery", {
+      file_count = #files,
+      directory = normalized_dir,
+      errors = error_count
+    })
+    
+    return files
+  end)
+  
+  if not find_success then
+    log_error("Error during Lua-based file discovery", {
+      directory = dir,
+      error = error_handler.format_error(result),
+      fallback = "returning empty file list"
+    })
+    return {}
   end
   
-  logger.info("Found files using filesystem module Lua-based method", {
-    file_count = #files,
-    directory = dir
-  })
-  
-  return files
+  return result
 end
 
 -- Initialize module with configuration

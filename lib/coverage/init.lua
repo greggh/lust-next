@@ -59,8 +59,8 @@ end
 -- Initialize static analyzer with configuration options
 local function init_static_analyzer()
   if not static_analyzer then
-    static_analyzer = require("lib.coverage.static_analyzer")
     local success, result, err = error_handler.try(function()
+      static_analyzer = require("lib.coverage.static_analyzer")
       return static_analyzer.init({
         control_flow_keywords_executable = true,
         cache_files = true
@@ -68,46 +68,95 @@ local function init_static_analyzer()
     end)
     
     if not success then
-      logger.error("Failed to initialize static analyzer: " .. error_handler.format_error(result))
-      return nil, result
+      local err_obj = error_handler.runtime_error(
+        "Failed to initialize static analyzer",
+        {operation = "init_static_analyzer"},
+        result
+      )
+      logger.error(err_obj.message, err_obj.context)
+      return nil, err_obj
     end
   end
   return static_analyzer
 end
 
--- Directly track a file (helper for tests)
-function M.track_file(file_path)
-  if not active or not config.enabled then
-    return
+-- Normalize file path with proper validation
+local function normalize_file_path(file_path)
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "normalize_file_path"
+      }
+    )
+  end
+  
+  if file_path == "" then
+    return nil, error_handler.validation_error(
+      "File path cannot be empty",
+      {operation = "normalize_file_path"}
+    )
   end
   
   -- Normalize path to prevent issues with path formatting (double slashes, etc.)
-  file_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  return file_path:gsub("//", "/"):gsub("\\", "/")
+end
+
+-- Directly track a file (helper for tests)
+function M.track_file(file_path)
+  if not active or not config.enabled then
+    logger.debug("Coverage not active or disabled, ignoring track_file", {
+      file_path = file_path
+    })
+    return false
+  end
+
+  -- Validate and normalize file path
+  local normalized_path, err = normalize_file_path(file_path)
+  if not normalized_path then
+    logger.error("Invalid file path for tracking: " .. error_handler.format_error(err))
+    return false, err
+  end
   
   -- Explicitly mark this file as active for reporting
-  -- This is a critical step to ensure it shows up in reports
-  debug_hook.activate_file(file_path)
+  local success, err = error_handler.try(function()
+    return debug_hook.activate_file(normalized_path)
+  end)
+  
+  if not success then
+    logger.error("Failed to activate file: " .. error_handler.format_error(err))
+    return false, err
+  end
   
   -- Get content of the file
   local content, err = error_handler.safe_io_operation(
-    function() return fs.read_file(file_path) end,
-    file_path,
+    function() return fs.read_file(normalized_path) end,
+    normalized_path,
     {operation = "track_file.read_file"}
   )
   
   if not content then
     logger.error("Failed to read file for tracking: " .. error_handler.format_error(err))
-    return false
+    return false, err
   end
   
   -- Add file to tracking
-  debug_hook.initialize_file(file_path)
+  local success, err = error_handler.try(function()
+    return debug_hook.initialize_file(normalized_path)
+  end)
+  
+  if not success then
+    logger.error("Failed to initialize file: " .. error_handler.format_error(err))
+    return false, err
+  end
   
   -- Make sure the file is marked as "discovered"
   local coverage_data = debug_hook.get_coverage_data()
-  local normalized_path = fs.normalize_path(file_path)
+  local normalized_path = fs.normalize_path(normalized_path)
   
-  if coverage_data.files[normalized_path] then
+  -- Update coverage data if the file exists in the data structure
+  if coverage_data and coverage_data.files and coverage_data.files[normalized_path] then
     coverage_data.files[normalized_path].discovered = true
     coverage_data.files[normalized_path].source_text = content
     
@@ -155,47 +204,109 @@ function M.track_file(file_path)
       line_count = line_count,
       covered_lines = coverage_data.files[normalized_path].covered_lines
     })
+    
+    return true
+  else
+    logger.error("Failed to update coverage data for file", {
+      file_path = normalized_path,
+      operation = "track_file"
+    })
+    return false, error_handler.runtime_error(
+      "Failed to update coverage data for file",
+      {
+        file_path = normalized_path,
+        operation = "track_file"
+      }
+    )
   end
-  
-  return true
 end
 
 -- Track line coverage through instrumentation
 function M.track_line(file_path, line_num)
   if not active or not config.enabled then
-    return
+    logger.debug("Coverage not active or disabled, ignoring track_line", {
+      file_path = file_path,
+      line_num = line_num
+    })
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" then
+    local err = error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "track_line"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(line_num) ~= "number" then
+    local err = error_handler.validation_error(
+      "Line number must be a number",
+      {
+        provided_type = type(line_num),
+        operation = "track_line"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if line_num <= 0 then
+    local err = error_handler.validation_error(
+      "Line number must be a positive number",
+      {
+        provided_value = line_num,
+        operation = "track_line"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
   end
   
   -- Normalize path to prevent issues with path formatting (double slashes, etc.)
-  file_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
   
   -- Enhanced logging to trace coverage issues
   logger.info("Track line called", {
-    file_path = file_path,
+    file_path = normalized_path,
     line_num = line_num,
     operation = "track_line"
   })
   
   -- Initialize file data if needed using debug_hook's centralized API
-  if not debug_hook.has_file(file_path) then
-    debug_hook.initialize_file(file_path)
+  if not debug_hook.has_file(normalized_path) then
+    local success, err = error_handler.try(function()
+      return debug_hook.initialize_file(normalized_path)
+    end)
+    
+    if not success then
+      logger.error("Failed to initialize file for line tracking: " .. error_handler.format_error(err))
+      return false, err
+    end
     
     -- Ensure file is properly discovered and tracked
     local coverage_data = debug_hook.get_coverage_data()
     if coverage_data and coverage_data.files then
       -- Use normalized path - important fix for consistency!
-      local normalized_path = fs.normalize_path(file_path)
-      if normalized_path and coverage_data.files[normalized_path] then
-        coverage_data.files[normalized_path].discovered = true
+      local normalized_key = fs.normalize_path(normalized_path)
+      if normalized_key and coverage_data.files[normalized_key] then
+        coverage_data.files[normalized_key].discovered = true
         
         -- Try to get file content if not already present
-        if not coverage_data.files[normalized_path].source_text then
-          local success, content = pcall(function() 
-            return fs.read_file(file_path)
-          end)
+        if not coverage_data.files[normalized_key].source_text then
+          local success, content = error_handler.safe_io_operation(
+            function() return fs.read_file(normalized_path) end,
+            normalized_path,
+            {operation = "track_line.read_file"}
+          )
           
           if success and content then
-            coverage_data.files[normalized_path].source_text = content
+            coverage_data.files[normalized_key].source_text = content
           end
         end
       end
@@ -203,38 +314,186 @@ function M.track_line(file_path, line_num)
   end
   
   -- Track the line as both executed and covered (validation)
-  debug_hook.track_line(file_path, line_num)
-  debug_hook.set_line_executable(file_path, line_num, true)
-  debug_hook.set_line_covered(file_path, line_num, true)
+  local success, err = error_handler.try(function()
+    local track_result = debug_hook.track_line(normalized_path, line_num)
+    local exe_result = debug_hook.set_line_executable(normalized_path, line_num, true)
+    local cov_result = debug_hook.set_line_covered(normalized_path, line_num, true)
+    return track_result and exe_result and cov_result
+  end)
+  
+  if not success then
+    logger.error("Failed to track line: " .. error_handler.format_error(err))
+    return false, err
+  end
   
   -- Set this file as active for reporting
-  debug_hook.activate_file(file_path)
+  local success, err = error_handler.try(function()
+    return debug_hook.activate_file(normalized_path)
+  end)
+  
+  if not success then
+    logger.error("Failed to activate file for line tracking: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  return true
 end
 
 -- Track function execution
 function M.track_function(file_path, line_num, func_name)
   if not active or not config.enabled then
-    return
+    logger.debug("Coverage not active or disabled, ignoring track_function", {
+      file_path = file_path,
+      line_num = line_num,
+      func_name = func_name
+    })
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" then
+    local err = error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "track_function"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(line_num) ~= "number" then
+    local err = error_handler.validation_error(
+      "Line number must be a number",
+      {
+        provided_type = type(line_num),
+        operation = "track_function"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if line_num <= 0 then
+    local err = error_handler.validation_error(
+      "Line number must be a positive number",
+      {
+        provided_value = line_num,
+        operation = "track_function"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(func_name) ~= "string" then
+    local err = error_handler.validation_error(
+      "Function name must be a string",
+      {
+        provided_type = type(func_name),
+        operation = "track_function"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
   end
   
   -- Normalize path to prevent issues with path formatting (double slashes, etc.)
-  file_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
   
-  debug_hook.track_function(file_path, line_num, func_name)
+  -- Track the function using debug_hook
+  local success, err = error_handler.try(function()
+    return debug_hook.track_function(normalized_path, line_num, func_name)
+  end)
+  
+  if not success then
+    logger.error("Failed to track function: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  return true
 end
 
 -- Track block execution
 function M.track_block(file_path, line_num, block_id, block_type)
   if not active or not config.enabled then
-    return
+    logger.debug("Coverage not active or disabled, ignoring track_block", {
+      file_path = file_path,
+      line_num = line_num,
+      block_id = block_id,
+      block_type = block_type
+    })
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" then
+    local err = error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "track_block"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(line_num) ~= "number" then
+    local err = error_handler.validation_error(
+      "Line number must be a number",
+      {
+        provided_type = type(line_num),
+        operation = "track_block"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if line_num <= 0 then
+    local err = error_handler.validation_error(
+      "Line number must be a positive number",
+      {
+        provided_value = line_num,
+        operation = "track_block"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(block_id) ~= "string" then
+    local err = error_handler.validation_error(
+      "Block ID must be a string",
+      {
+        provided_type = type(block_id),
+        operation = "track_block"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(block_type) ~= "string" then
+    local err = error_handler.validation_error(
+      "Block type must be a string",
+      {
+        provided_type = type(block_type),
+        operation = "track_block"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
   end
   
   -- Normalize path to prevent issues with path formatting (double slashes, etc.)
-  file_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
   
   -- Debug output at debug level
   logger.debug("Track block called", {
-    file_path = file_path,
+    file_path = normalized_path,
     line_num = line_num,
     block_id = block_id,
     block_type = block_type,
@@ -242,20 +501,51 @@ function M.track_block(file_path, line_num, block_id, block_type)
   })
   
   -- Initialize file data if needed - this is important to make sure the file is tracked properly
-  if not debug_hook.has_file(file_path) then
-    debug_hook.initialize_file(file_path)
+  if not debug_hook.has_file(normalized_path) then
+    local success, err = error_handler.try(function()
+      return debug_hook.initialize_file(normalized_path)
+    end)
+    
+    if not success then
+      logger.error("Failed to initialize file for block tracking: " .. error_handler.format_error(err))
+      return false, err
+    end
   end
   
   -- Track the line as executable and covered in addition to the block
-  debug_hook.track_line(file_path, line_num)
-  debug_hook.set_line_executable(file_path, line_num, true)
-  debug_hook.set_line_covered(file_path, line_num, true)
+  local success, err = error_handler.try(function()
+    local track_result = debug_hook.track_line(normalized_path, line_num)
+    local exe_result = debug_hook.set_line_executable(normalized_path, line_num, true)
+    local cov_result = debug_hook.set_line_covered(normalized_path, line_num, true)
+    return track_result and exe_result and cov_result
+  end)
+  
+  if not success then
+    logger.error("Failed to track line for block: " .. error_handler.format_error(err))
+    return false, err
+  end
   
   -- Track the block through debug_hook
-  debug_hook.track_block(file_path, line_num, block_id, block_type)
+  local success, err = error_handler.try(function()
+    return debug_hook.track_block(normalized_path, line_num, block_id, block_type)
+  end)
+  
+  if not success then
+    logger.error("Failed to track block: " .. error_handler.format_error(err))
+    return false, err
+  end
   
   -- Set this file as active for reporting - critical step for proper tracking
-  debug_hook.activate_file(file_path)
+  local success, err = error_handler.try(function()
+    return debug_hook.activate_file(normalized_path)
+  end)
+  
+  if not success then
+    logger.error("Failed to activate file for block tracking: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  return true
 end
 
 -- Initialize module
@@ -269,44 +559,54 @@ function M.init(options)
     return nil, err
   end
   
-  -- Start with defaults
+  -- Apply defaults and user options
   local success, err = error_handler.try(function()
+    -- Start with defaults
     for k, v in pairs(config) do
       config[k] = v
     end
+    
+    -- Apply user options if provided
+    if options then
+      for k, v in pairs(options) do
+        config[k] = v
+      end
+    end
+    
     return true
   end)
   
   if not success then
-    logger.error("Failed to initialize default config: " .. error_handler.format_error(err))
-    return nil, err
-  end
-  
-  -- Apply user options if provided
-  if options then
-    for k, v in pairs(options) do
-      config[k] = v
-    end
+    local err_obj = error_handler.runtime_error(
+      "Failed to initialize configuration",
+      {operation = "coverage.init"},
+      err
+    )
+    logger.error(err_obj.message, err_obj.context)
+    return nil, err_obj
   end
   
   -- Configure debug hook
-  success, err = error_handler.try(function()
+  local success, err = error_handler.try(function()
     return debug_hook.set_config(config)
   end)
   
   if not success then
-    logger.error("Failed to configure debug hook: " .. error_handler.format_error(err))
-    return nil, err
+    local err_obj = error_handler.runtime_error(
+      "Failed to configure debug hook",
+      {operation = "coverage.init"},
+      err
+    )
+    logger.error(err_obj.message, err_obj.context)
+    return nil, err_obj
   end
   
   -- Initialize static analyzer if enabled
   if config.use_static_analysis then
-    success, err = error_handler.try(function()
-      return init_static_analyzer()
-    end)
-    
-    if not success then
-      logger.warn("Failed to initialize static analyzer: " .. error_handler.format_error(err))
+    local analyzer, err = init_static_analyzer()
+    if not analyzer then
+      logger.warn("Static analyzer initialization failed, continuing without it: " .. 
+        error_handler.format_error(err))
     end
   end
   
@@ -331,6 +631,23 @@ function M.start(options)
   if active then
     logger.debug("Coverage already active, ignoring start request")
     return M  -- Already running
+  end
+  
+  -- Apply additional options if provided
+  if options then
+    if type(options) ~= "table" then
+      local err = error_handler.validation_error(
+        "Options must be a table or nil",
+        {provided_type = type(options), operation = "coverage.start"}
+      )
+      logger.error("Invalid start options: " .. error_handler.format_error(err))
+      return nil, err
+    end
+    
+    -- Apply options
+    for k, v in pairs(options) do
+      config[k] = v
+    end
   end
   
   -- Lazy load instrumentation module if needed
@@ -496,12 +813,13 @@ function M.start(options)
     end)
     
     if not success then
-      logger.error("Failed to set debug hook: " .. error_handler.format_error(err))
-      return nil, error_handler.runtime_error(
+      local err_obj = error_handler.runtime_error(
         "Failed to start coverage - could not set debug hook",
         { operation = "coverage.start" },
         err
       )
+      logger.error(err_obj.message, err_obj.context)
+      return nil, err_obj
     end
   end
   
@@ -524,14 +842,37 @@ function M.process_module_structure(file_path)
     return nil, err
   end
   
+  if type(file_path) ~= "string" then
+    local err = error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "process_module_structure"
+      }
+    )
+    logger.warn(err.message, err.context)
+    return nil, err
+  end
+  
+  -- Normalize file path
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  
   -- Initialize file tracking
   local success, err = error_handler.try(function()
-    return debug_hook.initialize_file(file_path)
+    return debug_hook.initialize_file(normalized_path)
   end)
   
   if not success then
-    logger.warn("Failed to initialize file for coverage: " .. error_handler.format_error(err))
-    return nil, err
+    local err_obj = error_handler.runtime_error(
+      "Failed to initialize file for coverage",
+      {
+        file_path = normalized_path,
+        operation = "process_module_structure"
+      },
+      err
+    )
+    logger.warn(err_obj.message, err_obj.context)
+    return nil, err_obj
   end
   
   return true
@@ -550,12 +891,31 @@ function M.stop()
   -- Handle based on mode
   if instrumentation_mode then
     logger.info("Stopping coverage with instrumentation approach")
+    
+    -- Unhook instrumentation if it was active
+    if instrumentation and config.instrument_on_load then
+      local success, err = error_handler.try(function()
+        instrumentation.unhook_loaders()
+        return true
+      end)
+      
+      if not success then
+        logger.warn("Error while unhooking instrumentation: " .. error_handler.format_error(err))
+      end
+    end
   else
     -- Restore original hook if any
-    if original_hook then
-      debug.sethook(original_hook)
-    else
-      debug.sethook()
+    local success, err = error_handler.try(function()
+      if original_hook then
+        debug.sethook(original_hook)
+      else
+        debug.sethook()
+      end
+      return true
+    end)
+    
+    if not success then
+      logger.warn("Error while restoring debug hook: " .. error_handler.format_error(err))
     end
     
     -- Process data with patchup if needed
@@ -568,7 +928,7 @@ function M.stop()
     end)
     
     if not success then
-      logger.warn("Error during coverage stop: " .. error_handler.format_error(err))
+      logger.warn("Error during coverage data patching: " .. error_handler.format_error(err))
     end
     
     logger.info("Stopping coverage with debug hook approach")
@@ -580,21 +940,38 @@ end
 
 -- Reset coverage data
 function M.reset()
+  local success, err = error_handler.try(function()
+    debug_hook.reset()
+    return true
+  end)
+  
+  if not success then
+    logger.warn("Error during coverage reset: " .. error_handler.format_error(err))
+  end
+  
   logger.info("Coverage data reset")
   return M
 end
 
 -- Full reset (more comprehensive than regular reset)
 function M.full_reset()
+  local success, err = error_handler.try(function()
+    -- Reset internal state
+    active = false
+    instrumentation_mode = false
+    original_hook = nil
+    
+    -- Reset debug hook data
+    debug_hook.reset()
+    
+    return true
+  end)
+  
+  if not success then
+    logger.warn("Error during full coverage reset: " .. error_handler.format_error(err))
+  end
+  
   logger.info("Full coverage data reset")
-  -- Reset internal state
-  active = false
-  instrumentation_mode = false
-  original_hook = nil
-  
-  -- Reset debug hook data
-  debug_hook.reset()
-  
   return M
 end
 
@@ -603,20 +980,30 @@ function M.get_report_data()
   local success, result, err = error_handler.try(function()
     -- Get data from debug_hook
     local data = debug_hook.get_coverage_data()
+    if not data or type(data) ~= "table" then
+      return nil, error_handler.runtime_error(
+        "Invalid coverage data from debug_hook",
+        {operation = "get_report_data"}
+      )
+    end
     
-    -- Print files in coverage data for debugging
-    print("Files in coverage data:")
-    for file_path, _ in pairs(data.files or {}) do
-      print("  " .. file_path)
+    if not data.files or type(data.files) ~= "table" then
+      return nil, error_handler.runtime_error(
+        "Invalid files structure in coverage data",
+        {operation = "get_report_data"}
+      )
     end
     
     -- Get active files list
-    local active_files = debug_hook.get_active_files and debug_hook.get_active_files() or {}
+    local active_files = {}
+    local success, result = error_handler.try(function()
+      return debug_hook.get_active_files and debug_hook.get_active_files() or {}
+    end)
     
-    -- Print active files for debugging
-    print("Active files:")
-    for file_path, _ in pairs(active_files) do
-      print("  " .. file_path)
+    if success then
+      active_files = result
+    else
+      logger.warn("Failed to get active files: " .. error_handler.format_error(result))
     end
     
     -- Normalize file data format
@@ -831,7 +1218,13 @@ function M.get_report_data()
         file_coverage_percent = 0,
         total_lines = 0,
         covered_lines = 0,
-        line_coverage_percent = 0
+        line_coverage_percent = 0,
+        total_functions = 0,
+        covered_functions = 0,
+        function_coverage_percent = 0,
+        total_blocks = 0,
+        covered_blocks = 0,
+        block_coverage_percent = 0
       }
     }
   end

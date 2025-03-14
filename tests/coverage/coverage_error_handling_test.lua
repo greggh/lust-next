@@ -85,72 +85,70 @@ describe("Coverage Error Handling", function()
     
     it("should handle configuration errors gracefully", function()
       -- Create a test case with invalid configuration
-      local central_config = require("lib.core.central_config")
+      local mock = require("lib.mocking.mock")
       
-      -- Save original get function to restore later
-      local original_get = central_config.get
-      
-      -- Mock central_config.get to throw an error
-      central_config.get = function()
-        error("Simulated configuration error")
-      end
-      
-      -- Reset coverage first
-      coverage.reset()
-      
-      -- Initialize with configuration that will trigger central_config.get
-      local success = coverage.init({enabled = true})
-      
-      -- Should not crash but still initialize with defaults
-      expect(success).to.equal(coverage)
-      expect(coverage.config.enabled).to.equal(true)
-      
-      -- Restore original function
-      central_config.get = original_get
+      -- Use mock.with_mocks to safely mock and restore functions
+      mock.with_mocks(function()
+        -- Create a mock for central_config.get
+        local central_config = require("lib.core.central_config")
+        mock.mock(central_config, "get", function()
+          return nil, error_handler.create("Test configuration error", error_handler.CATEGORY.CONFIGURATION)
+        end)
+        
+        -- Reset coverage first
+        coverage.reset()
+        
+        -- Initialize with configuration that will trigger central_config.get
+        local success = coverage.init({enabled = true})
+        
+        -- Should not crash but still initialize with defaults
+        expect(success).to.equal(coverage)
+        expect(coverage.config.enabled).to.equal(true)
+      end)
     end)
   end)
 
   describe("start method", function()
     it("should handle instrumentation failures gracefully", function()
-      -- Configure with instrumentation mode
-      coverage.reset()
-      coverage.init({
-        enabled = true,
-        use_instrumentation = true,
-        instrument_on_load = true
-      })
+      local mock = require("lib.mocking.mock")
       
-      -- Start should succeed even if instrumentation has issues
-      local result = coverage.start()
-      expect(result).to.equal(coverage)
-      
-      -- We can't reliably test instrumentation_mode directly as it's not accessible
-      -- Instead, let's check that it doesn't crash, which is the main purpose
+      mock.with_mocks(function()
+        -- Configure with instrumentation mode
+        coverage.reset()
+        coverage.init({
+          enabled = true,
+          use_instrumentation = true,
+          instrument_on_load = true
+        })
+        
+        -- Start should succeed even if instrumentation has issues
+        local result = coverage.start()
+        expect(result).to.equal(coverage)
+        
+        -- We can't reliably test instrumentation_mode directly as it's not accessible
+        -- Instead, let's check that it doesn't crash, which is the main purpose
+      end)
     end)
     
     it("should handle hook errors gracefully", function()
-      -- Original implementation to restore later
-      local original_gethook = debug.gethook
-      local original_sethook = debug.sethook
+      local mock = require("lib.mocking.mock")
       
-      -- Replace debug.sethook to simulate an error
-      debug.sethook = function()
-        error("Simulated sethook error")
-      end
-      
-      -- Start should handle the error
-      coverage.reset()
-      coverage.init({enabled = true, use_instrumentation = false})
-      
-      local success, err = coverage.start()
-      expect(success).to.equal(nil)
-      expect(err).to.be.a("table")
-      expect(err.category).to.equal(error_handler.CATEGORY.RUNTIME)
-      expect(err.message).to.match("Failed to start coverage")
-      
-      -- Restore original functions
-      debug.gethook = original_gethook
-      debug.sethook = original_sethook
+      mock.with_mocks(function()
+        -- Mock debug.sethook to simulate an error
+        mock.mock(debug, "sethook", function()
+          error("Simulated sethook error")
+        end)
+        
+        -- Start should handle the error
+        coverage.reset()
+        coverage.init({enabled = true, use_instrumentation = false})
+        
+        local success, err = coverage.start()
+        expect(success).to.equal(nil)
+        expect(err).to.be.a("table")
+        expect(err.category).to.equal(error_handler.CATEGORY.RUNTIME)
+        expect(err.message).to.match("Failed to start coverage")
+      end)
       
       -- Cleanup
       coverage.reset()
@@ -159,74 +157,69 @@ describe("Coverage Error Handling", function()
 
   describe("stop method", function()
     it("should handle hook restoration errors gracefully", function()
-      -- Start coverage normally
-      coverage.start()
+      local mock = require("lib.mocking.mock")
       
-      -- Original implementation to restore later
-      local original_sethook = debug.sethook
-      
-      -- Replace debug.sethook to simulate an error
-      debug.sethook = function()
-        error("Simulated sethook error")
-      end
-      
-      -- Stop should handle the error gracefully
-      local result = coverage.stop()
-      expect(result).to.equal(coverage)
-      
-      -- Restore original function
-      debug.sethook = original_sethook
+      mock.with_mocks(function()
+        -- Start coverage normally
+        coverage.start()
+        
+        -- Mock debug.sethook to simulate an error
+        mock.mock(debug, "sethook", function()
+          error("Simulated sethook error")
+        end)
+        
+        -- Stop should handle the error gracefully
+        local result = coverage.stop()
+        expect(result).to.equal(coverage)
+      end)
     end)
     
     it("should handle data processing errors gracefully", function()
-      -- Start coverage normally
-      coverage.start()
+      local mock = require("lib.mocking.mock")
       
-      -- Get local reference to patchup
-      local patchup = require("lib.coverage.patchup")
-      
-      -- Save original patch_all function
-      local original_patch_all = patchup.patch_all
-      
-      -- Replace with function that throws an error
-      patchup.patch_all = function()
-        error("Simulated patch_all error")
-      end
-      
-      -- Stop should handle the error gracefully
-      local result = coverage.stop()
-      expect(result).to.equal(coverage)
-      
-      -- Restore original function
-      patchup.patch_all = original_patch_all
+      mock.with_mocks(function()
+        -- Start coverage normally
+        coverage.start()
+        
+        -- Get local reference to patchup
+        local patchup = require("lib.coverage.patchup")
+        
+        -- Mock patch_all function
+        mock.mock(patchup, "patch_all", function()
+          error("Simulated patch_all error")
+        end)
+        
+        -- Stop should handle the error gracefully
+        local result = coverage.stop()
+        expect(result).to.equal(coverage)
+      end)
     end)
   end)
   
   describe("get_report_data method", function()
     it("should handle file processing errors gracefully", function()
-      -- Start coverage and track a file
-      coverage.start()
+      local mock = require("lib.mocking.mock")
       
-      -- Track some coverage data
-      local test_file = "test_file.lua"
-      coverage.track_line(test_file, 1)
-      coverage.track_line(test_file, 2)
-      
-      -- Original implementation to restore later
-      local original_is_comment_line = coverage.is_comment_line
-      
-      -- Replace is_comment_line to simulate an error
-      coverage.is_comment_line = function()
-        error("Simulated is_comment_line error")
-      end
-      
-      -- get_report_data should handle the error gracefully
-      local result = coverage.get_report_data()
-      expect(result).to.be.a("table")
-      expect(result.summary).to.be.a("table")
-      
-      -- Restore original function
-      coverage.is_comment_line = original_is_comment_line
+      mock.with_mocks(function()
+        -- Start coverage and track a file
+        coverage.start()
+        
+        -- Track some coverage data
+        local test_file = "test_file.lua"
+        coverage.track_line(test_file, 1)
+        coverage.track_line(test_file, 2)
+        
+        -- Mock any function that might cause an error
+        local debug_hook = require("lib.coverage.debug_hook")
+        mock.mock(debug_hook, "get_active_files", function()
+          error("Simulated get_active_files error")
+        end)
+        
+        -- get_report_data should handle the error gracefully
+        local result = coverage.get_report_data()
+        expect(result).to.be.a("table")
+        expect(result.summary).to.be.a("table")
+      end)
       
       -- Cleanup
       coverage.stop()

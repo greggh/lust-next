@@ -1,106 +1,112 @@
-# Assertion Module Extraction Plan (2025-03-11)
+# Assertion Module Extraction Plan
 
 ## Overview
 
-During the coverage module repair work, we discovered a circular dependency issue between the main `lust-next.lua` file and `module_reset.lua`. This circular dependency made it difficult to use the assertion functions from `lust-next.lua` in `module_reset.lua`. 
+This document outlines the plan for extracting assertion functions into a standalone module. This extraction is critical for resolving circular dependencies and implementing consistent error handling across the entire framework.
 
-To address this architectural issue, we need to extract all assertions to a separate, standalone module that can be required by both `lust-next.lua` and any other modules that need assertions without creating circular dependencies.
+## Current State
 
-## Current Problem
+The current implementation has several issues:
 
-The current architecture has several issues:
+1. **Circular Dependencies**: Assertion functions are tightly coupled with the main lust-next module, causing circular dependencies
+2. **Inconsistent Error Handling**: Error patterns vary across different assertion methods
+3. **Complex Error Propagation**: The assertion chain makes error tracing difficult
 
-1. **Circular Dependencies**: When `module_reset.lua` tries to use assertion functions from `lust-next.lua`, it creates a circular dependency because `lust-next.lua` also requires `module_reset.lua`.
+## Implementation Plan
 
-2. **Inconsistent Assertion Usage**: Due to this circular dependency, we had to create duplicate assertion functions in `module_reset.lua`, which violates our goal of having a single, consistent source of assertions.
+### Phase 1: Module Creation and Basic Functions
 
-3. **Scattered Assertion Implementations**: Currently, assertion functions exist in multiple places (error_handler.lua, lust-next.lua, module_reset.lua), making maintenance difficult.
+1. **Create Basic Module Structure**
+   - [ ] Create `lib/assertion.lua` with proper documentation
+   - [ ] Implement basic expect() function
+   - [ ] Set up proper error handling with error_handler
 
-## Solution: Assertion Module Extraction
+2. **Extract Core Assertion Types**
+   - [ ] Extract equality assertions (equal, same)
+   - [ ] Extract type assertions (a, type_of)
+   - [ ] Extract truthiness assertions (truthy, falsy)
+   - [ ] Extract existence assertions (exist, nil)
 
-We will create a new, standalone assertions module that will serve as the authoritative source for all assertion functions in the codebase.
+3. **Set Up Chain Mechanism**
+   - [ ] Implement to/to_not chain for all assertions
+   - [ ] Set up proper reset() functionality
+   - [ ] Ensure proper error context propagation
 
-### Implementation Steps
+### Phase 2: Advanced Assertions and Integration
 
-1. **Create a new assertions.lua module**:
-   - Create `lib/core/assertions.lua` as a standalone module
-   - Move all assertion functions from `lust-next.lua` to this new module
-   - Include basic assertions (equal, is_true, is_false, etc.)
-   - Include type assertions (is_exact_type, is_instance_of, is_type_or_nil)
-   - Ensure all assertion functions return true on success for chaining
+1. **Extract Advanced Assertions**
+   - [ ] Extract match assertions (match)
+   - [ ] Extract error assertions (error, fail)
+   - [ ] Extract comparison assertions (gt, lt, gte, lte)
+   - [ ] Extract collection assertions (include, empty)
 
-2. **Update lust-next.lua**:
-   - Change `lust-next.lua` to require `assertions.lua`
-   - Re-export all assertion functions through `lust_next.assert`
-   - Maintain backward compatibility with existing code
+2. **Implement Error Classification**
+   - [ ] Add structured error objects for all assertion failures
+   - [ ] Classify errors by type (equality, type, syntax)
+   - [ ] Implement detailed context information
 
-3. **Update module_reset.lua**:
-   - Remove temporary assertion functions from `module_reset.lua`
-   - Require `assertions.lua` directly instead of trying to access them through `lust-next.lua`
-   - Use assertions from the assertions module for validation
+3. **Integration with Main Module**
+   - [ ] Update lust-next.lua to use the new module
+   - [ ] Implement backward compatibility layer
+   - [ ] Add migration utilities for deprecated patterns
 
-4. **Update error_handler.lua**:
-   - Remove all remaining assertion functions from `error_handler.lua`
-   - Update documentation to direct users to `assertions.lua` instead
+### Phase 3: Testing and Documentation
 
-5. **Update documentation**:
-   - Update API documentation to reflect the new assertions module
-   - Add examples of how to use assertions directly from the assertions module
-   - Create a migration guide for any code that was using assertions from other modules
+1. **Comprehensive Test Suite**
+   - [ ] Create tests for all assertion types
+   - [ ] Test error propagation and classification
+   - [ ] Verify backward compatibility
+   - [ ] Add performance benchmarks
 
-### Benefits
+2. **Documentation**
+   - [ ] Document all exported functions
+   - [ ] Create migration guide
+   - [ ] Add examples for all assertion types
+   - [ ] Document error handling patterns
 
-1. **Eliminates Circular Dependencies**: By extracting assertions to their own module, we break the circular dependency chain.
+## Implementation Details
 
-2. **Centralizes Assertion Logic**: All assertion functions will be defined in a single place, making maintenance easier.
+### Module Interface
 
-3. **Improves Consistency**: Ensures all modules use the same assertion implementations.
+```lua
+local assertion = require("lib.assertion")
 
-4. **Enhances Maintainability**: Makes it easier to add new assertions or modify existing ones.
+-- Basic expect function
+local value = assertion.expect(5)
 
-## Implementation Timeline
+-- Chain-based assertions
+value.to.equal(5)
+value.to_not.equal(6)
 
-1. **Phase 1: Extraction (Priority: HIGH)**
-   - Create `assertions.lua` module
-   - Move all assertion functions from `lust-next.lua`
-   - Ensure backward compatibility
-   - Target completion: Immediately after error handler work
+-- Advanced assertions
+value.to.be.a("number")
+value.to.be_greater_than(3)
+```
 
-2. **Phase 2: Integration (Priority: HIGH)**
-   - Update `module_reset.lua` to use assertions directly
-   - Update `lust-next.lua` to re-export assertions
-   - Verify all tests pass with the new structure
-   - Target completion: 1 day after Phase 1
+### Error Handling Integration
 
-3. **Phase 3: Cleanup (Priority: MEDIUM)**
-   - Remove assertion functions from `error_handler.lua`
-   - Update documentation
-   - Add usage examples
-   - Target completion: 1 day after Phase 2
-
-4. **Phase 4: Validation (Priority: HIGH)**
-   - Comprehensive testing of assertion functions
-   - Run the full test suite to verify no regressions
-   - Create specialized tests for assertions module
-   - Target completion: 1 day after Phase 3
+```lua
+-- Error object structure
+{
+  message = "Expected 5 to equal 6",
+  category = "assertion_error",
+  severity = "error",
+  context = {
+    expected = 6,
+    actual = 5,
+    assertion_type = "equality",
+    source_location = "test.lua:123"
+  }
+}
+```
 
 ## Success Criteria
 
-The assertions module extraction will be considered successful when:
+The assertion module extraction will be considered successful when:
 
-1. All assertions are defined in a single `assertions.lua` module
-2. No circular dependencies exist in the codebase
-3. All modules are using assertions from the assertions module
-4. All tests pass with the new structure
-5. Documentation is updated to reflect the changes
-
-## Related Work
-
-This work is closely related to the ongoing coverage module repair project, specifically:
-
-1. **Error Handler Implementation**: The assertions extraction should be done after the error handler implementation is complete.
-2. **Module Structure Cleanup**: This work aligns with our broader goal of improving the module structure and reducing coupling between modules.
-
-## Conclusion
-
-Extracting assertions to a standalone module will resolve the circular dependency issues we've encountered and improve the overall architecture of the codebase. By centralizing all assertion functions, we'll also improve consistency and maintainability, making it easier to add new assertions or modify existing ones in the future.
+1. All assertion functions work correctly with the same API
+2. Error handling is consistent across all assertion types
+3. Circular dependencies are resolved
+4. Tests pass with the new implementation
+5. Documentation is complete and accurate
+6. Performance is equivalent or better than the original implementation

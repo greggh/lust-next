@@ -4,6 +4,7 @@ interactive._VERSION = "1.3.0"
 
 local logging = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
+local error_handler = require("lib.tools.error_handler")
 
 -- Initialize module logger
 local logger = logging.get_logger("interactive")
@@ -359,36 +360,129 @@ logger.debug("Interactive CLI module initialized", {
   version = interactive._VERSION
 })
 
--- Try to load required modules
-local has_discovery, discover = pcall(require, "discover")
-local has_runner, runner = pcall(require, "runner")
-local has_watcher, watcher = pcall(require, "lib.tools.watcher")
-local has_codefix, codefix = pcall(require, "lib.tools.codefix")
+-- Try to load modules with enhanced error handling
+local function load_module(name, module_path)
+  logger.debug("Attempting to load module", {
+    module = name,
+    path = module_path
+  })
+  
+  -- Try to load the module
+  local success, result = error_handler.try(function()
+    return require(module_path)
+  end)
+  
+  if not success then
+    -- Don't show errors for these specific modules, which are used differently in the CLI version
+    if name == "discover" or name == "runner" then
+      logger.debug("Module not available in this context", {
+        module = name,
+        path = module_path
+      })
+    else
+      logger.warn("Failed to load module", {
+        module = name,
+        path = module_path,
+        error = error_handler.format_error(result)
+      })
+    end
+  else
+    logger.debug("Successfully loaded module", {
+      module = name,
+      path = module_path
+    })
+  end
+  
+  return success, result
+end
 
--- Print the interactive CLI header
+-- These modules are loaded directly in the CLI version but not needed in the library context
+local has_discovery, discover = false, nil
+local has_runner, runner = false, nil
+
+-- Load internal modules (should exist)
+local has_watcher, watcher = load_module("watcher", "lib.tools.watcher")
+local has_codefix, codefix = load_module("codefix", "lib.tools.codefix")
+
+-- Print the interactive CLI header with error handling
 local function print_header()
-  io.write("\027[2J\027[H")  -- Clear screen
-  print(colors.bold .. colors.cyan .. "Lust-Next Interactive CLI" .. colors.normal)
-  print(colors.green .. "Type 'help' for available commands" .. colors.normal)
-  print(string.rep("-", 60))
+  -- Safe screen clearing with error handling
+  local success, result = error_handler.try(function()
+    io.write("\027[2J\027[H")  -- Clear screen
+    return true
+  end)
+  
+  if not success then
+    logger.warn("Failed to clear screen", {
+      component = "CLI",
+      error = error_handler.format_error(result)
+    })
+    -- Continue without clearing screen
+  end
+  
+  -- Safe output with error handling
+  success, result = error_handler.try(function()
+    print(colors.bold .. colors.cyan .. "Lust-Next Interactive CLI" .. colors.normal)
+    print(colors.green .. "Type 'help' for available commands" .. colors.normal)
+    print(string.rep("-", 60))
+    return true
+  end)
+  
+  if not success then
+    logger.error("Failed to display header", {
+      component = "CLI",
+      error = error_handler.format_error(result)
+    })
+    -- Try a simple fallback for header display
+    error_handler.try(function()
+      print("Lust-Next Interactive CLI")
+      print("Type 'help' for available commands")
+      print("---------------------------------------------------------")
+      return true
+    end)
+  end
+  
+  -- Safely get current time
+  local time_str = "unknown"
+  local time_success, time_result = error_handler.try(function()
+    return os.date("%H:%M:%S")
+  end)
+  
+  if time_success then
+    time_str = time_result
+  end
   
   logger.info("Interactive CLI header displayed", {
     component = "CLI",
-    time = os.date("%H:%M:%S")
+    time = time_str
   })
   
-  logger.debug("Display settings initialized", {
-    component = "CLI",
-    test_dir = state.test_dir,
-    pattern = state.test_pattern,
-    watch_mode = state.watch_mode and "on" or "off",
-    focus_filter = state.focus_filter or "none",
-    tag_filter = state.tag_filter or "none",
-    codefix_enabled = state.codefix_enabled and true or false,
-    watch_directories = #state.watch_dirs,
-    exclude_patterns = #state.exclude_patterns,
-    available_tests = #state.current_files
-  })
+  -- Safely check state properties with error handling
+  local debug_info = {}
+  success, result = error_handler.try(function()
+    debug_info = {
+      component = "CLI",
+      test_dir = state and state.test_dir or "unknown",
+      pattern = state and state.test_pattern or "unknown",
+      watch_mode = state and (state.watch_mode and "on" or "off") or "unknown",
+      focus_filter = state and (state.focus_filter or "none") or "unknown",
+      tag_filter = state and (state.tag_filter or "none") or "unknown",
+      codefix_enabled = state and (state.codefix_enabled and true or false) or "unknown",
+      watch_directories = state and state.watch_dirs and #state.watch_dirs or 0,
+      exclude_patterns = state and state.exclude_patterns and #state.exclude_patterns or 0,
+      available_tests = state and state.current_files and #state.current_files or 0
+    }
+    return debug_info
+  end)
+  
+  if success then
+    logger.debug("Display settings initialized", debug_info)
+  else
+    logger.warn("Failed to get display settings", {
+      component = "CLI",
+      error = error_handler.format_error(result)
+    })
+  end
 end
 
 -- Print help information
@@ -485,74 +579,424 @@ local function list_test_files()
   })
 end
 
--- Discover test files
+-- Discover test files with comprehensive error handling
 local function discover_test_files()
-  if has_discovery then
-    logger.debug("Discovering test files", {
+  -- Validate necessary state for test discovery
+  if not state then
+    local err = error_handler.runtime_error(
+      "State not initialized for test discovery",
+      {
+        operation = "discover_test_files",
+        module = "interactive"
+      }
+    )
+    logger.error("Test discovery failed due to missing state", {
       component = "TestDiscovery",
-      directory = state.test_dir,
-      pattern = state.test_pattern,
-      existing_files = #state.current_files
+      error = error_handler.format_error(err)
     })
     
-    state.current_files = discover.find_tests(state.test_dir, state.test_pattern)
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Internal state not initialized" .. colors.normal)
+      return true
+    end)
     
-    logger.debug("Test files discovery completed", {
-      component = "TestDiscovery",
-      file_count = #state.current_files,
-      success = #state.current_files > 0,
-      directory = state.test_dir,
-      pattern = state.test_pattern,
-      timestamp = os.date("%H:%M:%S")
-    })
-    
-    return #state.current_files > 0
-  else
-    print(colors.red .. "Error: Discovery module not available" .. colors.normal)
-    logger.error("Test discovery failed", {
-      component = "TestDiscovery",
-      error = "Discovery module not available",
-      error_type = "ModuleNotFound",
-      directory = state.test_dir,
-      pattern = state.test_pattern,
-      attempted_recovery = false,
-      timestamp = os.date("%H:%M:%S")
-    })
-    return false
-  end
-end
-
--- Run tests
-local function run_tests(file_path)
-  if not has_runner then
-    print(colors.red .. "Error: Runner module not available" .. colors.normal)
-    logger.error("Test execution failed", {
-      component = "TestRunner",
-      error = "Runner module not available",
-      error_type = "ModuleNotFound",
-      file = file_path or "all tests",
-      attempted_recovery = false,
-      timestamp = os.date("%H:%M:%S")
-    })
     return false
   end
   
-  -- Reset lust state
-  state.lust.reset()
-  logger.debug("Test environment reset before execution", {
-    component = "TestRunner",
-    file_path = file_path or "all files",
-    focus_filter = state.focus_filter or "none",
-    tag_filter = state.tag_filter or "none",
-    watch_mode = state.watch_mode and true or false,
-    timestamp = os.date("%H:%M:%S")
+  -- Validate test directory and pattern
+  if not state.test_dir or type(state.test_dir) ~= "string" then
+    local err = error_handler.validation_error(
+      "Invalid test directory",
+      {
+        operation = "discover_test_files",
+        test_dir = state.test_dir,
+        test_dir_type = type(state.test_dir),
+        module = "interactive"
+      }
+    )
+    logger.error("Test discovery failed due to invalid directory", {
+      component = "TestDiscovery",
+      error = error_handler.format_error(err)
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Invalid test directory" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  if not state.test_pattern or type(state.test_pattern) ~= "string" then
+    local err = error_handler.validation_error(
+      "Invalid test pattern",
+      {
+        operation = "discover_test_files",
+        test_pattern = state.test_pattern,
+        test_pattern_type = type(state.test_pattern),
+        module = "interactive"
+      }
+    )
+    logger.error("Test discovery failed due to invalid pattern", {
+      component = "TestDiscovery",
+      error = error_handler.format_error(err)
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Invalid test pattern" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Verify discovery module is available
+  if not has_discovery then
+    local err = error_handler.runtime_error(
+      "Discovery module not available",
+      {
+        operation = "discover_test_files",
+        module = "interactive",
+        test_dir = state.test_dir,
+        test_pattern = state.test_pattern
+      }
+    )
+    logger.error("Test discovery failed", {
+      component = "TestDiscovery",
+      error = error_handler.format_error(err),
+      error_type = "ModuleNotFound",
+      directory = state.test_dir,
+      pattern = state.test_pattern,
+      attempted_recovery = false
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Discovery module not available" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Initialize current_files if not present
+  if not state.current_files then
+    state.current_files = {}
+  end
+  
+  -- Log discovery start
+  logger.debug("Discovering test files", {
+    component = "TestDiscovery",
+    directory = state.test_dir,
+    pattern = state.test_pattern,
+    existing_files = #state.current_files
   })
+  
+  -- Attempt to discover test files with error handling
+  local success, result = error_handler.try(function()
+    -- Get timestamp for performance tracking
+    local start_time = os.time()
+    
+    -- Perform the actual discovery
+    local files = discover.find_tests(state.test_dir, state.test_pattern)
+    
+    -- Calculate discovery time
+    local end_time = os.time()
+    local duration = end_time - start_time
+    
+    return {
+      files = files,
+      duration = duration
+    }
+  end)
+  
+  -- Handle discovery results
+  if not success then
+    local err = error_handler.runtime_error(
+      "Test discovery operation failed",
+      {
+        operation = "discover_test_files",
+        module = "interactive",
+        test_dir = state.test_dir,
+        test_pattern = state.test_pattern
+      },
+      result -- Original error as cause
+    )
+    logger.error("Test discovery failed with exception", {
+      component = "TestDiscovery",
+      error = error_handler.format_error(err),
+      directory = state.test_dir,
+      pattern = state.test_pattern,
+      attempted_recovery = false
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Test discovery failed: " .. 
+        error_handler.format_error(result) .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Process successful discovery results
+  if not result.files or type(result.files) ~= "table" then
+    local err = error_handler.runtime_error(
+      "Discovery returned invalid result",
+      {
+        operation = "discover_test_files",
+        module = "interactive",
+        result_type = type(result.files)
+      }
+    )
+    logger.error("Test discovery failed with invalid result", {
+      component = "TestDiscovery",
+      error = error_handler.format_error(err),
+      directory = state.test_dir,
+      pattern = state.test_pattern,
+      attempted_recovery = false
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Test discovery returned invalid result" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Update state with discovered files
+  state.current_files = result.files
+  
+  -- Get timestamp for logging
+  local timestamp = "unknown"
+  local time_success, time_result = error_handler.try(function()
+    return os.date("%H:%M:%S")
+  end)
+  
+  if time_success then
+    timestamp = time_result
+  end
+  
+  -- Log discovery completion
+  logger.debug("Test files discovery completed", {
+    component = "TestDiscovery",
+    file_count = #state.current_files,
+    success = #state.current_files > 0,
+    directory = state.test_dir,
+    pattern = state.test_pattern,
+    timestamp = timestamp,
+    duration_seconds = result.duration or 0
+  })
+  
+  return #state.current_files > 0
+end
+
+-- Run tests with comprehensive error handling
+local function run_tests(file_path)
+  -- Validate state and dependencies
+  if not state then
+    local err = error_handler.runtime_error(
+      "State not initialized for test execution",
+      {
+        operation = "run_tests",
+        module = "interactive"
+      }
+    )
+    logger.error("Test execution failed due to missing state", {
+      component = "TestRunner",
+      error = error_handler.format_error(err)
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Internal state not initialized" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Verify runner module is available
+  if not has_runner then
+    local err = error_handler.runtime_error(
+      "Runner module not available",
+      {
+        operation = "run_tests",
+        module = "interactive",
+        file_path = file_path or "all tests"
+      }
+    )
+    
+    logger.error("Test execution failed", {
+      component = "TestRunner",
+      error = error_handler.format_error(err),
+      error_type = "ModuleNotFound",
+      file = file_path or "all tests",
+      attempted_recovery = false
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Runner module not available" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Verify lust test framework is available
+  if not state.lust then
+    local err = error_handler.runtime_error(
+      "Test framework not initialized",
+      {
+        operation = "run_tests",
+        module = "interactive",
+        file_path = file_path or "all tests"
+      }
+    )
+    
+    logger.error("Test execution failed", {
+      component = "TestRunner",
+      error = error_handler.format_error(err),
+      error_type = "FrameworkNotInitialized",
+      file = file_path or "all tests",
+      attempted_recovery = false
+    })
+    
+    -- Safe error display with fallback
+    error_handler.try(function()
+      print(colors.red .. "Error: Test framework not initialized" .. colors.normal)
+      return true
+    end)
+    
+    return false
+  end
+  
+  -- Reset lust state with error handling
+  local reset_success, reset_result = error_handler.try(function()
+    state.lust.reset()
+    return true
+  end)
+  
+  if not reset_success then
+    local err = error_handler.runtime_error(
+      "Failed to reset test environment",
+      {
+        operation = "run_tests",
+        module = "interactive",
+        file_path = file_path or "all tests"
+      },
+      reset_result -- Original error as cause
+    )
+    
+    logger.error("Test environment reset failed", {
+      component = "TestRunner",
+      error = error_handler.format_error(err),
+      file = file_path or "all tests",
+      attempted_recovery = true
+    })
+    
+    -- Try to continue despite reset failure
+  else
+    -- Get timestamp for logging
+    local timestamp = "unknown"
+    local time_success, time_result = error_handler.try(function()
+      return os.date("%H:%M:%S")
+    end)
+    
+    if time_success then
+      timestamp = time_result
+    end
+    
+    logger.debug("Test environment reset before execution", {
+      component = "TestRunner",
+      file_path = file_path or "all files",
+      focus_filter = state.focus_filter or "none",
+      tag_filter = state.tag_filter or "none",
+      watch_mode = state.watch_mode and true or false,
+      timestamp = timestamp
+    })
+  end
   
   local success = false
   
   if file_path then
-    -- Run single file
-    print(colors.cyan .. "Running file: " .. file_path .. colors.normal)
+    -- Run single file with error handling
+    
+    -- Validate file path
+    if type(file_path) ~= "string" or file_path == "" then
+      local err = error_handler.validation_error(
+        "Invalid file path for test execution",
+        {
+          operation = "run_tests",
+          module = "interactive",
+          file_path = file_path,
+          file_path_type = type(file_path)
+        }
+      )
+      
+      logger.error("Test execution failed", {
+        component = "TestRunner",
+        error = error_handler.format_error(err),
+        file = tostring(file_path)
+      })
+      
+      -- Safe error display with fallback
+      error_handler.try(function()
+        print(colors.red .. "Error: Invalid file path for test execution" .. colors.normal)
+        return true
+      end)
+      
+      return false
+    end
+    
+    -- Verify file exists with safe I/O
+    local file_exists, file_err = error_handler.safe_io_operation(
+      function() return fs.file_exists(file_path) end,
+      file_path,
+      {
+        operation = "run_tests.check_file",
+        module = "interactive"
+      }
+    )
+    
+    if not file_exists then
+      local err = error_handler.io_error(
+        "Test file not found",
+        {
+          operation = "run_tests",
+          module = "interactive",
+          file_path = file_path
+        },
+        file_err -- Include underlying error as cause
+      )
+      
+      logger.error("Test execution failed", {
+        component = "TestRunner",
+        error = error_handler.format_error(err),
+        file = file_path
+      })
+      
+      -- Safe error display with fallback
+      error_handler.try(function()
+        print(colors.red .. "Error: Test file not found: " .. file_path .. colors.normal)
+        return true
+      end)
+      
+      return false
+    end
+    
+    -- Display running message with error handling
+    error_handler.try(function()
+      print(colors.cyan .. "Running file: " .. file_path .. colors.normal)
+      return true
+    end)
     
     logger.info("Running single test file", {
       file = file_path,
@@ -560,7 +1004,66 @@ local function run_tests(file_path)
       tag_filter = state.tag_filter or "none"
     })
     
-    local results = runner.run_file(file_path, state.lust)
+    -- Run the single test file with error handling
+    local run_success, results = error_handler.try(function()
+      return runner.run_file(file_path, state.lust)
+    end)
+    
+    if not run_success then
+      local err = error_handler.runtime_error(
+        "Test file execution failed with exception",
+        {
+          operation = "run_tests",
+          module = "interactive",
+          file_path = file_path
+        },
+        results -- Original error as cause
+      )
+      
+      logger.error("Test file execution failed", {
+        component = "TestRunner",
+        error = error_handler.format_error(err),
+        file = file_path
+      })
+      
+      -- Safe error display with fallback
+      error_handler.try(function()
+        print(colors.red .. "Error executing test file: " .. 
+          error_handler.format_error(results) .. colors.normal)
+        return true
+      end)
+      
+      return false
+    end
+    
+    -- Validate results
+    if type(results) ~= "table" then
+      local err = error_handler.runtime_error(
+        "Test runner returned invalid result",
+        {
+          operation = "run_tests",
+          module = "interactive",
+          file_path = file_path,
+          result_type = type(results)
+        }
+      )
+      
+      logger.error("Test file execution completed with invalid result", {
+        component = "TestRunner",
+        error = error_handler.format_error(err),
+        file = file_path
+      })
+      
+      -- Safe error display with fallback
+      error_handler.try(function()
+        print(colors.red .. "Error: Test runner returned invalid result" .. colors.normal)
+        return true
+      end)
+      
+      return false
+    end
+    
+    -- Extract success state
     success = results.success and results.errors == 0
     
     logger.info("Test run completed", {
@@ -572,10 +1075,24 @@ local function run_tests(file_path)
       pending = results.pending or 0
     })
   else
-    -- Run all discovered files
-    if #state.current_files == 0 then
+    -- Run all discovered files with error handling
+    
+    -- Check if we need to discover files first
+    if not state.current_files or #state.current_files == 0 then
+      logger.debug("No test files in state, attempting discovery", {
+        component = "TestRunner",
+        test_dir = state.test_dir,
+        test_pattern = state.test_pattern
+      })
+      
       if not discover_test_files() then
-        print(colors.yellow .. "No test files found. Check test directory and pattern." .. colors.normal)
+        -- Error messages already handled by discover_test_files
+        
+        -- Safe error display with fallback
+        error_handler.try(function()
+          print(colors.yellow .. "No test files found. Check test directory and pattern." .. colors.normal)
+          return true
+        end)
         
         logger.warn("No test files found to run", {
           directory = state.test_dir,
@@ -586,19 +1103,72 @@ local function run_tests(file_path)
       end
     end
     
-    print(colors.cyan .. "Running " .. #state.current_files .. " test files..." .. colors.normal)
+    -- Get file count safely
+    local file_count = 0
+    error_handler.try(function()
+      file_count = #state.current_files
+      return true
+    end)
+    
+    -- Display running message with error handling
+    error_handler.try(function()
+      print(colors.cyan .. "Running " .. file_count .. " test files..." .. colors.normal)
+      return true
+    end)
     
     logger.info("Running multiple test files", {
-      file_count = #state.current_files,
+      file_count = file_count,
       focus_filter = state.focus_filter or "none",
       tag_filter = state.tag_filter or "none"
     })
     
-    success = runner.run_all(state.current_files, state.lust)
+    -- Run all test files with error handling
+    local run_success, run_result = error_handler.try(function()
+      return runner.run_all(state.current_files, state.lust)
+    end)
+    
+    if not run_success then
+      local err = error_handler.runtime_error(
+        "Multiple test file execution failed with exception",
+        {
+          operation = "run_tests",
+          module = "interactive",
+          file_count = file_count
+        },
+        run_result -- Original error as cause
+      )
+      
+      logger.error("Multiple test file execution failed", {
+        component = "TestRunner",
+        error = error_handler.format_error(err),
+        file_count = file_count
+      })
+      
+      -- Safe error display with fallback
+      error_handler.try(function()
+        print(colors.red .. "Error executing test files: " .. 
+          error_handler.format_error(run_result) .. colors.normal)
+        return true
+      end)
+      
+      return false
+    end
+    
+    -- Process run result
+    if type(run_result) == "boolean" then
+      success = run_result
+    else
+      -- If we get a table of results, process it like the single file case
+      if type(run_result) == "table" and run_result.success ~= nil then
+        success = run_result.success and (run_result.errors or 0) == 0
+      else
+        success = false
+      end
+    end
     
     logger.info("Multiple file test run completed", {
       success = success,
-      file_count = #state.current_files
+      file_count = file_count
     })
   end
   
