@@ -1,4 +1,6 @@
 <div align="center">
+# THIS IS ALPHA SOFTWARE, DO NOT USE
+# UNLESS YOU UNDERSTAND THAT, AND ARE LOOKING TO HELP.
 
 # Firmo
 
@@ -21,7 +23,6 @@ _A lightweight, powerful testing library for Lua projects. This enhanced fork of
 
 ## Features
 
-- 📦 **Minimal Dependencies** - Single file with no external requirements
 - 🧪 **Familiar Syntax** - BDD-style `describe`/`it` blocks for intuitive test organization
 - ✅ **Rich Assertions** - Extensive expect-style assertion library with detailed diffs
 - 🕵️ **Function Spies** - Track function calls and arguments
