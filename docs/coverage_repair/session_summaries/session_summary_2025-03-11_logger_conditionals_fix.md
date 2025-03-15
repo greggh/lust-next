@@ -1,8 +1,8 @@
-# Session Summary: Fix Logger Conditionals in lust-next.lua (2025-03-11)
+# Session Summary: Fix Logger Conditionals in firmo.lua (2025-03-11)
 
 ## Overview
 
-This session focused on addressing the critical issue identified in the previous session: fixing the logger conditionals in lust-next.lua to treat the logger as a required dependency, just like error_handler. This change is part of the project-wide error handling plan and ensures consistency in how core dependencies are handled throughout the framework.
+This session focused on addressing the critical issue identified in the previous session: fixing the logger conditionals in firmo.lua to treat the logger as a required dependency, just like error_handler. This change is part of the project-wide error handling plan and ensures consistency in how core dependencies are handled throughout the framework.
 
 ## Key Changes
 
@@ -50,10 +50,10 @@ if not logging then
     "Required module 'lib.tools.logging' could not be loaded", 
     error_handler.CATEGORY.CONFIGURATION, 
     error_handler.SEVERITY.FATAL,
-    {module = "lust-next"}
+    {module = "firmo"}
   )
 end
-local logger = logging.get_logger("lust-core")
+local logger = logging.get_logger("firmo-core")
 ```
 
 ### Logging Configuration
@@ -63,12 +63,12 @@ The logging configuration was updated to remove conditional checks:
 ```lua
 -- Configure logging (now a required component)
 local success, err = error_handler.try(function()
-  logging.configure_from_config("lust-core")
+  logging.configure_from_config("firmo-core")
 end)
 
 if not success then
   local context = {
-    module = "lust-core",
+    module = "firmo-core",
     operation = "configure_logging"
   }
   
@@ -80,7 +80,7 @@ if not success then
 end
 
 logger.debug("Logging system initialized", {
-  module = "lust-core",
+  module = "firmo-core",
   modules_loaded = {
     error_handler = true, -- Always true as this is now required
     filesystem = fs ~= nil, -- Always true as this is now required
@@ -129,7 +129,7 @@ While we've updated several sections of the file, the following work remains:
 
 ## Next Steps
 
-1. **Complete Remaining Logger Conditionals**: Continue updating the remaining `if logger` and `if logger and logger.debug` conditionals in lust-next.lua.
+1. **Complete Remaining Logger Conditionals**: Continue updating the remaining `if logger` and `if logger and logger.debug` conditionals in firmo.lua.
 2. **Test Updates**: Run tests to verify the changes work correctly.
 3. **Implement Error Handling in Reporting Modules**: Begin implementing error handling in reporting/init.lua and formatters.
 4. **Begin Assertion Module Extraction**: Start work on extracting assertion functions to lib/core/assertions.lua.

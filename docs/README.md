@@ -1,6 +1,7 @@
-# Lust-Next Documentation
-[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.4)
-Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful testing library for Lua projects, offering a rich set of features while maintaining simplicity and ease of use.
+# Firmo Documentation
+
+[![Version](https://img.shields.io/badge/Version-0.7.4-blue?style=flat-square)](https://github.com/greggh/firmo/releases/tag/v0.7.4)
+Welcome to the Firmo documentation. firmo is a lightweight, powerful testing library for Lua projects, offering a rich set of features while maintaining simplicity and ease of use.
 
 ## Latest Updates
 
@@ -38,26 +39,26 @@ Welcome to the Lust-Next documentation. Lust-Next is a lightweight, powerful tes
   - [CLI](api/cli.md): Command-line interface usage
   - [Test Discovery](api/discovery.md): Finding and running tests
 - [**Guides**](guides/README.md): How-to guides for common tasks
-  - [Getting Started](guides/getting-started.md): Your first tests with Lust-Next
+  - [Getting Started](guides/getting-started.md): Your first tests with firmo
   - [Reporting](guides/reporting.md): Using coverage, quality, and reporting
   - [Migrating from Other Frameworks](guides/migrating.md): Transitioning from other test frameworks
   - [CI Integration](guides/ci_integration.md): Setup for continuous integration
 
 ## Quick Links
 
-- [GitHub Repository](https://github.com/greggh/lust-next)
-- [Issue Tracker](https://github.com/greggh/lust-next/issues)
-- [Changelog](https://github.com/greggh/lust-next/blob/main/CHANGELOG.md)
+- [GitHub Repository](https://github.com/greggh/firmo)
+- [Issue Tracker](https://github.com/greggh/firmo/issues)
+- [Changelog](https://github.com/greggh/firmo/blob/main/CHANGELOG.md)
 
 ## Installation
 
-```bash
+````bash
 
 # Option 1: Copy the single file to your project
-curl -o lust-next.lua https://raw.githubusercontent.com/greggh/lust-next/master/lust-next.lua
+curl -o firmo.lua https://raw.githubusercontent.com/greggh/firmo/master/firmo.lua
 
 # Option 2: Use as Git submodule
-git submodule add https://github.com/greggh/lust-next.git deps/lust-next
+git submodule add https://github.com/greggh/firmo.git deps/firmo
 
 ```text
 
@@ -65,8 +66,8 @@ git submodule add https://github.com/greggh/lust-next.git deps/lust-next
 
 ```lua
 -- Import and expose globals for convenience
-local lust_next = require('lust-next')
-lust_next.expose_globals()
+local firmo = require('firmo')
+firmo.expose_globals()
 -- Write your tests
 describe("Calculator", function()
   it("adds numbers correctly", function()
@@ -80,5 +81,6 @@ end)
 ```text
 
 ## Contributing
-Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/lust-next/blob/main/CONTRIBUTING.md) for details on how to get involved.
+Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/firmo/blob/main/CONTRIBUTING.md) for details on how to get involved.
 
+````

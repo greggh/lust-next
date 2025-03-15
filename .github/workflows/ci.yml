@@ -64,7 +64,7 @@ jobs:
           sudo apt-get install -y lua5.3
           
           # Run the existing test file
-          lua5.3 tests/lust_test.lua
+          lua5.3 tests/firmo_test.lua
           
       - name: Run example
         run: |

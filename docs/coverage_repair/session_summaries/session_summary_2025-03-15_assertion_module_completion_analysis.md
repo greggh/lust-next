@@ -12,7 +12,7 @@ The assertion module extraction task has been successfully completed with all pl
 
 1. **Creation of Standalone Module**:
    - A dedicated assertion module has been created at `lib/assertion.lua`
-   - All assertion functionality has been extracted from lust-next.lua
+   - All assertion functionality has been extracted from firmo.lua
    - Circular dependencies have been resolved through lazy loading
 
 2. **Error Handling Implementation**:
@@ -21,7 +21,7 @@ The assertion module extraction task has been successfully completed with all pl
    - Structured error objects with context information are now used
 
 3. **Integration with Main Module**:
-   - lust-next.lua has been updated to use the standalone module
+   - firmo.lua has been updated to use the standalone module
    - The expect() function now delegates to assertion.expect()
    - The paths table is correctly exported for plugins
 

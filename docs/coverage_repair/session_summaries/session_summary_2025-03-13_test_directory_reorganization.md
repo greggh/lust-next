@@ -32,7 +32,7 @@ Today's session focused on implementing a comprehensive reorganization of the te
    - Changed `expect(variable).to.be(true)` to `expect(variable).to.be_truthy()`
    - Changed `expect(variable).to.be(false)` to `expect(variable).to_not.be_truthy()`
    - Changed `expect(variable).to.be(nil)` to `expect(variable).to_not.exist()`
-   - Fixed patterns in markdown_test.lua, interactive_mode_test.lua, and lust_test.lua
+   - Fixed patterns in markdown_test.lua, interactive_mode_test.lua, and firmo_test.lua
 
 4. **Updated Documentation:**
    - Created session summary for boolean assertion standardization
@@ -140,7 +140,7 @@ This reorganization has several significant benefits:
 
 ## References
 
-- [Test System Reorganization Plan](/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/test_system_reorganization_plan.md)
-- [Phase 4 Progress](/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/phase4_progress.md)
-- [Boolean Assertion Standardization Summary](/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/session_summaries/session_summary_2025-03-13_boolean_assertion_standardization.md)
-- [CLAUDE.md Test Directory Section](/home/gregg/Projects/lua-library/lust-next/CLAUDE.md#test-directory-structure)
+- [Test System Reorganization Plan](/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/test_system_reorganization_plan.md)
+- [Phase 4 Progress](/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/phase4_progress.md)
+- [Boolean Assertion Standardization Summary](/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/session_summaries/session_summary_2025-03-13_boolean_assertion_standardization.md)
+- [CLAUDE.md Test Directory Section](/home/gregg/Projects/lua-library/firmo/CLAUDE.md#test-directory-structure

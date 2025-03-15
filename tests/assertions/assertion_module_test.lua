@@ -1,6 +1,6 @@
 -- Tests for the dedicated assertion module
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Explicitly require the standalone assertion module
 local assertion = require("lib.assertion")

@@ -1,8 +1,8 @@
 # Guide to Coverage, Quality, and Reporting
-This guide provides an overview of lust-next's coverage tracking, quality validation, and reporting capabilities.
+This guide provides an overview of firmo's coverage tracking, quality validation, and reporting capabilities.
 
 ## Introduction
-The lust-next testing framework includes three interconnected modules for ensuring test quality and code coverage:
+The firmo testing framework includes three interconnected modules for ensuring test quality and code coverage:
 
 1. **Coverage Module**: Tracks which lines and functions are executed during tests
 2. **Quality Module**: Validates that tests meet defined quality standards
@@ -19,13 +19,13 @@ These modules work together in a modular architecture, with clear separation of 
 To enable coverage tracking in your tests:
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 -- Enable coverage tracking
-lust.coverage_options.enabled = true
+firmo.coverage_options.enabled = true
 -- Run your tests
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Generate an HTML report
-lust.generate_coverage_report('html', './coverage-report.html')
+firmo.generate_coverage_report('html', './coverage-report.html')
 
 ```text
 From the command line:
@@ -33,7 +33,7 @@ From the command line:
 ```bash
 
 # Run tests with coverage and generate HTML report
-lua lust-next.lua --coverage --coverage-format html tests/
+lua firmo.lua --coverage --coverage-format html tests/
 
 ```text
 
@@ -55,7 +55,7 @@ You can customize which files are included in coverage analysis:
 
 ```lua
 -- Configure coverage options
-lust.coverage_options = {
+firmo.coverage_options = {
   enabled = true,
   include = {
     "src/*.lua",         -- Include files in src directory
@@ -74,7 +74,7 @@ From the command line:
 ```bash
 
 # Set custom include/exclude patterns
-lua lust-next.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
+lua firmo.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
 
 ```text
 
@@ -84,14 +84,14 @@ lua lust-next.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage
 To enable quality validation in your tests:
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 -- Enable quality validation at level 3
-lust.quality_options.enabled = true
-lust.quality_options.level = 3
+firmo.quality_options.enabled = true
+firmo.quality_options.level = 3
 -- Run your tests
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Generate an HTML report
-lust.generate_quality_report('html', './quality-report.html')
+firmo.generate_quality_report('html', './quality-report.html')
 
 ```text
 From the command line:
@@ -99,7 +99,7 @@ From the command line:
 ```bash
 
 # Run tests with quality validation at level 3
-lua lust-next.lua --quality --quality-level 3 tests/
+lua firmo.lua --quality --quality-level 3 tests/
 
 ```text
 
@@ -176,7 +176,7 @@ describe("calculator.add", function()
   end)
   it("should validate inputs", function()
     -- Mock usage
-    local validator = lust.mock(calculator.validator)
+    local validator = firmo.mock(calculator.validator)
     validator:stub("is_number", true)
     calculator.add(2, 3)
     -- Verify mock was called correctly
@@ -194,7 +194,7 @@ describe("calculator.divide", function()
   local logs
   before_each(function()
     calculator = reset_module("src.calculator")
-    logs = lust.mock(calculator.logs)
+    logs = firmo.mock(calculator.logs)
   end)
   after_each(function()
     -- Cleanup resources
@@ -215,7 +215,7 @@ describe("calculator.divide", function()
   end)
   it("should properly validate and log operations", function()
     -- Complete mock verification
-    local validator = lust.mock(calculator.validator)
+    local validator = firmo.mock(calculator.validator)
     validator:stub("is_number", true)
     logs:stub("record")
     calculator.divide(10, 2)
@@ -225,7 +225,7 @@ describe("calculator.divide", function()
       {method = "is_number", args = {2}}
     })).to.be.truthy()
     expect(logs.stubs.record).to.be.called.with(
-      lust.arg_matcher.string_containing("division")
+      firmo.arg_matcher.string_containing("division")
     )
   end)
 end)
@@ -240,7 +240,7 @@ describe("calculator.evaluate", function()
   local security
   before_each(function()
     calculator = reset_module("src.calculator")
-    security = lust.mock(calculator.security)
+    security = firmo.mock(calculator.security)
     security:stub("validate_expression", true)
   end)
   -- Comprehensive branch coverage
@@ -293,7 +293,7 @@ end)
 ```text
 
 ## Using the Modular Reporting System
-The reporting system in lust-next follows a modular architecture with clear separation of concerns:
+The reporting system in firmo follows a modular architecture with clear separation of concerns:
 
 1. **Data Collection**: Coverage and quality modules collect data during test execution
 2. **Data Processing**: Modules process raw data into structured formats
@@ -304,16 +304,16 @@ The reporting system in lust-next follows a modular architecture with clear sepa
 You can manually control each step of the reporting process:
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Run tests with coverage and quality validation
-lust.coverage_options.enabled = true
-lust.quality_options.enabled = true
-lust.quality_options.level = 3
-lust.run_discovered('./tests')
+firmo.coverage_options.enabled = true
+firmo.quality_options.enabled = true
+firmo.quality_options.level = 3
+firmo.run_discovered('./tests')
 -- Get coverage and quality data
-local coverage_data = lust.get_coverage_data()
-local quality_data = lust.get_quality_data()
+local coverage_data = firmo.get_coverage_data()
+local quality_data = firmo.get_quality_data()
 -- Format data into different output formats
 local html_coverage = reporting.format_coverage(coverage_data, "html")
 local json_coverage = reporting.format_coverage(coverage_data, "json")
@@ -329,15 +329,15 @@ reporting.write_file("./reports/quality.html", html_quality)
 For convenience, the reporting module offers auto-save functionality:
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Run tests with coverage and quality validation
-lust.coverage_options.enabled = true
-lust.quality_options.enabled = true
-lust.run_discovered('./tests')
+firmo.coverage_options.enabled = true
+firmo.quality_options.enabled = true
+firmo.run_discovered('./tests')
 -- Get coverage and quality data
-local coverage_data = lust.get_coverage_data()
-local quality_data = lust.get_quality_data()
+local coverage_data = firmo.get_coverage_data()
+local quality_data = firmo.get_quality_data()
 -- Auto-save all report formats to a directory
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 -- This will generate:
@@ -355,18 +355,18 @@ The most convenient way to generate reports is through the command line:
 ```bash
 
 # Run tests with coverage and quality validation
-lua lust-next.lua --coverage --quality --quality-level 3 tests/
+lua firmo.lua --coverage --quality --quality-level 3 tests/
 
 # Specify report formats
-lua lust-next.lua --coverage --coverage-format html --quality --quality-format json tests/
+lua firmo.lua --coverage --coverage-format html --quality --quality-format json tests/
 
 # Set custom output paths
-lua lust-next.lua --coverage --coverage-output ./reports/coverage.html tests/
+lua firmo.lua --coverage --coverage-output ./reports/coverage.html tests/
 
 ```text
 
 ## Robust Fallback Mechanisms
-The reporting system in lust-next includes several fallback mechanisms to ensure reliable operation under all conditions:
+The reporting system in firmo includes several fallback mechanisms to ensure reliable operation under all conditions:
 
 ### Module Loading Fallbacks
 
@@ -377,11 +377,11 @@ if not mod then
   mod = require("src.reporting")
 end
 if not mod then
-  mod = require("deps.lust-next.src.reporting")
+  mod = require("deps.firmo.src.reporting")
 end
 if not mod then
   -- Try direct file loading
-  local ok, loaded = pcall(dofile, "./deps/lust-next/src/reporting.lua")
+  local ok, loaded = pcall(dofile, "./deps/firmo/src/reporting.lua")
   if ok then mod = loaded end
 end
 
@@ -508,7 +508,7 @@ end
    - Test boundary conditions and edge cases
 1. **Use pattern-based inclusion/exclusion**:
    ```lua
-   lust.coverage_options = {
+   firmo.coverage_options = {
      include = {"src/core/*.lua", "src/api/*.lua"},
      exclude = {"src/vendor/*.lua", "src/generated/*.lua"}
    }
@@ -517,7 +517,7 @@ end
 1. **Verify coverage with CI integration**:
    ```bash
    # Run in CI environment
-   lua lust-next.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
+   lua firmo.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
    ```
 
 ### CI Integration
@@ -539,7 +539,7 @@ end
 
        - name: Run tests with coverage
          run: |
-           lua lust-next.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
+           lua firmo.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
 
        - name: Upload coverage report
          uses: codecov/codecov-action@v2
@@ -551,7 +551,7 @@ end
    ```bash
    #!/bin/bash
    # Run tests with coverage and quality validation
-   lua lust-next.lua --coverage --coverage-threshold 80 --quality --quality-level 3 tests/
+   lua firmo.lua --coverage --coverage-threshold 80 --quality --quality-level 3 tests/
    # Check exit code
    if [ $? -ne 0 ]; then
      echo "Tests failed or coverage/quality below threshold"
@@ -560,12 +560,12 @@ end
    ```
 
 ## Conclusion
-The lust-next coverage, quality, and reporting system provides a comprehensive solution for ensuring test quality and code coverage. By using these modules, you can:
+The firmo coverage, quality, and reporting system provides a comprehensive solution for ensuring test quality and code coverage. By using these modules, you can:
 
 1. Track which parts of your code are being tested
 2. Validate that your tests meet defined quality standards
 3. Generate detailed reports in multiple formats
 4. Integrate with CI/CD pipelines for automated validation
-The modular architecture with robust fallback mechanisms ensures reliable operation under all conditions, making lust-next a robust choice for testing Lua projects.
+The modular architecture with robust fallback mechanisms ensures reliable operation under all conditions, making firmo a robust choice for testing Lua projects.
 For more details, see the API documentation for the [coverage](../api/coverage.md), [quality](../api/quality.md), and [reporting](../api/reporting.md) modules.
 

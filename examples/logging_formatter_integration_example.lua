@@ -1,5 +1,5 @@
 -- Example demonstrating integration between logging and test formatters
-local lust = require("lust-next")
+local firmo = require("firmo")
 local logging = require("lib.tools.logging")
 local test_suite = require("lib.core").describe
 local expect = require("lib.core").expect
@@ -70,7 +70,7 @@ local test_logger = formatter_integration.create_test_logger("Calculator Test", 
 print("\nRunning test with enhanced logging:")
 
 -- Reset the test state
-lust.reset()
+firmo.reset()
 
 -- Define a test suite with logging
 test_suite("Calculator with logging", function()
@@ -97,7 +97,7 @@ test_suite("Calculator with logging", function()
   step_logger.debug("Calculator created", {functions = {"add", "subtract", "multiply", "divide"}})
   
   -- Test addition
-  lust.it("should add two numbers correctly", function()
+  firmo.it("should add two numbers correctly", function()
     -- Get a step-specific logger
     local add_logger = test_logger.step("Addition Test")
     
@@ -118,7 +118,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test subtraction
-  lust.it("should subtract two numbers correctly", function()
+  firmo.it("should subtract two numbers correctly", function()
     -- Get a step-specific logger
     local sub_logger = test_logger.step("Subtraction Test")
     
@@ -139,7 +139,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test multiplication
-  lust.it("should multiply two numbers correctly", function()
+  firmo.it("should multiply two numbers correctly", function()
     -- Get a step-specific logger
     local mul_logger = test_logger.step("Multiplication Test")
     
@@ -160,7 +160,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test division
-  lust.it("should divide two numbers correctly", function()
+  firmo.it("should divide two numbers correctly", function()
     -- Get a step-specific logger
     local div_logger = test_logger.step("Division Test")
     
@@ -181,7 +181,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test division by zero
-  lust.it("should throw error when dividing by zero", function()
+  firmo.it("should throw error when dividing by zero", function()
     -- Get a step-specific logger
     local error_logger = test_logger.step("Division by Zero Test")
     
@@ -212,11 +212,11 @@ test_suite("Calculator with logging", function()
 end)
 
 -- Run the tests
-lust.run()
+firmo.run()
 
 -- Generate a report using the log formatter
 print("\nGenerating test report with log formatter:")
-local results = lust.report()
+local results = firmo.report()
 
 -- Add the log formatter
 results.formatters = results.formatters or {}

@@ -91,7 +91,7 @@ local function demonstrate_platform_export(platform, description)
     "logs/export_" .. platform .. ".json",
     {
       environment = "demo",
-      service_name = "lust-next-example"
+      service_name = "firmo-example"
     }
   )
   
@@ -175,7 +175,7 @@ local function demonstrate_platform_export(platform, description)
     "logs/config_" .. platform .. ".conf",
     {
       environment = "demo",
-      service = "lust-next-example",
+      service = "firmo-example",
       es_host = "localhost:9200"
     }
   )
@@ -206,7 +206,7 @@ for _, platform in ipairs(platforms) do
     platform,
     {
       environment = "demo",
-      service = "lust-next-example"
+      service = "firmo-example"
     }
   )
   

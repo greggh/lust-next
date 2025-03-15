@@ -63,7 +63,7 @@ This session continued implementing the test update plan by reviewing and fixing
    - Inconsistent error handling approaches
 
 3. **Test Framework Approach**:
-   - Most tests correctly avoid explicit lust() or lust.run() calls
+   - Most tests correctly avoid explicit firmo() or firmo.run() calls
    - Well-structured describe/it blocks are common
    - Minimal use of non-existent hooks like before_all/after_all
 

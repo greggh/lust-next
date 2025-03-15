@@ -1,8 +1,8 @@
 # Mocking API
-This document describes the mocking, spying, and stubbing capabilities provided by Lust-Next.
+This document describes the mocking, spying, and stubbing capabilities provided by Firmo.
 
 ## Overview
-Lust-Next provides a comprehensive mocking system for replacing dependencies and verifying interactions during testing. The mocking system includes:
+Firmo provides a comprehensive mocking system for replacing dependencies and verifying interactions during testing. The mocking system includes:
 
 - **Spies**: Track function calls without changing behavior
 - **Stubs**: Replace functions with custom implementations
@@ -14,7 +14,7 @@ Lust-Next provides a comprehensive mocking system for replacing dependencies and
 
 ## Spy Functions
 
-### lust.spy(target, [name], [run])
+### firmo.spy(target, [name], [run])
 Creates a spy function or spies on an object method.
 **Parameters:**
 
@@ -29,11 +29,11 @@ Creates a spy function or spies on an object method.
 ```lua
 -- Spy on a function
 local fn = function(a, b) return a + b end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn(1, 2) -- Calls original function, but tracks the call
 -- Spy on an object method
 local obj = { method = function(self, arg) return arg end }
-local spy_method = lust.spy(obj, "method")
+local spy_method = firmo.spy(obj, "method")
 obj:method("test") -- Calls original method, but tracks the call
 
 ```text
@@ -44,7 +44,7 @@ A boolean value indicating whether the spy has been called.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn()
 expect(spy_fn.called).to.be.truthy()
 
@@ -56,7 +56,7 @@ The number of times the spy has been called.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn()
 spy_fn()
 expect(spy_fn.call_count).to.equal(2)
@@ -69,7 +69,7 @@ A table containing the arguments passed to each call of the spy.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn(1, 2)
 spy_fn("a", "b")
 expect(spy_fn.calls[1][1]).to.equal(1) -- First call, first argument
@@ -89,7 +89,7 @@ Checks whether the spy was called with the specified arguments.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn("test", 123)
 expect(spy_fn:called_with("test")).to.be.truthy() -- Checks just the first arg
 expect(spy_fn:called_with("test", 123)).to.be.truthy() -- Checks both args
@@ -109,7 +109,7 @@ Checks whether the spy was called exactly n times.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn()
 spy_fn()
 expect(spy_fn:called_times(2)).to.be.truthy()
@@ -126,7 +126,7 @@ Checks whether the spy was never called.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 expect(spy_fn:not_called()).to.be.truthy()
 spy_fn()
 expect(spy_fn:not_called()).to.equal(false)
@@ -142,7 +142,7 @@ Checks whether the spy was called exactly once.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn()
 expect(spy_fn:called_once()).to.be.truthy()
 spy_fn()
@@ -164,8 +164,8 @@ Checks whether any call to this spy happened before a specific call to another s
 ```lua
 local fn1 = function() end
 local fn2 = function() end
-local spy1 = lust.spy(fn1)
-local spy2 = lust.spy(fn2)
+local spy1 = firmo.spy(fn1)
+local spy2 = firmo.spy(fn2)
 spy1() -- Called first
 spy2() -- Called second
 expect(spy1:called_before(spy2)).to.be.truthy()
@@ -187,8 +187,8 @@ Checks whether any call to this spy happened after a specific call to another sp
 ```lua
 local fn1 = function() end
 local fn2 = function() end
-local spy1 = lust.spy(fn1)
-local spy2 = lust.spy(fn2)
+local spy1 = firmo.spy(fn1)
+local spy2 = firmo.spy(fn2)
 spy1() -- Called first
 spy2() -- Called second
 expect(spy2:called_after(spy1)).to.be.truthy()
@@ -208,7 +208,7 @@ Checks whether the spy has any calls that match the specified pattern of argumen
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn("test", 123)
 spy_fn(456, "example")
 expect(spy_fn:has_calls_with("test")).to.be.truthy()
@@ -226,7 +226,7 @@ Gets the arguments from the most recent call to the spy.
 
 ```lua
 local fn = function() end
-local spy_fn = lust.spy(fn)
+local spy_fn = firmo.spy(fn)
 spy_fn("first")
 spy_fn("second", "arg")
 local last_args = spy_fn:last_call()
@@ -241,7 +241,7 @@ Restores the original function/method if the spy was created for an object metho
 
 ```lua
 local obj = { method = function() return "original" end }
-local spy_method = lust.spy(obj, "method")
+local spy_method = firmo.spy(obj, "method")
 expect(obj.method()).to.equal("original") -- Calls through to original
 spy_method:restore()
 expect(obj.method).to.equal(obj.method) -- Original function is restored
@@ -250,7 +250,7 @@ expect(obj.method).to.equal(obj.method) -- Original function is restored
 
 ## Stub Functions
 
-### lust.stub(return_value_or_implementation)
+### firmo.stub(return_value_or_implementation)
 Creates a standalone stub function that returns a specific value or implements a custom behavior.
 **Parameters:**
 
@@ -262,13 +262,13 @@ Creates a standalone stub function that returns a specific value or implements a
 
 ```lua
 -- Stub with a return value
-local get_config = lust.stub({debug = true, timeout = 1000})
+local get_config = firmo.stub({debug = true, timeout = 1000})
 local config = get_config() -- Returns {debug = true, timeout = 1000}
 -- Stub with a function implementation
-local calculate = lust.stub(function(a, b) return a * b end)
+local calculate = firmo.stub(function(a, b) return a * b end)
 local result = calculate(2, 3) -- Returns 6
 -- Stub with sequential return values
-local status = lust.stub(nil):returns_in_sequence({"starting", "in_progress", "complete"})
+local status = firmo.stub(nil):returns_in_sequence({"starting", "in_progress", "complete"})
 status() -- Returns "starting"
 status() -- Returns "in_progress"
 status() -- Returns "complete"
@@ -287,7 +287,7 @@ Sets up a stub to return different values on successive calls.
 **Example:**
 
 ```lua
-local counter = lust.stub("initial"):returns_in_sequence({
+local counter = firmo.stub("initial"):returns_in_sequence({
   1,
   2,
   3,
@@ -312,7 +312,7 @@ Configures a stub with sequential return values to cycle through the values afte
 **Example:**
 
 ```lua
-local light = lust.stub():returns_in_sequence({"red", "yellow", "green"}):cycle_sequence()
+local light = firmo.stub():returns_in_sequence({"red", "yellow", "green"}):cycle_sequence()
 light() -- Returns "red"
 light() -- Returns "yellow"
 light() -- Returns "green"
@@ -337,7 +337,7 @@ Configures what happens when a sequence of return values is exhausted.
 
 ```lua
 -- Return a custom error object when exhausted
-local api = lust.stub():returns_in_sequence({
+local api = firmo.stub():returns_in_sequence({
   { status = "success", data = "first" },
   { status = "success", data = "second" }
 }):when_exhausted("custom", { status = "error", message = "No more data" })
@@ -346,7 +346,7 @@ api() -- Returns { status = "success", data = "second" }
 api() -- Returns { status = "error", message = "No more data" }
 -- Fall back to original implementation when exhausted
 local obj = { get_data = function() return "original" end }
-local mock_obj = lust.mock(obj)
+local mock_obj = firmo.mock(obj)
 mock_obj:stub_in_sequence("get_data", {"mocked"})
   :when_exhausted("fallback")
 obj.get_data() -- Returns "mocked"
@@ -362,7 +362,7 @@ Resets a sequence stub to start returning values from the beginning of the seque
 **Example:**
 
 ```lua
-local counter = lust.stub():returns_in_sequence({1, 2, 3})
+local counter = firmo.stub():returns_in_sequence({1, 2, 3})
 counter() -- Returns 1
 counter() -- Returns 2
 counter() -- Returns 3
@@ -376,7 +376,7 @@ counter() -- Returns 2 again
 
 ```lua
 -- Configure multiple behaviors in a single chain
-local api = lust.stub()
+local api = firmo.stub()
   :returns_in_sequence({"pending", "processing", "complete"})
   :cycle_sequence(true)
   :when_exhausted("custom", "error")
@@ -392,7 +392,7 @@ Stubs include all the same tracking and verification methods as spies.
 
 ## Mock Objects
 
-### lust.mock(target, [options])
+### firmo.mock(target, [options])
 Creates a mock object for the specified target.
 **Parameters:**
 
@@ -410,7 +410,7 @@ local database = {
   query = function() end,
   disconnect = function() end
 }
-local db_mock = lust.mock(database)
+local db_mock = firmo.mock(database)
 
 ```text
 
@@ -427,7 +427,7 @@ Stubs a method on the mock object with a specific implementation or return value
 
 ```lua
 local database = { query = function() end }
-local db_mock = lust.mock(database)
+local db_mock = firmo.mock(database)
 -- Stub with a function
 db_mock:stub("query", function(query_string)
   return {rows = {{id = 1, name = "test"}}}
@@ -450,7 +450,7 @@ Stubs a method on the mock object to return different values on successive calls
 
 ```lua
 local api = { get_status = function() return "online" end }
-local mock_api = lust.mock(api)
+local mock_api = firmo.mock(api)
 -- Stub with sequential return values
 mock_api:stub_in_sequence("get_status", {
   "starting",
@@ -482,7 +482,7 @@ Restores the original implementation of a specific stubbed method.
 
 ```lua
 local obj = { method = function() return "original" end }
-local mock_obj = lust.mock(obj)
+local mock_obj = firmo.mock(obj)
 mock_obj:stub("method", function() return "stubbed" end)
 expect(obj.method()).to.equal("stubbed")
 mock_obj:restore_stub("method")
@@ -499,7 +499,7 @@ local obj = {
   method1 = function() return "original1" end,
   method2 = function() return "original2" end
 }
-local mock_obj = lust.mock(obj)
+local mock_obj = firmo.mock(obj)
 mock_obj:stub("method1", function() return "stubbed1" end)
 mock_obj:stub("method2", function() return "stubbed2" end)
 mock_obj:restore()
@@ -520,7 +520,7 @@ Verifies that all expectations set on the mock were met.
 
 ```lua
 local obj = { method = function() end }
-local mock_obj = lust.mock(obj)
+local mock_obj = firmo.mock(obj)
 mock_obj:stub("method", function() return "stubbed" end)
 obj.method() -- Call the stubbed method
 -- Verify all stubbbed methods were called
@@ -547,7 +547,7 @@ local api = {
   send = function() end,
   disconnect = function() end
 }
-local mock_api = lust.mock(api)
+local mock_api = firmo.mock(api)
 -- Stub methods
 mock_api:stub("connect", true)
 mock_api:stub("send", true)
@@ -577,7 +577,7 @@ Sets up expectations for how a method should be called. This returns a fluent in
 
 ```lua
 local api = { get_user = function() end }
-local mock_api = lust.mock(api)
+local mock_api = firmo.mock(api)
 -- Set up expectations
 mock_api:expect("get_user")
   .with(123)
@@ -603,7 +603,7 @@ Verifies that all expectations set with `expect()` were met.
 
 ```lua
 local api = { get_user = function() end }
-local mock_api = lust.mock(api)
+local mock_api = firmo.mock(api)
 -- Set up expectations
 mock_api:expect("get_user").to.be.called.times(2)
 -- Stub implementation 
@@ -624,7 +624,7 @@ A table containing all the stubs created on the mock.
 
 ```lua
 local obj = { method = function() end }
-local mock_obj = lust.mock(obj)
+local mock_obj = firmo.mock(obj)
 mock_obj:stub("method", function() return "stubbed" end)
 obj.method()
 expect(mock_obj._stubs.method.called).to.be.truthy()
@@ -635,7 +635,7 @@ expect(mock_obj._stubs.method.call_count).to.equal(1)
 ## Argument Matchers
 Argument matchers provide flexible ways to match arguments in function calls.
 
-### lust.arg_matcher.any()
+### firmo.arg_matcher.any()
 Matches any value.
 **Returns:**
 
@@ -643,13 +643,13 @@ Matches any value.
 **Example:**
 
 ```lua
-local spy_fn = lust.spy(function() end)
+local spy_fn = firmo.spy(function() end)
 spy_fn("test")
-expect(spy_fn:called_with(lust.arg_matcher.any())).to.be.truthy()
+expect(spy_fn:called_with(firmo.arg_matcher.any())).to.be.truthy()
 
 ```text
 
-### lust.arg_matcher.string()
+### firmo.arg_matcher.string()
 Matches any string value.
 **Returns:**
 
@@ -657,27 +657,27 @@ Matches any string value.
 **Example:**
 
 ```lua
-local spy_fn = lust.spy(function() end)
+local spy_fn = firmo.spy(function() end)
 spy_fn("test")
 spy_fn(123)
-expect(spy_fn:called_with(lust.arg_matcher.string())).to.be.truthy()
-expect(spy_fn:called_with(lust.arg_matcher.number())).to.be.truthy()
+expect(spy_fn:called_with(firmo.arg_matcher.string())).to.be.truthy()
+expect(spy_fn:called_with(firmo.arg_matcher.number())).to.be.truthy()
 
 ```text
 
-### lust.arg_matcher.number()
+### firmo.arg_matcher.number()
 Matches any number value.
 
-### lust.arg_matcher.boolean()
+### firmo.arg_matcher.boolean()
 Matches any boolean value.
 
-### lust.arg_matcher.table()
+### firmo.arg_matcher.table()
 Matches any table value.
 
-### lust.arg_matcher.func()
+### firmo.arg_matcher.func()
 Matches any function value.
 
-### lust.arg_matcher.table_containing(partial)
+### firmo.arg_matcher.table_containing(partial)
 Matches a table that contains at least the specified keys and values.
 **Parameters:**
 
@@ -688,20 +688,20 @@ Matches a table that contains at least the specified keys and values.
 **Example:**
 
 ```lua
-local spy_fn = lust.spy(function() end)
+local spy_fn = firmo.spy(function() end)
 spy_fn({id = 123, name = "test", extra = "value"})
 -- Matches because the argument contains the specified keys/values
 expect(spy_fn:called_with(
-  lust.arg_matcher.table_containing({id = 123, name = "test"})
+  firmo.arg_matcher.table_containing({id = 123, name = "test"})
 )).to.be.truthy()
 -- Doesn't match because the value for 'name' is different
 expect(spy_fn:called_with(
-  lust.arg_matcher.table_containing({id = 123, name = "different"})
+  firmo.arg_matcher.table_containing({id = 123, name = "different"})
 )).to.equal(false)
 
 ```text
 
-### lust.arg_matcher.custom(fn, description)
+### firmo.arg_matcher.custom(fn, description)
 Creates a custom matcher using the provided function.
 **Parameters:**
 
@@ -714,11 +714,11 @@ Creates a custom matcher using the provided function.
 
 ```lua
 -- Create a matcher for positive numbers
-local positive_matcher = lust.arg_matcher.custom(
+local positive_matcher = firmo.arg_matcher.custom(
   function(val) return type(val) == "number" and val > 0 end,
   "positive number"
 )
-local spy_fn = lust.spy(function() end)
+local spy_fn = firmo.spy(function() end)
 spy_fn(42)
 spy_fn(-10)
 expect(spy_fn:called_with(positive_matcher)).to.be.truthy()
@@ -727,7 +727,7 @@ expect(spy_fn:called_with(positive_matcher)).to.be.truthy()
 
 ## Context Management
 
-### lust.with_mocks(fn)
+### firmo.with_mocks(fn)
 Creates a context where mocks are automatically restored when the function exits, even if an error occurs.
 **Parameters:**
 
@@ -736,7 +736,7 @@ Creates a context where mocks are automatically restored when the function exits
 
 ```lua
 local obj = { method = function() return "original" end }
-lust.with_mocks(function(mock)
+firmo.with_mocks(function(mock)
   -- Create mocks inside the context
   local mock_obj = mock(obj)
   mock_obj:stub("method", function() return "stubbed" end)
@@ -757,7 +757,7 @@ expect(obj.method()).to.equal("original")
 describe("Function stubbing", function()
   it("can stub a function to return a fixed value", function()
     -- Create a stub that returns a fixed value
-    local getUser = lust.stub({id = 1, name = "John"})
+    local getUser = firmo.stub({id = 1, name = "John"})
     -- Use the stub
     local user = getUser()
     -- Verify the stub returned the expected value
@@ -790,7 +790,7 @@ describe("process_user", function()
     local user_service = {
       get_user = function() end
     }
-    local mock_service = lust.mock(user_service)
+    local mock_service = firmo.mock(user_service)
     -- Stub the get_user method
     mock_service:stub("get_user", function(id)
       expect(id).to.equal(123) -- Verify correct ID is passed
@@ -822,7 +822,7 @@ describe("with_mocks context", function()
     local original_function = function() return "original" end
     local obj = { func = original_function }
     -- Create mocks in a context
-    lust.with_mocks(function(mock)
+    firmo.with_mocks(function(mock)
       local obj_mock = mock(obj)
       obj_mock:stub("func", function() return "mocked" end)
       -- Inside the context, the function is mocked
@@ -837,7 +837,7 @@ describe("with_mocks context", function()
     local obj = { func = original_function }
     -- Create mocks in a context that throws an error
     pcall(function()
-      lust.with_mocks(function(mock)
+      firmo.with_mocks(function(mock)
         local obj_mock = mock(obj)
         obj_mock:stub("func", function() return "mocked" end)
         -- Throw an error
@@ -878,14 +878,14 @@ describe("Order processing system", function()
       send_confirmation = function() end
     }
     -- Create a mock of the order system
-    lust.with_mocks(function(mock)
+    firmo.with_mocks(function(mock)
       local system_mock = mock(order_system)
       -- Set up expectations with the fluent API
       system_mock:expect("validate_order")
-        .with(lust.arg_matcher.table_containing({id = 123}))
+        .with(firmo.arg_matcher.table_containing({id = 123}))
         .to.be.called.once()
       system_mock:expect("process_payment")
-        .with(lust.arg_matcher.number())
+        .with(firmo.arg_matcher.number())
         .to.be.called.once()
         .and_return(true)
       system_mock:expect("update_inventory")
@@ -950,7 +950,7 @@ describe("API client with changing state", function()
     }
 
     -- Test the normal success path
-    lust.with_mocks(function(mock)
+    firmo.with_mocks(function(mock)
       local mock_api = mock(api_client)
 
       -- Mock a job that progresses through multiple states
@@ -971,7 +971,7 @@ describe("API client with changing state", function()
     end)
 
     -- Test the error path
-    lust.with_mocks(function(mock)
+    firmo.with_mocks(function(mock)
       local mock_api = mock(api_client)
 
       -- Mock a job that fails midway
@@ -991,7 +991,7 @@ describe("API client with changing state", function()
     end)
 
     -- Test timeout scenario with manual cycling implementation
-    lust.with_mocks(function(mock)
+    firmo.with_mocks(function(mock)
       local mock_api = mock(api_client)
 
       -- Use a manual implementation for reliable cycling
@@ -1028,7 +1028,7 @@ end)
 describe("Advanced sequence behavior", function()
   it("demonstrates custom exhaustion behavior", function()
     local api = { get_status = function() return "online" end }
-    local mock_api = lust.mock(api)
+    local mock_api = firmo.mock(api)
 
     -- Option 1: Using direct implementation for reliable control
     local sequence_values = {
@@ -1060,7 +1060,7 @@ describe("Advanced sequence behavior", function()
   it("demonstrates falling back to original implementation", function()
     local original_impl = function() return "original value" end
     local obj = { method = original_impl }
-    local mock_obj = lust.mock(obj)
+    local mock_obj = firmo.mock(obj)
 
     -- Setup sequence with fallback to original
     local sequence = { "mock 1", "mock 2" }
@@ -1087,7 +1087,7 @@ describe("Advanced sequence behavior", function()
 
   it("demonstrates resetting a sequence", function()
     local obj = { method = function() return "real" end }
-    local mock_obj = lust.mock(obj)
+    local mock_obj = firmo.mock(obj)
 
     -- Create a sequence we can reset
     local sequence = { "value 1", "value 2" }

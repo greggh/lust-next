@@ -50,7 +50,7 @@ Our approach to fixing these issues involved:
 
 ### Assertion Pattern Fixes
 
-We standardized on the lust-next expect-style assertion patterns:
+We standardized on the firmo expect-style assertion patterns:
 
 ```lua
 -- Before (incorrect)

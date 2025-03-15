@@ -236,14 +236,14 @@ function M.format_coverage(coverage_data)
   -- Add schema version information
   if config.schema_version then
     result.schema_version = config.schema_version
-    result.format = "lust-next-coverage"
+    result.format = "firmo-coverage"
   end
   
   -- Add metadata if configured
   if config.include_metadata then
     result.metadata = {
       generated_at = os.date("%Y-%m-%dT%H:%M:%S"),
-      generator = "lust-next"
+      generator = "firmo"
     }
   end
   
@@ -420,14 +420,14 @@ function M.format_quality(quality_data)
   -- Add schema version information
   if config.schema_version then
     result.schema_version = config.schema_version
-    result.format = "lust-next-quality"
+    result.format = "firmo-quality"
   end
   
   -- Add metadata if configured
   if config.include_metadata then
     result.metadata = {
       generated_at = os.date("%Y-%m-%dT%H:%M:%S"),
-      generator = "lust-next"
+      generator = "firmo"
     }
   end
   
@@ -505,21 +505,21 @@ function M.format_results(results_data)
   -- Add schema version information
   if config.schema_version then
     result.schema_version = config.schema_version
-    result.format = "lust-next-results"
+    result.format = "firmo-results"
   end
   
   -- Add metadata if configured
   if config.include_metadata then
     result.metadata = {
       generated_at = os.date("%Y-%m-%dT%H:%M:%S"),
-      generator = "lust-next"
+      generator = "firmo"
     }
   end
   
   -- Format the test results
   if results_data then
     logger.debug("Generating test results JSON from data", {
-      name = results_data.name or "lust-next",
+      name = results_data.name or "firmo",
       tests = results_data.tests or 0,
       failures = results_data.failures or 0,
       errors = results_data.errors or 0,
@@ -531,7 +531,7 @@ function M.format_results(results_data)
     
     -- Convert test results data to JSON format
     result.summary = {
-      name = results_data.name or "lust-next",
+      name = results_data.name or "firmo",
       timestamp = results_data.timestamp or os.date("!%Y-%m-%dT%H:%M:%S"),
       tests = results_data.tests or 0,
       failures = results_data.failures or 0,
@@ -602,7 +602,7 @@ function M.format_results(results_data)
     
     -- Create empty result structure
     result.summary = {
-      name = "lust-next",
+      name = "firmo",
       timestamp = os.date("!%Y-%m-%dT%H:%M:%S"),
       tests = 0,
       failures = 0,

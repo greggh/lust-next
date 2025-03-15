@@ -1,9 +1,9 @@
-# Migrating from lust to lust-next
-This guide helps users of the original [lust](https://github.com/bjornbytes/lust) testing framework migrate to lust-next, which adds significant new functionality while maintaining backward compatibility.
+# Migrating from firmo to firmo
+This guide helps users of the original [firmo](https://github.com/bjornbytes/firmo) testing framework migrate to firmo, which adds significant new functionality while maintaining backward compatibility.
 
 ## Overview of Differences
-Lust-next is a direct enhancement of the original lust, maintaining all existing functionality while adding numerous new features:
-| Aspect | Original lust | lust-next |
+Firmo is a direct enhancement of the original firmo, maintaining all existing functionality while adding numerous new features:
+| Aspect | Original firmo | firmo |
 |--------|--------------|-----------|
 | Core functions | describe, it, expect | Same core functions + additional variants |
 | Assertions | Basic assertions | Enhanced assertions + custom assertion support |
@@ -20,18 +20,18 @@ Lust-next is a direct enhancement of the original lust, maintaining all existing
 ## Step-by-Step Migration
 
 ### 1. Installation
-**Original lust:**
+**Original firmo:**
 
 ```lua
--- Copy lust.lua to your project
-local lust = require 'lust'
+-- Copy firmo.lua to your project
+local firmo = require 'firmo'
 
 ```text
-**lust-next:**
+**firmo:**
 
 ```lua
--- Copy lust-next.lua to your project
-local lust = require 'lust-next'  -- You can keep the original require name
+-- Copy firmo.lua to your project
+local firmo = require 'firmo'  -- You can keep the original require name
 
 ```text
 
@@ -39,8 +39,8 @@ local lust = require 'lust-next'  -- You can keep the original require name
 The basic structure of tests remains the same, so most tests should work without modification:
 
 ```lua
-local lust = require 'lust-next'
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require 'firmo'
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 describe("My test suite", function()
   it("tests something", function()
     expect(1 + 1).to.equal(2)
@@ -50,8 +50,8 @@ end)
 ```text
 
 ### 3. Take Advantage of Enhanced Assertions
-lust-next includes many new assertion types that make tests more expressive:
-**Original lust:**
+firmo includes many new assertion types that make tests more expressive:
+**Original firmo:**
 
 ```lua
 -- Basic assertions
@@ -64,7 +64,7 @@ expect(x).to.have(y)
 expect(f).to.fail()
 
 ```text
-**lust-next:**
+**firmo:**
 
 ```lua
 -- Enhanced table assertions
@@ -87,34 +87,34 @@ expect(function_that_throws).to.throw.error_type("string")
 
 ### 4. Upgrade Your Mocking Strategy
 The enhanced mocking system is one of the most significant improvements:
-**Original lust:**
+**Original firmo:**
 
 ```lua
--- Basic spy in original lust
-local spy = lust.spy(myFunction)
+-- Basic spy in original firmo
+local spy = firmo.spy(myFunction)
 spy(1, 2, 3)
 expect(#spy).to.equal(1)
 expect(spy[1][1]).to.equal(1)
 
 ```text
-**lust-next:**
+**firmo:**
 
 ```lua
 -- Enhanced spy with better API
-local spy = lust.spy(myFunction)
+local spy = firmo.spy(myFunction)
 spy(1, 2, 3)
 expect(spy.called).to.be.truthy()
 expect(spy.call_count).to.equal(1)
 expect(spy:called_with(1, 2, 3)).to.be.truthy()
 -- Complete mocks of objects
-local db_mock = lust.mock(database)
+local db_mock = firmo.mock(database)
 -- Stub methods with implementation functions
 db_mock:stub("query", function(query_string)
   expect(query_string).to.match("SELECT")
   return {rows = {{id = 1, name = "Test"}}}
 end)
 -- Set expectations with fluent API
-db_mock:expect("get_users").with(lust.arg_matcher.any()).to.be.called.times(1)
+db_mock:expect("get_users").with(firmo.arg_matcher.any()).to.be.called.times(1)
 
 ```text
 
@@ -154,7 +154,7 @@ it_async("tests async code", function()
     result = data
   end)
   -- Wait for a specific amount of time
-  lust.await(100) -- Wait 100ms
+  firmo.await(100) -- Wait 100ms
   -- Make assertions after the wait
   expect(result).to.equal("expected result")
 end)
@@ -164,7 +164,7 @@ it_async("waits for a condition", function()
   -- Start async operation that will set value to true
   setTimeout(function() value = true end, 50)
   -- Wait until value becomes true or timeout after 200ms
-  lust.wait_until(function() return value end, 200)
+  firmo.wait_until(function() return value end, 200)
   -- Assert after condition is met
   expect(value).to.be.truthy()
 end)
@@ -176,34 +176,34 @@ Organize your tests with tags and filters:
 
 ```lua
 -- Add tags to a test
-lust.tags("unit", "math")
+firmo.tags("unit", "math")
 it("adds numbers correctly", function()
   expect(1 + 1).to.equal(2)
 end)
 -- Add tags to a group of tests
 describe("Math operations", function()
-  lust.tags("unit", "math")
+  firmo.tags("unit", "math")
   it("test1", function() end)
   it("test2", function() end)
   -- Both tests inherit the "unit" and "math" tags
 end)
 -- Filter by tag programmatically
-lust.only_tags("unit")
-lust.run_discovered("./tests")
+firmo.only_tags("unit")
+firmo.run_discovered("./tests")
 -- Command line filtering
--- lua lust-next.lua --tags unit,math
--- lua lust-next.lua --filter "addition"
+-- lua firmo.lua --tags unit,math
+-- lua firmo.lua --filter "addition"
 
 ```text
 
 ## Code Examples: Before and After
 
 ### Example 1: Basic Test Structure
-**Original lust:**
+**Original firmo:**
 
 ```lua
-local lust = require 'lust'
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require 'firmo'
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 describe('math', function()
   it('addition', function()
     expect(1 + 1).to.equal(2)
@@ -214,11 +214,11 @@ describe('math', function()
 end)
 
 ```text
-**lust-next:** (Unchanged - backwards compatible)
+**firmo:** (Unchanged - backwards compatible)
 
 ```lua
-local lust = require 'lust-next'
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require 'firmo'
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 describe('math', function()
   it('addition', function()
     expect(1 + 1).to.equal(2)
@@ -231,7 +231,7 @@ end)
 ```text
 
 ### Example 2: Using Enhanced Assertions
-**Original lust:**
+**Original firmo:**
 
 ```lua
 describe('user', function()
@@ -245,7 +245,7 @@ describe('user', function()
 end)
 
 ```text
-**lust-next:**
+**firmo:**
 
 ```lua
 describe('user', function()
@@ -262,7 +262,7 @@ end)
 ```text
 
 ### Example 3: Mocking
-**Original lust:**
+**Original firmo:**
 
 ```lua
 describe('database', function()
@@ -270,7 +270,7 @@ describe('database', function()
     local db = {
       query = function(sql) return {id = 1, name = "Test"} end
     }
-    local querySpy = lust.spy(db.query)
+    local querySpy = firmo.spy(db.query)
     db.query = querySpy
     local result = db.query("SELECT * FROM users")
     expect(#querySpy).to.equal(1)
@@ -279,7 +279,7 @@ describe('database', function()
 end)
 
 ```text
-**lust-next:**
+**firmo:**
 
 ```lua
 describe('database', function()
@@ -287,7 +287,7 @@ describe('database', function()
     local db = {
       query = function(sql) return {id = 1, name = "Test"} end
     }
-    local db_mock = lust.mock(db)
+    local db_mock = firmo.mock(db)
     db_mock:stub("query", function(sql)
       expect(sql).to.match("SELECT")
       return {id = 1, name = "Test"}
@@ -304,7 +304,7 @@ end)
 ## Common Migration Issues and Solutions
 
 ### Issue 1: Spy Usage Changes
-**Problem:** The spy API in lust-next has been enhanced and differs from the original.
+**Problem:** The spy API in firmo has been enhanced and differs from the original.
 **Solution:** Update spy usages to use the new properties:
 
 ```lua
@@ -324,11 +324,11 @@ expect(spy:called_with("arg")).to.be.truthy()
 **Solution:** Be aware that using `fdescribe` or `fit` will cause only focused tests to run. Remove these when you want to run all tests again.
 
 ### Issue 3: Output Format Changes
-**Problem:** Test output format looks different from the original lust.
+**Problem:** Test output format looks different from the original firmo.
 **Solution:** Configure the output format to your liking:
 
 ```lua
-lust.format({
+firmo.format({
   use_color = true,          -- Whether to use color codes
   indent_char = '  ',        -- Character for indentation
   indent_size = 2,           -- Indentation size
@@ -339,7 +339,7 @@ lust.format({
   summary_only = false       -- Show only summary
 })
 -- Or use the basic mode
-lust.format({ compact = true })
+firmo.format({ compact = true })
 
 ```text
 
@@ -350,21 +350,21 @@ lust.format({ compact = true })
 ```bash
 
 # Run all tests in a directory
-lua lust-next.lua --dir ./tests
+lua firmo.lua --dir ./tests
 
 # Run specific test files
-lua lust-next.lua --file test1.lua --file test2.lua
+lua firmo.lua --file test1.lua --file test2.lua
 
 # Run with specific tags
-lua lust-next.lua --tags unit,fast
+lua firmo.lua --tags unit,fast
 
 # Run with specific output format
-lua lust-next.lua --format dot
+lua firmo.lua --format dot
 
 ```text
 
 ## Feature Comparison Table
-| Feature | Original lust | lust-next |
+| Feature | Original firmo | firmo |
 |---------|--------------|-----------|
 | **Core Testing** | | |
 | describe/it blocks | ✅ | ✅ |
@@ -403,6 +403,6 @@ lua lust-next.lua --format dot
 | Configuration options | ❌ | ✅ |
 
 ## Conclusion
-Migrating from lust to lust-next should be a smooth process for most users. Since lust-next is fully backward compatible, you can gradually adopt new features as needed. The enhancements provide significant improvements to test organization, assertion capabilities, and mocking functionality, making your tests more expressive and maintainable.
+Migrating from firmo to firmo should be a smooth process for most users. Since firmo is fully backward compatible, you can gradually adopt new features as needed. The enhancements provide significant improvements to test organization, assertion capabilities, and mocking functionality, making your tests more expressive and maintainable.
 For more information, consult the [API Reference](../api/README.md) and [Example Files](../../examples).
 

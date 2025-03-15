@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the plan for creating a comprehensive test suite for error handling across the lust-next framework, with particular focus on the coverage module. The test suite will verify proper error detection, propagation, and recovery mechanisms.
+This document outlines the plan for creating a comprehensive test suite for error handling across the firmo framework, with particular focus on the coverage module. The test suite will verify proper error detection, propagation, and recovery mechanisms.
 
 ## Test Structure
 

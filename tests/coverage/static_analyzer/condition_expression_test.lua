@@ -1,9 +1,9 @@
 -- Tests for the condition expression tracking in the static analyzer
 
--- Import lust-next
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
-local before, after = lust_next.before, lust_next.after
+-- Import firmo
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 local static_analyzer = require("lib.coverage.static_analyzer")
 local temp_file = require("lib.tools.temp_file")

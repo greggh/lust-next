@@ -2,13 +2,13 @@
   tap_csv_report_example.lua
   
   Example demonstrating TAP (Test Anything Protocol) and CSV output formats
-  in lust-next reporting module. This example shows how to generate test results
+  in firmo reporting module. This example shows how to generate test results
   in these formats and save them to files.
 ]]
 
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import the filesystem module
 local fs = require("lib.tools.filesystem")
@@ -41,7 +41,7 @@ describe("TAP and CSV Output Example", function()
   -- A group with pending tests
   describe("Advanced features", function()
     it("has a pending test", function()
-      return lust_next.pending("Not implemented yet")
+      return firmo.pending("Not implemented yet")
     end)
     
     it("causes an error", function()

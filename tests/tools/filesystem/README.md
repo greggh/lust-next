@@ -1,6 +1,6 @@
 # Filesystem Module Tests
 
-This directory contains tests for the lust-next filesystem module. The filesystem module provides cross-platform file operations for test runners and reporting.
+This directory contains tests for the firmo filesystem module. The filesystem module provides cross-platform file operations for test runners and reporting.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next filesystem module. The filesyste
 
 ## Filesystem Features
 
-The lust-next filesystem module provides:
+The firmo filesystem module provides:
 
 - **Platform independence** - Works consistently across operating systems
 - **Error handling** - Robust error handling with detailed messages

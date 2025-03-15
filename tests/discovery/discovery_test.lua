@@ -1,16 +1,16 @@
 -- Test for the discovery functionality
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Test Discovery", function()
   it("has discovery function", function()
-    expect(lust_next.discover).to.be.a("function")
-    expect(lust_next.run_discovered).to.be.a("function")
-    expect(lust_next.cli_run).to.be.a("function")
+    expect(firmo.discover).to.be.a("function")
+    expect(firmo.run_discovered).to.be.a("function")
+    expect(firmo.cli_run).to.be.a("function")
   end)
   
   it("can find test files", function()
-    local files = lust_next.discover("./tests", "*_test.lua")
+    local files = firmo.discover("./tests", "*_test.lua")
     expect(#files).to.be.truthy()
     
     -- At minimum, this file should be found
@@ -27,7 +27,7 @@ describe("Test Discovery", function()
   
   it("can access discover functionality", function()
     -- Just test that we can call discover with custom patterns
-    local files = lust_next.discover("./tests", "nonexistent_pattern_*.lua")
+    local files = firmo.discover("./tests", "nonexistent_pattern_*.lua")
     -- Note that we don't actually check the result since the implementation
     -- details may change with the separate discover.lua module
     expect(files).to.be.a("table")

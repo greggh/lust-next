@@ -1,14 +1,14 @@
 # Configuration System
-lust-next comes with a comprehensive configuration system that allows you to customize almost every aspect of the framework's behavior. You can create a `.lust-next-config.lua` file in your project's root directory to set default options.
+firmo comes with a comprehensive configuration system that allows you to customize almost every aspect of the framework's behavior. You can create a `.firmo-config.lua` file in your project's root directory to set default options.
 
 ## Creating a Configuration File
 The easiest way to create a configuration file is to use the built-in command:
 
 ```bash
-lua lust-next.lua --create-config
+lua firmo.lua --create-config
 
 ```text
-This will create a `.lust-next-config.lua` file in your current directory with all available configuration options and their default values.
+This will create a `.firmo-config.lua` file in your current directory with all available configuration options and their default values.
 
 ## Configuration File Structure
 The configuration file should return a Lua table with the following structure:
@@ -43,14 +43,14 @@ return {
 You can specify a different configuration file at runtime:
 
 ```bash
-lua lust-next.lua --config my-custom-config.lua
+lua firmo.lua --config my-custom-config.lua
 
 ```text
 
 ## Configuration Sections
 
 ### Test Discovery
-Controls how lust-next finds test files:
+Controls how firmo finds test files:
 
 ```lua
 test_discovery = {
@@ -253,17 +253,17 @@ module_reset = {
 You can also load and use the configuration system programmatically:
 
 ```lua
-local lust = require("lust-next")
+local firmo = require("firmo")
 -- Load a specific configuration file
-local config = lust.config.load_from_file("path/to/config.lua")
+local config = firmo.config.load_from_file("path/to/config.lua")
 -- Apply the configuration
-lust.config.apply_to_lust(lust)
+firmo.config.apply_to_firmo(firmo)
 
 ```text
 
 ## CLI Options
 The configuration system adds the following CLI options:
 
-- `--config FILE`: Use the specified configuration file instead of `.lust-next-config.lua`
-- `--create-config`: Create a default configuration file at `.lust-next-config.lua`
+- `--config FILE`: Use the specified configuration file instead of `.firmo-config.lua`
+- `--create-config`: Create a default configuration file at `.firmo-config.lua`
 

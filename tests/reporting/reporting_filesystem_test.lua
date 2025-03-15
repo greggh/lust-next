@@ -6,10 +6,10 @@
 -- Add the project directory to the module path
 package.path = package.path .. ";./?.lua;./?/init.lua"
 
--- Load lust-next
-local lust = require("lust-next")
+-- Load firmo
+local firmo = require("firmo")
 local describe, it, expect, before, after =
-  lust.describe, lust.it, lust.expect, lust.before, lust.after
+  firmo.describe, firmo.it, firmo.expect, firmo.before, firmo.after
 
 -- Load modules needed for testing
 local reporting = require("lib.reporting")

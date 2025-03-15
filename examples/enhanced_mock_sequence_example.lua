@@ -4,9 +4,9 @@
   how mocks behave with sequential return values and exhaustion handling.
 ]]
 
-local lust = require "lust-next"
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local mock, stub, with_mocks = lust.mock, lust.stub, lust.with_mocks
+local firmo = require "firmo"
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local mock, stub, with_mocks = firmo.mock, firmo.stub, firmo.with_mocks
 
 describe("Enhanced Sequential Return Values", function()
   

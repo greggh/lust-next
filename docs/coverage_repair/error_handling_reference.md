@@ -1,6 +1,6 @@
 # Error Handling Reference Guide
 
-This document consolidates key information about error handling implementation across the lust-next framework. It serves as a reference for implementing consistent error handling patterns.
+This document consolidates key information about error handling implementation across the firmo framework. It serves as a reference for implementing consistent error handling patterns.
 
 ## Standard Error Handling Patterns
 

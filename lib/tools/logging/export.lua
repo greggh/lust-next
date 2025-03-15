@@ -1,4 +1,4 @@
--- Log export module for lust-next
+-- Log export module for firmo
 -- This module provides export mechanisms for external log analysis tools
 
 local M = {}
@@ -65,13 +65,13 @@ local adapters = {
       return {
         ["@timestamp"] = entry.timestamp or M.adapters.common.timestamp(),
         ["@metadata"] = {
-          type = options.type or "lust_log"
+          type = options.type or "firmo_log"
         },
         level = entry.level,
         module = entry.module,
         message = entry.message,
         params = entry.params,
-        application = options.application_name or "lust-next",
+        application = options.application_name or "firmo",
         environment = options.environment or "development",
         host = options.host or M.adapters.common.host(),
         tags = options.tags or {}
@@ -102,7 +102,7 @@ local adapters = {
         message = entry.message,
         params = entry.params,
         service = {
-          name = options.service_name or "lust-next",
+          name = options.service_name or "firmo",
           environment = options.environment or "development"
         },
         host = {
@@ -114,7 +114,7 @@ local adapters = {
     
     http_endpoint = function(options)
       options = options or {}
-      local index = options.index or "logs-lust"
+      local index = options.index or "logs-firmo"
       return {
         method = "POST",
         url = (options.url or "http://localhost:9200") .. "/" .. index .. "/_doc",
@@ -132,8 +132,8 @@ local adapters = {
       return {
         time = entry.timestamp or M.adapters.common.timestamp(),
         host = options.host or M.adapters.common.host(),
-        source = options.source or "lust-next",
-        sourcetype = options.sourcetype or "lust:log",
+        source = options.source or "firmo",
+        sourcetype = options.sourcetype or "firmo:log",
         index = options.index or "main",
         event = {
           level = entry.level,
@@ -181,8 +181,8 @@ local adapters = {
         timestamp = entry.timestamp or M.adapters.common.timestamp(),
         message = entry.message,
         level = entry.level and string.lower(entry.level) or "info",
-        service = options.service or "lust-next",
-        ddsource = "lust",
+        service = options.service or "firmo",
+        ddsource = "firmo",
         ddtags = tags,
         hostname = options.hostname or M.adapters.common.host(),
         attributes = entry.params
@@ -209,7 +209,7 @@ local adapters = {
       -- Prepare labels
       local labels = {
         level = entry.level and string.lower(entry.level) or "info",
-        app = "lust-next",
+        app = "firmo",
         env = options.environment or "development"
       }
       
@@ -468,14 +468,14 @@ function M.create_platform_config(platform, output_file, options)
     config_content = [[
 input {
   file {
-    path => "logs/lust-next.json"
+    path => "logs/firmo.json"
     codec => "json"
-    type => "lust-next"
+    type => "firmo"
   }
 }
 
 filter {
-  if [type] == "lust-next" {
+  if [type] == "firmo" {
     date {
       match => [ "@timestamp", "ISO8601" ]
     }
@@ -497,10 +497,10 @@ filter {
 }
 
 output {
-  if [type] == "lust-next" {
+  if [type] == "firmo" {
     elasticsearch {
       hosts => ["]] .. (options.es_host or "localhost:9200") .. [["]
-      index => "lust-next-%{+YYYY.MM.dd}"
+      index => "firmo-%{+YYYY.MM.dd}"
     }
     
     # Uncomment to enable stdout output for debugging
@@ -511,7 +511,7 @@ output {
   elseif platform == "elasticsearch" then
     config_content = [[
 {
-  "index_patterns": ["lust-next-*"],
+  "index_patterns": ["firmo-*"],
   "template": {
     "settings": {
       "number_of_shards": 1,
@@ -535,7 +535,7 @@ output {
 ]]
   elseif platform == "splunk" then
     config_content = [[
-[lust_logs]
+[firmo_logs]
 DATETIME_CONFIG = 
 INDEXED_EXTRACTIONS = json
 KV_MODE = none
@@ -549,12 +549,12 @@ TIME_PREFIX = "time":"
 ]]
   elseif platform == "datadog" then
     config_content = [[
-# Datadog Agent configuration for lust-next logs
+# Datadog Agent configuration for firmo logs
 logs:
   - type: file
-    path: "logs/lust-next.json"
-    service: "]] .. (options.service or "lust-next") .. [["
-    source: "lust"
+    path: "logs/firmo.json"
+    service: "]] .. (options.service or "firmo") .. [["
+    source: "firmo"
     sourcecategory: "logging"
     log_processing_rules:
       - type: multi_line

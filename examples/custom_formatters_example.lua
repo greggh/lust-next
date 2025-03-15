@@ -1,15 +1,15 @@
 #!/usr/bin/env lua
--- Example demonstrating custom formatters in lust-next
+-- Example demonstrating custom formatters in firmo
 -- This example creates a module with custom formatters and loads it at runtime
 
 -- Set up package path so we can run this from the examples directory
 package.path = "../?.lua;" .. package.path
 
--- Load lust-next and required modules
-local lust = require("lust-next")
+-- Load firmo and required modules
+local firmo = require("firmo")
 local reporting = require("src.reporting")
 
--- Example Module: Custom formatters for lust-next
+-- Example Module: Custom formatters for firmo
 local custom_formatters = {}
 
 -- Define a structure for our formatters
@@ -148,16 +148,16 @@ print("  Quality: " .. table.concat(available.quality, ", "))
 print("  Results: " .. table.concat(available.results, ", "))
 
 -- Run some simple tests
-lust.describe("Custom Formatter Example", function()
-  lust.it("demonstrates successful tests", function()
-    lust.expect(1 + 1).to.equal(2)
-    lust.expect("test").to.be.a("string")
-    lust.expect({1, 2, 3}).to.contain(2)
+firmo.describe("Custom Formatter Example", function()
+  firmo.it("demonstrates successful tests", function()
+    firmo.expect(1 + 1).to.equal(2)
+    firmo.expect("test").to.be.a("string")
+    firmo.expect({1, 2, 3}).to.contain(2)
   end)
   
-  lust.it("demonstrates a failing test", function()
+  firmo.it("demonstrates a failing test", function()
     -- This test will fail
-    lust.expect(2 + 2).to.equal(5) -- Incorrect expectation
+    firmo.expect(2 + 2).to.equal(5) -- Incorrect expectation
   end)
 end)
 

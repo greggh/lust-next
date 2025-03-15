@@ -1,6 +1,6 @@
 # Archive
 
-This directory contains historical planning and implementation documents for the lust-next project. These files are kept for reference purposes but have been superseded by the formal documentation in the docs directory.
+This directory contains historical planning and implementation documents for the firmo project. These files are kept for reference purposes but have been superseded by the formal documentation in the docs directory.
 
 ## Files
 
@@ -9,7 +9,7 @@ This directory contains historical planning and implementation documents for the
 - **logging_enhancement_summary.md**: Summary of logging system enhancements
 - **logging_features_summary.md**: List of implemented logging features
 - **logging_implementation_report.md**: Implementation report for the centralized logging system
-- **lust.lua.original**: Original version of lust before modifications
+- **firmo.lua.original**: Original version of firmo before modifications
 
 ## Note
 

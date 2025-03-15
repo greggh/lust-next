@@ -1,6 +1,6 @@
-# IO Replacement Plan for lust-next
+# IO Replacement Plan for firmo
 
-This document outlines our systematic approach to replacing all `io.*` function calls with our robust `filesystem` module across the lust-next codebase.
+This document outlines our systematic approach to replacing all `io.*` function calls with our robust `filesystem` module across the firmo codebase.
 
 ## Current Status
 

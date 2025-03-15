@@ -2,12 +2,12 @@
   html_report_example.lua
   
   Example demonstrating HTML output format for test results
-  in lust-next, including syntax highlighting and detailed statistics.
+  in firmo, including syntax highlighting and detailed statistics.
 ]]
 
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import the filesystem module
 local fs = require("lib.tools.filesystem")

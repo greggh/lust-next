@@ -1,6 +1,6 @@
 -- Tests for the logging system
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local fs = require("lib.tools.filesystem")
 
 -- Import logging module
@@ -114,7 +114,7 @@ describe("Logging System", function()
       -- Read the file and verify content
       local content, err = fs.read_file(full_path)
       if not content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read log file", 
           file = full_path,
           error = err or "unknown error"
@@ -151,7 +151,7 @@ describe("Logging System", function()
       -- Read the file and verify content
       local content, err = fs.read_file(full_path)
       if not content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read JSON log file", 
           file = full_path,
           error = err or "unknown error"
@@ -197,7 +197,7 @@ describe("Logging System", function()
       -- Verify log was written
       local normal_content, err = fs.read_file(full_path)
       if not normal_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read file for normal mode check", 
           file = full_path,
           error = err or "unknown error"
@@ -223,7 +223,7 @@ describe("Logging System", function()
       -- Verify nothing was written
       local silent_content, err = fs.read_file(full_path)
       if not silent_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read file for silent mode check", 
           file = full_path,
           error = err or "unknown error"
@@ -263,7 +263,7 @@ describe("Logging System", function()
       -- Clear the file
       local success, err = fs.write_file(full_path, "")
       if not success then
-        lust.log.error({ message = "Failed to clear log file", file = full_path, error = err })
+        firmo.log.error({ message = "Failed to clear log file", file = full_path, error = err })
       end
       
       -- Create test loggers
@@ -278,7 +278,7 @@ describe("Logging System", function()
       -- Verify both logs were written
       local unfiltered_content, err = fs.read_file(full_path)
       if not unfiltered_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read file for unfiltered check", 
           file = full_path,
           error = err or "unknown error"
@@ -303,7 +303,7 @@ describe("Logging System", function()
       -- Verify only module1 logs were written
       local filtered_content, err = fs.read_file(full_path)
       if not filtered_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read file for filtered check", 
           file = full_path,
           error = err or "unknown error"
@@ -338,7 +338,7 @@ describe("Logging System", function()
       -- Clear the file
       local success, err = fs.write_file(full_path, "")
       if not success then
-        lust.log.error({ message = "Failed to clear log file", file = full_path, error = err })
+        firmo.log.error({ message = "Failed to clear log file", file = full_path, error = err })
       end
       
       -- Create test loggers
@@ -353,7 +353,7 @@ describe("Logging System", function()
       -- Verify both logs were written
       local unfiltered_content, err = fs.read_file(full_path)
       if not unfiltered_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read file for unfiltered blacklist check", 
           file = full_path,
           error = err or "unknown error"
@@ -378,7 +378,7 @@ describe("Logging System", function()
       -- Verify only test2 logs were written
       local filtered_content, err = fs.read_file(full_path)
       if not filtered_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read file for blacklist check", 
           file = full_path,
           error = err or "unknown error"
@@ -416,7 +416,7 @@ describe("Logging System", function()
       -- Clear the file
       local success, err = fs.write_file(full_path, "")
       if not success then
-        lust.log.error({ message = "Failed to clear log file", file = full_path, error = err })
+        firmo.log.error({ message = "Failed to clear log file", file = full_path, error = err })
       end
       
       -- Write 5 logs (should be buffered, not written yet)
@@ -427,7 +427,7 @@ describe("Logging System", function()
       -- Check file is still empty
       local content_before, err = fs.read_file(full_path)
       if not content_before then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read buffer file for before check", 
           file = full_path,
           error = err or "unknown error"
@@ -443,7 +443,7 @@ describe("Logging System", function()
       -- Verify logs were written
       local content_after, err = fs.read_file(full_path)
       if not content_after then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read buffer file for after check", 
           file = full_path,
           error = err or "unknown error"
@@ -488,7 +488,7 @@ describe("Logging System", function()
       -- Verify logs were auto-flushed
       local content, err = fs.read_file(full_path)
       if not content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read auto-buffer file", 
           file = full_path 
         })
@@ -526,7 +526,7 @@ describe("Logging System", function()
       -- Check file is still empty (logs are buffered)
       local content_before, err = fs.read_file(full_path)
       if not content_before then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read custom buffer file for before check", 
           file = full_path,
           error = err or "unknown error"
@@ -543,7 +543,7 @@ describe("Logging System", function()
       -- Verify logs were written
       local content_after, err = fs.read_file(full_path)
       if not content_after then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read custom buffer file for after check", 
           file = full_path,
           error = err or "unknown error"
@@ -708,7 +708,7 @@ describe("Logging System", function()
       -- Read CSV to verify format
       local csv_content, err = fs.read_file(csv_output)
       if not csv_content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read CSV export file", 
           file = csv_output,
           error = err or "unknown error"
@@ -811,7 +811,7 @@ describe("Logging System", function()
       -- File should contain content
       local content, err = fs.read_file(config_path)
       if not content then
-        lust.log.error({ 
+        firmo.log.error({ 
           message = "Failed to read platform config file", 
           file = config_path,
           error = err or "unknown error"
@@ -861,7 +861,7 @@ describe("Logging System", function()
   end)
 end)
 
--- Clean up after tests (after_all is not available in lust-next)
+-- Clean up after tests (after_all is not available in firmo)
 -- Set up cleanup to run at the end
 describe("Test Cleanup", function()
   it("resets logging configuration", function()

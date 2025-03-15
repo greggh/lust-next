@@ -4,7 +4,7 @@
 
 ## Overview
 
-In this session, we implemented comprehensive error handling in the reporting system of the lust-next framework, focusing on the reporting module and formatters. This work is part of the project-wide error handling plan, which aims to establish consistent error handling patterns across all components of the framework.
+In this session, we implemented comprehensive error handling in the reporting system of the firmo framework, focusing on the reporting module and formatters. This work is part of the project-wide error handling plan, which aims to establish consistent error handling patterns across all components of the framework.
 
 ## Key Accomplishments
 
@@ -158,4 +158,4 @@ The next priorities for the error handling implementation are:
 
 ## Conclusion
 
-This session's work marks a significant step forward in the implementation of the project-wide error handling plan. By applying comprehensive error handling to the reporting system, we've established patterns that can be applied to other modules throughout the framework. The work improves the reliability, maintainability, and user experience of the lust-next framework, making it more robust in real-world usage scenarios.
+This session's work marks a significant step forward in the implementation of the project-wide error handling plan. By applying comprehensive error handling to the reporting system, we've established patterns that can be applied to other modules throughout the framework. The work improves the reliability, maintainability, and user experience of the firmo framework, making it more robust in real-world usage scenarios

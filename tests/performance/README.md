@@ -1,6 +1,6 @@
 # Performance Tests
 
-This directory contains tests for the lust-next performance benchmarking capabilities. The performance module enables measuring execution time and memory usage of code.
+This directory contains tests for the firmo performance benchmarking capabilities. The performance module enables measuring execution time and memory usage of code.
 
 ## Directory Contents
 
@@ -9,7 +9,7 @@ This directory contains tests for the lust-next performance benchmarking capabil
 
 ## Performance Testing Features
 
-The lust-next performance module provides:
+The firmo performance module provides:
 
 - Time-based benchmarking
 - Memory usage tracking
@@ -23,14 +23,14 @@ The lust-next performance module provides:
 
 ```lua
 -- Basic benchmarking
-local benchmark = lust.benchmark.new("operation_name")
+local benchmark = firmo.benchmark.new("operation_name")
 benchmark.run(function()
   -- Code to benchmark
 end)
 benchmark.report()
 
 -- Advanced benchmarking with options
-local benchmark = lust.benchmark.new("operation_name", {
+local benchmark = firmo.benchmark.new("operation_name", {
   iterations = 1000,
   warmup = 100,
   report_memory = true

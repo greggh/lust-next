@@ -1,28 +1,28 @@
--- Example of using focus and exclude features in lust-next
+-- Example of using focus and exclude features in firmo
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
+local firmo = require("firmo")
 
 -- Extract the functions we need
-local describe = lust_next.describe
-local fdescribe = lust_next.fdescribe
-local xdescribe = lust_next.xdescribe
-local it = lust_next.it
-local fit = lust_next.fit
-local xit = lust_next.xit
-local expect = lust_next.expect
+local describe = firmo.describe
+local fdescribe = firmo.fdescribe
+local xdescribe = firmo.xdescribe
+local it = firmo.it
+local fit = firmo.fit
+local xit = firmo.xit
+local expect = firmo.expect
 
 -- Set formatting options (these can be overridden by command line args)
 -- Check if we're running directly or through the test runner
-local is_direct = not arg or not arg[0]:match("lust%-next%.lua$")
+local is_direct = not arg or not arg[0]:match("firmo%-next%.lua$")
 -- Create a counter to verify excluded tests don't run
 local excluded_test_ran = false
 
 if is_direct then
   -- Reset state when running directly
-  lust_next.focus_mode = false
-  lust_next.skipped = 0
+  firmo.focus_mode = false
+  firmo.skipped = 0
   
-  lust_next.format({
+  firmo.format({
     use_color = true,
     indent_char = '  ', -- use 2 spaces instead of tabs
     indent_size = 1,
@@ -109,6 +109,6 @@ if is_direct then
   print("\n-- Example complete --")
   print("Excluded test execution check: " .. 
     (excluded_test_ran and "FAILED - excluded test was run!" or "PASSED - excluded test was properly skipped"))
-  print("Try running this file with: lua lust-next.lua examples/focused_tests_example.lua --format dot")
+  print("Try running this file with: lua firmo.lua examples/focused_tests_example.lua --format dot")
   print("Or try other format options: --format compact, --format summary, etc.")
 end

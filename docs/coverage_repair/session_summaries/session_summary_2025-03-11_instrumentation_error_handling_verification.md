@@ -69,7 +69,7 @@ Based on this verification, the next steps in the error handling implementation 
    - module_reset.lua
    - filesystem.lua
    - version.lua
-   - main lust-next.lua
+   - main firmo.lua
 
 2. Create comprehensive tests for the error handling implementation:
    - Develop specific test cases for error conditions

@@ -1,21 +1,21 @@
 -- Tests for the mocking functionality
 package.path = "../?.lua;../lib/?.lua;../lib/?/init.lua;" .. package.path
 
--- Load lust-next, which already has the mocking system loaded
-local lust_next = require("lust-next")
+-- Load firmo, which already has the mocking system loaded
+local firmo = require("firmo")
 
 -- Get direct access to the mocking library for testing
 local mocking = require("lib.mocking")
 
-local describe, it, expect, pending = lust_next.describe, lust_next.it, lust_next.expect, lust_next.pending
+local describe, it, expect, pending = firmo.describe, firmo.it, firmo.expect, firmo.pending
 
 -- Import spy functionality
-local spy_module = lust_next.spy
+local spy_module = firmo.spy
 local spy_on = spy_module.on
 local spy_new = spy_module.new
-local mock = lust_next.mock
-local stub = lust_next.stub
-local with_mocks = lust_next.with_mocks
+local mock = firmo.mock
+local stub = firmo.stub
+local with_mocks = firmo.with_mocks
 
 describe("Mocking System", function()
   

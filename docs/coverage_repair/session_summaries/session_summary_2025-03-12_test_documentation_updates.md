@@ -25,7 +25,7 @@ This session focused on enhancing the documentation of the testing system, parti
 
 3. **Testing Documentation Updates**:
    - Updated CLAUDE.md with comprehensive assertion pattern guidance
-   - Added a complete assertion pattern mapping table with busted-to-lust-next conversions
+   - Added a complete assertion pattern mapping table with busted-to-firmo conversions
    - Documented common assertion mistakes to avoid
    - Added clear examples of correct and incorrect patterns
    - Provided detailed documentation on proper test organization and structure
@@ -69,7 +69,7 @@ The updated documentation provides:
 1. **Clear Assertion Guidance**:
    - Side-by-side comparison of correct and incorrect assertion patterns
    - Examples of common mistakes and how to fix them
-   - A comprehensive mapping table for converting busted-style assertions to lust-next expect-style assertions
+   - A comprehensive mapping table for converting busted-style assertions to firmo expect-style assertions
 
 2. **Organizational Structure**:
    - Detailed explanation of the logical directory structure for tests

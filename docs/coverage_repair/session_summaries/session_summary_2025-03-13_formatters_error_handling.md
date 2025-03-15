@@ -651,7 +651,7 @@ Each formatter implementation has contributed unique error handling techniques b
 
 The TAP formatter implementation was particularly comprehensive in its handling of the YAML diagnostic blocks, which are a critical component for providing detailed failure information in TAP reports. The implementation ensures that these blocks are properly formatted and escaped, with multiple fallback mechanisms when errors occur.
 
-The next steps will be to implement error handling in the remaining formatter (lcov) following these established patterns. This work represents significant progress in the larger project-wide error handling plan and contributes to making the lust-next framework more resilient and user-friendly.
+The next steps will be to implement error handling in the remaining formatter (lcov) following these established patterns. This work represents significant progress in the larger project-wide error handling plan and contributes to making the firmo framework more resilient and user-friendly.
 
 Considering the number of formatters enhanced with error handling so far, we can identify some common patterns and implementation techniques that have proven effective across different output formats:
 

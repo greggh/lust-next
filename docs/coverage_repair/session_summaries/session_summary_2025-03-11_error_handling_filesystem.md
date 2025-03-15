@@ -142,7 +142,7 @@ All implementations were designed with testability in mind:
 
 2. **Version.lua & Main Module Error Handling**:
    - Implement error handling in version.lua
-   - Enhance error handling in the main lust-next.lua module
+   - Enhance error handling in the main firmo.lua module
 
 3. **Create Tests for Filesystem Error Handling**:
    - Create dedicated tests for file discovery error handling

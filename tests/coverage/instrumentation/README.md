@@ -1,6 +1,6 @@
 # Instrumentation Tests
 
-This directory contains tests for the lust-next code instrumentation system. The instrumentation module provides an alternative approach to code coverage through source code transformation.
+This directory contains tests for the firmo code instrumentation system. The instrumentation module provides an alternative approach to code coverage through source code transformation.
 
 ## Directory Contents
 
@@ -10,7 +10,7 @@ This directory contains tests for the lust-next code instrumentation system. The
 
 ## Instrumentation Features
 
-The lust-next instrumentation module provides:
+The firmo instrumentation module provides:
 
 - **Source code transformation** - Modify code to add coverage tracking
 - **Line tracking** - Insert tracking code for each executable line

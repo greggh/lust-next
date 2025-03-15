@@ -1,4 +1,4 @@
--- lust-next parser module
+-- firmo parser module
 -- Based on lua-parser (https://github.com/andremm/lua-parser)
 -- MIT License
 

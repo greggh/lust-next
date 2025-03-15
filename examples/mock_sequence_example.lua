@@ -4,9 +4,9 @@
   over timestamp-based approaches and how to use the sequence verification API.
 ]]
 
-local lust = require "lust-next"
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local mock = lust.mock
+local firmo = require "firmo"
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local mock = firmo.mock
 local sleep = require "socket".sleep
 
 describe("Mock Sequence Tracking", function()
@@ -152,7 +152,7 @@ describe("Mock Sequence Tracking", function()
       end
       
       -- Can get global sequence number to compare across different mocks
-      local lastSequence = lust.mock.__global_sequence
+      local lastSequence = firmo.mock.__global_sequence
       print("Current global sequence number: " .. lastSequence)
     end)
   end)

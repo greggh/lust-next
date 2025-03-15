@@ -1,9 +1,9 @@
 -- Test case for the log rotation system
-local lust = require("lust-next")
+local firmo = require("firmo")
 local logging = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
 
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Log Rotation System", function()
   -- Clean up any existing test logs before we start

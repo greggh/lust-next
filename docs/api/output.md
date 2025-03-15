@@ -1,25 +1,25 @@
 # Output Formatting API
-This document describes the output formatting capabilities provided by Lust-Next, allowing you to customize how test results are displayed.
+This document describes the output formatting capabilities provided by Firmo, allowing you to customize how test results are displayed.
 
 ## Overview
-Lust-Next provides a flexible output formatting system that allows you to customize how test results are presented. This includes options for colors, indentation, verbosity levels, and specialized output formats.
+Firmo provides a flexible output formatting system that allows you to customize how test results are presented. This includes options for colors, indentation, verbosity levels, and specialized output formats.
 The output formatting options can dramatically improve the readability of your test output, especially when running large test suites.
 
 ## Formatting Functions
 
-### lust.format(options)
+### firmo.format(options)
 Configures the output formatting options.
 **Parameters:**
 
 - `options` (table): A table of formatting options (see formatting options table below)
 **Returns:**
 
-- The lust object (for chaining)
+- The firmo object (for chaining)
 **Example:**
 
 ```lua
 -- Configure output formatting
-lust.format({
+firmo.format({
   use_color = true,
   indent_char = '  ',
   indent_size = 2,
@@ -28,16 +28,16 @@ lust.format({
 
 ```text
 
-### lust.nocolor()
-Disables colored output. This is a shorthand for `lust.format({ use_color = false })`.
+### firmo.nocolor()
+Disables colored output. This is a shorthand for `firmo.format({ use_color = false })`.
 **Returns:**
 
-- The lust object (for chaining)
+- The firmo object (for chaining)
 **Example:**
 
 ```lua
 -- Disable colored output
-lust.nocolor()
+firmo.nocolor()
 
 ```text
 
@@ -58,9 +58,9 @@ lust.nocolor()
 ### Basic Configuration
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 -- Set up formatting before running tests
-lust.format({
+firmo.format({
   use_color = true,
   indent_char = '  ',
   indent_size = 2,
@@ -80,7 +80,7 @@ end)
 #### Standard Output (Default)
 
 ```lua
-lust.format({
+firmo.format({
   use_color = true,
   show_success_detail = true,
   compact = false
@@ -98,7 +98,7 @@ My feature
 #### Compact Output
 
 ```lua
-lust.format({
+firmo.format({
   compact = true,
   show_success_detail = false
 })
@@ -115,7 +115,7 @@ My feature
 #### Dot Mode
 
 ```lua
-lust.format({
+firmo.format({
   dot_mode = true
 })
 
@@ -130,7 +130,7 @@ This produces minimal output with dots for passing tests and 'F' for failing tes
 #### Summary Only
 
 ```lua
-lust.format({
+firmo.format({
   summary_only = true
 })
 
@@ -145,7 +145,7 @@ This only shows the final summary:
 #### Plain Text (No Colors)
 
 ```lua
-lust.format({
+firmo.format({
   use_color = false
 })
 
@@ -153,7 +153,7 @@ lust.format({
 or simply:
 
 ```lua
-lust.nocolor()
+firmo.nocolor()
 
 ```text
 This disables ANSI color codes, useful for environments that don't support them.
@@ -162,12 +162,12 @@ This disables ANSI color codes, useful for environments that don't support them.
 
 ```lua
 -- Using spaces for indentation
-lust.format({
+firmo.format({
   indent_char = ' ',
   indent_size = 2
 })
 -- Using tabs for indentation
-lust.format({
+firmo.format({
   indent_char = '\t',
   indent_size = 1
 })
@@ -177,7 +177,7 @@ lust.format({
 ### Showing Stack Traces
 
 ```lua
-lust.format({
+firmo.format({
   show_trace = true
 })
 
@@ -188,8 +188,8 @@ This shows full stack traces for errors:
 FAIL Test that will fail
   stack traceback:
     test.lua:10: in function 'fn'
-    lust-next.lua:283: in upvalue 'subject'
-    lust-next.lua:289: in function <lust-next.lua:278>
+    firmo.lua:283: in upvalue 'subject'
+    firmo.lua:289: in function <firmo.lua:278>
 
 ```text
 
@@ -199,19 +199,19 @@ When running tests via the command line, you can use the `--format` option to sp
 ```bash
 
 # Run tests with dot mode
-lua lust-next.lua --format dot
+lua firmo.lua --format dot
 
 # Run tests with compact mode
-lua lust-next.lua --format compact
+lua firmo.lua --format compact
 
 # Run tests with summary only
-lua lust-next.lua --format summary
+lua firmo.lua --format summary
 
 # Run tests with detailed output
-lua lust-next.lua --format detailed
+lua firmo.lua --format detailed
 
 # Run tests with plain text (no colors)
-lua lust-next.lua --format plain
+lua firmo.lua --format plain
 
 ```text
 You can also customize indentation from the command line:
@@ -219,13 +219,13 @@ You can also customize indentation from the command line:
 ```bash
 
 # Use spaces for indentation
-lua lust-next.lua --indent spaces
+lua firmo.lua --indent spaces
 
 # Use 4 spaces for indentation
-lua lust-next.lua --indent 4
+lua firmo.lua --indent 4
 
 # Use tabs for indentation
-lua lust-next.lua --indent tabs
+lua firmo.lua --indent tabs
 
 ```text
 
@@ -255,7 +255,7 @@ With detailed error output:
 
 ```lua
 -- Enable detailed error output
-lust.format({
+firmo.format({
   show_trace = true,
   show_success_detail = true
 })
@@ -279,13 +279,13 @@ For CI environments, you might want summary-only output for logs:
 local in_ci = os.getenv("CI") == "true"
 if in_ci then
   -- Use summary only mode for CI
-  lust.format({
+  firmo.format({
     summary_only = true,
     use_color = false  -- Many CI log systems don't support color
   })
 else
   -- Use detailed mode for local development
-  lust.format({
+  firmo.format({
     show_trace = true,
     compact = false
   })
@@ -297,7 +297,7 @@ end
 For large test suites, dot mode can provide a compact overview:
 
 ```lua
-lust.format({
+firmo.format({
   dot_mode = true
 })
 -- When many tests run, you'll see something like:

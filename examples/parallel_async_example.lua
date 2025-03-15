@@ -1,14 +1,14 @@
 -- Example demonstrating parallel async operations
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
+local firmo = require("firmo")
 
 -- Import the test functions
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
-local it_async = lust_next.it_async
-local async = lust_next.async
-local await = lust_next.await
-local wait_until = lust_next.wait_until
-local parallel_async = lust_next.parallel_async
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local it_async = firmo.it_async
+local async = firmo.async
+local await = firmo.await
+local wait_until = firmo.wait_until
+local parallel_async = firmo.parallel_async
 
 -- Simulate a set of asynchronous APIs
 local AsyncAPI = {}
@@ -238,7 +238,7 @@ describe("Parallel Async Operations Demo", function()
   describe("Timeout handling", function()
     it("handles timeouts for operations that take too long", function()
       -- Using the pending mechanism is better than manually printing skip messages
-      return lust_next.pending("Timeout test is hard to test reliably - see implementation in src/async.lua")
+      return firmo.pending("Timeout test is hard to test reliably - see implementation in src/async.lua")
     end)
   end)
 end)
@@ -248,10 +248,10 @@ if arg[0]:match("parallel_async_example%.lua$") then
   print("\nParallel Async Operations Demo")
   print("=============================")
   print("This file demonstrates parallel async operations for running multiple")
-  print("asynchronous tasks concurrently in lust-next tests.")
+  print("asynchronous tasks concurrently in firmo tests.")
   print("")
   print("To run this example, use:")
-  print("  env -C /home/gregg/Projects/lua-library/lust-next lua examples/parallel_async_example.lua")
+  print("  env -C /home/gregg/Projects/lua-library/firmo lua examples/parallel_async_example.lua")
   print("")
   print("Key features demonstrated:")
   print("1. Running multiple async operations concurrently")

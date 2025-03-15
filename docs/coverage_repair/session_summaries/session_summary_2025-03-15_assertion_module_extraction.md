@@ -9,7 +9,7 @@ In this session, we implemented the standalone assertion module as described in 
 ## Tasks Completed
 
 1. **Created standalone assertion module** (`lib/assertion.lua`)
-   - Extracted core assertion functionality from lust-next.lua
+   - Extracted core assertion functionality from firmo.lua
    - Implemented expect() function with proper error handling
    - Extracted utility functions like eq() and isa()
    - Implemented all assertion paths from the original implementation
@@ -26,7 +26,7 @@ In this session, we implemented the standalone assertion module as described in 
    - Tests for table comparison with diffs
 
 3. **Added integration tests** (`tests/assertions/assertion_module_integration_test.lua`)
-   - Tests to verify that the new module behaves identically to lust-next.expect
+   - Tests to verify that the new module behaves identically to firmo.expect
    - Comparison of error handling behaviors
    - Verification of API compatibility
 
@@ -83,17 +83,17 @@ The `assertion.lua` module exports:
 
 All tests pass successfully, confirming that:
 
-1. The module provides the same functionality as the original lust-next
+1. The module provides the same functionality as the original firmo
 2. Error handling is consistent and provides useful context
 3. The API is backward compatible with existing tests
 4. All assertion types are correctly implemented
 
 ## Next Steps
 
-1. **Integration with lust-next.lua**
-   - Update lust-next.lua to use the new assertion module
+1. **Integration with firmo.lua**
+   - Update firmo.lua to use the new assertion module
    - Implement backward compatibility layer
-   - Remove duplicated code from lust-next.lua
+   - Remove duplicated code from firmo.lua
 
 2. **Testing in Existing Test Suite**
    - Run existing tests to ensure compatibility

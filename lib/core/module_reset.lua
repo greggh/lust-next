@@ -1,4 +1,4 @@
--- Module reset functionality for lust-next
+-- Module reset functionality for firmo
 -- Provides better isolation between test files by cleaning up module state
 
 local error_handler = require("lib.tools.error_handler")
@@ -105,8 +105,8 @@ module_reset.protected_modules = {
   ["utf8"] = true,
   
   -- Essential testing modules
-  ["lust-next"] = true,
-  ["lust"] = true
+  ["firmo"] = true,
+  ["firmo"] = true
 }
 
 -- Configure additional modules that should be protected
@@ -768,44 +768,44 @@ function module_reset.add_protected_module(module_name)
   return result
 end
 
--- Register the module with lust-next
-function module_reset.register_with_lust(lust_next)
+-- Register the module with firmo
+function module_reset.register_with_firmo(firmo)
   local log = get_logger()
   
   -- Validate input
-  validate_not_nil(lust_next, "lust_next")
-  validate_type(lust_next, "table", "lust_next")
+  validate_not_nil(firmo, "firmo")
+  validate_type(firmo, "table", "firmo")
   
   local success, err = error_handler.try(function()
     if log then
-      log.debug("Registering module reset with lust-next")
+      log.debug("Registering module reset with firmo")
     end
     
-    -- Store reference to lust-next
-    module_reset.lust_next = lust_next
+    -- Store reference to firmo
+    module_reset.firmo = firmo
     
-    -- Add module reset capabilities to lust_next
-    lust_next.module_reset = module_reset
+    -- Add module reset capabilities to firmo
+    firmo.module_reset = module_reset
     
-    -- Verify that lust_next.reset exists and is a function
-    if type(lust_next.reset) ~= "function" then
+    -- Verify that firmo.reset exists and is a function
+    if type(firmo.reset) ~= "function" then
       error_handler.throw(
-        "Expected lust_next.reset to be a function, but it was " .. 
-        (lust_next.reset == nil and "nil" or type(lust_next.reset)),
+        "Expected firmo.reset to be a function, but it was " .. 
+        (firmo.reset == nil and "nil" or type(firmo.reset)),
         error_handler.CATEGORY.VALIDATION,
         error_handler.SEVERITY.ERROR,
         {
-          required_function = "lust_next.reset",
-          actual_type = lust_next.reset == nil and "nil" or type(lust_next.reset),
-          operation = "register_with_lust"
+          required_function = "firmo.reset",
+          actual_type = firmo.reset == nil and "nil" or type(firmo.reset),
+          operation = "register_with_firmo"
         }
       )
     end
     
     -- Enhance the reset function
-    local original_reset = lust_next.reset
+    local original_reset = firmo.reset
     
-    lust_next.reset = function()
+    firmo.reset = function()
       local reset_success, reset_result = error_handler.try(function()
         if log then
           log.debug("Enhanced reset function called")
@@ -815,20 +815,20 @@ function module_reset.register_with_lust(lust_next)
         original_reset()
         
         -- Then reset modules as needed
-        if lust_next.isolation_options and lust_next.isolation_options.reset_modules then
+        if firmo.isolation_options and firmo.isolation_options.reset_modules then
           if log then
             log.debug("Automatic module reset triggered", {
-              verbose = lust_next.isolation_options.verbose and true or false
+              verbose = firmo.isolation_options.verbose and true or false
             })
           end
           
           module_reset.reset_all({
-            verbose = lust_next.isolation_options.verbose
+            verbose = firmo.isolation_options.verbose
           })
         end
         
-        -- Return lust_next to allow chaining
-        return lust_next
+        -- Return firmo to allow chaining
+        return firmo
       end)
       
       if not reset_success then
@@ -847,7 +847,7 @@ function module_reset.register_with_lust(lust_next)
     module_reset.init()
     
     if log then
-      log.info("Module reset system registered with lust-next", {
+      log.info("Module reset system registered with firmo", {
         protected_modules = module_reset.count_protected_modules(),
         initial_modules = module_reset.initial_state and
           (type(module_reset.initial_state) == "table" and #module_reset.initial_state or 0) or 0
@@ -857,7 +857,7 @@ function module_reset.register_with_lust(lust_next)
   
   if not success then
     if log then
-      log.error("Failed to register module reset with lust-next", {
+      log.error("Failed to register module reset with firmo", {
         error = error_handler.format_error(err),
         protected_modules_count = module_reset.count_protected_modules(),
         initial_state = module_reset.initial_state ~= nil and "created" or "missing"
@@ -865,15 +865,15 @@ function module_reset.register_with_lust(lust_next)
     end
     
     error_handler.rethrow(err, {
-      operation = "module_reset.register_with_lust",
+      operation = "module_reset.register_with_firmo",
       module_version = module_reset._VERSION
     })
   end
   
-  return lust_next
+  return firmo
 end
 
--- Configure isolation options for lust-next
+-- Configure isolation options for firmo
 function module_reset.configure(options)
   local log = get_logger()
   
@@ -882,11 +882,11 @@ function module_reset.configure(options)
   validate_type_or_nil(options, "table", "options")
   
   local success, result = error_handler.try(function()
-    local lust_next = module_reset.lust_next
+    local firmo = module_reset.firmo
     
-    if not lust_next then
+    if not firmo then
       error_handler.throw(
-        "Module reset not registered with lust-next", 
+        "Module reset not registered with firmo", 
         error_handler.CATEGORY.CONFIGURATION, 
         error_handler.SEVERITY.ERROR
       )
@@ -900,7 +900,7 @@ function module_reset.configure(options)
       })
     end
     
-    lust_next.isolation_options = options
+    firmo.isolation_options = options
     
     if log then
       log.info("Isolation options configured", {
@@ -908,7 +908,7 @@ function module_reset.configure(options)
       })
     end
     
-    return lust_next
+    return firmo
   end)
   
   if not success then
@@ -916,7 +916,7 @@ function module_reset.configure(options)
       log.error("Failed to configure isolation options", {
         error = error_handler.format_error(result),
         options_type = type(options),
-        has_lust_next = module_reset.lust_next ~= nil,
+        has_firmo = module_reset.firmo ~= nil,
         reset_modules = options and options.reset_modules,
         verbose = options and options.verbose,
         track_memory = options and options.track_memory

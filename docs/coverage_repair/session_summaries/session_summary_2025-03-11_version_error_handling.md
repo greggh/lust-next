@@ -127,7 +127,7 @@ The implementation was tested with:
 ## Next Steps
 
 1. **Main Module Error Handling**:
-   - Implement error handling in main lust-next.lua
+   - Implement error handling in main firmo.lua
    - Enhance initialization with proper validation
    - Add proper error propagation to user-facing functions
 

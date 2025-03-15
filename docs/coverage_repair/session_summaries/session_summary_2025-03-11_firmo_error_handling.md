@@ -1,8 +1,8 @@
-# Session Summary: Comprehensive Error Handling Implementation in lust-next.lua (2025-03-11)
+# Session Summary: Comprehensive Error Handling Implementation in firmo.lua (2025-03-11)
 
 ## Overview
 
-Today we implemented comprehensive error handling in all functions of the main lust-next.lua module, which is the core of the lust-next testing framework. This implementation follows the project-wide error handling plan and ensures consistent error handling throughout the framework, making it more robust and reliable.
+Today we implemented comprehensive error handling in all functions of the main firmo.lua module, which is the core of the firmo testing framework. This implementation follows the project-wide error handling plan and ensures consistent error handling throughout the framework, making it more robust and reliable.
 
 ## Key Changes
 
@@ -104,7 +104,7 @@ Today we implemented comprehensive error handling in all functions of the main l
        })
      end
      
-     lust_next.errors = lust_next.errors + 1
+     firmo.errors = firmo.errors + 1
      print(indent() .. red .. "ERROR" .. normal .. " Invalid test (missing name)")
      return
    end
@@ -126,9 +126,9 @@ Today we implemented comprehensive error handling in all functions of the main l
    ```lua
    -- Run before hooks with error handling
    local before_errors = {}
-   for level = 1, lust_next.level do
-     if lust_next.befores[level] then
-       for i = 1, #lust_next.befores[level] do
+   for level = 1, firmo.level do
+     if firmo.befores[level] then
+       for i = 1, #firmo.befores[level] do
          -- Run hook with error handling
          -- Track errors in before_errors array
        end
@@ -141,7 +141,7 @@ Today we implemented comprehensive error handling in all functions of the main l
 
 4. **Error Propagation Pattern**:
    ```lua
-   local files, err = lust_next.discover(dir, pattern)
+   local files, err = firmo.discover(dir, pattern)
    
    -- Handle discovery errors
    if err then
@@ -170,7 +170,7 @@ Today we implemented comprehensive error handling in all functions of the main l
 
 ## Results and Validation
 
-The implementation of error handling in lust-next.lua has significantly improved the robustness and reliability of the testing framework. Key improvements include:
+The implementation of error handling in firmo.lua has significantly improved the robustness and reliability of the testing framework. Key improvements include:
 
 1. **Better Error Messages**:
    - All errors now include detailed context for debugging
@@ -195,7 +195,7 @@ The implementation of error handling in lust-next.lua has significantly improved
 ## Next Steps
 
 1. **IMMEDIATE - Fix Logger Conditionals**:
-   - Remove all `if logger` and `if logger and logger.debug` conditional checks from lust-next.lua
+   - Remove all `if logger` and `if logger and logger.debug` conditional checks from firmo.lua
    - Treat the logger as a required dependency, just like error_handler
    - This must be done immediately after the compact command to maintain consistency
 
@@ -206,7 +206,7 @@ The implementation of error handling in lust-next.lua has significantly improved
 
 3. **Assertion Module Extraction**:
    - Create lib/core/assertions.lua module with all assertion functions
-   - Update lust-next.lua to use the new assertions module
+   - Update firmo.lua to use the new assertions module
    - Remove duplicated assertion functions from the codebase
 
 4. **Comprehensive Testing**:
@@ -214,4 +214,4 @@ The implementation of error handling in lust-next.lua has significantly improved
    - Create error handling test suite
    - Verify error handling in edge cases
 
-The implementation of error handling in lust-next.lua completes a major component of the project-wide error handling plan. The framework is now more robust, provides better error messages, and handles failures more gracefully. However, the logger conditional checks must be fixed to treat logging as a required dependency, as per project standards.
+The implementation of error handling in firmo.lua completes a major component of the project-wide error handling plan. The framework is now more robust, provides better error messages, and handles failures more gracefully. However, the logger conditional checks must be fixed to treat logging as a required dependency, as per project standards

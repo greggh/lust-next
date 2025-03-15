@@ -1,7 +1,7 @@
 -- tests/all_tests.lua
-local lust = require("lust-next")
+local firmo = require("firmo")
 local fs = require("lib.tools.filesystem")
-local describe = lust.describe
+local describe = firmo.describe
 
 -- Core tests
 describe("Core functionality tests", function()
@@ -22,7 +22,7 @@ describe("Core functionality tests", function()
     require("tests.core.config_test")
     require("tests.core.module_reset_test")
     require("tests.core.type_checking_test")
-    require("tests.core.lust_test")
+    require("tests.core.firmo_test")
     require("tests.core.tagging_test")
 end)
 

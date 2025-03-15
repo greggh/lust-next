@@ -7,8 +7,8 @@
   2. Covered lines (lines that are executed AND validated by test assertions)
 ]]
 
-local lust = require("lust-next")
-local describe, it, expect, before, after = lust.describe, lust.it, lust.expect, lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect, before, after = firmo.describe, firmo.it, firmo.expect, firmo.before, firmo.after
 local fs = require("lib.tools.filesystem")
 local coverage = require("lib.coverage")
 
@@ -168,9 +168,9 @@ describe("Execution vs. Coverage Distinction", function()
       -- Stop coverage tracking
       coverage.stop()
       
-      -- In a real implementation, the lust.expect function would have called 
+      -- In a real implementation, the firmo.expect function would have called 
       -- coverage.mark_current_line_covered() internally, marking the assertion 
-      -- lines as covered. Since we can't modify lust.expect in this test,
+      -- lines as covered. Since we can't modify firmo.expect in this test,
       -- we'll manually verify the mechanism works.
       
       -- We can verify the basic mechanism works
@@ -178,7 +178,7 @@ describe("Execution vs. Coverage Distinction", function()
       coverage.mark_current_line_covered(4) -- Mark the line where this is called
       
       -- This would verify that the mechanism works, but we'd need to implement
-      -- the callback in lust.expect for a full implementation
+      -- the callback in firmo.expect for a full implementation
     end)
   end)
 end)

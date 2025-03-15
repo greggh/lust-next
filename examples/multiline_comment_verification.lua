@@ -1,9 +1,9 @@
 -- A simple file to verify multiline comment detection in coverage
 
 -- First, enable coverage tracking
-local lust = require("lust-next")
+local firmo = require("firmo")
 local coverage = require("lib.coverage")
-local describe, it, expect, before, after = lust.describe, lust.it, lust.expect, lust.before, lust.after
+local describe, it, expect, before, after = firmo.describe, firmo.it, firmo.expect, firmo.before, firmo.after
 
 -- A function with print statements and multiline comments
 local function func_with_comments()

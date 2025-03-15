@@ -1,8 +1,8 @@
-# Session Summary: Fixed Syntax Errors in lust-next.lua (2025-03-12)
+# Session Summary: Fixed Syntax Errors in firmo.lua (2025-03-12)
 
 ## Overview
 
-In this session, we successfully identified and fixed all syntax errors in the lust-next.lua file. These errors were preventing the file from being properly loaded and executed, which was blocking our progress on removing logger conditionals throughout the codebase.
+In this session, we successfully identified and fixed all syntax errors in the firmo.lua file. These errors were preventing the file from being properly loaded and executed, which was blocking our progress on removing logger conditionals throughout the codebase.
 
 ## Issues Fixed
 
@@ -54,7 +54,7 @@ In this session, we successfully identified and fixed all syntax errors in the l
 
 With the syntax errors fixed, we can now:
 
-1. Continue the task of removing the remaining logger conditionals throughout lust-next.lua
+1. Continue the task of removing the remaining logger conditionals throughout firmo.lua
 2. Run the test suite to verify all changes work correctly
 3. Mark the task as completed in the project documentation
 4. Begin implementing error handling in reporting modules

@@ -1,6 +1,6 @@
 # Asynchronous Testing
 
-This directory contains tests for the lust-next asynchronous testing functionality. The async module enables testing of asynchronous operations with proper timeout handling and sequential execution guarantees.
+This directory contains tests for the firmo asynchronous testing functionality. The async module enables testing of asynchronous operations with proper timeout handling and sequential execution guarantees.
 
 ## Directory Contents
 
@@ -9,7 +9,7 @@ This directory contains tests for the lust-next asynchronous testing functionali
 
 ## Asynchronous Testing Features
 
-The lust-next framework provides specialized support for asynchronous testing:
+The firmo framework provides specialized support for asynchronous testing:
 
 - Support for async test blocks with `it.async`
 - Proper handling of timeout configurations

@@ -5,7 +5,7 @@
 
 ## Overview
 
-This session focused on implementing a centralized configuration mechanism as the first task of Phase 2 (Core Functionality Fixes) of the coverage module repair project. The centralized configuration system provides a global configuration store with standardized access patterns for all components in the lust-next framework, replacing the previous approach of passing configuration separately to each component.
+This session focused on implementing a centralized configuration mechanism as the first task of Phase 2 (Core Functionality Fixes) of the coverage module repair project. The centralized configuration system provides a global configuration store with standardized access patterns for all components in the firmo framework, replacing the previous approach of passing configuration separately to each component.
 
 ## Implementation Details
 
@@ -96,8 +96,8 @@ Created comprehensive documentation in `docs/coverage_repair/centralized_config.
 
 With the centralized configuration mechanism in place, the next steps for Phase 2 should focus on:
 
-1. **Project-wide Integration of Centralized Configuration**: Update all modules and components throughout the lust-next project to use the new centralized configuration system, not just the coverage module. This includes:
-   - Main lust-next.lua initialization
+1. **Project-wide Integration of Centralized Configuration**: Update all modules and components throughout the firmo project to use the new centralized configuration system, not just the coverage module. This includes:
+   - Main firmo.lua initialization
    - All module configuration systems (coverage, quality, reporting, async, parallel, watcher, etc.)
    - CLI argument handling
    - Test discovery and execution systems
@@ -115,6 +115,6 @@ With the centralized configuration mechanism in place, the next steps for Phase 
 
 ## Conclusion
 
-The implementation of the centralized configuration mechanism provides a solid foundation for addressing the data flow issues identified in Phase 1. By standardizing configuration access and validation across the codebase, we can ensure consistent behavior and better error handling throughout the entire lust-next framework, not just the coverage module.
+The implementation of the centralized configuration mechanism provides a solid foundation for addressing the data flow issues identified in Phase 1. By standardizing configuration access and validation across the codebase, we can ensure consistent behavior and better error handling throughout the entire firmo framework, not just the coverage module.
 
-This framework-level change, along with the error handling system created earlier, represents a significant architectural improvement that will have a positive impact on all components of the lust-next project. The next phase of work will focus on integrating both of these systems throughout the entire codebase to create a more cohesive, maintainable, and robust testing framework.
+This framework-level change, along with the error handling system created earlier, represents a significant architectural improvement that will have a positive impact on all components of the firmo project. The next phase of work will focus on integrating both of these systems throughout the entire codebase to create a more cohesive, maintainable, and robust testing framework

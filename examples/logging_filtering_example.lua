@@ -1,7 +1,7 @@
 #!/usr/bin/env lua
 -- Example demonstrating module filtering and log level control for the logging system
 
-local lust = require("lust-next")
+local firmo = require("firmo")
 local logging = require("lib.tools.logging")
 
 -- Initialize several loggers for different modules to demonstrate filtering

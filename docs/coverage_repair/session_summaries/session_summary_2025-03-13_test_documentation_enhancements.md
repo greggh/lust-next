@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on creating comprehensive testing documentation for the lust-next project. We created detailed guides for assertion patterns, test writing, and framework usage to help developers write better tests and avoid common mistakes.
+This session focused on creating comprehensive testing documentation for the firmo project. We created detailed guides for assertion patterns, test writing, and framework usage to help developers write better tests and avoid common mistakes.
 
 ## Accomplishments
 
@@ -12,7 +12,7 @@ This session focused on creating comprehensive testing documentation for the lus
 
 Created a detailed assertion pattern mapping document (`assertion_pattern_mapping.md`) that includes:
 
-- Complete mapping between busted-style and lust-next assertions
+- Complete mapping between busted-style and firmo assertions
 - Detailed examples of assertion usage for different data types
 - Common mistakes to avoid with clear examples
 - Advanced assertion patterns for complex testing scenarios
@@ -44,7 +44,7 @@ Revised the test framework guide (`test_framework_guide.md`) to:
 ## Implementation Details
 
 1. **Assertion Pattern Documentation:**
-   - Created a complete mapping between busted-style and lust-next assertions
+   - Created a complete mapping between busted-style and firmo assertions
    - Added detailed examples for basic assertions (equality, existence, type checks)
    - Added examples for complex assertions (tables, functions, strings)
    - Created a section on advanced patterns including mock/spy assertions
@@ -95,6 +95,6 @@ Revised the test framework guide (`test_framework_guide.md`) to:
 
 ## Conclusion
 
-This session significantly improved the testing documentation for the lust-next project. The comprehensive guides we created will help developers write better tests, avoid common mistakes, and troubleshoot issues more effectively. These improvements support the overall goal of the Test System Reorganization plan to create a more consistent, reliable test suite.
+This session significantly improved the testing documentation for the firmo project. The comprehensive guides we created will help developers write better tests, avoid common mistakes, and troubleshoot issues more effectively. These improvements support the overall goal of the Test System Reorganization plan to create a more consistent, reliable test suite.
 
 With these documentation improvements, we've addressed a major need identified in Phase 5 (Verification) of the plan. The next steps will focus on continuing the verification process and fixing any remaining issues in specific tests.

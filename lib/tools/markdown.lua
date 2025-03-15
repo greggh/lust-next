@@ -1,4 +1,4 @@
--- Markdown fixing utilities for lust-next
+-- Markdown fixing utilities for firmo
 -- Provides functions to fix common markdown issues
 -- This is a Lua implementation of the shell scripts in scripts/markdown/
 

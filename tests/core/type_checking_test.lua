@@ -1,7 +1,7 @@
 -- Tests for enhanced type checking functionality
 
-local lust = require("../lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("../firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Create a test class with metatable for instance checking
 local TestClass = {}

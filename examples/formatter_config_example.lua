@@ -1,5 +1,5 @@
 -- Example demonstrating formatter configuration options
-local lust = require("lust-next")
+local firmo = require("firmo")
 local central_config = require("lib.core.central_config")
 local reporting = require("lib.reporting")
 
@@ -66,18 +66,18 @@ end
 
 print("\n5. Running a simple test with configured formatters:")
 -- Write a simple test
-lust.describe("Basic test", function()
-  lust.it("should pass", function()
-    lust.expect(true).to.be.truthy()
+firmo.describe("Basic test", function()
+  firmo.it("should pass", function()
+    firmo.expect(true).to.be.truthy()
   end)
   
-  lust.it("should have proper equality", function()
-    lust.expect({1, 2, 3}).to.equal({1, 2, 3})
+  firmo.it("should have proper equality", function()
+    firmo.expect({1, 2, 3}).to.equal({1, 2, 3})
   end)
 end)
 
 -- Run the test
-lust.run()
+firmo.run()
 
 print("\nTo see HTML output with configured light theme, use:")
 print("lua run_tests.lua --coverage -cf html examples/formatter_config_example.lua")

@@ -1,6 +1,6 @@
 # Logging API
 
-The logging system in lust-next provides a centralized way to handle log messages with different severity levels, module-specific configuration, output options, search capabilities, external tool integration, and test result integration.
+The logging system in firmo provides a centralized way to handle log messages with different severity levels, module-specific configuration, output options, search capabilities, external tool integration, and test result integration.
 
 ## Basic Usage
 
@@ -51,12 +51,12 @@ logging.configure({
   level = logging.LEVELS.INFO,   -- Global default level
   timestamps = true,             -- Include timestamps in log messages
   use_colors = true,             -- Use ANSI colors in console output
-  output_file = "lust-next.log", -- Log to file (nil = console only)
+  output_file = "firmo.log", -- Log to file (nil = console only)
   log_dir = "logs",              -- Directory for log files
   max_file_size = 1024 * 1024,   -- 1MB max file size before rotation
   max_log_files = 5,             -- Keep 5 rotated log files
   format = "text",               -- Log format: "text" or "json"
-  json_file = "lust-next.json",  -- Separate JSON structured log file
+  json_file = "firmo.json",  -- Separate JSON structured log file
   buffering = false,             -- Buffer logs for higher performance
   buffer_size = 100,             -- Buffer size when buffering is enabled
   buffer_flush_interval = 5000,  -- Auto-flush buffer every 5 seconds
@@ -173,10 +173,10 @@ When rotation occurs:
 
 ## Integration with Global Config
 
-The logging system integrates with lust-next's global configuration system:
+The logging system integrates with firmo's global configuration system:
 
 ```lua
--- In your .lust-next-config.lua file:
+-- In your .firmo-config.lua file:
 return {
   -- Test configuration
   filter = ".*test",
@@ -186,14 +186,14 @@ return {
   logging = {
     level = 3,  -- INFO level
     timestamps = true,
-    output_file = "lust-next.log",
+    output_file = "firmo.log",
     log_dir = "logs",
     module_levels = {
       coverage = 4,  -- DEBUG level for coverage module
       reporting = 2  -- WARN level for reporting module
     },
     format = "text",
-    json_file = "lust-next.json",
+    json_file = "firmo.json",
     module_filter = {"coverage", "reporting", "test*"},
     buffering = true,
     buffer_size = 100
@@ -323,7 +323,7 @@ log_export.create_platform_file(
   "logs/splunk_format.json",       -- Output file
   {                                -- Platform-specific options
     source = "my-application",
-    sourcetype = "lust:application",
+    sourcetype = "firmo:application",
     environment = "production"
   }
 )

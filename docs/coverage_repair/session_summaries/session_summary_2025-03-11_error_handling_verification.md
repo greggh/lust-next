@@ -2,7 +2,7 @@
 
 ## Overview
 
-Today we performed verification of the error handling implementation across the lust-next codebase, focusing particularly on the instrumentation.lua module as part of the Phase 4 error handling initiative. Our work confirms that instrumentation.lua already implements comprehensive error handling following the standardized patterns established in the project_wide_error_handling_plan.md document.
+Today we performed verification of the error handling implementation across the firmo codebase, focusing particularly on the instrumentation.lua module as part of the Phase 4 error handling initiative. Our work confirms that instrumentation.lua already implements comprehensive error handling following the standardized patterns established in the project_wide_error_handling_plan.md document.
 
 ## Primary Findings
 
@@ -63,7 +63,7 @@ The following functions were verified to have proper error handling:
 
 We ran tests for the instrumentation module using:
 ```bash
-cd /home/gregg/Projects/lua-library/lust-next && lua scripts/run_tests.lua tests/instrumentation_test.lua
+cd /home/gregg/Projects/lua-library/firmo && lua scripts/run_tests.lua tests/instrumentation_test.lua
 ```
 
 The test results showed:
@@ -91,7 +91,7 @@ Based on our verification results, the next steps in the error handling implemen
    - module_reset.lua
    - filesystem.lua
    - version.lua
-   - main lust-next.lua
+   - main firmo.lua
 
 3. **Create comprehensive tests for error handling**:
    - Add specific tests for error conditions in instrumentation.lua

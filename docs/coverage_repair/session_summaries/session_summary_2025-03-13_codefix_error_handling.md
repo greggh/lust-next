@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on implementing comprehensive error handling in the `codefix.lua` module, which provides code quality checking and fixing capabilities for the lust-next framework. The module interacts extensively with the filesystem, executes external commands, and performs complex string operations, making robust error handling essential for its reliable operation.
+This session focused on implementing comprehensive error handling in the `codefix.lua` module, which provides code quality checking and fixing capabilities for the firmo framework. The module interacts extensively with the filesystem, executes external commands, and performs complex string operations, making robust error handling essential for its reliable operation.
 
 ## Implementation Approach
 

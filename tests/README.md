@@ -1,6 +1,6 @@
-# Lust-Next Tests
+# Firmo Tests
 
-This directory contains the test suite for the lust-next testing framework. The tests are organized by component to improve maintainability and navigability.
+This directory contains the test suite for the firmo testing framework. The tests are organized by component to improve maintainability and navigability.
 
 ## Directory Structure
 
@@ -61,8 +61,8 @@ Test files should follow this general structure:
 
 Example:
 ```lua
-local lust = require "lust-next"
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require "firmo"
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Module name", function()
   describe("Function name", function()
@@ -77,7 +77,7 @@ end)
 
 - Each test should focus on a single behavior or feature
 - Tests should be isolated and not depend on other tests
-- Use appropriate assertion methods following the lust-next style guide
+- Use appropriate assertion methods following the firmo style guide
 - Prefer `.to.be_truthy()` over `.to.be(true)` for boolean assertions
 - Use `.to.exist()` instead of `.to_not.be(nil)` for existence checks
 - Always clean up resources created during tests

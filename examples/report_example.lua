@@ -1,9 +1,9 @@
 -- report_example.lua
--- Example demonstrating the reporting module in lust-next
+-- Example demonstrating the reporting module in firmo
 
--- Make sure we're using lust-next with globals
-local lust_next = require('../lust-next')
-lust_next.expose_globals()
+-- Make sure we're using firmo with globals
+local firmo = require('../firmo')
+firmo.expose_globals()
 
 -- Import the filesystem module
 local fs = require("lib.tools.filesystem")
@@ -74,7 +74,7 @@ end)
 
 -- After running tests, we can manually generate reports with the reporting module
 after_each(function()
-  -- Note: In actual usage, the reporting would be handled by lust-next.cli_run
+  -- Note: In actual usage, the reporting would be handled by firmo.cli_run
   -- This example shows the direct use of the reporting module
 end)
 
@@ -87,7 +87,7 @@ describe("Reporting Module Examples", function()
     end
     
     -- Example of how to use reporting module with coverage data
-    -- In real usage, lust-next.cli_run handles this automatically
+    -- In real usage, firmo.cli_run handles this automatically
     local coverage = package.loaded["lib.coverage"] or require("lib.coverage")
     if coverage and coverage.get_report_data then
       local coverage_data = coverage.get_report_data()
@@ -163,26 +163,26 @@ end)
 -- Run the example tests with coverage enabled
 -- Note: This would typically be handled by the CLI with appropriate options
 print("\nRunning example tests with coverage and quality tracking")
-lust_next.coverage_options.enabled = true
-lust_next.quality_options.enabled = true
+firmo.coverage_options.enabled = true
+firmo.quality_options.enabled = true
 
--- Note: In a normal CLI invocation, lust_next.cli_run would handle
+-- Note: In a normal CLI invocation, firmo.cli_run would handle
 -- setup/teardown of coverage, running tests, and generating reports
 local coverage = package.loaded["lib.coverage"] or require("lib.coverage")
 if coverage then
-  coverage.init(lust_next.coverage_options)
+  coverage.init(firmo.coverage_options)
   coverage.reset()
   coverage.start()
 end
 
 local quality = package.loaded["lib.quality"] or require("lib.quality")
 if quality then
-  quality.init(lust_next.quality_options)
+  quality.init(firmo.quality_options)
   quality.reset()
 end
 
 print("\nExample complete!")
 
 -- Note: The purpose of this example is to show how the reporting module works.
--- In practice, you would run tests with lust-next's CLI which handles coverage
+-- In practice, you would run tests with firmo's CLI which handles coverage
 -- and report generation automatically.

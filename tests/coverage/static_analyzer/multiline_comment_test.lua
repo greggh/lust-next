@@ -1,6 +1,6 @@
 -- Tests for the improved multiline comment detection in the static analyzer
-local lust = require("lust-next")
-local describe, it, expect, before, after = lust.describe, lust.it, lust.expect, lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect, before, after = firmo.describe, firmo.it, firmo.expect, firmo.before, firmo.after
 
 local static_analyzer = require("lib.coverage.static_analyzer")
 

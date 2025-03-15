@@ -1,12 +1,12 @@
 -- Tests for the async testing functionality
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
-local it_async = lust_next.it_async
-local async = lust_next.async
-local await = lust_next.await
-local wait_until = lust_next.wait_until
-local parallel_async = lust_next.parallel_async
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local it_async = firmo.it_async
+local async = firmo.async
+local await = firmo.await
+local wait_until = firmo.wait_until
+local parallel_async = firmo.parallel_async
 
 describe("Asynchronous Testing", function()
   -- Verify basic async functionality
@@ -190,7 +190,7 @@ describe("Asynchronous Testing", function()
     it("is a shorthand for it() with async()", function()
       -- This test verifies that it_async exists and calls the right functions
       -- The actual async functionality is tested in other tests
-      expect(lust_next.it_async).to.be.a("function")
+      expect(firmo.it_async).to.be.a("function")
     end)
   end)
 end)

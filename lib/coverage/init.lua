@@ -1,4 +1,4 @@
--- lust-next code coverage module
+-- firmo code coverage module
 local M = {}
 M._VERSION = '1.0.0'
 

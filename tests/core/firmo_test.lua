@@ -1,7 +1,7 @@
--- Basic test for lust-next
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+-- Basic test for firmo
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Try to load the logging module
 local logging, logger
@@ -10,11 +10,11 @@ local function try_load_logger()
     local ok, log_module = pcall(require, "lib.tools.logging")
     if ok and log_module then
       logging = log_module
-      logger = logging.get_logger("test.lust")
+      logger = logging.get_logger("test.firmo")
       
       if logger and logger.debug then
-        logger.debug("Lust core test initialized", {
-          module = "test.lust",
+        logger.debug("Firmo core test initialized", {
+          module = "test.firmo",
           test_type = "unit",
           test_focus = "core API"
         })
@@ -27,19 +27,19 @@ end
 -- Initialize logger
 local log = try_load_logger()
 
-describe("lust-next", function()
+describe("firmo", function()
   if log then
-    log.info("Beginning lust core tests", {
-      test_group = "lust_core",
+    log.info("Beginning firmo core tests", {
+      test_group = "firmo_core",
       test_focus = "API functions"
     })
   end
 
   it("has required functions", function()
-    expect(lust.describe).to.be.a("function")
-    expect(lust.it).to.be.a("function")
-    expect(lust.expect).to.be.a("function")
-    expect(lust.spy).to.exist()
+    expect(firmo.describe).to.be.a("function")
+    expect(firmo.it).to.be.a("function")
+    expect(firmo.expect).to.be.a("function")
+    expect(firmo.spy).to.exist()
   end)
   
   it("passes simple tests", function()
@@ -52,14 +52,14 @@ describe("lust-next", function()
   it("has spy functionality", function()
     if log then log.debug("Testing spy functionality") end
     -- Test the spy functionality which is now implemented
-    expect(lust.spy).to.exist()
+    expect(firmo.spy).to.exist()
     -- The spy is a module with new and on functions
-    expect(lust.spy.new).to.be.a("function")
-    expect(lust.spy.on).to.be.a("function")
+    expect(firmo.spy.new).to.be.a("function")
+    expect(firmo.spy.on).to.be.a("function")
     
     -- Test basic spy functionality
     local test_fn = function(a, b) return a + b end
-    local spied = lust.spy.new(test_fn)
+    local spied = firmo.spy.new(test_fn)
     
     -- Spy should work like the original function
     expect(spied(2, 3)).to.equal(5)
@@ -73,12 +73,12 @@ describe("lust-next", function()
   end)
 
   if log then
-    log.info("Lust core tests completed", {
+    log.info("Firmo core tests completed", {
       status = "success",
-      test_group = "lust_core"
+      test_group = "firmo_core"
     })
   end
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

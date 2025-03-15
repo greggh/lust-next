@@ -1,6 +1,6 @@
 -- Test for processing large files with the static analyzer
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import modules for testing
 local coverage = require("lib.coverage")
@@ -10,9 +10,9 @@ local static_analyzer = require("lib.coverage.static_analyzer")
 describe("Large File Processing", function()
   
   it("should successfully analyze the largest file in the project", function()
-    -- Process the largest file in our project: lust-next.lua
+    -- Process the largest file in our project: firmo.lua
     local project_root = fs.get_absolute_path(".")
-    local file_path = fs.join_paths(project_root, "lust-next.lua")
+    local file_path = fs.join_paths(project_root, "firmo.lua")
     
     -- Time the operation
     local start_time = os.clock()
@@ -22,7 +22,7 @@ describe("Large File Processing", function()
     
     -- Calculate duration
     local duration = os.clock() - start_time
-    lust_next.log.info({ 
+    firmo.log.info({ 
       message = "Parsed large file", 
       file = file_path,
       duration_seconds = string.format("%.2f", duration)
@@ -40,7 +40,7 @@ describe("Large File Processing", function()
     
     local executable_lines = static_analyzer.get_executable_lines(code_map)
     
-    lust_next.log.info({ 
+    firmo.log.info({ 
       message = "File stats", 
       file = file_path,
       total_lines = line_count,

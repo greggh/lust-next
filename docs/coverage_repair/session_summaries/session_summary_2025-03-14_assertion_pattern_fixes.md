@@ -4,19 +4,19 @@ Date: 2025-03-14
 
 ## Overview
 
-During Phase 5 (Verification) of the Test System Reorganization plan, we discovered that many test files, particularly reporting_test.lua, were using busted-style assertions (assert.is_true(), assert.is_not_nil(), etc.) instead of the lust-next expect-style assertions (expect(...).to.be_truthy(), expect(...).to.exist(), etc.). This session focused on fixing these assertion patterns to ensure proper test execution with the new unified testing system.
+During Phase 5 (Verification) of the Test System Reorganization plan, we discovered that many test files, particularly reporting_test.lua, were using busted-style assertions (assert.is_true(), assert.is_not_nil(), etc.) instead of the firmo expect-style assertions (expect(...).to.be_truthy(), expect(...).to.exist(), etc.). This session focused on fixing these assertion patterns to ensure proper test execution with the new unified testing system.
 
 ## Key Accomplishments
 
 1. **Identified Critical Issues in Testing Patterns**:
-   - Discovered that reporting_test.lua was using busted-style assertions not supported by the lust-next framework
+   - Discovered that reporting_test.lua was using busted-style assertions not supported by the firmo framework
    - Found multiple error patterns resulting from these incompatible assertions:
      - `attempt to call a nil value (field 'getn')` in the summary formatter
      - `attempt to call a nil value (field 'maxn')` in the quality module
      - `attempt to index a function value (global 'assert')` in test assertions
 
 2. **Created Comprehensive Assertion Pattern Mapping Guide**:
-   - Documented all commonly used busted-style assertions and their lust-next equivalents
+   - Documented all commonly used busted-style assertions and their firmo equivalents
    - Created detailed mapping table in assertion_pattern_mapping.md
    - Included special considerations for parameter order differences, negation patterns, and custom assertions
    - Added examples of complete test conversion for clearer understanding
@@ -28,8 +28,8 @@ During Phase 5 (Verification) of the Test System Reorganization plan, we discove
    - Fixed configuration value validation to avoid "attempt to compare nil with number" errors
 
 4. **Updated reporting_test.lua with Proper Assertion Patterns**:
-   - Converted all busted-style assertions to lust-next expect-style assertions
-   - Fixed parameter order issues (busted uses assert.equals(expected, actual) while lust-next uses expect(actual).to.equal(expected))
+   - Converted all busted-style assertions to firmo expect-style assertions
+   - Fixed parameter order issues (busted uses assert.equals(expected, actual) while firmo uses expect(actual).to.equal(expected))
    - Maintained test behavior and assertions while fixing the syntax
    - Carefully fixed pattern-checking assertions to preserve functionality
    - Ensured consistent assertion styles throughout the file
@@ -107,7 +107,7 @@ During Phase 5 (Verification) of the Test System Reorganization plan, we discove
    assert.type_of(result, "string")
    assert.is_true(result:find("<!DOCTYPE html>") ~= nil)
    
-   -- New lust-next expect-style assertions
+   -- New firmo expect-style assertions
    expect(result).to.exist()
    expect(result.overall_pct).to.equal(80)
    expect(result).to.be.a("string")
@@ -141,7 +141,7 @@ While we made significant progress, several issues remain that need further atte
 
 2. **Update Additional Test Files**:
    - Continue with assertion pattern conversion in other formatter-specific tests
-   - Standardize all test files to use the lust-next expect-style assertions
+   - Standardize all test files to use the firmo expect-style assertions
 
 3. **Enhance Test Utilities**:
    - Consider adding utility functions for common assertion patterns

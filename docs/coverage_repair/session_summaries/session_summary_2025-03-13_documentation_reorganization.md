@@ -2,7 +2,7 @@
 
 ## Overview
 
-In this session, we comprehensively reorganized the documentation for the lust-next coverage module repair project. Our goals were to reduce context token usage during chats while preserving essential information, create a clear path forward with consolidated plans, and centralize key implementation guidelines in CLAUDE.md for easy reference.
+In this session, we comprehensively reorganized the documentation for the firmo coverage module repair project. Our goals were to reduce context token usage during chats while preserving essential information, create a clear path forward with consolidated plans, and centralize key implementation guidelines in CLAUDE.md for easy reference.
 
 ## Key Changes
 
@@ -92,7 +92,7 @@ Updated the testing guide with:
    - Follow assertion_extraction_plan.md to extract assertion functions
    - Create lib/assertion.lua with proper error handling
    - Implement core assertion types first (equality, type, existence)
-   - Connect to lust-next.lua with backward compatibility
+   - Connect to firmo.lua with backward compatibility
 
 2. **Error Handling Test Structure**:
    - Create tests/error_handling directory and subdirectories

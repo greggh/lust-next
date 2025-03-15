@@ -1,12 +1,12 @@
--- Instrumentation approach example for lust-next coverage
+-- Instrumentation approach example for firmo coverage
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
-local lust = require("lust-next")
+local firmo = require("firmo")
 local logging = require("lib.tools.logging")
 local logger = logging.get_logger("example.instrumentation")
 
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 describe("Instrumentation approach for coverage", function()
     -- Create variables to hold test file paths and content
@@ -226,4 +226,4 @@ return M
 end)
 
 -- No additional test suite needed - tests are run by the runner
--- Do not include explicit lust() or lust.run() calls
+-- Do not include explicit firmo() or firmo.run() calls

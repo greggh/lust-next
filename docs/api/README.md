@@ -1,5 +1,5 @@
-# Lust-Next API Reference
-This section contains detailed API documentation for all Lust-Next functionality.
+# Firmo API Reference
+This section contains detailed API documentation for all Firmo functionality.
 
 ## Table of Contents
 
@@ -17,21 +17,21 @@ This section contains detailed API documentation for all Lust-Next functionality
 - [Test Discovery](discovery.md) - Automatic test discovery capabilities
 
 ## API Overview
-Lust-Next provides a comprehensive API for testing Lua code. The API is designed to be simple, intuitive, and powerful.
+Firmo provides a comprehensive API for testing Lua code. The API is designed to be simple, intuitive, and powerful.
 
 ### Core Functions
 
 ```lua
 -- Define a test group
-lust.describe("Group name", function()
+firmo.describe("Group name", function()
   -- Define a test
-  lust.it("Test name", function()
+  firmo.it("Test name", function()
     -- Test code here
   end)
 end)
 -- Setup and teardown
-lust.before(function() -- Run before each test end)
-lust.after(function() -- Run after each test end)
+firmo.before(function() -- Run before each test end)
+firmo.after(function() -- Run after each test end)
 
 ```text
 
@@ -54,15 +54,15 @@ expect(str).to.start_with("prefix")
 
 ```lua
 -- Async test
-lust.it_async("Async test", function()
+firmo.it_async("Async test", function()
   local result = nil
-  lust.await(100) -- Wait 100ms
+  firmo.await(100) -- Wait 100ms
   expect(result).to.exist()
 end)
 -- Run async operations in parallel
-local results = lust.parallel_async(
-  function() lust.await(100); return "first" end,
-  function() lust.await(200); return "second" end
+local results = firmo.parallel_async(
+  function() firmo.await(100); return "first" end,
+  function() firmo.await(200); return "second" end
 )
 
 ```text
@@ -71,9 +71,9 @@ local results = lust.parallel_async(
 
 ```lua
 -- Reset and reload a module
-local fresh_module = lust.reset_module("app.module")
+local fresh_module = firmo.reset_module("app.module")
 -- Run test with a fresh module
-lust.with_fresh_module("app.module", function(mod)
+firmo.with_fresh_module("app.module", function(mod)
   -- Test using the fresh module
 end)
 
@@ -83,10 +83,10 @@ end)
 
 ```lua
 -- Create a mock
-local mock_obj = lust.mock(dependencies)
+local mock_obj = firmo.mock(dependencies)
 mock_obj:stub("method", function() return "mocked" end)
 -- Create a spy
-local spy = lust.spy(function() end)
+local spy = firmo.spy(function() end)
 
 ```text
 
@@ -94,18 +94,18 @@ local spy = lust.spy(function() end)
 
 ```lua
 -- Enable coverage tracking
-lust.coverage_options.enabled = true
-lust.coverage_options.include = {"src/*.lua"}
-lust.coverage_options.exclude = {"tests/*.lua"}
+firmo.coverage_options.enabled = true
+firmo.coverage_options.include = {"src/*.lua"}
+firmo.coverage_options.exclude = {"tests/*.lua"}
 -- Run tests with coverage
-lust.run_discovered("./tests")
+firmo.run_discovered("./tests")
 -- Generate a coverage report
-lust.generate_coverage_report("html", "./coverage-report.html")
+firmo.generate_coverage_report("html", "./coverage-report.html")
 -- Enable quality validation
-lust.quality_options.enabled = true
-lust.quality_options.level = 3 -- Comprehensive quality level
+firmo.quality_options.enabled = true
+firmo.quality_options.level = 3 -- Comprehensive quality level
 -- Generate a quality report
-lust.generate_quality_report("html", "./quality-report.html")
+firmo.generate_quality_report("html", "./quality-report.html")
 
 ```text
 
@@ -115,8 +115,8 @@ lust.generate_quality_report("html", "./quality-report.html")
 -- Get the reporting module
 local reporting = require("src.reporting")
 -- Format and save reports
-local coverage_data = lust.get_coverage_data()
-local quality_data = lust.get_quality_data()
+local coverage_data = firmo.get_coverage_data()
+local quality_data = firmo.get_quality_data()
 -- Auto-save all report formats
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 
@@ -126,13 +126,13 @@ reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 
 ```lua
 -- Enable code fixing
-lust.codefix_options.enabled = true
+firmo.codefix_options.enabled = true
 -- Fix a specific file
-lust.fix_file("path/to/file.lua")
+firmo.fix_file("path/to/file.lua")
 -- Fix multiple files
-lust.fix_files({"file1.lua", "file2.lua"})
+firmo.fix_files({"file1.lua", "file2.lua"})
 -- Find and fix all Lua files in a directory
-lust.fix_lua_files("src")
+firmo.fix_lua_files("src")
 
 ```text
 See the individual sections for detailed documentation on each API area.

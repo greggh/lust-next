@@ -1,4 +1,4 @@
--- Error handling module for lust-next
+-- Error handling module for firmo
 -- Provides standardized error handling, validation, and error reporting functions
 local M = {}
 
@@ -179,7 +179,7 @@ function M.try(fn)
   return true, result
 end
 
--- REMOVED: Assert functions were moved to lust-next.assert
+-- REMOVED: Assert functions were moved to firmo.assert
 
 -- Internal helper to log an error
 local function log_error(err)
@@ -296,7 +296,7 @@ function M.assert(condition, message, category, context, cause)
   return condition
 end
 
--- REMOVED: Assert functions were moved to lust-next.assert
+-- REMOVED: Assert functions were moved to firmo.assert
 
 -- Compatibility function for table unpacking (works with both Lua 5.1 and 5.2+)
 local unpack_table = table.unpack or unpack

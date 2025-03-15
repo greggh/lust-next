@@ -1,10 +1,10 @@
 # Centralized Configuration System
 
-This document provides comprehensive documentation for the centralized configuration system implemented in the lust-next framework.
+This document provides comprehensive documentation for the centralized configuration system implemented in the firmo framework.
 
 ## Overview
 
-The centralized configuration system provides a global configuration store with standardized access patterns for all components in the lust-next framework. It replaces the previous approach of passing configuration separately to each component and allows for consistent configuration access, validation, and notification across the codebase.
+The centralized configuration system provides a global configuration store with standardized access patterns for all components in the firmo framework. It replaces the previous approach of passing configuration separately to each component and allows for consistent configuration access, validation, and notification across the codebase.
 
 ## Key Features
 
@@ -79,10 +79,10 @@ local valid = central_config.validate("coverage")
 
 ```lua
 -- Load configuration from a file
-local config, error = central_config.load_from_file(".lust-next-config.lua")
+local config, error = central_config.load_from_file(".firmo-config.lua")
 
 -- Save current configuration to a file
-local success, error = central_config.save_to_file(".lust-next-config.lua")
+local success, error = central_config.save_to_file(".firmo-config.lua")
 ```
 
 #### Reset Configuration
@@ -109,7 +109,7 @@ central_config.configure_from_config(global_config)
 
 ```lua
 -- Default configuration file path
-central_config.DEFAULT_CONFIG_PATH -- ".lust-next-config.lua"
+central_config.DEFAULT_CONFIG_PATH -- ".firmo-config.lua"
 
 -- Error categories
 central_config.ERROR_TYPES.VALIDATION -- "validation"
@@ -272,13 +272,13 @@ my_module.configure = function(options)
   end
 end
 
--- In lust-next.lua
-lust_next.my_module_options = {
+-- In firmo.lua
+firmo.my_module_options = {
   timeout = 5000
 }
 
 -- Applying configuration
-my_module.configure(lust_next.my_module_options)
+my_module.configure(firmo.my_module_options)
 ```
 
 ### After

@@ -5,7 +5,7 @@
 ]]
 
 package.path = "./?.lua;" .. package.path
-local lust_next = require("lust-next")
+local firmo = require("firmo")
 local reporting = require("lib.reporting")
 local fs = require("lib.tools.filesystem")
 

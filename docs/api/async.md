@@ -1,12 +1,12 @@
 # Async Testing API
-This document describes the asynchronous testing capabilities provided by Lust-Next.
+This document describes the asynchronous testing capabilities provided by Firmo.
 
 ## Overview
-Lust-Next provides a modular system for testing asynchronous code. The `src/async.lua` module implements the core functionality, which is then integrated into the main testing framework.
+Firmo provides a modular system for testing asynchronous code. The `src/async.lua` module implements the core functionality, which is then integrated into the main testing framework.
 
 ## Async Test Functions
 
-### lust.async(fn, [timeout])
+### firmo.async(fn, [timeout])
 Creates an asynchronous test function wrapper.
 **Parameters:**
 
@@ -18,15 +18,15 @@ Creates an asynchronous test function wrapper.
 **Example:**
 
 ```lua
-it("performs async operation", lust.async(function()
+it("performs async operation", firmo.async(function()
   -- Async test code here
-  lust.await(100) -- Wait 100ms
+  firmo.await(100) -- Wait 100ms
   expect(result).to.exist()
 end))
 
 ```text
 
-### lust.it_async(name, fn, [timeout])
+### firmo.it_async(name, fn, [timeout])
 Convenient shorthand for creating an asynchronous test.
 **Parameters:**
 
@@ -37,9 +37,9 @@ Convenient shorthand for creating an asynchronous test.
 **Example:**
 
 ```lua
-lust.it_async("performs async operation", function()
+firmo.it_async("performs async operation", function()
   -- Async test code here
-  lust.await(100) -- Wait 100ms
+  firmo.await(100) -- Wait 100ms
   expect(result).to.exist()
 end)
 
@@ -47,7 +47,7 @@ end)
 
 ## Async Utilities
 
-### lust.await(milliseconds)
+### firmo.await(milliseconds)
 Pauses execution for the specified number of milliseconds.
 **Parameters:**
 
@@ -60,19 +60,19 @@ Pauses execution for the specified number of milliseconds.
 **Example:**
 
 ```lua
-lust.it_async("waits before checking result", function()
+firmo.it_async("waits before checking result", function()
   local result = nil
   -- Start async operation
   setTimeout(function() result = "done" end, 50)
   -- Wait for operation to complete
-  lust.await(100)
+  firmo.await(100)
   -- Check result
   expect(result).to.equal("done")
 end)
 
 ```text
 
-### lust.wait_until(condition_fn, [timeout], [check_interval])
+### firmo.wait_until(condition_fn, [timeout], [check_interval])
 Waits until the condition function returns true or until the timeout is reached.
 **Parameters:**
 
@@ -90,19 +90,19 @@ Waits until the condition function returns true or until the timeout is reached.
 **Example:**
 
 ```lua
-lust.it_async("waits for condition", function()
+firmo.it_async("waits for condition", function()
   local value = nil
   -- Start async operation
   setTimeout(function() value = "done" end, 50)
   -- Wait until value is set
-  lust.wait_until(function() return value ~= nil end, 1000, 10)
+  firmo.wait_until(function() return value ~= nil end, 1000, 10)
   -- Check result
   expect(value).to.equal("done")
 end)
 
 ```text
 
-### lust.parallel_async(operations, [timeout])
+### firmo.parallel_async(operations, [timeout])
 Runs multiple async operations concurrently and waits for all to complete.
 **Parameters:**
 
@@ -121,22 +121,22 @@ Runs multiple async operations concurrently and waits for all to complete.
 **Example:**
 
 ```lua
-lust.it_async("runs operations in parallel", function()
+firmo.it_async("runs operations in parallel", function()
   -- Define multiple async operations
   local function fetch_users()
-    lust.await(100)  -- Simulate network delay
+    firmo.await(100)  -- Simulate network delay
     return { {id = 1, name = "User 1"}, {id = 2, name = "User 2"} }
   end
   local function fetch_posts()
-    lust.await(150)  -- Different operation with different timing
+    firmo.await(150)  -- Different operation with different timing
     return { {id = 1, title = "Post 1"}, {id = 2, title = "Post 2"} }
   end
   local function fetch_comments()
-    lust.await(80)  -- Yet another async operation
+    firmo.await(80)  -- Yet another async operation
     return { {id = 1, text = "Comment 1"}, {id = 2, text = "Comment 2"} }
   end
   -- Run all operations in parallel (completes in ~150ms instead of ~330ms)
-  local results = lust.parallel_async({fetch_users, fetch_posts, fetch_comments})
+  local results = firmo.parallel_async({fetch_users, fetch_posts, fetch_comments})
   -- Verify all results
   expect(#results).to.equal(3)
   expect(#results[1]).to.equal(2)  -- Two users
@@ -157,7 +157,7 @@ local async_module = package.loaded["src.async"]
 if async_module then
   async_module.set_timeout(10000) -- 10 seconds
 end
-lust.it_async("long running test", function()
+firmo.it_async("long running test", function()
   -- This test has up to 10 seconds to complete
 end)
 
@@ -175,7 +175,7 @@ wait_until(condition_fn, 5000, 100)
 ### Testing Callbacks
 
 ```lua
-lust.it_async("tests callback-based async code", function()
+firmo.it_async("tests callback-based async code", function()
   local result = nil
   -- Function with callback
   local function fetchData(callback)
@@ -189,7 +189,7 @@ lust.it_async("tests callback-based async code", function()
     result = data
   end)
   -- Wait for callback to be called
-  lust.wait_until(function() return result ~= nil end)
+  firmo.wait_until(function() return result ~= nil end)
   -- Verify result
   expect(result.success).to.be.truthy()
   expect(result.data).to.equal("result")
@@ -200,7 +200,7 @@ end)
 ### Testing Promises
 
 ```lua
-lust.it_async("tests promise-like async code", function()
+firmo.it_async("tests promise-like async code", function()
   local result = nil
   -- Function returning promise-like object
   local function fetchData()
@@ -220,7 +220,7 @@ lust.it_async("tests promise-like async code", function()
     result = data
   end)
   -- Wait for promise to resolve
-  lust.wait_until(function() return result ~= nil end)
+  firmo.wait_until(function() return result ~= nil end)
   -- Verify result
   expect(result.success).to.be.truthy()
   expect(result.data).to.equal("result")
@@ -231,7 +231,7 @@ end)
 ### Handling Timeouts
 
 ```lua
-lust.it_async("handles timeouts gracefully", function()
+firmo.it_async("handles timeouts gracefully", function()
   local result = nil
   -- This function takes too long
   local function slowOperation(callback)
@@ -245,7 +245,7 @@ lust.it_async("handles timeouts gracefully", function()
   end)
   -- This will fail due to timeout (only waits 100ms)
   local success = pcall(function()
-    lust.wait_until(function() return result ~= nil end, 100)
+    firmo.wait_until(function() return result ~= nil end, 100)
   end)
   -- Verify timeout occurred
   expect(success).to.equal(false)
@@ -258,7 +258,7 @@ end)
 
 1. **Keep timeouts reasonable**: Set timeouts that give your async operations enough time to complete, but not so long that tests hang when errors occur.
 1. **Always check for completion**: Use `wait_until` to confirm operations completed before making assertions.
-1. **Clean up after async operations**: Use Lust's `after` hooks to clean up any resources from async operations.
+1. **Clean up after async operations**: Use Firmo's `after` hooks to clean up any resources from async operations.
 1. **Isolate tests**: Each async test should be self-contained and not depend on the state of other tests.
 1. **Handle errors**: Use pcall to capture and test for expected errors in async code.
 1. **Test edge cases**: Test timeout conditions, error conditions, and race conditions in your async code.

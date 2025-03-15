@@ -1,6 +1,6 @@
 # Mocking System Tests
 
-This directory contains tests for the lust-next mocking system. The mocking module provides facilities for creating test doubles (spies, stubs, and mocks) to isolate code during testing.
+This directory contains tests for the firmo mocking system. The mocking module provides facilities for creating test doubles (spies, stubs, and mocks) to isolate code during testing.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next mocking system. The mocking modu
 
 ## Mocking System Features
 
-The lust-next mocking system provides:
+The firmo mocking system provides:
 
 - **Spies** - Track function calls without changing behavior
 - **Stubs** - Replace function behavior with custom implementation
@@ -22,20 +22,20 @@ The lust-next mocking system provides:
 
 ```lua
 -- Creating a spy
-local spy = lust.spy.on(table, "method")
+local spy = firmo.spy.on(table, "method")
 expect(spy).to.be.called()
 
 -- Creating a stub
-local stub = lust.stub.on(table, "method").returns(value)
+local stub = firmo.stub.on(table, "method").returns(value)
 expect(stub).to.be.called_with(arg1, arg2)
 
 -- Creating a mock
-local mock = lust.mock.new()
+local mock = firmo.mock.new()
 mock.method.returns(value)
 expect(mock.method).to.be.called()
 
 -- Creating a sequence
-local sequence = lust.mock.sequence()
+local sequence = firmo.mock.sequence()
   .returns(1)
   .returns(2)
   .raises("error")

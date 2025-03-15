@@ -1,6 +1,6 @@
 # Coverage Module Tests
 
-This directory contains tests for the lust-next code coverage system. The coverage module tracks test execution to measure code coverage metrics and provide visualized reports.
+This directory contains tests for the firmo code coverage system. The coverage module tracks test execution to measure code coverage metrics and provide visualized reports.
 
 ## Directory Contents
 
@@ -21,7 +21,7 @@ This directory contains tests for the lust-next code coverage system. The covera
 
 ## Coverage System Architecture
 
-The lust-next coverage system consists of multiple components:
+The firmo coverage system consists of multiple components:
 
 - **debug_hook.lua** - Core line tracking functionality using debug hooks
 - **file_manager.lua** - File discovery integrated with filesystem module

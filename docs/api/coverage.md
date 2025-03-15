@@ -1,5 +1,5 @@
 # Coverage Module API
-The coverage module in lust-next provides comprehensive code coverage tracking and reporting capabilities.
+The coverage module in firmo provides comprehensive code coverage tracking and reporting capabilities.
 
 ## Overview
 The coverage module uses Lua's debug hooks to track line execution and function calls, providing detailed information about which parts of your code are being executed during tests. It supports multiple output formats and can be configured to focus on specific files or exclude certain patterns.
@@ -8,12 +8,12 @@ The coverage module uses Lua's debug hooks to track line execution and function 
 
 ```lua
 -- Enable coverage tracking in a test file
-local lust = require('lust-next')
-lust.coverage_options.enabled = true
+local firmo = require('firmo')
+firmo.coverage_options.enabled = true
 -- Run tests with coverage tracking
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Generate a coverage report
-local report = lust.generate_coverage_report('html', './coverage-report.html')
+local report = firmo.generate_coverage_report('html', './coverage-report.html')
 
 ```text
 From the command line:
@@ -21,15 +21,15 @@ From the command line:
 ```bash
 
 # Run tests with coverage enabled
-lua lust-next.lua --coverage tests/
+lua firmo.lua --coverage tests/
 
 ```text
 
 ## Configuration Options
-The coverage module can be configured through the `lust.coverage_options` table:
+The coverage module can be configured through the `firmo.coverage_options` table:
 
 ```lua
-lust.coverage_options = {
+firmo.coverage_options = {
   enabled = true,                         -- Enable coverage tracking (default: false)
   source_dirs = {".", "src", "lib"},      -- Directories to scan for source files
   use_default_patterns = true,            -- Whether to use default include/exclude patterns
@@ -46,7 +46,7 @@ lust.coverage_options = {
 
 ## API Reference
 
-### `lust.coverage_options`
+### `firmo.coverage_options`
 Configuration table for coverage options:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -64,58 +64,58 @@ Configuration table for coverage options:
 | `use_static_analysis` | boolean | `false` | Use static analysis for improved accuracy |
 | `control_flow_keywords_executable` | boolean | `true` | Treat control flow keywords (`end`, `else`, etc.) as executable lines |
 
-### `lust.with_coverage(options, fn)`
+### `firmo.with_coverage(options, fn)`
 Run a function with coverage tracking:
 
 ```lua
-lust.with_coverage({
+firmo.with_coverage({
   include = {"src/*.lua"},
   exclude = {"src/vendor/*.lua"}
 }, function()
   -- Run tests here
-  lust.run_discovered('./tests')
+  firmo.run_discovered('./tests')
 end)
 
 ```text
 
-### `lust.start_coverage(options)`
+### `firmo.start_coverage(options)`
 Start coverage tracking with the given options:
 
 ```lua
-lust.start_coverage({
+firmo.start_coverage({
   include = {"src/*.lua"},
   exclude = {"tests/*.lua"}
 })
 -- Run tests
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Stop coverage
-lust.stop_coverage()
+firmo.stop_coverage()
 
 ```text
 
-### `lust.stop_coverage()`
+### `firmo.stop_coverage()`
 Stop coverage tracking and finalize data collection.
 
-### `lust.get_coverage_data()`
+### `firmo.get_coverage_data()`
 Get the collected coverage data as a structured table:
 
 ```lua
-local coverage_data = lust.get_coverage_data()
+local coverage_data = firmo.get_coverage_data()
 
 ```text
 
-### `lust.generate_coverage_report(format, output_path)`
+### `firmo.generate_coverage_report(format, output_path)`
 Generate a coverage report:
 
 ```lua
 -- Generate an HTML report
-lust.generate_coverage_report("html", "./coverage-report.html")
+firmo.generate_coverage_report("html", "./coverage-report.html")
 -- Generate a JSON report
-lust.generate_coverage_report("json", "./coverage-report.json")
+firmo.generate_coverage_report("json", "./coverage-report.json")
 -- Generate an LCOV report
-lust.generate_coverage_report("lcov", "./coverage-report.lcov")
+firmo.generate_coverage_report("lcov", "./coverage-report.lcov")
 -- Generate a summary report (returns text, doesn't write to file)
-local summary = lust.generate_coverage_report("summary")
+local summary = firmo.generate_coverage_report("summary")
 
 ```text
 Parameters:
@@ -123,11 +123,11 @@ Parameters:
 - `format` (string): Output format (html, json, lcov, summary)
 - `output_path` (string): Path to save the report (optional for summary format)
 
-### `lust.coverage_meets_threshold(threshold)`
+### `firmo.coverage_meets_threshold(threshold)`
 Check if coverage meets the specified threshold:
 
 ```lua
-if lust.coverage_meets_threshold(80) then
+if firmo.coverage_meets_threshold(80) then
   print("Coverage is good!")
 else
   print("Coverage is below threshold!")
@@ -171,24 +171,24 @@ Examples:
 ### Basic Coverage Tracking
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 -- Enable coverage
-lust.coverage_options.enabled = true
-lust.coverage_options.include = {"src/*.lua"}
-lust.coverage_options.exclude = {"tests/*.lua", "vendor/*.lua"}
+firmo.coverage_options.enabled = true
+firmo.coverage_options.include = {"src/*.lua"}
+firmo.coverage_options.exclude = {"tests/*.lua", "vendor/*.lua"}
 -- Run tests
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Generate report
-lust.generate_coverage_report("html", "./coverage-report.html")
+firmo.generate_coverage_report("html", "./coverage-report.html")
 
 ```text
 
 ### Custom Coverage Configuration
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 -- Start coverage with custom configuration
-lust.start_coverage({
+firmo.start_coverage({
   include = {
     "src/core/*.lua",
     "src/utils/*.lua"
@@ -201,19 +201,19 @@ lust.start_coverage({
   debug = true
 })
 -- Run specific tests
-lust.run_file("tests/core_tests.lua")
+firmo.run_file("tests/core_tests.lua")
 -- Stop coverage
-lust.stop_coverage()
+firmo.stop_coverage()
 -- Check if coverage meets threshold
-if lust.coverage_meets_threshold(90) then
+if firmo.coverage_meets_threshold(90) then
   print("Meets threshold!")
 else
   print("Below threshold!")
 end
 -- Generate reports in different formats
-lust.generate_coverage_report("html", "./coverage/report.html")
-lust.generate_coverage_report("json", "./coverage/report.json")
-lust.generate_coverage_report("lcov", "./coverage/report.lcov")
+firmo.generate_coverage_report("html", "./coverage/report.html")
+firmo.generate_coverage_report("json", "./coverage/report.json")
+firmo.generate_coverage_report("lcov", "./coverage/report.lcov")
 
 ```text
 
@@ -222,22 +222,22 @@ lust.generate_coverage_report("lcov", "./coverage/report.lcov")
 ```bash
 
 # Run tests with basic coverage
-lua lust-next.lua --coverage tests/
+lua firmo.lua --coverage tests/
 
 # Specify report format
-lua lust-next.lua --coverage --coverage-format html tests/
+lua firmo.lua --coverage --coverage-format html tests/
 
 # Set custom threshold
-lua lust-next.lua --coverage --coverage-threshold 90 tests/
+lua firmo.lua --coverage --coverage-threshold 90 tests/
 
 # Specify include/exclude patterns
-lua lust-next.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
+lua firmo.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
 
 # Set custom output file
-lua lust-next.lua --coverage --coverage-format html --coverage-output ./reports/coverage.html tests/
+lua firmo.lua --coverage --coverage-format html --coverage-output ./reports/coverage.html tests/
 
 # Enable debug mode
-lua lust-next.lua --coverage --debug tests/
+lua firmo.lua --coverage --debug tests/
 
 ```text
 

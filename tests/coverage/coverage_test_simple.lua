@@ -1,7 +1,7 @@
 -- Simple focused test for the coverage module
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import modules for testing
 local coverage = require("lib.coverage")
@@ -186,4 +186,4 @@ describe("Coverage Module Simple Test", function()
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

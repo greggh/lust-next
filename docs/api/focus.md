@@ -1,8 +1,8 @@
 # Focused and Excluded Tests
-This document describes how to use focused and excluded tests in Lust-Next, allowing you to run specific tests or skip certain tests temporarily.
+This document describes how to use focused and excluded tests in Firmo, allowing you to run specific tests or skip certain tests temporarily.
 
 ## Overview
-Lust-Next provides a powerful system for selectively running or skipping tests:
+Firmo provides a powerful system for selectively running or skipping tests:
 
 - **Focused Tests**: Run only tests marked as "focused" (using `fdescribe` or `fit`)
 - **Excluded Tests**: Skip specific tests (using `xdescribe` or `xit`)
@@ -113,7 +113,7 @@ end)
 ```text
 
 ## Focus Mode Behavior
-When any test is marked as focused (using `fdescribe` or `fit`), Lust-Next enters "focus mode." In focus mode:
+When any test is marked as focused (using `fdescribe` or `fit`), Firmo enters "focus mode." In focus mode:
 
 1. Only focused tests or tests in focused groups will run
 2. All other tests will be skipped (shown as "SKIP (not focused)" in the output)
@@ -125,10 +125,10 @@ When running tests via the command line, focus mode works alongside tag and filt
 ```bash
 
 # Run tests with focus mode respecting focused tests
-lua lust-next.lua
+lua firmo.lua
 
 # Focus mode can be combined with other filters
-lua lust-next.lua --tags unit
+lua firmo.lua --tags unit
 
 ```text
 If filters are active (via tags or pattern) but no focused tests match the filters, no tests will run.
@@ -138,8 +138,8 @@ If filters are active (via tags or pattern) but no focused tests match the filte
 ### Basic Focus and Exclude Example
 
 ```lua
-local lust = require("lust-next")
-local describe, it, fit, xit = lust.describe, lust.it, lust.fit, lust.xit
+local firmo = require("firmo")
+local describe, it, fit, xit = firmo.describe, firmo.it, firmo.fit, firmo.xit
 describe("Calculator", function()
   it("adds numbers", function()
     -- Regular test, will be skipped if focus mode is active
@@ -215,7 +215,7 @@ end)
 1. **Use for debugging**: Focus is particularly useful during debugging to quickly iterate on a problematic test without running the entire suite.
 
 ## Implementation Details
-When any test is marked as focused, the `lust_next.focus_mode` flag is set to `true`. This causes all non-focused tests to be skipped during execution. When tests are excluded, they are effectively replaced with empty functions that never run.
+When any test is marked as focused, the `firmo.focus_mode` flag is set to `true`. This causes all non-focused tests to be skipped during execution. When tests are excluded, they are effectively replaced with empty functions that never run.
 The focus system is implemented to be explicit and deterministic, ensuring that:
 
 1. Focus takes precedence over normal execution

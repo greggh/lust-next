@@ -2,7 +2,7 @@
 
 ## Overview
 
-Today we successfully implemented comprehensive error handling in the static_analyzer.lua module, following the standardized error handling patterns established in the error_handler_pattern_analysis.md document. This implementation is part of our ongoing effort to ensure consistent, robust error handling throughout the lust-next codebase.
+Today we successfully implemented comprehensive error handling in the static_analyzer.lua module, following the standardized error handling patterns established in the error_handler_pattern_analysis.md document. This implementation is part of our ongoing effort to ensure consistent, robust error handling throughout the firmo codebase.
 
 ## Changes Made
 

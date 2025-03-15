@@ -1,4 +1,4 @@
--- Log search and query module for lust-next
+-- Log search and query module for firmo
 -- This module provides search and filtering capabilities for log files
 
 local M = {}
@@ -423,12 +423,12 @@ function M.create_export_adapter(adapter_type, options)
       return {
         ["@timestamp"] = log_entry.timestamp,
         ["@metadata"] = {
-          type = "lust_log"
+          type = "firmo_log"
         },
         level = log_entry.level,
         module = log_entry.module,
         message = log_entry.message,
-        application = options.application_name or "lust-next",
+        application = options.application_name or "firmo",
         environment = options.environment or "development",
         host = options.host or os.getenv("HOSTNAME") or "unknown"
       }
@@ -444,7 +444,7 @@ function M.create_export_adapter(adapter_type, options)
         },
         message = log_entry.message,
         service = {
-          name = options.service_name or "lust-next",
+          name = options.service_name or "firmo",
           environment = options.environment or "development"
         },
         host = {
@@ -458,8 +458,8 @@ function M.create_export_adapter(adapter_type, options)
       return {
         time = log_entry.timestamp,
         host = options.host or os.getenv("HOSTNAME") or "unknown",
-        source = options.source or "lust-next",
-        sourcetype = options.sourcetype or "lust:log",
+        source = options.source or "firmo",
+        sourcetype = options.sourcetype or "firmo:log",
         index = options.index or "main",
         event = {
           level = log_entry.level,
@@ -476,8 +476,8 @@ function M.create_export_adapter(adapter_type, options)
         timestamp = log_entry.timestamp,
         message = log_entry.message,
         level = log_entry.level and log_entry.level:lower() or "info",
-        service = options.service or "lust-next",
-        ddsource = "lust",
+        service = options.service or "firmo",
+        ddsource = "firmo",
         ddtags = "env:" .. (options.environment or "development") .. 
                  ",module:" .. (log_entry.module or "unknown"),
         hostname = options.hostname or os.getenv("HOSTNAME") or "unknown"

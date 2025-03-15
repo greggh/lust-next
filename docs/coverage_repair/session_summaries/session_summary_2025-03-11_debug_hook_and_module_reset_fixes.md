@@ -59,21 +59,21 @@ Today's session focused on fixing critical issues in both the debug_hook.lua mod
 
 - **Identified Error Handling Problems**:
   - Discovered issues with error handling in module_reset.lua
-  - Found potential circular reference between lust_next and module_reset
+  - Found potential circular reference between firmo and module_reset
   - Identified incorrect validation of function presence during module initialization
 
 - **Error Diagnosis**:
-  - When module_reset.register_with_lust() is called, it was attempting to enforce that lust_next.reset is a function
-  - However, in lust-next.lua, reset is defined on line 566 but may not be available during initial setup
-  - The error "Expected lust_next.reset to be a function" was occurring during initialization
+  - When module_reset.register_with_firmo() is called, it was attempting to enforce that firmo.reset is a function
+  - However, in firmo.lua, reset is defined on line 566 but may not be available during initial setup
+  - The error "Expected firmo.reset to be a function" was occurring during initialization
 
 - **Initial Challenges**:
   - Attempted to create a workaround by adding a placeholder function (incorrect approach)
   - Realized we needed to investigate the initialization sequence and timing issues instead
 
 - **Next Steps for Module Reset**:
-  - Properly investigate the initialization sequence in lust-next.lua
-  - Understand the relationship between module_reset and lust_next to prevent circular issues
+  - Properly investigate the initialization sequence in firmo.lua
+  - Understand the relationship between module_reset and firmo to prevent circular issues
   - Apply the standard error handling patterns to improve error recovery
 
 ## Documentation Updates
@@ -97,8 +97,8 @@ Today's session focused on fixing critical issues in both the debug_hook.lua mod
 ## Next Steps
 
 1. **Complete Module Reset Error Handling**:
-   - Properly investigate the initialization sequence in lust-next.lua
-   - Fix the timing issue with lust_next.reset function existence check
+   - Properly investigate the initialization sequence in firmo.lua
+   - Fix the timing issue with firmo.reset function existence check
    - Apply proper error handling patterns to the module_reset.lua file
 
 2. **Enhance Instrumentation Tests**:
@@ -111,5 +111,5 @@ Today's session focused on fixing critical issues in both the debug_hook.lua mod
      - module_reset.lua (high priority)
      - filesystem.lua
      - version.lua
-     - main lust-next.lua
+     - main firmo.lua
    - Create comprehensive tests for coverage/init.lua error handling

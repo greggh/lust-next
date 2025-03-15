@@ -9,8 +9,8 @@ This session focused on updating examples and documentation to align with the be
 ### Example Files Updated:
 
 1. **basic_example.lua**:
-   - Fixed before/after hook imports by adding `local before, after = lust.before, lust.after`
-   - Replaced print statements with structured logging using lust.log.info
+   - Fixed before/after hook imports by adding `local before, after = firmo.before, firmo.after`
+   - Replaced print statements with structured logging using firmo.log.info
    - Added comment clarifying that tests are run by scripts/runner.lua or run_all_tests.lua
    - Enhanced example readability while preserving the teaching purpose
    - Successfully validated that the updated example works
@@ -24,7 +24,7 @@ This session focused on updating examples and documentation to align with the be
 3. **watch_mode_example.lua**:
    - Removed hardcoded paths and unnecessary path manipulation
    - Simplified module loading
-   - Replaced all print statements with structured logging using lust.log.info
+   - Replaced all print statements with structured logging using firmo.log.info
    - Added proper comment about test execution
    - Successfully validated the example works as expected
 

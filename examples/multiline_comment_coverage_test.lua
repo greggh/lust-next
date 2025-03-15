@@ -1,6 +1,6 @@
 -- This file tests the improved multiline comment detection in coverage reports
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 --[[ This is a multiline comment
 that spans multiple lines

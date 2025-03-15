@@ -1,7 +1,7 @@
 #!/usr/bin/env lua
 -- Example demonstrating advanced logging configuration with JSON structured logging
 
-local lust = require("lust-next")
+local firmo = require("firmo")
 local logging = require("lib.tools.logging")
 
 -- Create a custom logger for this example
@@ -17,7 +17,7 @@ logging.configure({
   log_dir = "logs",              -- Directory for log files
   max_file_size = 10 * 1024,     -- 10KB max file size (small for demo purposes)
   max_log_files = 3,             -- Keep 3 rotated log files
-  module_filter = {"json_logging_example", "lust*"} -- Only log from these modules
+  module_filter = {"json_logging_example", "firmo*"} -- Only log from these modules
 })
 
 -- Print information about the configuration

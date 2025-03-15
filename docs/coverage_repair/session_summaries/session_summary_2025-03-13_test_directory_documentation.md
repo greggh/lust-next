@@ -4,7 +4,7 @@
 
 ## Overview
 
-In this session, we focused on creating comprehensive README.md files for all test subdirectories in the lust-next project. This work completes the test directory reorganization effort by providing clear documentation of each directory's purpose, contents, and usage patterns.
+In this session, we focused on creating comprehensive README.md files for all test subdirectories in the firmo project. This work completes the test directory reorganization effort by providing clear documentation of each directory's purpose, contents, and usage patterns.
 
 ## Actions Taken
 
@@ -82,4 +82,4 @@ With the test directory documentation complete, we can now focus on other aspect
 
 ## Conclusion
 
-This session's work completes the test directory reorganization effort by providing comprehensive documentation for all test directories. This documentation enhances the maintainability and navigability of the test system, making it easier for developers to understand, use, and contribute to the lust-next project.
+This session's work completes the test directory reorganization effort by providing comprehensive documentation for all test directories. This documentation enhances the maintainability and navigability of the test system, making it easier for developers to understand, use, and contribute to the firmo project

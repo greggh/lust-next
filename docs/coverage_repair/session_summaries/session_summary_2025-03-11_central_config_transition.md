@@ -22,7 +22,7 @@ With the completion of formatter integration in our previous session, we have no
    - Removed all direct references to the legacy config module
 
 4. **Main Framework Updates**
-   - Updated lust-next.lua to use central_config directly
+   - Updated firmo.lua to use central_config directly
    - Added proper registration of core modules with central_config
    - Implemented CLI options for configuration handling (--config, --create-config)
    - Added help text for configuration options
@@ -63,7 +63,7 @@ We've enhanced the CLI arguments handling to support configuration:
 ```
 Configuration Options:
   --config FILE    Load configuration from specified file
-  --create-config  Create default configuration file (.lust-next-config.lua)
+  --create-config  Create default configuration file (.firmo-config.lua)
 ```
 
 These options interact directly with central_config, bypassing the legacy module entirely.

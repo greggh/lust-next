@@ -1,7 +1,7 @@
--- Example demonstrating the enhanced codefix module in lust-next
-local lust = require("lust-next")
+-- Example demonstrating the enhanced codefix module in firmo
+local firmo = require("firmo")
 
-print("This example demonstrates the enhanced codefix module in lust-next")
+print("This example demonstrates the enhanced codefix module in firmo")
 print("The codefix module can be used to fix common Lua code quality issues across multiple files")
 
 -- Load the filesystem module
@@ -120,24 +120,24 @@ local function run_multi_file_codefix(dirname, files)
   print(string.rep("-", 60))
   
   -- Check if codefix module is available
-  if not lust.codefix then
+  if not firmo.codefix then
     print("Error: Enhanced codefix module not found")
     return
   end
   
   -- Enable codefix
-  lust.codefix.config.enabled = true
-  lust.codefix.config.verbose = true
+  firmo.codefix.config.enabled = true
+  firmo.codefix.config.verbose = true
   
   -- 1. First, demonstrate the find functionality
   print("\n1. Finding Lua files in the directory:")
-  local cli_result = lust.codefix.run_cli({"find", dirname, "--include", "%.lua$"})
+  local cli_result = firmo.codefix.run_cli({"find", dirname, "--include", "%.lua$"})
   
   -- 2. Demonstrate running codefix on multiple files
   print("\n2. Running codefix on all files:")
   print(string.rep("-", 60))
   
-  local success, results = lust.codefix.fix_files(files)
+  local success, results = firmo.codefix.fix_files(files)
   
   if success then
     print("✅ All files fixed successfully")
@@ -155,7 +155,7 @@ local function run_multi_file_codefix(dirname, files)
     report_file = "codefix_report.json"
   }
   
-  success, results = lust.codefix.fix_lua_files(dirname, options)
+  success, results = firmo.codefix.fix_lua_files(dirname, options)
   
   -- 4. Show results of fixes
   print("\n4. Results of fixed files:")

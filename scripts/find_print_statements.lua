@@ -53,7 +53,7 @@ local config = {
   },
   -- Files to ignore (these legitimately need print functions)
   ignore_files = {
-    "%.lust%-next%-config%.lua%.template$",
+    "%.firmo%-next%-config%.lua%.template$",
     "logging%.lua$" -- Logging module itself
   }
 }

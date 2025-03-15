@@ -1,4 +1,4 @@
--- lust-next codefix module
+-- firmo codefix module
 -- Implementation of code quality checking and fixing capabilities
 
 local M = {}
@@ -14,9 +14,9 @@ logging.configure_from_config("codefix")
 local json
 local function load_json_module()
   return error_handler.try(function()
-    -- Try loading JSON module from lust-next first
+    -- Try loading JSON module from firmo first
     local loaded_json = require("lib.reporting.json")
-    logger.debug("Loaded JSON module from lust-next", {
+    logger.debug("Loaded JSON module from firmo", {
       module_path = "lib.reporting.json"
     })
     return loaded_json
@@ -27,7 +27,7 @@ local success, loaded_json_or_error = load_json_module()
 if success then
   json = loaded_json_or_error
 else
-  logger.debug("Failed to load JSON module from lust-next", {
+  logger.debug("Failed to load JSON module from firmo", {
     error = error_handler.format_error(loaded_json_or_error)
   })
   
@@ -1875,7 +1875,7 @@ function M.run_cli(args)
     logger.debug("Displaying codefix help text")
     
     -- Use the logging module's info function for consistent help text display
-    logging.info("lust-next codefix usage:")
+    logging.info("firmo codefix usage:")
     logging.info("  fix [directory or file] - Fix Lua files")
     logging.info("  check [directory or file] - Check Lua files without fixing")
     logging.info("  find [directory] - Find Lua files matching patterns")
@@ -1906,42 +1906,42 @@ function M.run_cli(args)
   end
 end
 
--- Module interface with lust-next
-function M.register_with_lust(lust)
-  if not lust then
+-- Module interface with firmo
+function M.register_with_firmo(firmo)
+  if not firmo then
     return
   end
   
-  -- Add codefix configuration to lust
-  lust.codefix_options = M.config
+  -- Add codefix configuration to firmo
+  firmo.codefix_options = M.config
   
-  -- Add codefix functions to lust
-  lust.fix_file = M.fix_file
-  lust.fix_files = M.fix_files
-  lust.fix_lua_files = M.fix_lua_files
+  -- Add codefix functions to firmo
+  firmo.fix_file = M.fix_file
+  firmo.fix_files = M.fix_files
+  firmo.fix_lua_files = M.fix_lua_files
   
   -- Add the full codefix module as a namespace for advanced usage
-  lust.codefix = M
+  firmo.codefix = M
   
   -- Add CLI commands
-  lust.commands = lust.commands or {}
-  lust.commands.fix = function(args)
+  firmo.commands = firmo.commands or {}
+  firmo.commands.fix = function(args)
     return M.run_cli(args)
   end
   
-  lust.commands.check = function(args)
+  firmo.commands.check = function(args)
     table.insert(args, 1, "check")
     return M.run_cli(args)
   end
   
-  lust.commands.find = function(args)
+  firmo.commands.find = function(args)
     table.insert(args, 1, "find")
     return M.run_cli(args)
   end
   
   -- Register a custom reporter for code quality
-  if lust.register_reporter then
-    lust.register_reporter("codefix", function(results, options)
+  if firmo.register_reporter then
+    firmo.register_reporter("codefix", function(results, options)
       options = options or {}
       
       -- Check if codefix should be run

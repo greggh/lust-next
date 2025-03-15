@@ -1,6 +1,6 @@
 -- Test for coverage tracking on larger files
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import modules for testing
 local coverage = require("lib.coverage")
@@ -24,7 +24,7 @@ describe("Large File Coverage", function()
       pre_analyze_files = false
     })
     
-    local file_path = fs.join_paths(project_root, "lust-next.lua")
+    local file_path = fs.join_paths(project_root, "firmo.lua")
     
     -- Start timing
     local start_time = os.clock()
@@ -36,7 +36,7 @@ describe("Large File Coverage", function()
     coverage.track_file(file_path)
     
     -- Simply require the file to execute it
-    local lust_next_module = require("lust-next")
+    local firmo_module = require("firmo")
     
     -- Stop coverage tracking
     coverage.stop()

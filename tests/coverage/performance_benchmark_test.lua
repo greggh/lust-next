@@ -5,9 +5,9 @@
   with various codebase sizes and complexity.
 --]]
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 local coverage = require("lib.coverage")
 local debug_hook = require("lib.coverage.debug_hook")

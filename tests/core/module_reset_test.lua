@@ -1,7 +1,7 @@
 -- Tests for module_reset functionality
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import the filesystem module
 local fs = require("lib.tools.filesystem")
@@ -59,7 +59,7 @@ describe("Module Reset Functionality", function()
   -- Skip tests if module_reset is not available
   if not module_reset_loaded then
     it("module_reset module is required for these tests", function()
-      lust.pending("module_reset module not available")
+      firmo.pending("module_reset module not available")
     end)
     return
   end
@@ -70,7 +70,7 @@ describe("Module Reset Functionality", function()
   local restore_path
   
   -- Set up test modules before each test
-  lust.before(function()
+  firmo.before(function()
     -- Clean up any existing test modules for this test run
     cleanup_test_modules()
     
@@ -116,7 +116,7 @@ describe("Module Reset Functionality", function()
   end)
   
   -- Clean up test modules after each test
-  lust.after(function()
+  firmo.after(function()
     -- First clear the package.loaded entries
     if module_a_name then
       package.loaded[module_a_name] = nil
@@ -182,8 +182,8 @@ describe("Module Reset Functionality", function()
         ["utf8"] = true,
         
         -- Essential testing modules
-        ["lust-next"] = true,
-        ["lust"] = true
+        ["firmo"] = true,
+        ["firmo"] = true
       }
       
       -- Now protect our specific module
@@ -236,8 +236,8 @@ describe("Module Reset Functionality", function()
         ["utf8"] = true,
         
         -- Essential testing modules
-        ["lust-next"] = true,
-        ["lust"] = true
+        ["firmo"] = true,
+        ["firmo"] = true
       }
       
       -- Reset modules to start fresh
@@ -292,8 +292,8 @@ describe("Module Reset Functionality", function()
         ["utf8"] = true,
         
         -- Essential testing modules
-        ["lust-next"] = true,
-        ["lust"] = true
+        ["firmo"] = true,
+        ["firmo"] = true
       }
       
       -- Start fresh
@@ -332,29 +332,29 @@ describe("Module Reset Functionality", function()
     end)
   end)
   
-  describe("Integration with lust-next", function()
+  describe("Integration with firmo", function()
     it("should have module_reset property", function()
-      -- lust has already been registered with module_reset in the test runner
+      -- firmo has already been registered with module_reset in the test runner
       -- Just verify it has the property
-      expect(lust.module_reset).to.exist()
+      expect(firmo.module_reset).to.exist()
     end)
     
     it("should enhance reset functionality", function()
       -- Create temporary copies to avoid interfering with the main instance
-      local temp_lust = {
+      local temp_firmo = {
         reset = function() end -- Dummy reset function
       }
       
       -- Register with our temporary object
-      module_reset.register_with_lust(temp_lust)
+      module_reset.register_with_firmo(temp_firmo)
       
       -- Check that module_reset property exists
-      expect(temp_lust.module_reset).to.exist()
+      expect(temp_firmo.module_reset).to.exist()
       
       -- Don't modify the test state in this test
       -- just verify the enhancement worked
-      expect(temp_lust.reset ~= lust.reset).to.be_truthy("Reset functions should be different")
-      expect(temp_lust.module_reset == module_reset).to.be_truthy("Module reset reference should be the same")
+      expect(temp_firmo.reset ~= firmo.reset).to.be_truthy("Reset functions should be different")
+      expect(temp_firmo.module_reset == module_reset).to.be_truthy("Module reset reference should be the same")
     end)
   end)
   

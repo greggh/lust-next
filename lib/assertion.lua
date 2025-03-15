@@ -1,4 +1,4 @@
--- Assertion module for lust-next
+-- Assertion module for firmo
 -- This is a standalone module for assertions that resolves circular dependencies
 -- and provides consistent error handling patterns.
 
@@ -8,7 +8,7 @@ local M = {}
 local unpack = table.unpack or _G.unpack
 
 -- Lazy-load dependencies to avoid circular dependencies
-local _error_handler, _logging, _lust_next
+local _error_handler, _logging, _firmo
 local function get_error_handler()
   if not _error_handler then
     local success, error_handler = pcall(require, "lib.tools.error_handler")

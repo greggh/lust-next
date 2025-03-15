@@ -24,7 +24,7 @@ This session continued our work on the Test System Reorganization Plan's Phase 5
 
 3. **Fixed Validation Module Tests**:
    - Updated assertion patterns from `to_be` to `to.be` throughout the file
-   - Fixed assertion functions to match the correct lust-next expect-style pattern
+   - Fixed assertion functions to match the correct firmo expect-style pattern
    - Identified deeper issues with the validation tests that will need more work
 
 ## Technical Details
@@ -44,13 +44,13 @@ tests/
 
 ### Assertion Pattern Fixes
 
-We updated assertions to follow the lust-next expect-style pattern instead of busted-style:
+We updated assertions to follow the firmo expect-style pattern instead of busted-style:
 ```lua
 -- Before (incorrect busted-style)
 expect(result).not_to.match("pattern")
 expect(value).to_be(true)
 
--- After (correct lust-next style)
+-- After (correct firmo style)
 expect(result).to_not.match("pattern")
 expect(value).to.be(true)
 ```

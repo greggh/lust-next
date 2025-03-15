@@ -1,10 +1,10 @@
 # Debug Hook Tests
 
-This directory contains tests for the lust-next debug hook system. The debug hook module provides core line tracking functionality using Lua's debug hooks.
+This directory contains tests for the firmo debug hook system. The debug hook module provides core line tracking functionality using Lua's debug hooks.
 
 ## Debug Hook Features
 
-The lust-next debug hook module provides:
+The firmo debug hook module provides:
 
 - **Line execution tracking** - Track which lines are executed
 - **Function call tracking** - Track which functions are called

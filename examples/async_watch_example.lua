@@ -1,17 +1,17 @@
--- Example of using async testing with watch mode in lust-next
--- Run with: env -C /home/gregg/Projects/lua-library/lust-next lua scripts/run_tests.lua --watch examples/async_watch_example.lua
+-- Example of using async testing with watch mode in firmo
+-- Run with: env -C /home/gregg/Projects/lua-library/firmo lua scripts/run_tests.lua --watch examples/async_watch_example.lua
 
 -- Add paths for proper module loading
 local script_path = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
 package.path = script_path .. "../?.lua;" .. script_path .. "../scripts/?.lua;" .. script_path .. "../src/?.lua;" .. package.path
 
--- Load lust-next with async support
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local it_async = lust.it_async
-local async = lust.async
-local await = lust.await
-local wait_until = lust.wait_until
+-- Load firmo with async support
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local it_async = firmo.it_async
+local async = firmo.async
+local await = firmo.await
+local wait_until = firmo.wait_until
 
 -- Create a test suite with async tests
 describe("Async Watch Mode Example", function()
@@ -87,7 +87,7 @@ if arg[0]:match("async_watch_example%.lua$") then
   print("This file demonstrates async testing with watch mode for continuous testing.")
   print("")
   print("To run with watch mode, use:")
-  print("  env -C /home/gregg/Projects/lua-library/lust-next lua scripts/run_tests.lua --watch examples/async_watch_example.lua")
+  print("  env -C /home/gregg/Projects/lua-library/firmo lua scripts/run_tests.lua --watch examples/async_watch_example.lua")
   print("")
   print("Watch mode with async will:")
   print("1. Run the async tests in this file")

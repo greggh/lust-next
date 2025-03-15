@@ -1,8 +1,8 @@
 -- Comprehensive tests for the expect assertion system
 
-local lust = require('lust-next')
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require('firmo')
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Try to load the logging module
 local logging, logger
@@ -168,7 +168,7 @@ describe('Expect Assertion System', function()
       local function test_reset_chaining()
         -- If we get to here without errors, it means reset() supports chaining
         -- since reset() is called in the chain below
-        lust.reset().describe('test', function() end)
+        firmo.reset().describe('test', function() end)
         return true
       end
       
@@ -178,10 +178,10 @@ describe('Expect Assertion System', function()
     
     it('has important API functions', function()
       -- Just check that the main API functions exist and are proper types
-      expect(type(lust.reset)).to.equal("function")
-      expect(type(lust.describe)).to.equal("function")
-      expect(type(lust.it)).to.equal("function")
-      expect(type(lust.expect)).to.equal("function")
+      expect(type(firmo.reset)).to.equal("function")
+      expect(type(firmo.describe)).to.equal("function")
+      expect(type(firmo.it)).to.equal("function")
+      expect(type(firmo.expect)).to.equal("function")
     end)
   end)
   
@@ -194,4 +194,4 @@ describe('Expect Assertion System', function()
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

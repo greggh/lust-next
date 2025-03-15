@@ -1,7 +1,7 @@
 -- Test file for static_analyzer.lua error handling
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import modules
 local static_analyzer = require("lib.coverage.static_analyzer")
@@ -10,7 +10,7 @@ local filesystem = require("lib.tools.filesystem")
 local mock = require("lib.mocking.mock")
 
 describe("static_analyzer error handling", function()
-  local test_dir = "/tmp/lust_static_analyzer_test"
+  local test_dir = "/tmp/firmo_static_analyzer_test"
   local test_file = test_dir .. "/test_file.lua"
   local large_test_file = test_dir .. "/large_test_file.lua"
   local invalid_file = test_dir .. "/non_existent_file.lua"

@@ -12,7 +12,7 @@ During our verification process, we discovered a significant issue with many tes
 
 1. **Inconsistent Assertion Patterns**:
    - Many test files (particularly reporting_test.lua) are using busted-style assertions with `assert.is_true()`, `assert.is_not_nil()`, etc.
-   - The lust-next framework uses expect-style assertions with `expect(...).to.be_truthy()`, `expect(...).to.exist()`, etc.
+   - The firmo framework uses expect-style assertions with `expect(...).to.be_truthy()`, `expect(...).to.exist()`, etc.
    - This inconsistency is causing runtime errors like:
      ```
      attempt to call a nil value (field 'getn')
@@ -24,7 +24,7 @@ During our verification process, we discovered a significant issue with many tes
    - Most failures are related to the incorrect assertion pattern
    - The tests that pass are using the correct expect-style assertions
    - Simple tests with core assertions (assertions_test.lua) pass completely
-   - Core framework tests (lust_test.lua) also pass completely
+   - Core framework tests (firmo_test.lua) also pass completely
 
 3. **Specific Error Patterns**:
    - Error in summary formatter: `attempt to call a nil value (field 'getn')`
@@ -39,17 +39,17 @@ During our verification process, we discovered a significant issue with many tes
      assert.is_not_nil(result)
      assert.equal(80, result.overall_pct)
      ```
-   - The lust-next framework expects:
+   - The firmo framework expects:
      ```lua
      expect(result).to.exist()
      expect(result.overall_pct).to.equal(80)
      ```
-   - There is no `assert` table with these methods in lust-next
+   - There is no `assert` table with these methods in firmo
    - The global `assert` is the standard Lua function, not an assertion library
 
 2. **Scope of Impact**:
    - This issue affects several test files, particularly those in reporting and formatter modules
-   - It indicates we need to update all test files to use the standardized lust-next assertion pattern
+   - It indicates we need to update all test files to use the standardized firmo assertion pattern
    - This is a clear example of why the test system reorganization was necessary
 
 ## Plan for Fixing
@@ -65,7 +65,7 @@ To properly complete Phase 5 verification, we need to:
      - `assert.type_of(x, "string")` → `expect(x).to.be.a("string")`
 
 2. **Create a mapping guide for test conversion**:
-   - Document all assertion pattern mappings between busted and lust-next
+   - Document all assertion pattern mappings between busted and firmo
    - Add this to the testing guide documentation
    - Include examples of before/after conversion
 

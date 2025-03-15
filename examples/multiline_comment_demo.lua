@@ -6,8 +6,8 @@ print("Starting coverage demo for multiline comments")
 os.execute("mkdir -p examples/reports/debug")
 local output_file = "examples/reports/debug/multiline_comment_coverage.html"
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Enable coverage
 local coverage = require("lib.coverage")

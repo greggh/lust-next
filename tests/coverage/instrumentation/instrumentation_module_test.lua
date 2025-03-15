@@ -1,9 +1,9 @@
 -- Test file for module require instrumentation
 
--- Import lust-next test framework
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+-- Import firmo test framework
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import required modules
 local coverage = require("lib.coverage")

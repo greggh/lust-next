@@ -1,5 +1,5 @@
 # Core Functions
-This document describes the core functions provided by Lust-Next for defining and organizing tests.
+This document describes the core functions provided by Firmo for defining and organizing tests.
 
 ## Test Structure Functions
 
@@ -103,7 +103,7 @@ end)
 ## Aliases
 The following aliases are provided for convenience:
 
-- `lust.test` - Alias for `lust.it`
+- `firmo.test` - Alias for `firmo.it`
 
 ## Examples
 

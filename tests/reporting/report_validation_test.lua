@@ -1,10 +1,10 @@
 -- Report validation test suite
-local lust = require("lust-next")
-local expect = lust.expect
-local describe = lust.describe
-local it = lust.it
-local before = lust.before
-local after = lust.after
+local firmo = require("firmo")
+local expect = firmo.expect
+local describe = firmo.describe
+local it = firmo.it
+local before = firmo.before
+local after = firmo.after
 
 -- Import modules
 local reporting = require("lib.reporting")

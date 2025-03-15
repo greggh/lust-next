@@ -1,6 +1,6 @@
-# lust-next Parser Module
+# firmo Parser Module
 
-This module provides a Lua parser that can analyze Lua 5.3/5.4 source code and generate detailed information about the code structure. It is primarily designed to support the coverage and quality modules in lust-next.
+This module provides a Lua parser that can analyze Lua 5.3/5.4 source code and generate detailed information about the code structure. It is primarily designed to support the coverage and quality modules in firmo.
 
 ## Features
 

@@ -1,6 +1,6 @@
 # Tools Tests
 
-This directory contains tests for the lust-next utility tools. These tools provide supporting functionality for the testing framework.
+This directory contains tests for the firmo utility tools. These tools provide supporting functionality for the testing framework.
 
 ## Directory Contents
 
@@ -20,7 +20,7 @@ This directory contains tests for the lust-next utility tools. These tools provi
 
 ## Tools Features
 
-The lust-next tools provide supporting functionality:
+The firmo tools provide supporting functionality:
 
 - **Filesystem** - Cross-platform file operations
 - **Logging** - Structured logging with levels and filtering

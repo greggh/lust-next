@@ -1,6 +1,6 @@
 # Centralized Configuration System Guide
 
-This guide explains the centralized configuration system in lust-next, which provides a unified approach to managing configuration across all framework components.
+This guide explains the centralized configuration system in firmo, which provides a unified approach to managing configuration across all framework components.
 
 ## Overview
 
@@ -52,15 +52,15 @@ central_config.set("coverage.threshold", 90)
 
 ## Configuration File Structure
 
-The configuration file (`.lust-next-config.lua`) should return a table with hierarchical configuration:
+The configuration file (`.firmo-config.lua`) should return a table with hierarchical configuration:
 
 ```lua
--- .lust-next-config.lua
+-- .firmo-config.lua
 return {
   -- Core options
   debug = false,
   verbose = false,
-  
+
   -- Coverage options
   coverage = {
     enabled = true,
@@ -68,7 +68,7 @@ return {
     include = { "lib/", "src/" },
     exclude = { "tests/", "examples/" }
   },
-  
+
   -- Reporting options
   reporting = {
     report_dir = "./coverage-reports",
@@ -95,7 +95,7 @@ return {
 local central_config = require("lib.core.central_config")
 
 -- Load from file
-local success, err = central_config.load_from_file(".lust-next-config.lua")
+local success, err = central_config.load_from_file(".firmo-config.lua")
 if not success then
   print("Failed to load config: " .. tostring(err))
 end
@@ -215,8 +215,8 @@ lua run_tests.lua --coverage.threshold=90 --reporting.formatters.html.theme=ligh
 The configuration system follows this priority order (highest to lowest):
 
 1. Command line options (`--key=value`)
-2. Environment variables (`LUST_KEY=value`)
-3. Project config file (`.lust-next-config.lua`)
+2. Environment variables (`FIRMO_KEY=value`)
+3. Project config file (`.firmo-config.lua`)
 4. Programmatically set values (`central_config.set()`)
 5. Default values from schema registration
 
@@ -228,13 +228,13 @@ Modules should access configuration using the centralized system:
 local function configure_module(options)
   -- Try to load central_config (with pcall for safety)
   local has_central_config, central_config = pcall(require, "lib.core.central_config")
-  
+
   -- Default configuration
   local config = {
     enabled = true,
     timeout = 30
   }
-  
+
   -- If central_config is available, use it
   if has_central_config then
     -- Get module configuration
@@ -245,21 +245,21 @@ local function configure_module(options)
         config[k] = v
       end
     end
-    
+
     -- Register for changes
     central_config.on_change("my_module", function(path, old_value, new_value)
       -- Update local config when central config changes
       config = central_config.get("my_module") or config
     end)
   end
-  
+
   -- Options override everything
   if options then
     for k, v in pairs(options) do
       config[k] = v
     end
   end
-  
+
   return config
 end
 ```
@@ -330,7 +330,7 @@ central_config.reset() -- Reset to defaults
 ### Configuration for CI/CD
 
 ```lua
--- CI/CD configuration file (.lust-next-ci-config.lua)
+-- CI/CD configuration file (.firmo-ci-config.lua)
 return {
   debug = false,
   verbose = true,
@@ -355,7 +355,7 @@ return {
 local env = os.getenv("ENV") or "development"
 
 -- Load environment-specific config
-local config_file = ".lust-next-config." .. env .. ".lua"
+local config_file = ".firmo-config." .. env .. ".lua"
 central_config.load_from_file(config_file)
 ```
 

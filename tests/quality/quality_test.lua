@@ -1,7 +1,7 @@
--- Tests for the lust-next quality module
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+-- Tests for the firmo quality module
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 local fs = require("lib.tools.filesystem")
 local central_config = require("lib.core.central_config")
 
@@ -32,8 +32,8 @@ local log = try_load_logger()
 -- Helper function to create a test file with different quality levels
 local function create_test_file(filename, quality_level)
   local content = "-- Test file for quality level " .. quality_level .. "\n"
-  content = content .. "local lust = require('lust-next')\n"
-  content = content .. "local describe, it, expect = lust.describe, lust.it, lust.expect\n\n"
+  content = content .. "local firmo = require('firmo')\n"
+  content = content .. "local describe, it, expect = firmo.describe, firmo.it, firmo.expect\n\n"
   
   content = content .. "describe('Sample Test Suite', function()\n"
   
@@ -68,7 +68,7 @@ local function create_test_file(filename, quality_level)
     content = content .. "  end)\n"
     content = content .. "  it('should use setup and mocking', function()\n"
     content = content .. "    expect(setup_value).to.equal('initialized')\n"
-    content = content .. "    local mock = lust.mock({ test = function() return true end })\n"
+    content = content .. "    local mock = firmo.mock({ test = function() return true end })\n"
     content = content .. "    expect(mock.test()).to.be.truthy()\n"
     content = content .. "    expect(mock.test).to.have.been.called()\n"
     content = content .. "  end)\n"
@@ -97,7 +97,7 @@ local function create_test_file(filename, quality_level)
     content = content .. "  describe('Advanced Features', function()\n"
     content = content .. "    -- Add a tag to this test group\n"
     content = content .. "    tags('advanced', 'integration')\n"
-    content = content .. "    local complex_mock = lust.mock({\n"
+    content = content .. "    local complex_mock = firmo.mock({\n"
     content = content .. "      method1 = function(self, arg) return arg * 2 end,\n"
     content = content .. "      method2 = function(self) return self.value end,\n"
     content = content .. "      value = 10\n"
@@ -206,7 +206,7 @@ describe("Quality Module", function()
           test = "should validate test quality levels correctly"
         })
       end
-      lust.pending("Quality module check_file function not available")
+      firmo.pending("Quality module check_file function not available")
       return
     end
     
@@ -291,7 +291,7 @@ describe("Quality Module", function()
           test = "should provide quality level names"
         })
       end
-      lust.pending("get_level_name function not available")
+      firmo.pending("get_level_name function not available")
     end
   end)
   
@@ -304,4 +304,4 @@ describe("Quality Module", function()
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

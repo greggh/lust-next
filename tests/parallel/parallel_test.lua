@@ -1,7 +1,7 @@
 -- Tests for parallel execution functionality
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import filesystem module for file operations
 local fs = require("lib.tools.filesystem")
@@ -46,8 +46,8 @@ describe("Parallel Execution Module", function()
     
     -- Create test files
     create_test_file("passing_test", [[
-      local lust = require("lust-next")
-      local describe, it, expect = lust.describe, lust.it, lust.expect
+      local firmo = require("firmo")
+      local describe, it, expect = firmo.describe, firmo.it, firmo.expect
       
       describe("Passing Test", function()
         it("should pass", function()
@@ -57,8 +57,8 @@ describe("Parallel Execution Module", function()
     ]])
     
     create_test_file("failing_test", [[
-      local lust = require("lust-next")
-      local describe, it, expect = lust.describe, lust.it, lust.expect
+      local firmo = require("firmo")
+      local describe, it, expect = firmo.describe, firmo.it, firmo.expect
       
       describe("Failing Test", function()
         it("should fail", function()
@@ -68,8 +68,8 @@ describe("Parallel Execution Module", function()
     ]])
     
     create_test_file("slow_test", [[
-      local lust = require("lust-next")
-      local describe, it, expect = lust.describe, lust.it, lust.expect
+      local firmo = require("firmo")
+      local describe, it, expect = firmo.describe, firmo.it, firmo.expect
       
       describe("Slow Test", function()
         it("should take some time", function()
@@ -182,8 +182,8 @@ describe("Parallel Execution Module", function()
     
     -- Create an additional test file that would run if fail_fast didn't work
     create_test_file("very_slow_test", [[
-      local lust = require("lust-next")
-      local describe, it, expect = lust.describe, lust.it, lust.expect
+      local firmo = require("firmo")
+      local describe, it, expect = firmo.describe, firmo.it, firmo.expect
       
       describe("Very Slow Test", function()
         it("should take a long time", function()

@@ -62,7 +62,7 @@ The next components to address in the error handling implementation plan are:
 
 1. **filesystem.lua**: Apply consistent error handling patterns
 2. **version.lua**: Enhance with structured error handling
-3. **lust-next.lua**: Implement core error handling in the main framework file
+3. **firmo.lua**: Implement core error handling in the main framework file
 
 ## Documentation Updates
 

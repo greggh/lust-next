@@ -1,12 +1,12 @@
 #!/usr/bin/env lua
--- Example demonstrating the report path configuration features in lust-next
+-- Example demonstrating the report path configuration features in firmo
 -- This example shows how to organize a CI/CD-friendly report directory structure
 
 -- Set up package path so we can run this from the examples directory
 package.path = "../?.lua;" .. package.path
 
--- Load lust-next and required modules
-local lust = require("lust-next")
+-- Load firmo and required modules
+local firmo = require("firmo")
 local reporting = require("src.reporting")
 
 -- Define a version for report naming
@@ -17,22 +17,22 @@ local TIMESTAMP = os.date("%Y%m%d")
 local TODAY = os.date("%Y-%m-%d")
 
 -- Define a test structure
-lust.describe("Report Path Configuration Test", function()
-  lust.it("generates multiple reports in organized structure", function()
-    lust.expect(1 + 1).to.equal(2)
-    lust.expect("test").to.be.a("string")  -- Using the proper type checker
-    lust.expect({1, 2, 3}).to.contain(2)
+firmo.describe("Report Path Configuration Test", function()
+  firmo.it("generates multiple reports in organized structure", function()
+    firmo.expect(1 + 1).to.equal(2)
+    firmo.expect("test").to.be.a("string")  -- Using the proper type checker
+    firmo.expect({1, 2, 3}).to.contain(2)
   end)
   
-  lust.it("generates data for report analysis", function()
-    lust.expect(5 * 5).to.equal(25)
-    lust.expect(true).to.be_truthy()
+  firmo.it("generates data for report analysis", function()
+    firmo.expect(5 * 5).to.equal(25)
+    firmo.expect(true).to.be_truthy()
   end)
 end)
 
 -- Run the tests to produce actual test results
 -- Normally this happens automatically, but for this example we need to run them explicitly
-lust.reset() -- Make sure we start fresh
+firmo.reset() -- Make sure we start fresh
 
 -- End with a simple summary
 print("\n============================================")
@@ -54,7 +54,7 @@ local config = {
   verbose = true -- Enable verbose output to see paths
 }
 
--- Get test results data from lust
+-- Get test results data from firmo
 local results_data = {
   name = "Report Path Example",
   timestamp = os.date("!%Y-%m-%dT%H:%M:%S"),

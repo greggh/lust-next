@@ -2,7 +2,7 @@
   executed_vs_covered.lua
   
   An example demonstrating the distinction between code execution and test coverage.
-  This shows how the lust-next coverage module can track both:
+  This shows how the firmo coverage module can track both:
   
   1. Code that is executed (regardless of test validation)
   2. Code that is covered (executed AND validated by test assertions)

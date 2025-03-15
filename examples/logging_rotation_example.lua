@@ -1,5 +1,5 @@
 -- Example demonstrating the enhanced logging system with log rotation
-local lust = require("lust-next")
+local firmo = require("firmo")
 local logging = require("lib.tools.logging")
 
 -- Create a sample config file with logging settings
@@ -45,7 +45,7 @@ print("You should see: logs/debug_rotation.log and rotated files like logs/debug
 
 -- Show how to use the logging with global config
 print("\nExample of using logging configured via global config:")
-print("Add the following to your .lust-next-config.lua file:")
+print("Add the following to your .firmo-config.lua file:")
 print([[
   logging = {
     level = 3, -- INFO level
@@ -55,7 +55,7 @@ print([[
     },
     timestamps = true,
     use_colors = true,
-    output_file = "lust-next.log",
+    output_file = "firmo.log",
     log_dir = "logs",
     max_file_size = 10 * 1024 * 1024, -- 10MB
     max_log_files = 5
@@ -63,7 +63,7 @@ print([[
 ]])
 
 -- To test the configuration-based approach, you would normally:
--- 1. Create .lust-next-config.lua with the settings above
+-- 1. Create .firmo-config.lua with the settings above
 -- 2. In your modules, get the logger and configure from config:
 -- 
 -- local logging = require("lib.tools.logging")

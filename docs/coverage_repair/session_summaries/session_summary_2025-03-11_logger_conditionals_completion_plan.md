@@ -1,8 +1,8 @@
-# Session Summary: Logger Conditionals in lust-next.lua - Completion Plan (2025-03-11)
+# Session Summary: Logger Conditionals in firmo.lua - Completion Plan (2025-03-11)
 
 ## Overview
 
-This session focused on continuing our work on removing logger conditionals throughout lust-next.lua. We made substantial progress in updating test execution functions, before/after hooks, CLI and watch mode functionalities. However, we encountered syntax errors in the file that need to be resolved before we can consider this task complete.
+This session focused on continuing our work on removing logger conditionals throughout firmo.lua. We made substantial progress in updating test execution functions, before/after hooks, CLI and watch mode functionalities. However, we encountered syntax errors in the file that need to be resolved before we can consider this task complete.
 
 ## Progress Made
 
@@ -29,7 +29,7 @@ This session focused on continuing our work on removing logger conditionals thro
 
 ## Syntax Issues Identified
 
-During our implementation, we discovered that the original lust-next.lua file contains syntax errors:
+During our implementation, we discovered that the original firmo.lua file contains syntax errors:
 
 1. **Extra `end` statement** at line 1038 in the format function
 2. **Additional syntax error** reported at line 1327
@@ -41,7 +41,7 @@ These pre-existing syntax issues need to be resolved before we can consider our 
 To finalize this task, we need to:
 
 1. **Resolve Syntax Issues**:
-   - Create a clean version of lust-next.lua without syntax errors
+   - Create a clean version of firmo.lua without syntax errors
    - Fix the excess `end` statement at line 1038
    - Investigate and fix any other syntax errors that may be present
    - Verify the file passes syntax checks with `luac -p`
@@ -63,6 +63,6 @@ To finalize this task, we need to:
 
 ## Note on Existing Syntax Errors
 
-The discovery of pre-existing syntax errors in the lust-next.lua file is significant and unexpected. This confirms the value of our careful, incremental approach to code modification. If the file already contains syntax errors, it suggests the need for a broader review of code quality and syntax validation throughout the codebase.
+The discovery of pre-existing syntax errors in the firmo.lua file is significant and unexpected. This confirms the value of our careful, incremental approach to code modification. If the file already contains syntax errors, it suggests the need for a broader review of code quality and syntax validation throughout the codebase.
 
 We have documented these findings in session_summary_2025-03-11_logger_conditionals_fix_syntax_issues.md and will address them as part of our overall quality improvement efforts.

@@ -4,15 +4,15 @@
 
 ## Summary
 
-In this session, we completed the integration of the standalone assertion module with the main lust-next.lua file. This involved removing all the assertion-related code from lust-next.lua and replacing it with a cleaner implementation that uses the new assertion module.
+In this session, we completed the integration of the standalone assertion module with the main firmo.lua file. This involved removing all the assertion-related code from firmo.lua and replacing it with a cleaner implementation that uses the new assertion module.
 
 ## Tasks Completed
 
-1. **Integrated standalone assertion module with lust-next.lua**
-   - Added a require for the new assertion module at the top of lust-next.lua
+1. **Integrated standalone assertion module with firmo.lua**
+   - Added a require for the new assertion module at the top of firmo.lua
    - Removed all duplicated assertion functions (isa, has, eq, stringify, diff_values)
    - Removed the entire paths table with all assertion implementations
-   - Updated the lust_next.expect function to use assertion.expect
+   - Updated the firmo.expect function to use assertion.expect
    - Maintained the quality module integration for assertion tracking
    - Set up proper paths export for plugins and extensions
 
@@ -30,7 +30,7 @@ In this session, we completed the integration of the standalone assertion module
 
 The integration followed these key principles:
 
-1. **Minimize Changes to lust-next.lua**
+1. **Minimize Changes to firmo.lua**
    - Focused only on removing assertion code and using the new module
    - Preserved the quality module integration for tracking assertions
    - Maintained the same API for plugins through paths export
@@ -40,7 +40,7 @@ The integration followed these key principles:
    - Maintained the quality tracking functionality
 
 3. **Code Cleanup**
-   - Removed over 1000 lines of code from lust-next.lua
+   - Removed over 1000 lines of code from firmo.lua
    - Significantly simplified the codebase
 
 ### Integration Steps
@@ -53,12 +53,12 @@ The integration followed these key principles:
 
 2. **Simplified expect() Function**
    ```lua
-   function lust_next.expect(v)
+   function firmo.expect(v)
      -- Count assertion
-     lust_next.assertion_count = (lust_next.assertion_count or 0) + 1
+     firmo.assertion_count = (firmo.assertion_count or 0) + 1
      
      -- Track assertion in quality module if enabled
-     if lust_next.quality_options.enabled and quality then
+     if firmo.quality_options.enabled and quality then
        quality.track_assertion("expect", debug.getinfo(2, "n").name)
      end
      
@@ -77,7 +77,7 @@ The integration followed these key principles:
 The integration was successful as demonstrated by:
 
 1. All assertion module tests passing
-2. The integration tests showing both lust-next's expect() and assertion.expect() work identically
+2. The integration tests showing both firmo's expect() and assertion.expect() work identically
 3. Most of the project's tests passing
 
 ## Next Steps
@@ -94,7 +94,7 @@ With the assertion module extraction and integration complete, we can now move o
 
 The successful extraction of the assertion module demonstrates the benefits of modular design:
 
-1. **Reduced Complexity**: The main lust-next.lua file is now significantly smaller and more focused.
+1. **Reduced Complexity**: The main firmo.lua file is now significantly smaller and more focused.
 2. **Easier Maintenance**: Bug fixes and enhancements to assertions can now be made in a dedicated module.
 3. **Breaking Circular Dependencies**: The standalone module can be used by other modules without creating circular dependencies.
 4. **Consistent Error Handling**: The assertion module now uses the error_handler module consistently.

@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on implementing comprehensive error handling in the interactive CLI module (`lib/tools/interactive.lua`), which provides command-line interface capabilities for running tests in the lust-next framework. The implementation follows the patterns established in the project-wide error handling plan and builds on the approaches used in the benchmark, codefix, and watcher modules.
+This session focused on implementing comprehensive error handling in the interactive CLI module (`lib/tools/interactive.lua`), which provides command-line interface capabilities for running tests in the firmo framework. The implementation follows the patterns established in the project-wide error handling plan and builds on the approaches used in the benchmark, codefix, and watcher modules.
 
 ## Implementation Approach
 
@@ -108,7 +108,7 @@ local function print_header()
   
   -- Safe output with error handling
   success, result = error_handler.try(function()
-    print(colors.bold .. colors.cyan .. "Lust-Next Interactive CLI" .. colors.normal)
+    print(colors.bold .. colors.cyan .. "Firmo Interactive CLI" .. colors.normal)
     print(colors.green .. "Type 'help' for available commands" .. colors.normal)
     print(string.rep("-", 60))
     return true
@@ -121,7 +121,7 @@ local function print_header()
     })
     -- Try a simple fallback for header display
     error_handler.try(function()
-      print("Lust-Next Interactive CLI")
+      print("Firmo Interactive CLI")
       print("Type 'help' for available commands")
       print("---------------------------------------------------------")
       return true
@@ -222,8 +222,8 @@ local function run_tests(file_path)
   end
   
   -- Verify runner module is available
-  -- Verify lust test framework is available
-  -- Reset lust state with error handling
+  -- Verify firmo test framework is available
+  -- Reset firmo state with error handling
   -- File existence validation
   -- Test execution with error boundaries
   -- Result processing with validation

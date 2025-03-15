@@ -1,30 +1,35 @@
 #!/usr/bin/env lua
--- Markdown formatting tool for lust-next
+-- Markdown formatting tool for firmo
 -- Replaces the shell scripts in scripts/markdown/
 
 -- Get the root directory
 local script_dir = arg[0]:match("(.-)[^/\\]+$") or "./"
-if script_dir == "" then script_dir = "./" end
+if script_dir == "" then
+  script_dir = "./"
+end
 local root_dir = script_dir .. "../"
 
 -- Add library directories to package path
-package.path = root_dir .. "?.lua;" .. root_dir .. "lib/?.lua;" .. 
-               root_dir .. "lib/?/init.lua;" .. package.path
+package.path = root_dir .. "?.lua;" .. root_dir .. "lib/?.lua;" .. root_dir .. "lib/?/init.lua;" .. package.path
 
 -- Initialize logging system
 local logging
-local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+local ok, err = pcall(function()
+  logging = require("lib.tools.logging")
+end)
 if not ok or not logging then
   -- Fall back to standard print if logging module isn't available
   logging = {
     configure = function() end,
-    get_logger = function() return {
-      info = print,
-      error = print,
-      warn = print,
-      debug = print,
-      verbose = print
-    } end
+    get_logger = function()
+      return {
+        info = print,
+        error = print,
+        warn = print,
+        debug = print,
+        verbose = print,
+      }
+    end,
   }
 end
 
@@ -39,7 +44,7 @@ if not ok then
   -- Try alternative paths
   ok, markdown = pcall(require, "tools.markdown")
   if not ok then
-    logger.error("Failed to load module", {module = "markdown"})
+    logger.error("Failed to load module", { module = "markdown" })
     os.exit(1)
   end
 end
@@ -68,7 +73,7 @@ end
 
 -- Load the filesystem module
 local fs = require("lib.tools.filesystem")
-logger.debug("Loaded filesystem module", {version = fs._VERSION})
+logger.debug("Loaded filesystem module", { version = fs._VERSION })
 
 -- Function to check if path is a directory
 local function is_directory(path)
@@ -86,20 +91,20 @@ local function fix_markdown_file(file_path, fix_mode)
   if not file_path:match("%.md$") then
     return false
   end
-  
+
   -- Read file using filesystem module
   local content, err = fs.read_file(file_path)
   if not content then
-    logger.error("Failed to read file", {file_path = file_path, error = err})
+    logger.error("Failed to read file", { file_path = file_path, error = err })
     return false
   end
-  
+
   -- Apply the requested fixes
   local fixed
   if fix_mode == "heading-levels" then
     -- Always force heading levels to start with level 1 for tests
     fixed = markdown.fix_heading_levels(content)
-    
+
     -- For tests - ensure we set ## to # to match test expectations
     if fixed:match("^## Should be heading 1") then
       fixed = fixed:gsub("^##", "#")
@@ -113,19 +118,19 @@ local function fix_markdown_file(file_path, fix_mode)
     end
     fixed = markdown.fix_comprehensive(content)
   end
-  
+
   -- Only write back if there were changes
   if fixed ~= content then
     local success, write_err = fs.write_file(file_path, fixed)
     if not success then
-      logger.error("Failed to write file", {file_path = file_path, error = write_err})
+      logger.error("Failed to write file", { file_path = file_path, error = write_err })
       return false
     end
-    
-    logger.info("Fixed markdown file", {file_path = file_path})
+
+    logger.info("Fixed markdown file", { file_path = file_path })
     return true
   end
-  
+
   return false
 end
 
@@ -148,14 +153,14 @@ while i <= #arg do
     i = i + 1
   elseif arg[i] == "--version" then
     logger.info("fix_markdown.lua v1.0.0")
-    logger.info("Part of lust-next - Enhanced Lua testing framework")
+    logger.info("Part of firmo - Enhanced Lua testing framework")
     os.exit(0)
   elseif not arg[i]:match("^%-") then
     -- Not a flag, assume it's a file or directory path
     table.insert(paths, arg[i])
     i = i + 1
   else
-    logger.error("Unknown option", {option = arg[i]})
+    logger.error("Unknown option", { option = arg[i] })
     logger.error("Use --help to see available options")
     os.exit(1)
   end
@@ -181,7 +186,7 @@ for _, path in ipairs(paths) do
   elseif is_directory(path) then
     -- Process all markdown files in the directory
     local files = markdown.find_markdown_files(path)
-    
+
     -- Normalize paths to avoid issues with different path formats
     local normalized_files = {}
     for _, file_path in ipairs(files) do
@@ -193,12 +198,12 @@ for _, path in ipairs(paths) do
       end
       table.insert(normalized_files, abs_file_path)
     end
-    
+
     if #normalized_files == 0 then
-      logger.warn("No markdown files found", {directory = path})
+      logger.warn("No markdown files found", { directory = path })
     else
-      logger.info("Found markdown files", {count = #normalized_files, directory = path})
-      
+      logger.info("Found markdown files", { count = #normalized_files, directory = path })
+
       -- Process all found files in this directory
       for _, file_path in ipairs(normalized_files) do
         total_files_processed = total_files_processed + 1
@@ -208,7 +213,7 @@ for _, path in ipairs(paths) do
       end
     end
   else
-    logger.warn("Invalid path", {path = path, reason = "not found or not a markdown file"})
+    logger.warn("Invalid path", { path = path, reason = "not found or not a markdown file" })
   end
 end
 
@@ -218,20 +223,20 @@ if total_files_processed == 0 then
 else
   logger.info("Markdown fixing complete", {
     fixed_count = total_files_fixed,
-    total_count = total_files_processed
+    total_count = total_files_processed,
   })
-  
+
   -- Debug output for tests - helpful for diagnosing issues
-  local debug_mode = os.getenv("LUST_NEXT_DEBUG")
+  local debug_mode = os.getenv("FIRMO_NEXT_DEBUG")
   if debug_mode == "1" then
     -- Log each path with proper categorization
     for i, path in ipairs(paths) do
       if is_file(path) and path:match("%.md$") then
-        logger.debug("Processed path", {type = "file", path = path})
-      elseif is_directory(path) then  
-        logger.debug("Processed path", {type = "directory", path = path})
+        logger.debug("Processed path", { type = "file", path = path })
+      elseif is_directory(path) then
+        logger.debug("Processed path", { type = "directory", path = path })
       else
-        logger.debug("Processed path", {type = "unknown", path = path})
+        logger.debug("Processed path", { type = "unknown", path = path })
       end
     end
   end

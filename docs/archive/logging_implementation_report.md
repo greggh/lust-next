@@ -2,7 +2,7 @@
 
 ## Summary
 
-This report documents the comprehensive implementation of a centralized logging system in the lust-next test framework. The implementation includes structured JSON logging for machine readability, module filtering capabilities for targeted debugging, and systematic conversion of print statements to use the new logging system.
+This report documents the comprehensive implementation of a centralized logging system in the firmo test framework. The implementation includes structured JSON logging for machine readability, module filtering capabilities for targeted debugging, and systematic conversion of print statements to use the new logging system.
 
 ## Implemented Features
 
@@ -107,6 +107,6 @@ The enhanced logging system provides several benefits:
 
 ## Conclusion
 
-The implementation of structured JSON logging and module filtering capabilities significantly enhances the lust-next framework's logging system. These improvements make the framework more suitable for integration with external tools, provide better debugging capabilities, and ensure consistent logging practices throughout the codebase.
+The implementation of structured JSON logging and module filtering capabilities significantly enhances the firmo framework's logging system. These improvements make the framework more suitable for integration with external tools, provide better debugging capabilities, and ensure consistent logging practices throughout the codebase.
 
 The print statement conversion effort has successfully migrated the codebase to use the new centralized logging system, improving code quality and maintainability.

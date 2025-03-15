@@ -1,6 +1,6 @@
 # Test Fixtures
 
-This directory contains common test fixtures and utilities used across multiple test files in the lust-next project.
+This directory contains common test fixtures and utilities used across multiple test files in the firmo project.
 
 ## Directory Contents
 

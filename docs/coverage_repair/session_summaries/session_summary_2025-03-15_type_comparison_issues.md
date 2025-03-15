@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on addressing assertion pattern standardization in the validation module tests and investigating type comparison issues in the coverage instrumentation tests. We successfully fixed the assertion patterns in the validation module tests and implemented a robust solution for the type comparison issues in the lust-next equality function.
+This session focused on addressing assertion pattern standardization in the validation module tests and investigating type comparison issues in the coverage instrumentation tests. We successfully fixed the assertion patterns in the validation module tests and implemented a robust solution for the type comparison issues in the firmo equality function.
 
 ## Key Accomplishments
 
@@ -23,7 +23,7 @@ This session focused on addressing assertion pattern standardization in the vali
    - Found issues with `expect().to.equal()` implementation
    - Identified specific error: "attempt to compare number with string"
    - Fixed incorrect type checks by using `expect(value).to.be.a("type")` instead of `expect(type(value)).to.equal("type")`
-   - Completely rewrote the `eq()` function in lust-next.lua to robustly handle mixed types
+   - Completely rewrote the `eq()` function in firmo.lua to robustly handle mixed types
 
 4. **Implemented Robust Mixed-Type Comparisons**:
    - Added special handling for string/number type mismatches
@@ -33,7 +33,7 @@ This session focused on addressing assertion pattern standardization in the vali
 
 ## Type Comparison Implementation
 
-We implemented a robust solution to handle mixed-type comparisons in the lust-next equality function:
+We implemented a robust solution to handle mixed-type comparisons in the firmo equality function:
 
 ```lua
 local function eq(t1, t2, eps)
@@ -147,7 +147,7 @@ Key improvements:
 The validation module tests are now passing with standardized assertion patterns and the fixed equality function:
 
 ```
-$ env -C /home/gregg/Projects/lua-library/lust-next lua test.lua tests/reporting/report_validation_test.lua
+$ env -C /home/gregg/Projects/lua-library/firmo lua test.lua tests/reporting/report_validation_test.lua
 ```
 
 Results:
@@ -158,7 +158,7 @@ Results:
 Simple non-instrumentation tests also pass with the fixed implementation:
 
 ```
-$ env -C /home/gregg/Projects/lua-library/lust-next lua test.lua tests/simple_test.lua
+$ env -C /home/gregg/Projects/lua-library/firmo lua test.lua tests/simple_test.lua
 ```
 
 Results:

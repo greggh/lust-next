@@ -1,7 +1,7 @@
--- Test for enhanced reporting functionality in lust-next
+-- Test for enhanced reporting functionality in firmo
 
-local lust = require("lust-next")
-local describe, it, expect, pending = lust.describe, lust.it, lust.expect, lust.pending
+local firmo = require("firmo")
+local describe, it, expect, pending = firmo.describe, firmo.it, firmo.expect, firmo.pending
 
 -- Attempt to load the reporting module
 local reporting

@@ -1,4 +1,4 @@
--- stub.lua - Function stubbing implementation for lust-next
+-- stub.lua - Function stubbing implementation for firmo
 
 local spy = require("lib.mocking.spy")
 local logging = require("lib.tools.logging")
@@ -122,7 +122,7 @@ function stub.new(return_value_or_implementation)
   end
   
   local stub_obj = spy.new(implementation)
-  stub_obj._is_lust_stub = true
+  stub_obj._is_firmo_stub = true
   
   logger.debug("Created stub object based on spy")
   
@@ -283,7 +283,7 @@ function stub.on(obj, method_name, return_value_or_implementation)
   end
   
   local stub_obj = spy.new(implementation)
-  stub_obj._is_lust_stub = true
+  stub_obj._is_firmo_stub = true
   stub_obj.target = obj
   stub_obj.name = method_name
   stub_obj.original = original_fn

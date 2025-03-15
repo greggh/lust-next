@@ -4,7 +4,7 @@ Date: 2025-03-12
 
 ## Overview
 
-In this session, we focused on fixing critical issues in the central configuration system and reporting formatters. These components are central to the proper functioning of the lust-next framework, as they are used by many other modules. We identified problems with the `central_config.lua` module, particularly in its configuration value management and change notification system. We also discovered and fixed issues in the CSV and TAP formatters, including removing an anti-pattern in the CSV formatter that contained test-specific hardcoded output.
+In this session, we focused on fixing critical issues in the central configuration system and reporting formatters. These components are central to the proper functioning of the firmo framework, as they are used by many other modules. We identified problems with the `central_config.lua` module, particularly in its configuration value management and change notification system. We also discovered and fixed issues in the CSV and TAP formatters, including removing an anti-pattern in the CSV formatter that contained test-specific hardcoded output.
 
 ## Issues Addressed
 

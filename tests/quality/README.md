@@ -1,6 +1,6 @@
 # Quality Tests
 
-This directory contains tests for the lust-next quality validation system. The quality module evaluates test comprehensiveness beyond simple code coverage.
+This directory contains tests for the firmo quality validation system. The quality module evaluates test comprehensiveness beyond simple code coverage.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next quality validation system. The q
 
 ## Quality Validation Features
 
-The lust-next quality module provides:
+The firmo quality module provides:
 
 - Test comprehensiveness scoring
 - Assertion density analysis

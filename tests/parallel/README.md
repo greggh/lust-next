@@ -1,6 +1,6 @@
 # Parallel Execution Tests
 
-This directory contains tests for the lust-next parallel execution system. The parallel module enables running tests across multiple processes for improved performance and isolation.
+This directory contains tests for the firmo parallel execution system. The parallel module enables running tests across multiple processes for improved performance and isolation.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next parallel execution system. The p
 
 ## Parallel Execution Features
 
-The lust-next parallel execution system provides:
+The firmo parallel execution system provides:
 
 - Multi-process test execution
 - Results aggregation from parallel runs
@@ -27,7 +27,7 @@ Parallel execution can be enabled via:
 lua test.lua --parallel tests/
 
 -- API
-lust.run_tests({
+firmo.run_tests({
   path = "tests/",
   parallel = true,
   process_count = 4

@@ -24,7 +24,7 @@ Updated config.lua to register core modules with central_config, including:
 - Logging module configuration schema and defaults
 - Format module configuration schema and defaults
 - Test discovery module configuration schema and defaults
-- Core lust-next configuration
+- Core firmo configuration
 
 ### 3. Dynamic Reconfiguration
 

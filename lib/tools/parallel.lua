@@ -1,4 +1,4 @@
--- Parallel test execution module for lust-next
+-- Parallel test execution module for firmo
 -- Provides functionality to run test files in parallel for better resource utilization
 
 local parallel = {}
@@ -202,8 +202,8 @@ end
 -- Initialize the module
 parallel.configure()
 
--- Store reference to lust-next
-parallel.lust_next = nil
+-- Store reference to firmo
+parallel.firmo = nil
 
 -- Test result aggregation
 local Results = {}
@@ -524,18 +524,18 @@ function parallel.run_tests(files, options)
   return results
 end
 
--- Register with lust-next
-function parallel.register_with_lust(lust_next)
-  -- Store reference to lust-next
-  parallel.lust_next = lust_next
+-- Register with firmo
+function parallel.register_with_firmo(firmo)
+  -- Store reference to firmo
+  parallel.firmo = firmo
   
-  -- Add parallel functionality to lust-next
-  lust_next.parallel = parallel
+  -- Add parallel functionality to firmo
+  firmo.parallel = parallel
   
   -- Add CLI options for parallel execution
-  local original_cli_run = lust_next.cli_run
+  local original_cli_run = firmo.cli_run
   if original_cli_run then
-    lust_next.cli_run = function(args)
+    firmo.cli_run = function(args)
       -- Parse for parallel-specific options
       local parallel_options = {
         enabled = false,
@@ -623,14 +623,14 @@ function parallel.register_with_lust(lust_next)
       end
       
       -- If we get here, we're running in parallel mode
-      local options = lust_next.parse_cli_options(args)
+      local options = firmo.parse_cli_options(args)
       
       -- Discover test files
       local files
       if #options.files > 0 then
         files = options.files
       else
-        files = lust_next.discover(options.dir, options.pattern)
+        files = firmo.discover(options.dir, options.pattern)
       end
       
       if #files == 0 then
@@ -709,7 +709,7 @@ function parallel.register_with_lust(lust_next)
       end
       
       -- Generate reports if coverage was enabled
-      if options.coverage and parallel_options.aggregate_coverage and lust_next.coverage then
+      if options.coverage and parallel_options.aggregate_coverage and firmo.coverage then
         -- Convert coverage data to the format expected by the reporting module
         local coverage_data = {
           files = results.coverage,
@@ -724,15 +724,15 @@ function parallel.register_with_lust(lust_next)
         }
         
         -- Generate reports
-        if lust_next.reporting then
-          local report_config = lust_next.report_config or {}
+        if firmo.reporting then
+          local report_config = firmo.report_config or {}
           
           logger.info("Generating coverage reports from parallel execution", {
             report_config = report_config,
             files_to_report = coverage_data.summary.total_files
           })
           
-          lust_next.reporting.auto_save_reports(coverage_data, nil, nil, report_config)
+          firmo.reporting.auto_save_reports(coverage_data, nil, nil, report_config)
           io.write("\nCoverage reports generated from parallel execution\n")
         end
       end
@@ -743,7 +743,7 @@ function parallel.register_with_lust(lust_next)
   end
   
   -- Parse CLI options - helper function used by parallel mode
-  function lust_next.parse_cli_options(args)
+  function firmo.parse_cli_options(args)
     local options = {
       dir = "./tests",
       pattern = "*_test.lua",
@@ -874,9 +874,9 @@ function parallel.register_with_lust(lust_next)
   end
   
   -- Extend help text to include parallel options
-  local original_show_help = lust_next.show_help
+  local original_show_help = firmo.show_help
   if original_show_help then
-    lust_next.show_help = function()
+    firmo.show_help = function()
       original_show_help()
       
       logger.debug("Displaying parallel execution help options")
@@ -892,7 +892,7 @@ function parallel.register_with_lust(lust_next)
     end
   end
   
-  return lust_next
+  return firmo
 end
 
 -- Reset the module configuration to defaults

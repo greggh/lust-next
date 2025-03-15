@@ -130,7 +130,7 @@ This approach allows the system to continue functioning even when more complex f
 
 ## Best Practices for Future Development
 
-Based on these lessons, we've established the following best practices for error handling in the lust-next project:
+Based on these lessons, we've established the following best practices for error handling in the firmo project:
 
 1. **Never Directly Return error_handler.try Results**:
    - Always capture the return values in local variables
@@ -155,7 +155,7 @@ Based on these lessons, we've established the following best practices for error
    - Verify proper error propagation through the call stack
    - Ensure error messages are clear and actionable
 
-By following these best practices, we can ensure more robust, maintainable, and debuggable code throughout the lust-next project.
+By following these best practices, we can ensure more robust, maintainable, and debuggable code throughout the firmo project.
 
 ## Next Steps
 

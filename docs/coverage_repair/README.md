@@ -1,6 +1,6 @@
 # Coverage Module Repair Documentation
 
-This directory contains comprehensive documentation for the coverage module repair process in the lust-next testing framework.
+This directory contains comprehensive documentation for the coverage module repair process in the firmo testing framework.
 
 ## Documentation Structure
 

@@ -1,6 +1,6 @@
 -- Block boundary detection test for static analyzer
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local static_analyzer = require("lib.coverage.static_analyzer")
 local filesystem = require("lib.tools.filesystem")
 local temp_file = require("lib.tools.temp_file")

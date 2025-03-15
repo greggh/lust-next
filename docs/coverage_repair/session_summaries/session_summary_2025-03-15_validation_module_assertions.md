@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on standardizing assertion patterns in the `report_validation_test.lua` file. We identified and fixed inconsistent patterns to align with the lust-next expect-style assertion standards documented in our assertion pattern documentation. This work is part of Phase 5 (Verification) of the Test System Reorganization Plan.
+This session focused on standardizing assertion patterns in the `report_validation_test.lua` file. We identified and fixed inconsistent patterns to align with the firmo expect-style assertion standards documented in our assertion pattern documentation. This work is part of Phase 5 (Verification) of the Test System Reorganization Plan.
 
 ## Key Accomplishments
 
@@ -61,7 +61,7 @@ This session focused on standardizing assertion patterns in the `report_validati
 All tests in the validation module are now passing with the standardized assertion patterns. We ran the tests using the unified test system:
 
 ```
-$ env -C /home/gregg/Projects/lua-library/lust-next lua test.lua tests/reporting/report_validation_test.lua
+$ env -C /home/gregg/Projects/lua-library/firmo lua test.lua tests/reporting/report_validation_test.lua
 ```
 
 Results:

@@ -1,7 +1,7 @@
 -- truthy_falsey_test.lua
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Truthy and Falsey Assertions", function()
   describe("expect(value).to.be_truthy()", function()

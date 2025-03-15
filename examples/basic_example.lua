@@ -1,7 +1,7 @@
--- Basic usage example for lust-next
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+-- Basic usage example for firmo
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- A simple calculator module to test
 local calculator = {
@@ -18,12 +18,12 @@ local calculator = {
 describe("Calculator", function()
   -- Setup that runs before each test
   before(function()
-    lust.log.info({ message = "Setting up test" })
+    firmo.log.info({ message = "Setting up test" })
   end)
   
   -- Cleanup that runs after each test
   after(function()
-    lust.log.info({ message = "Cleaning up test" })
+    firmo.log.info({ message = "Cleaning up test" })
   end)
   
   describe("addition", function()

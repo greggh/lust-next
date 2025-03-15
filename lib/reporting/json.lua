@@ -1,4 +1,4 @@
--- Simple JSON encoder for lust-next
+-- Simple JSON encoder for firmo
 -- Minimalist implementation for coverage reports
 
 local M = {}

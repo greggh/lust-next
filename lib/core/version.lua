@@ -1,4 +1,4 @@
--- Version module for lust-next
+-- Version module for firmo
 -- Single source of truth for the project version
 
 -- This file is used by other components like documentation generators,

@@ -1,9 +1,9 @@
 -- junit_report_example.lua
 -- Example demonstrating JUnit XML reporting for CI integration
 
--- Make sure we're using lust-next with globals
-local lust_next = require('../lust-next')
-lust_next.expose_globals()
+-- Make sure we're using firmo with globals
+local firmo = require('../firmo')
+firmo.expose_globals()
 
 -- Optional: Try to load reporting module directly
 local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
@@ -83,7 +83,7 @@ do
   end
   
   -- Create a demo test results data structure
-  -- In real usage, this would be created automatically by lust-next
+  -- In real usage, this would be created automatically by firmo
   local test_results = {
     name = "JUnitDemo",
     timestamp = os.date("!%Y-%m-%dT%H:%M:%S"),
@@ -95,7 +95,7 @@ do
     properties = {
       lua_version = _VERSION,
       platform = package.config:sub(1,1) == "\\" and "Windows" or "Unix",
-      framework = "lust-next"
+      framework = "firmo"
     },
     test_cases = {
       {
@@ -179,7 +179,7 @@ do
   print("\nIn CI environments, you would use this XML for integration with test reporting systems.")
   print("Example usage with GitHub Actions:")
   print('  - name: Run tests')
-  print('    run: lua lust-next.lua --dir ./tests --reporter junit > test-results.xml')
+  print('    run: lua firmo.lua --dir ./tests --reporter junit > test-results.xml')
   print('  - name: Upload test results')
   print('    uses: actions/upload-artifact@v3')
   print('    with:')

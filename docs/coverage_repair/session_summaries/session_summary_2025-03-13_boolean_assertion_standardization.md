@@ -9,7 +9,7 @@ This session focused on continuing the standardization of assertion patterns acr
 1. **Identified Test Files with Improper Boolean Assertion Patterns**:
    - Used grep to find test files using `to.be(true)` and `to.be(false)`
    - Found instances in `markdown_test.lua` and `interactive_mode_test.lua`
-   - Also identified `to.be(nil)` patterns in `lust_test.lua`
+   - Also identified `to.be(nil)` patterns in `firmo_test.lua`
 
 2. **Fixed Assertion Patterns in Markdown Test File**:
    - Changed `expect(variable).to.be(true)` to `expect(variable).to.be_truthy()`
@@ -18,11 +18,11 @@ This session focused on continuing the standardization of assertion patterns acr
 
 3. **Fixed Assertion Patterns in Interactive Mode Test File**:
    - Changed `expect(true).to.be(true)` to `expect(true).to.be_truthy()`
-   - Changed `expect(lust).to_not.be(nil)` to `expect(lust).to.exist()`
-   - Changed `expect(lust.version).to_not.be(nil)` to `expect(lust.version).to.exist()`
+   - Changed `expect(firmo).to_not.be(nil)` to `expect(firmo).to.exist()`
+   - Changed `expect(firmo.version).to_not.be(nil)` to `expect(firmo.version).to.exist()`
 
-4. **Fixed Assertion Patterns in Lust Test File**:
-   - Changed `expect(lust.spy).to_not.be(nil)` to `expect(lust.spy).to.exist()`
+4. **Fixed Assertion Patterns in Firmo Test File**:
+   - Changed `expect(firmo.spy).to_not.be(nil)` to `expect(firmo.spy).to.exist()`
 
 5. **Verified Changes with Test Runs**:
    - All tests run successfully after standardization
@@ -64,7 +64,7 @@ This session focused on continuing the standardization of assertion patterns acr
 1. Added to the list of fixed files in Phase 5 (Verification):
    - Fixed `markdown_test.lua` with standardized assertion patterns
    - Fixed `interactive_mode_test.lua` with standardized assertion patterns
-   - Fixed `lust_test.lua` with standardized assertion patterns
+   - Fixed `firmo_test.lua` with standardized assertion patterns
 
 ### Next Steps:
 
@@ -91,6 +91,6 @@ These changes improve the test system in several ways:
 
 ## References
 
-- [Test System Reorganization Plan](/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/test_system_reorganization_plan.md)
-- [Assertion Pattern Standardization](/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/session_summaries/session_summary_2025-03-13_assertion_pattern_standardization.md)
-- [Updated Test Files](/home/gregg/Projects/lua-library/lust-next/tests/markdown_test.lua, /home/gregg/Projects/lua-library/lust-next/tests/interactive_mode_test.lua, /home/gregg/Projects/lua-library/lust-next/tests/lust_test.lua)
+- [Test System Reorganization Plan](/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/test_system_reorganization_plan.md)
+- [Assertion Pattern Standardization](/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/session_summaries/session_summary_2025-03-13_assertion_pattern_standardization.md)
+- [Updated Test Files](/home/gregg/Projects/lua-library/firmo/tests/markdown_test.lua, /home/gregg/Projects/lua-library/firmo/tests/interactive_mode_test.lua, /home/gregg/Projects/lua-library/firmo/tests/firmo_test.lu

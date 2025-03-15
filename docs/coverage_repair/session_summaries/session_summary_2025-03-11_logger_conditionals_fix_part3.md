@@ -1,8 +1,8 @@
-# Session Summary: Fix Logger Conditionals in lust-next.lua (Part 3) (2025-03-11)
+# Session Summary: Fix Logger Conditionals in firmo.lua (Part 3) (2025-03-11)
 
 ## Overview
 
-This session continued our work on fixing logger conditionals in lust-next.lua, treating the logger as a required dependency similar to error_handler and filesystem. We made additional progress removing conditional checks from more functions in the file.
+This session continued our work on fixing logger conditionals in firmo.lua, treating the logger as a required dependency similar to error_handler and filesystem. We made additional progress removing conditional checks from more functions in the file.
 
 ## Progress Made
 
@@ -67,7 +67,7 @@ This session continued our work on fixing logger conditionals in lust-next.lua, 
 
 ## Remaining Work
 
-Several sections of lust-next.lua still contain conditional logger checks that need to be updated:
+Several sections of firmo.lua still contain conditional logger checks that need to be updated:
 
 1. **Test Functions**:
    - [ ] Fix it function and its variants (fit, xit)
@@ -83,7 +83,7 @@ Several sections of lust-next.lua still contain conditional logger checks that n
 
 To complete this task, we need to:
 
-1. Continue systematically removing the remaining `if logger` and `if logger and logger.debug` conditionals throughout lust-next.lua
+1. Continue systematically removing the remaining `if logger` and `if logger and logger.debug` conditionals throughout firmo.lua
 2. Run tests to verify the changes work correctly
 3. Update the project-wide error handling plan with the completed task
 4. Begin implementing error handling in reporting modules

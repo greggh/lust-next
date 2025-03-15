@@ -1,4 +1,4 @@
--- Test discovery module for lust-next
+-- Test discovery module for firmo
 local discover = {}
 discover._VERSION = "1.1.0"
 

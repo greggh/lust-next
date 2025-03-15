@@ -1,4 +1,5 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -166,7 +167,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved string representation for complex data structures
   - Context-aware error messages with more details
 - Improved output formatting options:
-  - Configurable output styles with `lust_next.format()`
+  - Configurable output styles with `firmo.format()`
   - Multiple output formats: normal, dot, compact, summary, detailed
   - Customizable indentation (tabs or spaces)
   - Colorized output with intelligent context
@@ -188,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Fork from bjornbytes/lust to enhance functionality
+- Fork from bjornbytes/firmo to enhance functionality
 - GitHub Actions CI workflow for testing on multiple Lua versions
 - GitHub structure with templates and community health files
 - Documentation improvements with modern markdown format
@@ -197,18 +198,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced README with new feature descriptions
 - Automatic test discovery for finding and running test files
 - Test filtering and tagging system:
-  - Tag tests with `lust.tags()` function
-  - Filter by tag with `lust.only_tags()`
-  - Filter by name pattern with `lust.filter()`
+  - Tag tests with `firmo.tags()` function
+  - Filter by tag with `firmo.only_tags()`
+  - Filter by name pattern with `firmo.filter()`
   - Command-line filtering with `--tags` and `--filter` flags
   - Skip tracking for filtered tests
 - Enhanced reporting with clearer test summaries
 - Improved CLI with more flexible options
 - Async testing support:
-  - `lust.async()` for wrapping async test functions
-  - `lust.await()` for waiting in tests
-  - `lust.wait_until()` for condition-based waiting
-  - `lust.it_async()` for simplified async test declaration
+  - `firmo.async()` for wrapping async test functions
+  - `firmo.await()` for waiting in tests
+  - `firmo.wait_until()` for condition-based waiting
+  - `firmo.it_async()` for simplified async test declaration
   - Configurable timeouts and error handling
   - Comprehensive examples in examples/async_example.lua
 - Comprehensive mocking system:
@@ -244,7 +245,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Usage examples for all major features
   - Code examples for common use cases
 
-## [0.2.0] - Original lust
+## [0.2.0] - Original firmo
+
 This is where the fork begins. Original [lust project](https://github.com/bjornbytes/lust) features:
 
 ### Features
@@ -254,6 +256,5 @@ This is where the fork begins. Original [lust project](https://github.com/bjornb
 - Expect-style assertions
 - Function spies
 - Support for console and non-console environments
-[Unreleased]: https://github.com/greggh/lust/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/bjornbytes/lust/tree/master
-
+  [Unreleased]: https://github.com/greggh/firmo/compare/v0.2.0...HEAD
+  [0.2.0]: https://github.com/bjornbytes/lust/tree/master

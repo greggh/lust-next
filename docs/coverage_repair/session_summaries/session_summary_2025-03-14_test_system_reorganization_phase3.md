@@ -40,10 +40,10 @@ In this session, we completed Phase 3 of the Test System Reorganization plan, wh
    if fs.directory_exists(path) then
      -- Run all tests in directory
      logger.info("Detected directory path", {path = path})
-     return runner.run_all(path, lust, options)
+     return runner.run_all(path, firmo, options)
    elseif fs.file_exists(path) then
      -- Run a single test file
-     local result = runner.run_file(path, lust, options)
+     local result = runner.run_file(path, firmo, options)
      return result.success and result.errors == 0
    else
      -- Path not found
@@ -111,5 +111,5 @@ With the completion of Phase 3, we can now proceed to Phase 4 of the Test System
    - Document the standard patterns for test files
 
 3. **Create Examples of Framework Testing**:
-   - Add an example showing how to test a project with lust-next
+   - Add an example showing how to test a project with firmo
    - Show proper configuration in examples

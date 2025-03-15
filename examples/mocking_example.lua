@@ -1,8 +1,8 @@
 -- Example demonstrating mocking functionality
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
-local mock, spy, stub, with_mocks = lust_next.mock, lust_next.spy, lust_next.stub, lust_next.with_mocks
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local mock, spy, stub, with_mocks = firmo.mock, firmo.spy, firmo.stub, firmo.with_mocks
 
 -- A sample "database" module we'll use to demonstrate mocking
 local database = {

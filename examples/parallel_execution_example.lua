@@ -1,33 +1,33 @@
 #!/usr/bin/env lua
--- Parallel test execution example for lust-next
+-- Parallel test execution example for firmo
 
-local lust = require("lust-next")
+local firmo = require("firmo")
 
 -- Add the lib directory to the package path for loading the parallel module
 package.path = "./lib/?.lua;" .. package.path
 
--- Load the parallel module and register it with lust
+-- Load the parallel module and register it with firmo
 local parallel_loaded, parallel = pcall(require, "tools.parallel")
 if not parallel_loaded then
   print("Warning: Could not load parallel module. Using fallback.")
 else
-  parallel.register_with_lust(lust)
+  parallel.register_with_firmo(firmo)
 end
 
-print("lust-next Parallel Test Execution Example")
+print("firmo Parallel Test Execution Example")
 print("------------------------------------------")
 
 -- Create a simple test to demonstrate parallel execution
-lust.describe("Parallel Test Execution Demo", function()
-  lust.it("can run tests in parallel", function()
-    lust.expect(1 + 1).to.equal(2)
+firmo.describe("Parallel Test Execution Demo", function()
+  firmo.it("can run tests in parallel", function()
+    firmo.expect(1 + 1).to.equal(2)
   end)
   
-  lust.it("can also run this test", function()
-    lust.expect("test").to.be.a("string")
+  firmo.it("can also run this test", function()
+    firmo.expect("test").to.be.a("string")
   end)
   
-  lust.it("demonstrates a longer-running test", function()
+  firmo.it("demonstrates a longer-running test", function()
     -- Simulate a test that takes some time
     local function sleep(sec)
       local start = os.clock()
@@ -35,7 +35,7 @@ lust.describe("Parallel Test Execution Demo", function()
     end
     
     sleep(0.1) -- Sleep for 100ms
-    lust.expect(true).to.be.truthy()
+    firmo.expect(true).to.be.truthy()
   end)
 end)
 
@@ -60,8 +60,8 @@ if arg[0]:match("parallel_execution_example%.lua$") then
       
       -- Build file content
       local content = "-- Generated test file #" .. i .. "\n"
-      content = content .. "local lust = require('lust-next')\n"
-      content = content .. "local describe, it, expect = lust.describe, lust.it, lust.expect\n\n"
+      content = content .. "local firmo = require('firmo')\n"
+      content = content .. "local describe, it, expect = firmo.describe, firmo.it, firmo.expect\n\n"
       content = content .. "-- Simulate work by sleeping\n"
       content = content .. "local function sleep(sec)\n"
       content = content .. "  local start = os.clock()\n"
@@ -92,7 +92,7 @@ if arg[0]:match("parallel_execution_example%.lua$") then
   end
   
   -- Create 10 test files in a temporary directory
-  local temp_dir = "/tmp/lust_parallel_demo"
+  local temp_dir = "/tmp/firmo_parallel_demo"
   local files = create_test_files(temp_dir, 10)
   
   -- Report what we created
@@ -102,21 +102,21 @@ if arg[0]:match("parallel_execution_example%.lua$") then
   print("\n== Running tests sequentially ==")
   local start_time = os.clock()
   for _, file in ipairs(files) do
-    lust.reset()
+    firmo.reset()
     dofile(file)
   end
   local sequential_time = os.clock() - start_time
   print("Sequential execution time: " .. string.format("%.3f", sequential_time) .. " seconds")
   
   -- Parallel execution demo
-  if lust.parallel then
+  if firmo.parallel then
     print("\n== Running tests in parallel ==")
     local parallel_start = os.clock()
     
     -- Use the files as they are - they already have the correct path
     
     -- Run tests in parallel
-    local results = lust.parallel.run_tests(files, {
+    local results = firmo.parallel.run_tests(files, {
       workers = 4,                  -- Use 4 worker processes
       show_worker_output = true,    -- Show individual worker output for the demo
       verbose = true                -- Display verbose output for the demo

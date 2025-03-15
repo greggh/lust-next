@@ -1,11 +1,11 @@
 #!/usr/bin/env lua
--- Module reset example for lust-next
+-- Module reset example for firmo
 -- This example demonstrates how to use the module reset functionality
 -- to improve test isolation between test files.
 
-local lust = require("lust-next")
+local firmo = require("firmo")
 
-print("lust-next Module Reset Example")
+print("firmo Module Reset Example")
 print("----------------------------")
 
 -- Check if module_reset is available
@@ -103,11 +103,11 @@ run_test_2()  -- Should also start with counter = 0 due to reset
 -- Information about the enhanced module reset system
 print("\n== Enhanced Module Reset System ==")
 if module_reset_available then
-  print("The enhanced module reset system is available in lust-next.")
+  print("The enhanced module reset system is available in firmo.")
   print("This provides automatic module reset between test files when using run_all_tests.lua.")
   print("\nTo use it in your test runner:")
   print("1. Require the module: local module_reset = require('lib.core.module_reset')")
-  print("2. Register with lust: module_reset.register_with_lust(lust)")
+  print("2. Register with firmo: module_reset.register_with_firmo(firmo)")
   print("3. Configure options: module_reset.configure({ reset_modules = true })")
   print("\nThe run_all_tests.lua script does this automatically when available.")
 else

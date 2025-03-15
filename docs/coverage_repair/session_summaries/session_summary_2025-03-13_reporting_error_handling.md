@@ -4,7 +4,7 @@
 
 ## Overview
 
-In this session, we implemented comprehensive error handling throughout the reporting module using the error_handler patterns established in the project-wide error handling plan. The reporting module is responsible for generating and saving reports in various formats, making it a critical component of the lust-next framework where proper error handling is essential.
+In this session, we implemented comprehensive error handling throughout the reporting module using the error_handler patterns established in the project-wide error handling plan. The reporting module is responsible for generating and saving reports in various formats, making it a critical component of the firmo framework where proper error handling is essential.
 
 ## Key Changes
 

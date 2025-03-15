@@ -1,6 +1,6 @@
 # Formatter Tests
 
-This directory contains tests for the lust-next reporting formatters. The formatters generate test results and coverage data in various output formats.
+This directory contains tests for the firmo reporting formatters. The formatters generate test results and coverage data in various output formats.
 
 ## Directory Contents
 
@@ -9,7 +9,7 @@ This directory contains tests for the lust-next reporting formatters. The format
 
 ## Supported Formatters
 
-The lust-next reporting system includes multiple formatters:
+The firmo reporting system includes multiple formatters:
 
 - **HTML** - Interactive HTML reports with syntax highlighting
 - **JSON** - Machine-readable data for integration

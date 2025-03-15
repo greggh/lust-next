@@ -1,9 +1,9 @@
 -- Comprehensive tests for the HTML formatter
 
-local lust = require('lust-next')
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
-local before_each, after_each = lust.before, lust.after
+local firmo = require('firmo')
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
+local before_each, after_each = firmo.before, firmo.after
 
 -- Try to load the logging module
 local logging, logger
@@ -227,7 +227,7 @@ describe("HTML Formatter", function()
         expect(html).to.match("<html")
         expect(html).to.match("</html>")
         expect(html).to.match("<head>")
-        expect(html).to.match("<title>lust%-next Coverage Report</title>")
+        expect(html).to.match("<title>firmo%-next Coverage Report</title>")
         expect(html).to.match("<body")
         
         -- Verify it contains essential sections
@@ -597,4 +597,4 @@ describe("HTML Formatter", function()
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

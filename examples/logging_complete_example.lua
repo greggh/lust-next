@@ -145,7 +145,7 @@ local export_result = export.create_platform_file(
   "logs/export_elasticsearch.json",
   {
     environment = "demo",
-    service_name = "lust-next-complete-example"
+    service_name = "firmo-complete-example"
   }
 )
 

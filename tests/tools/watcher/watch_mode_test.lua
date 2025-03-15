@@ -1,7 +1,7 @@
 -- Tests for the watch mode functionality
 
-local lust = require('lust-next')
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require('firmo')
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local fs = require('lib.tools.filesystem')
 
 -- Initialize proper logging
@@ -105,36 +105,36 @@ describe('Watch Mode', function()
   end)
   
   describe('Reset Function', function()
-    it('exists in lust-next', function()
-      expect(type(lust.reset)).to.equal("function")
+    it('exists in firmo', function()
+      expect(type(firmo.reset)).to.equal("function")
     end)
     
     it('has a reset function with proper structure', function()
       -- Just check the reset function is available and has the right type
-      expect(type(lust.reset)).to.equal("function")
+      expect(type(firmo.reset)).to.equal("function")
     end)
   end)
   
   describe('Command Line Interface', function()
     it('has watch mode documentation', function()
       -- Check that docs/api/cli.md exists and contains watch mode info
-      local content, err = fs.read_file("/home/gregg/Projects/lua-library/lust-next/docs/api/cli.md")
+      local content, err = fs.read_file("/home/gregg/Projects/lua-library/firmo/docs/api/cli.md")
       if content then
         -- Check for watch mode documentation
         expect(content:find("watch mode", 1, true) or content:find("Watch Mode", 1, true)).to.be.truthy()
       else
         -- Skip test if docs file not found
-        lust.log.warn({ 
+        firmo.log.warn({ 
           message = "CLI docs not found, skipping documentation check", 
           error = err or "unknown error",
-          file = "/home/gregg/Projects/lua-library/lust-next/docs/api/cli.md"
+          file = "/home/gregg/Projects/lua-library/firmo/docs/api/cli.md"
         })
       end
     end)
     
     it('has watch mode example', function()
       -- Check that examples/watch_mode_example.lua exists
-      local exists = fs.file_exists("/home/gregg/Projects/lua-library/lust-next/examples/watch_mode_example.lua")
+      local exists = fs.file_exists("/home/gregg/Projects/lua-library/firmo/examples/watch_mode_example.lua")
       expect(exists).to.be.truthy()
     end)
   end)

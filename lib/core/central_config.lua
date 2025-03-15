@@ -1,4 +1,4 @@
--- Centralized configuration module for lust-next
+-- Centralized configuration module for firmo
 -- Provides a global configuration store with standardized access patterns
 
 -- Directly require error_handler to ensure it's always available
@@ -24,7 +24,7 @@ local function init_config()
 end
 
 -- Constants
-M.DEFAULT_CONFIG_PATH = ".lust-next-config.lua"
+M.DEFAULT_CONFIG_PATH = ".firmo-config.lua"
 
 -- Error categories mapping to error_handler categories
 M.ERROR_TYPES = {
@@ -1335,7 +1335,7 @@ function M.save_to_file(path)
     return false, err
   end
   
-  local content = "-- lust-next configuration file\n"
+  local content = "-- firmo configuration file\n"
   content = content .. "-- This file was automatically generated\n\n"
   content = content .. "return " .. serialized_config .. "\n"
   

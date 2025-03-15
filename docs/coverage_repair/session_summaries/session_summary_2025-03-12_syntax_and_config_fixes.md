@@ -2,7 +2,7 @@
 
 ## Overview
 
-In this session, we focused on fixing critical syntax errors and inconsistencies in the codebase that were causing test failures. We tackled several issues across different modules, including duplicate declarations in error_handler.lua, syntax errors in lust-next.lua, configuration module problems in coverage/init.lua, and function name inconsistencies in codefix_test.lua. These fixes represent significant progress in making the test suite more reliable and exposing the actual functional issues that need to be addressed.
+In this session, we focused on fixing critical syntax errors and inconsistencies in the codebase that were causing test failures. We tackled several issues across different modules, including duplicate declarations in error_handler.lua, syntax errors in firmo.lua, configuration module problems in coverage/init.lua, and function name inconsistencies in codefix_test.lua. These fixes represent significant progress in making the test suite more reliable and exposing the actual functional issues that need to be addressed.
 
 ## Accomplished Work
 
@@ -11,7 +11,7 @@ In this session, we focused on fixing critical syntax errors and inconsistencies
    - Removed duplicate declarations of local variables, functions, and data structures
    - This fixed cascading errors throughout the codebase that stemmed from this duplication
 
-2. **Fixed Syntax Error in lust-next.lua**:
+2. **Fixed Syntax Error in firmo.lua**:
    - Fixed an extraneous `end` statement on line 1288 that caused incorrect block nesting
    - Added a missing closing `end` statement for the describe function that begins on line 1137
    - These changes fixed the error message: 'end' expected (to close 'function' at line 1137) near <eof>

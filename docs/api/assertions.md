@@ -1,10 +1,10 @@
 # Assertions API
-This document describes the assertion functions provided by Lust-Next for verifying test conditions.
+This document describes the assertion functions provided by Firmo for verifying test conditions.
 
 ## Basic Assertions
 
 ### expect(value)
-The foundation of Lust-Next's assertion system. Creates an assertion object for the given value.
+The foundation of Firmo's assertion system. Creates an assertion object for the given value.
 **Parameters:**
 
 - `value` (any): The value to make assertions about

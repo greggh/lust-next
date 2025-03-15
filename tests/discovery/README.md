@@ -1,6 +1,6 @@
 # Discovery Tests
 
-This directory contains tests for the lust-next test discovery system. The discovery module locates and loads test files based on patterns and directory structures.
+This directory contains tests for the firmo test discovery system. The discovery module locates and loads test files based on patterns and directory structures.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next test discovery system. The disco
 
 ## Discovery Features
 
-The lust-next discovery system provides:
+The firmo discovery system provides:
 
 - Recursive directory scanning
 - Pattern-based file matching

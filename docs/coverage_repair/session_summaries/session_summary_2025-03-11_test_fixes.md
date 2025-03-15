@@ -41,7 +41,7 @@ We successfully updated 7 additional tests (bringing the total to 11):
 
 5. **quality_test.lua**:
    - Updated imports to follow consistent pattern
-   - Replaced lust.before/after with before/after
+   - Replaced firmo.before/after with before/after
    - Added central_config integration
    - Added structured logging
    - Added proper end comment

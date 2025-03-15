@@ -1,11 +1,11 @@
 -- Report validation example
 --
--- This example demonstrates the report validation capabilities of lust-next.
+-- This example demonstrates the report validation capabilities of firmo.
 -- It shows how to validate coverage data, formatted outputs, and perform
 -- comprehensive validation with anomaly detection.
 
 -- Load required modules
-local lust = require("lust-next")
+local firmo = require("firmo")
 local coverage = require("lib.coverage")
 local reporting = require("lib.reporting")
 local error_handler = require("lib.tools.error_handler")
@@ -19,7 +19,7 @@ error_handler.configure({
 })
 
 -- Create a simple test suite for demonstration
-local describe, it = lust.describe, lust.it
+local describe, it = firmo.describe, firmo.it
 
 describe("Report Validation Example", function()
   -- Create a simple test to generate coverage data
@@ -51,8 +51,8 @@ coverage.init({
 coverage.start()
 
 -- Run the tests (this will generate coverage data)
-lust.reset() -- Reset any previous tests
--- In lust-next, tests are automatically collected but we need to call reset
+firmo.reset() -- Reset any previous tests
+-- In firmo, tests are automatically collected but we need to call reset
 -- to make sure they're properly initialized
 -- The actual test execution happens when the test definitions are loaded
 

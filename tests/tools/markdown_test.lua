@@ -1,14 +1,14 @@
 -- Tests for the markdown fixing functionality
-local lust = require("lust-next")
+local firmo = require("firmo")
 local markdown = require("lib.tools.markdown")
 local codefix = require("lib.tools.codefix")
 
 -- Expose test functions
-_G.describe = lust.describe
-_G.it = lust.it
-_G.expect = lust.expect
-_G.before = lust.before
-_G.after = lust.after
+_G.describe = firmo.describe
+_G.it = firmo.it
+_G.expect = firmo.expect
+_G.before = firmo.before
+_G.after = firmo.after
 
 -- Create test files and directories using the filesystem module
 local fs = require("lib.tools.filesystem")

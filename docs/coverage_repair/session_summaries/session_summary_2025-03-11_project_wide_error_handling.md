@@ -118,7 +118,7 @@ end
    - Implement error handling in module_reset.lua
    - Implement error handling in filesystem.lua
    - Implement error handling in version.lua
-   - Implement error handling in main lust-next.lua
+   - Implement error handling in main firmo.lua
 
 2. **Develop Comprehensive Tests**:
    - Create test suite for central_config.lua error handling

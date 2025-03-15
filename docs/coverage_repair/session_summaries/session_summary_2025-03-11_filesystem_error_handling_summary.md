@@ -5,7 +5,7 @@
 
 ## Overview
 
-This session focused on implementing comprehensive error handling for the filesystem.lua module, which provides critical file I/O operations for the lust-next framework. We specifically enhanced the file discovery functions with robust error handling patterns, building on our previous work with path manipulation functions.
+This session focused on implementing comprehensive error handling for the filesystem.lua module, which provides critical file I/O operations for the firmo framework. We specifically enhanced the file discovery functions with robust error handling patterns, building on our previous work with path manipulation functions.
 
 ## Accomplishments
 

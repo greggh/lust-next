@@ -10,8 +10,8 @@
 ]]
 
 -- Import modules
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local fs = require("lib.tools.filesystem")
 
 -- Sample Calculator implementation to test

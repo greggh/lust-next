@@ -1,7 +1,7 @@
 -- Import the test framework
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import modules for testing
 local coverage = require("lib.coverage")
@@ -189,12 +189,12 @@ describe("Coverage Module", function()
       })
     end
     
-    -- Verify using the correct lust-next assertions
+    -- Verify using the correct firmo assertions
     expect(data.files[normalized_path].total_lines).to.be.a("number")
     expect(data.files[normalized_path].covered_lines).to.be.a("number")
     expect(data.files[normalized_path].line_coverage_percent).to.be.a("number")
     
-    -- Use be_greater_than which is the correct path in lust-next
+    -- Use be_greater_than which is the correct path in firmo
     expect(data.files[normalized_path].total_lines).to.be_greater_than(0)
     expect(data.files[normalized_path].covered_lines).to.be_greater_than(0)
     
@@ -251,11 +251,11 @@ describe("Coverage Module", function()
       })
     end
     
-    -- Verify using the correct lust-next assertions
+    -- Verify using the correct firmo assertions
     expect(data.files[normalized_path].total_lines).to.be.a("number")
     expect(data.files[normalized_path].line_coverage_percent).to.be.a("number")
     
-    -- Use be_greater_than which is the correct path in lust-next
+    -- Use be_greater_than which is the correct path in firmo
     expect(data.files[normalized_path].total_lines).to.be_greater_than(0)
     expect(data.files[normalized_path].line_coverage_percent).to.be_greater_than(0)
   end)
@@ -344,4 +344,4 @@ if log then
 end
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

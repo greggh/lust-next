@@ -113,14 +113,14 @@ In addition to fixing the filesystem module, we identified and fixed several tes
    - Verified the fix using Lua's syntax validation
 
 2. **Fixed watch_mode_test.lua**
-   - Fixed errors related to trying to use `lust.log` which doesn't exist
+   - Fixed errors related to trying to use `firmo.log` which doesn't exist
    - Added proper logger initialization using a consistent pattern
    - Implemented proper error handling for logger calls
 
 3. **Fixed codefix_test.lua**
-   - Fixed errors related to trying to use `lust.log` which doesn't exist
+   - Fixed errors related to trying to use `firmo.log` which doesn't exist
    - Added proper logger initialization using the standard pattern
-   - Fixed after() function reference to use the local variable instead of lust.after
+   - Fixed after() function reference to use the local variable instead of firmo.after
    - Added proper conditional logging in cleanup functions
 
 These fixes allowed the tests to run through completion, with only the expected test failures in some files due to the coverage module and other areas still needing work. 
@@ -143,16 +143,16 @@ We updated the reporting logic to check for assertion failures:
 
 ```lua
 -- Check if there are any assertion failures within test files that loaded successfully
-if lust_next.test_stats.failures > 0 then
+if firmo.test_stats.failures > 0 then
   logger.warn("\n⚠️ TESTS EXECUTED WITH FAILURES")
   logger.warn(string.format("  %d of %d assertions passed (%.1f%%)", 
-    lust_next.test_stats.passes, 
-    lust_next.test_stats.total, 
-    lust_next.test_stats.passes / lust_next.test_stats.total * 100))
+    firmo.test_stats.passes, 
+    firmo.test_stats.total, 
+    firmo.test_stats.passes / firmo.test_stats.total * 100))
   logger.warn(string.format("  %d of %d assertions failed (%.1f%%)", 
-    lust_next.test_stats.failures, 
-    lust_next.test_stats.total, 
-    lust_next.test_stats.failures / lust_next.test_stats.total * 100))
+    firmo.test_stats.failures, 
+    firmo.test_stats.total, 
+    firmo.test_stats.failures / firmo.test_stats.total * 100))
 else
   logger.info("\n✅ ALL TESTS PASSED")
 end
@@ -173,4 +173,4 @@ We have successfully fixed the critical issues in the filesystem module where fu
 
 These fixes maintain robust error handling while ensuring that functions return their expected value types. Testing confirms that the filesystem module now correctly processes and returns appropriate values, resolving the root issues that were causing cascading errors throughout the codebase.
 
-This work represents a significant improvement to the error handling architecture of the lust-next framework, making it more robust and maintainable. The pattern implemented here should be applied to other modules that use error_handler.try to ensure consistent behavior throughout the codebase.
+This work represents a significant improvement to the error handling architecture of the firmo framework, making it more robust and maintainable. The pattern implemented here should be applied to other modules that use error_handler.try to ensure consistent behavior throughout the codebase

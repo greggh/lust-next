@@ -1,6 +1,6 @@
 # Logging Module Tests
 
-This directory contains tests for the lust-next logging system. The logging module provides structured logging capabilities for debugging, monitoring, and auditing.
+This directory contains tests for the firmo logging system. The logging module provides structured logging capabilities for debugging, monitoring, and auditing.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next logging system. The logging modu
 
 ## Logging System Features
 
-The lust-next logging module provides:
+The firmo logging module provides:
 
 - **Multiple severity levels** - FATAL, ERROR, WARN, INFO, DEBUG, TRACE
 - **Module-specific configuration** - Configure logging per module

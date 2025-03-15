@@ -12,8 +12,8 @@
   executed and all comments are properly identified as non-executable.
 ]]
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- A function with various comment types and print statements
 local function test_comments()

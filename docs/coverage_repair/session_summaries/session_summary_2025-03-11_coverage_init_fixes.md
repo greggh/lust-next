@@ -48,7 +48,7 @@ This session focused on addressing critical issues in the coverage/init.lua file
    - module_reset.lua
    - filesystem.lua
    - version.lua
-   - main lust-next.lua
+   - main firmo.lua
 
 2. Consider creating a follow-up task to address the instrumentation module failures once the core error handling is complete
 

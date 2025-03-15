@@ -5,7 +5,7 @@
 
 ## Overview
 
-This session focused on implementing comprehensive error handling for all information functions in the filesystem.lua module. These functions provide essential details about files and directories and are critical for reliable filesystem operations across the lust-next framework.
+This session focused on implementing comprehensive error handling for all information functions in the filesystem.lua module. These functions provide essential details about files and directories and are critical for reliable filesystem operations across the firmo framework.
 
 ## Accomplishments
 
@@ -141,7 +141,7 @@ All implementations were thoroughly tested for:
    - Add proper version number validation
    - Enhance version comparison operations
 
-2. **Main lust-next.lua Error Handling**:
+2. **Main firmo.lua Error Handling**:
    - Implement error handling in the main framework file
    - Enhance module initialization error handling
    - Add proper error propagation to user-facing functions

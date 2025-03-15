@@ -1,4 +1,4 @@
--- Centralized logging module for lust-next
+-- Centralized logging module for firmo
 local M = {}
 
 -- Try to import filesystem module (might not be available during first load)

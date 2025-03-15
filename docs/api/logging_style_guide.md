@@ -1,6 +1,6 @@
 # Logging Style Guide
 
-This guide establishes standards for writing log messages in the lust-next framework. Following these guidelines ensures that logs are consistent, readable, and useful for both human and machine consumption.
+This guide establishes standards for writing log messages in the firmo framework. Following these guidelines ensures that logs are consistent, readable, and useful for both human and machine consumption.
 
 ## Core Principles
 

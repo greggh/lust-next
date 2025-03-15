@@ -1,18 +1,18 @@
-# Getting Started with Lust-Next
-This guide will help you get started with Lust-Next, a lightweight and powerful testing framework for Lua.
+# Getting Started with Firmo
+This guide will help you get started with Firmo, a lightweight and powerful testing framework for Lua.
 
 ## Installation
 
 ### Method 1: Copy the File
-The simplest way to use Lust-Next is to copy the `lust-next.lua` file directly into your project.
+The simplest way to use Firmo is to copy the `firmo.lua` file directly into your project.
 
-1. Download the `lust-next.lua` file from the repository
+1. Download the `firmo.lua` file from the repository
 2. Place it in your project directory or in a lib/vendor directory
 
 ### Method 2: LuaRocks (Coming Soon)
 
 ```bash
-luarocks install lust-next
+luarocks install firmo
 
 ```text
 
@@ -22,10 +22,10 @@ luarocks install lust-next
 Create a file named `example_test.lua` with the following content:
 
 ```lua
--- Require the Lust-Next library
-local lust = require("lust-next")
+-- Require the Firmo library
+local firmo = require("firmo")
 -- Import the core functions
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 -- Define a test suite
 describe("Math operations", function()
   -- Define a test
@@ -47,7 +47,7 @@ end)
 ```text
 
 ### 2. Run the Test
-Run the test using the lust-next runner script:
+Run the test using the firmo runner script:
 
 ```bash
 lua scripts/runner.lua example_test.lua
@@ -67,14 +67,14 @@ Note: Tests are run by `scripts/runner.lua` or `run_all_tests.lua`, not by direc
 ## Writing Tests
 
 ### Test Structure
-Lust-Next uses a BDD-style syntax with describe and it blocks:
+Firmo uses a BDD-style syntax with describe and it blocks:
 
 - `describe(name, fn)`: Groups related tests
 - `it(name, fn)`: Defines an individual test
 - `expect(value)`: Creates assertions about a value
 
 ### Assertions
-Lust-Next provides a rich set of assertions:
+Firmo provides a rich set of assertions:
 
 ```lua
 -- Basic assertions
@@ -102,9 +102,9 @@ First import the hooks, then use them for setup and teardown:
 
 ```lua
 -- Import hooks along with other test functions
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 describe("Database tests", function()
   local db
@@ -112,7 +112,7 @@ describe("Database tests", function()
     -- Set up database connection before each test
     db = Database.connect()
     -- Use structured logging for setup information
-    lust.log.debug({ message = "Database connected", connection_id = db.id })
+    firmo.log.debug({ message = "Database connected", connection_id = db.id })
   end)
   
   it("queries data", function()
@@ -124,7 +124,7 @@ describe("Database tests", function()
     -- Clean up after each test
     db:disconnect()
     -- Log cleanup operations
-    lust.log.debug({ message = "Database disconnected" })
+    firmo.log.debug({ message = "Database disconnected" })
   end)
 end)
 
@@ -159,11 +159,11 @@ You can add tags to your tests for filtering:
 
 ```lua
 describe("User module", function()
-  lust.tags("unit")
+  firmo.tags("unit")
   it("validates username format", function()
     -- Fast unit test
   end)
-  lust.tags("integration", "slow")
+  firmo.tags("integration", "slow")
   it("stores user in database", function()
     -- Slower integration test
   end)
@@ -181,7 +181,7 @@ lua scripts/runner.lua tests/example_test.lua
 ```text
 
 ### Running Multiple Test Files
-Create a directory for your tests (e.g., `tests`) and use Lust-Next's test discovery:
+Create a directory for your tests (e.g., `tests`) and use Firmo's test discovery:
 
 ```bash
 lua run_all_tests.lua --dir ./tests
@@ -214,14 +214,14 @@ lua scripts/runner.lua --watch tests/example_test.lua
 For testing asynchronous code, use the async testing support:
 
 ```lua
-lust.it_async("fetches data asynchronously", function()
+firmo.it_async("fetches data asynchronously", function()
   local result = nil
   -- Start async operation
   fetchData(function(data) 
     result = data
   end)
   -- Wait for operation to complete
-  lust.wait_until(function() return result ~= nil end)
+  firmo.wait_until(function() return result ~= nil end)
   -- Make assertions on the result
   expect(result).to.exist()
   expect(result.status).to.equal("success")
@@ -234,7 +234,7 @@ For isolating your tests, use the mocking system:
 
 ```lua
 -- Create a mock database
-local db_mock = lust.mock(database)
+local db_mock = firmo.mock(database)
 -- Stub methods with test implementations
 db_mock:stub("query", function(query_string)
   return {
@@ -251,7 +251,7 @@ db_mock:restore()
 ```text
 
 ## Next Steps
-Now that you understand the basics of Lust-Next, you can:
+Now that you understand the basics of Firmo, you can:
 
 1. Explore the [API Reference](../api/README.md) for detailed documentation
 2. Look at the [Examples](../../examples) directory for more complex examples

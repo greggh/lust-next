@@ -1,8 +1,8 @@
 # Command Line Interface
-This document describes the command-line interface (CLI) provided by Lust-Next.
+This document describes the command-line interface (CLI) provided by Firmo.
 
 ## Overview
-Lust-Next can be run directly from the command line to discover and run tests. This provides a convenient way to run tests without writing test runner scripts. The CLI now supports three modes of operation:
+Firmo can be run directly from the command line to discover and run tests. This provides a convenient way to run tests without writing test runner scripts. The CLI now supports three modes of operation:
 
 1. **Standard Mode**: Run tests and exit
 2. **Watch Mode**: Continuously run tests when files change
@@ -164,14 +164,14 @@ Test Summary: 5 passed, 0 failed
 ```text
 
 ## Exit Codes
-Lust-Next sets the process exit code based on the test results:
+Firmo sets the process exit code based on the test results:
 
 - **0**: All tests passed
 - **1**: One or more tests failed, or an error occurred during test execution
 This is useful for integration with CI systems.
 
 ## Environment Variables
-Lust-Next doesn't use environment variables directly, but you can create wrapper scripts that use environment variables to configure test runs.
+Firmo doesn't use environment variables directly, but you can create wrapper scripts that use environment variables to configure test runs.
 **Example:**
 
 ```bash
@@ -194,7 +194,7 @@ TEST_TYPE=integration ./run_tests.sh
 ```text
 
 ## Integration with Make
-You can integrate Lust-Next with Make for more complex test workflows:
+You can integrate Firmo with Make for more complex test workflows:
 
 ```makefile
 .PHONY: test test-unit test-watch
@@ -245,7 +245,7 @@ lua scripts/run_tests.lua --interactive
 
 ```text
 $ lua scripts/run_tests.lua -i
-Lust-Next Interactive CLI
+Firmo Interactive CLI
 Type 'help' for available commands
 ------------------------------------------------------------
 Current settings:
@@ -264,7 +264,7 @@ Available test files:
   2. ./tests/async_test.lua
   3. ./tests/discovery_test.lua
   4. ./tests/expect_assertions_test.lua
-  5. ./tests/lust_test.lua
+  5. ./tests/firmo_test.lua
   6. ./tests/mocking_test.lua
   7. ./tests/tagging_test.lua
   8. ./tests/truthy_falsey_test.lua
@@ -302,11 +302,11 @@ Watching directories: .
 You can also start interactive mode programmatically:
 
 ```lua
-local lust = require("lust-next")
+local firmo = require("firmo")
 local interactive = require("src.interactive")
 -- Run your tests...
 -- Start interactive mode
-interactive.start(lust, {
+interactive.start(firmo, {
   test_dir = "./tests",
   pattern = "*_test.lua",
   watch_mode = false
@@ -346,7 +346,7 @@ jobs:
 ```text
 
 ## Creating Custom Test Runners
-You can create custom test runners that use Lust-Next's API. See the `scripts/runner.lua` file for an example of how to implement a custom runner with watch mode support.
+You can create custom test runners that use Firmo's API. See the `scripts/runner.lua` file for an example of how to implement a custom runner with watch mode support.
 
 ## Best Practices
 
@@ -356,5 +356,5 @@ You can create custom test runners that use Lust-Next's API. See the `scripts/ru
 4. **Group Related Options**: When running tests, group related command-line options together
 5. **CI Integration**: Set up your CI system to run different test subsets using tags
 6. **Exit Codes**: Use exit codes in scripts to indicate test success or failure
-7. **Custom Runners**: For complex requirements, create custom test runners using the Lust-Next API
+7. **Custom Runners**: For complex requirements, create custom test runners using the Firmo API
 

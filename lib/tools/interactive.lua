@@ -1,4 +1,4 @@
--- Interactive CLI module for lust-next
+-- Interactive CLI module for firmo
 local interactive = {}
 interactive._VERSION = "1.3.0"
 
@@ -39,7 +39,7 @@ local colors = {
 
 -- Current state of the interactive CLI
 local state = {
-  lust = nil,
+  firmo = nil,
   test_dir = DEFAULT_CONFIG.test_dir,
   test_pattern = DEFAULT_CONFIG.test_pattern,
   current_files = {},
@@ -422,7 +422,7 @@ local function print_header()
   
   -- Safe output with error handling
   success, result = error_handler.try(function()
-    print(colors.bold .. colors.cyan .. "Lust-Next Interactive CLI" .. colors.normal)
+    print(colors.bold .. colors.cyan .. "Firmo Interactive CLI" .. colors.normal)
     print(colors.green .. "Type 'help' for available commands" .. colors.normal)
     print(string.rep("-", 60))
     return true
@@ -435,7 +435,7 @@ local function print_header()
     })
     -- Try a simple fallback for header display
     error_handler.try(function()
-      print("Lust-Next Interactive CLI")
+      print("Firmo Interactive CLI")
       print("Type 'help' for available commands")
       print("---------------------------------------------------------")
       return true
@@ -850,8 +850,8 @@ local function run_tests(file_path)
     return false
   end
   
-  -- Verify lust test framework is available
-  if not state.lust then
+  -- Verify firmo test framework is available
+  if not state.firmo then
     local err = error_handler.runtime_error(
       "Test framework not initialized",
       {
@@ -878,9 +878,9 @@ local function run_tests(file_path)
     return false
   end
   
-  -- Reset lust state with error handling
+  -- Reset firmo state with error handling
   local reset_success, reset_result = error_handler.try(function()
-    state.lust.reset()
+    state.firmo.reset()
     return true
   end)
   
@@ -1006,7 +1006,7 @@ local function run_tests(file_path)
     
     -- Run the single test file with error handling
     local run_success, results = error_handler.try(function()
-      return runner.run_file(file_path, state.lust)
+      return runner.run_file(file_path, state.firmo)
     end)
     
     if not run_success then
@@ -1124,7 +1124,7 @@ local function run_tests(file_path)
     
     -- Run all test files with error handling
     local run_success, run_result = error_handler.try(function()
-      return runner.run_all(state.current_files, state.lust)
+      return runner.run_all(state.current_files, state.firmo)
     end)
     
     if not run_success then
@@ -1248,8 +1248,8 @@ local function start_watch_mode()
     file_count = #state.current_files
   })
   
-  state.lust.reset()
-  runner.run_all(state.current_files, state.lust)
+  state.firmo.reset()
+  runner.run_all(state.current_files, state.firmo)
   
   print(colors.cyan .. "\n--- WATCHING FOR CHANGES (Press Enter to return to interactive mode) ---" .. colors.normal)
   
@@ -1306,8 +1306,8 @@ local function start_watch_mode()
         batch = os.time() - state.session_start_time  -- How many batches into the session
       })
       
-      state.lust.reset()
-      runner.run_all(state.current_files, state.lust)
+      state.firmo.reset()
+      runner.run_all(state.current_files, state.firmo)
       last_run_time = current_time
       need_to_run = false
       
@@ -1544,9 +1544,9 @@ local function process_command(input)
     state.focus_filter = args
     print(colors.green .. "Test filter set to: " .. state.focus_filter .. colors.normal)
     
-    -- Apply filter to lust
-    if state.lust and state.lust.set_filter then
-      state.lust.set_filter(state.focus_filter)
+    -- Apply filter to firmo
+    if state.firmo and state.firmo.set_filter then
+      state.firmo.set_filter(state.focus_filter)
     end
     
     return true
@@ -1561,9 +1561,9 @@ local function process_command(input)
     state.focus_filter = args
     print(colors.green .. "Test focus set to: " .. state.focus_filter .. colors.normal)
     
-    -- Apply focus to lust
-    if state.lust and state.lust.focus then
-      state.lust.focus(state.focus_filter)
+    -- Apply focus to firmo
+    if state.firmo and state.firmo.focus then
+      state.firmo.focus(state.focus_filter)
     end
     
     return true
@@ -1578,13 +1578,13 @@ local function process_command(input)
     state.tag_filter = args
     print(colors.green .. "Tag filter set to: " .. state.tag_filter .. colors.normal)
     
-    -- Apply tags to lust
-    if state.lust and state.lust.filter_tags then
+    -- Apply tags to firmo
+    if state.firmo and state.firmo.filter_tags then
       local tags = {}
       for tag in state.tag_filter:gmatch("([^,]+)") do
         table.insert(tags, tag:match("^%s*(.-)%s*$")) -- Trim spaces
       end
-      state.lust.filter_tags(tags)
+      state.firmo.filter_tags(tags)
     end
     
     return true
@@ -1706,7 +1706,7 @@ local function read_line_with_history()
 end
 
 -- Main entry point for the interactive CLI
-function interactive.start(lust, options)
+function interactive.start(firmo, options)
   options = options or {}
   
   -- Record session start time
@@ -1724,7 +1724,7 @@ function interactive.start(lust, options)
   })
   
   -- Set initial state
-  state.lust = lust
+  state.firmo = firmo
   
   if options.test_dir then
     state.test_dir = options.test_dir

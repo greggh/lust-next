@@ -4,7 +4,7 @@
 
 In today's session, we made significant progress in multiple areas of the coverage module repair project:
 
-1. Fixed issues with the module_reset functionality and its integration with lust-next
+1. Fixed issues with the module_reset functionality and its integration with firmo
 2. Removed inappropriate assertion functions from error_handler.lua
 3. Identified and resolved a circular dependency issue between modules
 4. Created a plan to extract assertion functions to a dedicated module
@@ -15,9 +15,9 @@ In today's session, we made significant progress in multiple areas of the covera
 
 ### 1. Module Reset Integration Fixes
 
-- **Timing Issue Resolution**: Fixed a critical timing issue where `module_reset.register_with_lust` was being called before `lust_next.reset` was defined
-  - Moved the registration call to the end of lust-next.lua to ensure all necessary functions are defined
-  - Added explicit verification to check if `lust_next.reset` exists and is a function
+- **Timing Issue Resolution**: Fixed a critical timing issue where `module_reset.register_with_firmo` was being called before `firmo.reset` was defined
+  - Moved the registration call to the end of firmo.lua to ensure all necessary functions are defined
+  - Added explicit verification to check if `firmo.reset` exists and is a function
 
 - **Temporary Validation Functions**: Created temporary validation functions in module_reset.lua to avoid circular dependencies
   - Implemented `validate_not_nil`, `validate_type`, and `validate_type_or_nil` functions
@@ -28,7 +28,7 @@ In today's session, we made significant progress in multiple areas of the covera
 
 - **Removed Custom Assertions**: Eliminated inappropriate assertion functions from error_handler.lua
   - Removed `M.assert_type_or_nil`, `M.assert_not_nil`, and `M.assert_type`
-  - Added a comment indicating these functions were moved to lust-next assertions
+  - Added a comment indicating these functions were moved to firmo assertions
 
 - **Enhanced safe_io_operation**: Improved error handling for file operations
   - Modified the function to distinguish between errors and negative results
@@ -37,8 +37,8 @@ In today's session, we made significant progress in multiple areas of the covera
 
 ### 3. Assertion Module Plan
 
-- **Architecture Analysis**: Analyzed the circular dependency issue between lust-next.lua and module_reset.lua
-  - Identified that module_reset is required by lust-next.lua and needs assertion functions
+- **Architecture Analysis**: Analyzed the circular dependency issue between firmo.lua and module_reset.lua
+  - Identified that module_reset is required by firmo.lua and needs assertion functions
   - Created a comprehensive plan to address this architectural issue
 
 - **Extraction Plan**: Created a detailed assertion module extraction plan
@@ -68,7 +68,7 @@ In today's session, we made significant progress in multiple areas of the covera
    - Normal negative conditions that should be logged as INFO or DEBUG
    - Added semantic clarity to error handling functions
 
-3. **Module Initialization Order**: Improved the initialization sequence in lust-next.lua
+3. **Module Initialization Order**: Improved the initialization sequence in firmo.lua
    - Ensured all core functionality is defined before integration with optional modules
    - Added explicit validation for expected functions before using them
 
@@ -90,7 +90,7 @@ In today's session, we made significant progress in multiple areas of the covera
 
 All changes were tested to ensure functionality:
 
-1. **Module Reset Integration**: Verified module_reset.lua works correctly with lust-next
+1. **Module Reset Integration**: Verified module_reset.lua works correctly with firmo
    - Confirmed successful loading and initialization
    - Verified module reset functionality works as expected
 
@@ -116,4 +116,4 @@ All changes were tested to ensure functionality:
 
 ## Conclusion
 
-Today's session made significant progress in addressing core architectural issues in the lust-next framework. By resolving circular dependencies, improving error handling, and planning for better modularization, we've enhanced the maintainability and reliability of the codebase. The fixes for module_reset.lua and logging provide immediate benefits, while the assertion module extraction plan sets the stage for a cleaner architecture in the future.
+Today's session made significant progress in addressing core architectural issues in the firmo framework. By resolving circular dependencies, improving error handling, and planning for better modularization, we've enhanced the maintainability and reliability of the codebase. The fixes for module_reset.lua and logging provide immediate benefits, while the assertion module extraction plan sets the stage for a cleaner architecture in the future

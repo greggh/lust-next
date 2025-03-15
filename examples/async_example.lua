@@ -1,13 +1,13 @@
 -- Example demonstrating async testing features
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
+local firmo = require("firmo")
 
 -- Import the test functions
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
-local it_async = lust_next.it_async
-local async = lust_next.async
-local await = lust_next.await
-local wait_until = lust_next.wait_until
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local it_async = firmo.it_async
+local async = firmo.async
+local await = firmo.await
+local wait_until = firmo.wait_until
 
 -- Use the async module directly if we need more control
 local async_module = package.loaded["src.async"]

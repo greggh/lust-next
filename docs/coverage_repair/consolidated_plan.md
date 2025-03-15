@@ -283,11 +283,11 @@ The assertion module extraction was successfully completed with the following ke
 4. **Compatibility**: Maintained the same chainable API pattern (`expect(value).to.equal(expected)`).
 5. **Extensibility**: Exposed paths and utility functions to allow extensions.
 
-#### Integration with lust-next.lua (Completed)
+#### Integration with firmo.lua (Completed)
 
-The assertion module was successfully integrated with the main lust-next.lua file:
+The assertion module was successfully integrated with the main firmo.lua file:
 
-1. **Code Cleanup**: Removed over 1000 lines of assertion-related code from lust-next.lua.
+1. **Code Cleanup**: Removed over 1000 lines of assertion-related code from firmo.lua.
 2. **Seamless Integration**: Updated the expect() function to use the standalone module without changing its behavior.
 3. **Regression Tests**: Verified the integration works correctly and maintains backward compatibility.
 

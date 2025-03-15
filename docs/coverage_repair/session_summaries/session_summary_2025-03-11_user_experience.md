@@ -4,7 +4,7 @@
 
 ## Overview
 
-In this session, we completed comprehensive user experience improvements for the lust-next coverage and reporting system. We created detailed documentation, developed visual examples, and implemented validation for configuration options. This addresses the third major task in Phase 3 of the coverage module repair plan.
+In this session, we completed comprehensive user experience improvements for the firmo coverage and reporting system. We created detailed documentation, developed visual examples, and implemented validation for configuration options. This addresses the third major task in Phase 3 of the coverage module repair plan.
 
 ## Changes Implemented
 
@@ -71,7 +71,7 @@ The documentation follows a clear structure to aid user understanding:
 Each configuration guide includes:
 
 1. **Configuration Tables**: Lists all available options with types and default values
-2. **Configuration Samples**: Complete examples in `.lust-next-config.lua` format
+2. **Configuration Samples**: Complete examples in `.firmo-config.lua` format
 3. **Option Explanations**: Detailed explanations of each configuration option
 4. **Best Practices**: Recommendations for optimal configuration
 5. **Environment-Specific Guidance**: Different settings for development vs. CI/CD
@@ -89,7 +89,7 @@ The `enhanced_config_example.lua` implements a comprehensive example that demons
 6. **Report Validation**: Validating coverage reports with different options
 7. **Report Formatting**: Using different formatters with configuration
 8. **Report Saving**: Saving reports with validation
-9. **Integration with lust API**: Using configuration with the lust framework
+9. **Integration with firmo API**: Using configuration with the firmo framework
 
 ## Files Created
 
@@ -111,7 +111,7 @@ The `enhanced_config_example.lua` implements a comprehensive example that demons
 
 ## Impact Assessment
 
-These user experience improvements significantly enhance the usability of the lust-next framework by providing:
+These user experience improvements significantly enhance the usability of the firmo framework by providing:
 
 1. **Comprehensive Documentation**: Users now have detailed documentation for all configuration options, making it easier to understand and use the system.
 

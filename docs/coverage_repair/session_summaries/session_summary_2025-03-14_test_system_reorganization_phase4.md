@@ -100,7 +100,7 @@ With the completion of Phase 4, we are now ready to proceed to Phase 5 of the Te
    - Ensure examples work correctly
 
 3. **Create Example for Project Integration**:
-   - Create a sample project that uses lust-next
+   - Create a sample project that uses firmo
    - Show how to integrate and configure the test system
    - Demonstrate proper test file organization
    - Include CI/CD integration examples

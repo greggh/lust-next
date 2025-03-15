@@ -2,7 +2,7 @@
 
 ## Overview
 
-In this session, we implemented comprehensive error handling in the `central_config.lua` module following the project-wide error handling plan. The central_config module is a critical component that provides configuration management for the entire lust-next framework, making it a priority target for our error handling improvements.
+In this session, we implemented comprehensive error handling in the `central_config.lua` module following the project-wide error handling plan. The central_config module is a critical component that provides configuration management for the entire firmo framework, making it a priority target for our error handling improvements.
 
 ## Changes Implemented
 
@@ -119,7 +119,7 @@ end
 Basic testing was performed to verify the module can be loaded successfully:
 
 ```
-cd /home/gregg/Projects/lua-library/lust-next && lua -e "local config = require('lib.core.central_config'); print('central_config module loaded successfully')"
+cd /home/gregg/Projects/lua-library/firmo && lua -e "local config = require('lib.core.central_config'); print('central_config module loaded successfully')"
 ```
 
 More comprehensive testing will be needed to ensure all error conditions are properly handled, especially interactions with other modules that depend on central_config.

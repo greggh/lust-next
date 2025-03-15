@@ -1,16 +1,16 @@
 # Module Reset Utilities
-This document describes the module management utilities provided by Lust-Next to help maintain clean test state.
+This document describes the module management utilities provided by Firmo to help maintain clean test state.
 
 ## Overview
-Lust-Next provides utilities for resetting and reloading modules between tests. These utilities help ensure that each test runs with a fresh module state, eliminating test cross-contamination.
-There are two approaches to module reset in lust-next:
+Firmo provides utilities for resetting and reloading modules between tests. These utilities help ensure that each test runs with a fresh module state, eliminating test cross-contamination.
+There are two approaches to module reset in firmo:
 
 1. **Individual Module Reset**: Reset specific modules manually within tests
 2. **Automatic Test Suite Isolation**: Automatically reset all modules between test files
 
 ## Individual Module Reset Functions
 
-### lust.reset_module(module_name)
+### firmo.reset_module(module_name)
 Resets and reloads a module, ensuring a fresh state.
 **Parameters:**
 
@@ -25,7 +25,7 @@ describe("Database tests", function()
   local db
   before_each(function()
     -- Reset the module before each test
-    db = lust.reset_module("app.database")
+    db = firmo.reset_module("app.database")
   end)
   it("connects to the database", function()
     -- Each test gets a fresh instance of the module
@@ -40,7 +40,7 @@ end)
 
 ```text
 
-### lust.with_fresh_module(module_name, test_fn)
+### firmo.with_fresh_module(module_name, test_fn)
 Runs a function with a freshly loaded module, simplifying single-use cases.
 **Parameters:**
 
@@ -53,7 +53,7 @@ Runs a function with a freshly loaded module, simplifying single-use cases.
 
 ```lua
 it("executes a test with a fresh module", function()
-  lust.with_fresh_module("app.config", function(config)
+  firmo.with_fresh_module("app.config", function(config)
     -- We have a guaranteed fresh config module
     expect(config.initialized).to.equal(false)
     -- Modify the module
@@ -67,16 +67,16 @@ end)
 ```text
 
 ## Automatic Test Suite Isolation
-Lust-Next provides an enhanced module reset system that automatically resets all modules between test files, ensuring complete isolation. This system is built into the run_all_tests.lua runner.
+Firmo provides an enhanced module reset system that automatically resets all modules between test files, ensuring complete isolation. This system is built into the run_all_tests.lua runner.
 
 ### Using the Module Reset System
 The module reset system is automatically used by the run_all_tests.lua script when available. You can also use it directly:
 
 ```lua
-local lust = require("lust-next")
+local firmo = require("firmo")
 local module_reset = require("lib.core.module_reset")
--- Register with lust-next
-module_reset.register_with_lust(lust)
+-- Register with firmo
+module_reset.register_with_firmo(firmo)
 -- Configure isolation options
 module_reset.configure({
   reset_modules = true,  -- Enable/disable module reset
@@ -90,8 +90,8 @@ module_reset.configure({
 #### `module_reset.init()`
 Initializes the module reset system by taking a snapshot of the current module state.
 
-#### `module_reset.register_with_lust(lust_next)`
-Registers the module reset system with lust-next, enhancing the `reset()` method.
+#### `module_reset.register_with_firmo(firmo)`
+Registers the module reset system with firmo, enhancing the `reset()` method.
 
 #### `module_reset.configure(options)`
 Configures the module reset system:
@@ -186,8 +186,8 @@ describe("User database operations", function()
   local user_service
   before_each(function()
     -- Reset both modules to ensure a clean state
-    db = lust.reset_module("app.database")
-    user_service = lust.reset_module("app.services.user")
+    db = firmo.reset_module("app.database")
+    user_service = firmo.reset_module("app.services.user")
     -- Now set up fresh state
     db.connect({
       type = "sqlite",
@@ -228,7 +228,7 @@ describe("Authentication service", function()
   local auth_service
   before_each(function()
     -- This will effectively reset all dependencies too, since they'll be re-required
-    auth_service = lust.reset_module("app.services.auth")
+    auth_service = firmo.reset_module("app.services.auth")
   end)
   it("authenticates valid credentials", function()
     expect(auth_service.authenticate("user", "password")).to.be.truthy()
@@ -246,14 +246,14 @@ For maximum isolation, you can use both approaches:
 ```lua
 -- In your test runner, enable automatic test suite isolation
 local module_reset = require("lib.core.module_reset")
-module_reset.register_with_lust(lust)
+module_reset.register_with_firmo(firmo)
 module_reset.configure({ reset_modules = true })
 -- In your tests, reset specific modules that need per-test isolation
 describe("User service tests", function()
   local user_service
   before_each(function()
     -- Reset for each test case
-    user_service = lust.reset_module("app.services.user")
+    user_service = firmo.reset_module("app.services.user")
   end)
 
   -- Tests...

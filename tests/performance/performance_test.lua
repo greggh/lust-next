@@ -1,6 +1,6 @@
--- Performance tests for lust-next
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+-- Performance tests for firmo
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import filesystem module
 local fs = require("lib.tools.filesystem")
@@ -17,28 +17,28 @@ describe("Performance Tests", function()
 
   if not benchmark_loaded then
     it("requires the benchmark module", function()
-      lust.pending("benchmark module not available")
+      firmo.pending("benchmark module not available")
     end)
     return
   end
   
   if not module_reset_loaded then
     it("requires the module_reset module", function()
-      lust.pending("module_reset module not available")
+      firmo.pending("module_reset module not available")
     end)
     return
   end
   
   if not fixtures_loaded then
     it("requires test fixtures", function()
-      lust.pending("fixtures not available: " .. tostring(fixtures))
+      firmo.pending("fixtures not available: " .. tostring(fixtures))
     end)
     return
   end
   
-  -- Register modules with lust-next
-  benchmark.register_with_lust(lust)
-  module_reset.register_with_lust(lust)
+  -- Register modules with firmo
+  benchmark.register_with_firmo(firmo)
+  module_reset.register_with_firmo(firmo)
   
   describe("Test suite isolation", function()
     it("should measure performance impact of module reset", function()
@@ -73,7 +73,7 @@ describe("Performance Tests", function()
         
         local success, err = fs.write_file(path, module_content)
         if not success then
-          lust.log.error({ message = "Failed to create test module", module = name, path = path, error = err })
+          firmo.log.error({ message = "Failed to create test module", module = name, path = path, error = err })
           return
         end
         
@@ -86,7 +86,7 @@ describe("Performance Tests", function()
       -- Benchmark with module reset disabled
       local function run_without_reset()
         -- Configure to disable module reset
-        lust.module_reset.configure({
+        firmo.module_reset.configure({
           reset_modules = false
         })
         
@@ -97,15 +97,15 @@ describe("Performance Tests", function()
           m.add_data("key" .. math.random(100), "value" .. math.random(100))
         end
         
-        -- Run a normal lust-next reset
-        lust.reset()
+        -- Run a normal firmo reset
+        firmo.reset()
         collectgarbage("collect")
       end
       
       -- Benchmark with module reset enabled
       local function run_with_reset()
         -- Configure to enable module reset
-        lust.module_reset.configure({
+        firmo.module_reset.configure({
           reset_modules = true
         })
         
@@ -117,25 +117,25 @@ describe("Performance Tests", function()
         end
         
         -- Run a reset that includes module reset
-        lust.reset()
+        firmo.reset()
         collectgarbage("collect")
       end
       
       -- Run benchmarks
-      local without_reset_results = lust.benchmark.measure(run_without_reset, nil, {
+      local without_reset_results = firmo.benchmark.measure(run_without_reset, nil, {
         iterations = 10,
         warmup = 2,
         label = "Without module reset"
       })
       
-      local with_reset_results = lust.benchmark.measure(run_with_reset, nil, {
+      local with_reset_results = firmo.benchmark.measure(run_with_reset, nil, {
         iterations = 10,
         warmup = 2,
         label = "With module reset"
       })
       
       -- Compare results
-      local comparison = lust.benchmark.compare(without_reset_results, with_reset_results)
+      local comparison = firmo.benchmark.compare(without_reset_results, with_reset_results)
       
       -- Clean up test modules
       for _, mod in ipairs(modules) do
@@ -157,14 +157,14 @@ describe("Performance Tests", function()
       local initial_memory = collectgarbage("count")
       
       -- Generate a small test suite for benchmarking
-      local small_suite = lust.benchmark.generate_large_test_suite({
+      local small_suite = firmo.benchmark.generate_large_test_suite({
         file_count = 5,
         tests_per_file = 10,
         output_dir = "/tmp/small_benchmark_tests"
       })
       
       -- Generate a larger test suite for benchmarking
-      local large_suite = lust.benchmark.generate_large_test_suite({
+      local large_suite = firmo.benchmark.generate_large_test_suite({
         file_count = 10,
         tests_per_file = 20,
         output_dir = "/tmp/large_benchmark_tests"
@@ -173,7 +173,7 @@ describe("Performance Tests", function()
       -- Function to test memory usage when running test suites
       local function run_test_suite(suite_dir, with_reset)
         -- Configure module reset
-        lust.module_reset.configure({
+        firmo.module_reset.configure({
           reset_modules = with_reset
         })
         
@@ -182,7 +182,7 @@ describe("Performance Tests", function()
         local all_files, err = fs.list_files(suite_dir)
         
         if not all_files then
-          lust.log.error({ message = "Failed to list test files", directory = suite_dir, error = err })
+          firmo.log.error({ message = "Failed to list test files", directory = suite_dir, error = err })
           return
         end
         
@@ -195,7 +195,7 @@ describe("Performance Tests", function()
         
         -- Run each test file
         for _, file in ipairs(files) do
-          lust.reset()
+          firmo.reset()
           dofile(file)
         end
         
@@ -204,36 +204,36 @@ describe("Performance Tests", function()
       end
       
       -- Benchmark small suite without reset
-      local small_without_reset = lust.benchmark.measure(
+      local small_without_reset = firmo.benchmark.measure(
         run_test_suite, 
         {small_suite.output_dir, false}, 
         {label = "Small suite without reset"}
       )
       
       -- Benchmark small suite with reset
-      local small_with_reset = lust.benchmark.measure(
+      local small_with_reset = firmo.benchmark.measure(
         run_test_suite, 
         {small_suite.output_dir, true}, 
         {label = "Small suite with reset"}
       )
       
       -- Benchmark large suite without reset
-      local large_without_reset = lust.benchmark.measure(
+      local large_without_reset = firmo.benchmark.measure(
         run_test_suite, 
         {large_suite.output_dir, false}, 
         {label = "Large suite without reset"}
       )
       
       -- Benchmark large suite with reset
-      local large_with_reset = lust.benchmark.measure(
+      local large_with_reset = firmo.benchmark.measure(
         run_test_suite, 
         {large_suite.output_dir, true}, 
         {label = "Large suite with reset"}
       )
       
       -- Compare results
-      lust.benchmark.compare(small_without_reset, small_with_reset)
-      lust.benchmark.compare(large_without_reset, large_with_reset)
+      firmo.benchmark.compare(small_without_reset, small_with_reset)
+      firmo.benchmark.compare(large_without_reset, large_with_reset)
       
       -- Clean up test files
       fs.remove_dir(small_suite.output_dir)
@@ -245,7 +245,7 @@ describe("Performance Tests", function()
       
       -- Check that memory doesn't grow too much
       local memory_growth = final_memory - initial_memory
-      lust.log.info({ message = "Memory usage statistics", growth_kb = memory_growth })
+      firmo.log.info({ message = "Memory usage statistics", growth_kb = memory_growth })
       expect(memory_growth).to.be_less_than(1000) -- 1MB is a reasonable limit
     end)
   end)
@@ -273,7 +273,7 @@ describe("Performance Tests", function()
       end
       
       -- Measure error handling performance
-      local error_perf = lust.benchmark.measure(
+      local error_perf = firmo.benchmark.measure(
         handle_errors, 
         nil,
         {
@@ -283,7 +283,7 @@ describe("Performance Tests", function()
       )
       
       -- Print results
-      lust.benchmark.print_result(error_perf)
+      firmo.benchmark.print_result(error_perf)
       
       -- Make sure the benchmark ran successfully
       expect(error_perf.time_stats.mean).to.be_greater_than(0)

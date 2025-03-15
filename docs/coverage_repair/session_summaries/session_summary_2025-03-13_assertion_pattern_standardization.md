@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on implementing consistent assertion patterns across the test suite according to our new comprehensive testing documentation. We identified and began fixing incorrect assertion patterns in test files to ensure they follow the lust-next expect-style assertion best practices.
+This session focused on implementing consistent assertion patterns across the test suite according to our new comprehensive testing documentation. We identified and began fixing incorrect assertion patterns in test files to ensure they follow the firmo expect-style assertion best practices.
 
 ## Accomplishments
 
@@ -14,7 +14,7 @@ This session focused on implementing consistent assertion patterns across the te
 
 2. **Fixed incorrect numeric comparison patterns**:
    - Updated `filesystem_test.lua` to use `.to.equal()` for numeric comparisons instead of `.to.be()`
-   - Updated `lust_test.lua` to use `.to.equal()` for numeric comparisons instead of `.to.be()`
+   - Updated `firmo_test.lua` to use `.to.equal()` for numeric comparisons instead of `.to.be()`
    - Corrected assertion patterns in `assertions_test.lua` and `expect_assertions_test.lua`
    - Fixed some patterns in `fix_markdown_script_test.lua`
 
@@ -66,7 +66,7 @@ expect(#files).to.be(3)
 expect(#files).to.equal(3)
 ```
 
-#### Fixed in lust_test.lua:
+#### Fixed in firmo_test.lua:
 
 ```lua
 -- Before:
@@ -84,8 +84,8 @@ expect(#spied.calls).to.equal(1)
 
 ```lua
 -- Before:
-lust.assert.is_truthy(true)
-lust.assert.is_falsey(false)
+firmo.assert.is_truthy(true)
+firmo.assert.is_falsey(false)
 
 -- After:
 expect(true).to.be_truthy()

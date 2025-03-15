@@ -1,7 +1,7 @@
 -- Test for coverage module error handling
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 local fs = require("lib.tools.filesystem")
 local coverage = require("lib.coverage")

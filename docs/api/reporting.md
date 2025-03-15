@@ -1,5 +1,5 @@
 # Reporting Module API
-The reporting module in lust-next provides a centralized system for generating and saving reports from test data.
+The reporting module in firmo provides a centralized system for generating and saving reports from test data.
 
 ## Overview
 The reporting module handles report formatting and file operations, providing a clean separation of concerns between data collection and output generation. It supports multiple output formats, robust file operations, and fallback mechanisms to ensure reliable report generation.
@@ -7,10 +7,10 @@ The reporting module handles report formatting and file operations, providing a 
 ## Basic Usage
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Get coverage data
-local coverage_data = lust.get_coverage_data()
+local coverage_data = firmo.get_coverage_data()
 -- Format coverage data as HTML
 local html_report = reporting.format_coverage(coverage_data, "html")
 -- Save the report to a file
@@ -31,7 +31,7 @@ The reporting module doesn't require explicit configuration, as it receives its 
 Format coverage data into the specified output format:
 
 ```lua
-local coverage_data = lust.get_coverage_data()
+local coverage_data = firmo.get_coverage_data()
 local html_report = reporting.format_coverage(coverage_data, "html")
 
 ```text
@@ -47,7 +47,7 @@ Returns:
 Format quality data into the specified output format:
 
 ```lua
-local quality_data = lust.get_quality_data()
+local quality_data = firmo.get_quality_data()
 local html_report = reporting.format_quality(quality_data, "html")
 
 ```text
@@ -81,7 +81,7 @@ Returns:
 Format and save a coverage report:
 
 ```lua
-local coverage_data = lust.get_coverage_data()
+local coverage_data = firmo.get_coverage_data()
 reporting.save_coverage_report("./coverage-report.html", coverage_data, "html")
 
 ```text
@@ -99,7 +99,7 @@ Returns:
 Format and save a quality report:
 
 ```lua
-local quality_data = lust.get_quality_data()
+local quality_data = firmo.get_quality_data()
 reporting.save_quality_report("./quality-report.html", quality_data, "html")
 
 ```text
@@ -263,7 +263,7 @@ lua run_tests.lua --timestamp-format "%Y%m%d"
 lua run_tests.lua --verbose-reports
 
 ```text
-These options can be combined with other lust-next options:
+These options can be combined with other firmo options:
 
 ```bash
 lua run_tests.lua --coverage --output-dir ./reports --report-suffix "-$(date +%Y%m%d)" tests/coverage_test.lua
@@ -275,12 +275,12 @@ lua run_tests.lua --coverage --output-dir ./reports --report-suffix "-$(date +%Y
 ### Test Results Report Generation
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Run tests
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Get test results data
-local results_data = lust.get_test_results()
+local results_data = firmo.get_test_results()
 -- Generate different report formats
 local junit_report = reporting.format_results(results_data, "junit")
 local tap_report = reporting.format_results(results_data, "tap")
@@ -306,13 +306,13 @@ reporting.auto_save_reports(nil, nil, results_data, {
 ### Coverage Report Generation
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Run tests with coverage
-lust.coverage_options.enabled = true
-lust.run_discovered('./tests')
+firmo.coverage_options.enabled = true
+firmo.run_discovered('./tests')
 -- Get coverage data
-local coverage_data = lust.get_coverage_data()
+local coverage_data = firmo.get_coverage_data()
 -- Generate different report formats
 local html_report = reporting.format_coverage(coverage_data, "html")
 local json_report = reporting.format_coverage(coverage_data, "json")
@@ -330,17 +330,17 @@ reporting.auto_save_reports(coverage_data, nil, "./reports")
 ### Combined Coverage and Quality Reporting
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Enable both coverage and quality
-lust.coverage_options.enabled = true
-lust.quality_options.enabled = true
-lust.quality_options.level = 3
+firmo.coverage_options.enabled = true
+firmo.quality_options.enabled = true
+firmo.quality_options.level = 3
 -- Run tests
-lust.run_discovered('./tests')
+firmo.run_discovered('./tests')
 -- Get both data sets
-local coverage_data = lust.get_coverage_data()
-local quality_data = lust.get_quality_data()
+local coverage_data = firmo.get_coverage_data()
+local quality_data = firmo.get_quality_data()
 -- Save all reports
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 
@@ -349,13 +349,13 @@ reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 ### Custom Report Directory Structure
 
 ```lua
-local lust = require('lust-next')
+local firmo = require('firmo')
 local reporting = require('src.reporting')
 -- Run tests with coverage
-lust.coverage_options.enabled = true
-lust.run_discovered('./tests')
+firmo.coverage_options.enabled = true
+firmo.run_discovered('./tests')
 -- Get coverage data
-local coverage_data = lust.get_coverage_data()
+local coverage_data = firmo.get_coverage_data()
 -- Create custom directory structure
 reporting.write_file("./reports/coverage/html/index.html", 
                     reporting.format_coverage(coverage_data, "html"))

@@ -1,4 +1,4 @@
--- mocking.lua - Mocking system integration for lust-next
+-- mocking.lua - Mocking system integration for firmo
 
 local spy = require("lib.mocking.spy")
 local stub = require("lib.mocking.stub")
@@ -609,17 +609,17 @@ function mocking.register_cleanup_hook(after_test_fn)
   end
 end
 
--- Function to add be_truthy/be_falsy assertions to lust-next
-function mocking.ensure_assertions(lust_next_module)
+-- Function to add be_truthy/be_falsy assertions to firmo
+function mocking.ensure_assertions(firmo_module)
   logger.debug("Ensuring mocking assertions are registered")
   
   -- Input validation
-  if lust_next_module == nil then
+  if firmo_module == nil then
     local err = error_handler.validation_error(
       "Cannot register assertions on nil module",
       {
         function_name = "mocking.ensure_assertions",
-        parameter_name = "lust_next_module",
+        parameter_name = "firmo_module",
         provided_value = "nil"
       }
     )
@@ -629,7 +629,7 @@ function mocking.ensure_assertions(lust_next_module)
   
   -- Use error handling to safely access the paths
   local success, paths, err = error_handler.try(function()
-    return lust_next_module.paths
+    return firmo_module.paths
   end)
   
   if not success or not paths then
@@ -637,7 +637,7 @@ function mocking.ensure_assertions(lust_next_module)
       "Failed to register assertions - paths not found or accessible",
       {
         function_name = "mocking.ensure_assertions",
-        module_name = "lust_next_module",
+        module_name = "firmo_module",
         error = success and "paths is nil" or error_handler.format_error(paths)
       }
     )

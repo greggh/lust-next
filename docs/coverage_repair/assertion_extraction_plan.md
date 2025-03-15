@@ -8,7 +8,7 @@ This document outlines the plan for extracting assertion functions into a standa
 
 The current implementation has several issues:
 
-1. **Circular Dependencies**: Assertion functions are tightly coupled with the main lust-next module, causing circular dependencies
+1. **Circular Dependencies**: Assertion functions are tightly coupled with the main firmo module, causing circular dependencies
 2. **Inconsistent Error Handling**: Error patterns vary across different assertion methods
 3. **Complex Error Propagation**: The assertion chain makes error tracing difficult
 
@@ -46,7 +46,7 @@ The current implementation has several issues:
    - [ ] Implement detailed context information
 
 3. **Integration with Main Module**
-   - [ ] Update lust-next.lua to use the new module
+   - [ ] Update firmo.lua to use the new module
    - [ ] Implement backward compatibility layer
    - [ ] Add migration utilities for deprecated patterns
 

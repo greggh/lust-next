@@ -1,10 +1,10 @@
 # Logging Guide
 
-This guide explains how to use the lust-next logging system in your projects.
+This guide explains how to use the firmo logging system in your projects.
 
 ## Overview
 
-The lust-next testing framework includes a comprehensive centralized logging system that provides:
+The firmo testing framework includes a comprehensive centralized logging system that provides:
 
 - Multiple log levels (ERROR, WARN, INFO, DEBUG, VERBOSE)
 - Module-specific log configuration
@@ -55,10 +55,10 @@ The logging system can be configured in several ways:
 
 ### 1. Global Configuration File
 
-The recommended approach is to use the global configuration file (`.lust-next-config.lua`). This allows centralized control of logging behavior across your project.
+The recommended approach is to use the global configuration file (`.firmo-config.lua`). This allows centralized control of logging behavior across your project.
 
 ```lua
--- In .lust-next-config.lua
+-- In .firmo-config.lua
 return {
   -- Other configuration...
   
@@ -190,9 +190,9 @@ function process_file(file_path)
 end
 ```
 
-## Integration with lust-next Modules
+## Integration with firmo Modules
 
-The logging system is integrated with all core lust-next modules. Each module configures logging automatically based on the global configuration:
+The logging system is integrated with all core firmo modules. Each module configures logging automatically based on the global configuration:
 
 - Coverage module
 - Reporting module

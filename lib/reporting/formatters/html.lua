@@ -631,7 +631,7 @@ function M.format_coverage(coverage_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>lust-next Coverage Report</title>
+  <title>firmo Coverage Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -650,7 +650,7 @@ function M.format_coverage(coverage_data)
 </head>
 <body>
   <div class="container">
-    <h1>lust-next Coverage Report</h1>
+    <h1>firmo Coverage Report</h1>
     <div class="summary">
       <h2>Summary</h2>
       <p>Overall Coverage: 52.72%</p>
@@ -701,7 +701,7 @@ function M.format_coverage(coverage_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Lust-Next Coverage Report</title>
+  <title>Firmo Coverage Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -718,7 +718,7 @@ function M.format_coverage(coverage_data)
 </head>
 <body>
   <div class="container">
-    <h1>Lust-Next Coverage Report</h1>
+    <h1>Firmo Coverage Report</h1>
     <div class="summary">
       <h2>Summary</h2>
       <p>Overall Coverage: 80.00%</p>
@@ -855,7 +855,7 @@ function M.format_coverage(coverage_data)
 <html data-theme="]] .. theme .. [[">
 <head>
   <meta charset="utf-8">
-  <title>lust-next Coverage Report</title>
+  <title>firmo Coverage Report</title>
   <style>
     /* Light theme variables (default) */
     :root {
@@ -1565,7 +1565,7 @@ function M.format_coverage(coverage_data)
 </head>
 <body>
   <div class="container">
-    <h1>Lust-Next Coverage Report</h1>
+    <h1>Firmo Coverage Report</h1>
     
     <!-- Theme toggle -->
     <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
@@ -1905,7 +1905,7 @@ function M.format_quality(quality_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Lust-Next Test Quality Report</title>
+  <title>Firmo Test Quality Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -1917,7 +1917,7 @@ function M.format_quality(quality_data)
 </head>
 <body>
   <div class="container">
-    <h1>Lust-Next Test Quality Report</h1>
+    <h1>Firmo Test Quality Report</h1>
     <div class="summary">
       <h2>Summary</h2>
       <p>Quality Level: 3 - comprehensive</p>
@@ -1997,7 +1997,7 @@ function M.format_quality(quality_data)
 <html>
 <head>
   <meta charset="utf-8">
-  <title>lust-next Test Quality Report</title>
+  <title>firmo Test Quality Report</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; }
     .container { max-width: 960px; margin: 0 auto; padding: 20px; }
@@ -2013,7 +2013,7 @@ function M.format_quality(quality_data)
 </head>
 <body>
   <div class="container">
-    <h1>lust-next Test Quality Report</h1>
+    <h1>firmo Test Quality Report</h1>
     
     <div class="summary">
       <h2>Summary</h2>

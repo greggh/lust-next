@@ -1,20 +1,20 @@
-# Assertion Pattern Mapping for lust-next
+# Assertion Pattern Mapping for firmo
 
 ## Introduction
 
-This guide provides a comprehensive reference for writing assertions in lust-next. It includes detailed mappings from busted-style assertions to lust-next's expect-style assertions, common mistakes to avoid, and examples of complex assertion patterns.
+This guide provides a comprehensive reference for writing assertions in firmo. It includes detailed mappings from busted-style assertions to firmo's expect-style assertions, common mistakes to avoid, and examples of complex assertion patterns.
 
 ## Key Concepts
 
 ### Basic Structure
 
-lust-next uses **expect-style** assertions rather than assert-style assertions:
+firmo uses **expect-style** assertions rather than assert-style assertions:
 
 ```lua
--- Expect-style (correct for lust-next)
+-- Expect-style (correct for firmo)
 expect(actual_value).to.equal(expected_value)
 
--- Assert-style (from busted, NOT for use in lust-next)
+-- Assert-style (from busted, NOT for use in firmo)
 assert.equals(expected_value, actual_value)  -- DON'T USE THIS
 ```
 
@@ -26,11 +26,11 @@ assert.equals(expected_value, actual_value)  -- DON'T USE THIS
 
 ### Parameter Order
 
-The parameter order in lust-next is the opposite of busted:
+The parameter order in firmo is the opposite of busted:
 - In busted: `assert.equals(expected, actual)`
-- In lust-next: `expect(actual).to.equal(expected)`
+- In firmo: `expect(actual).to.equal(expected)`
 
-The lust-next convention follows the pattern: "expect what you have to equal what you want"
+The firmo convention follows the pattern: "expect what you have to equal what you want"
 
 ### Negating Assertions
 
@@ -42,7 +42,7 @@ expect(value).to_not.be_truthy()
 
 ## Complete Assertion Pattern Mapping
 
-| Busted-style                       | lust-next style                     | Notes                             |
+| Busted-style                       | firmo style                     | Notes                             |
 |------------------------------------|-------------------------------------|-----------------------------------|
 | `assert.is_not_nil(value)`         | `expect(value).to.exist()`          | Checks if a value is not nil      |
 | `assert.is_nil(value)`             | `expect(value).to_not.exist()`      | Checks if a value is nil          |
@@ -247,9 +247,9 @@ expect(user.nonexistent).to_not.exist()  -- for properties that shouldn't exist
 #### Assertions with Mocks and Spies
 
 ```lua
-local lust = require "lust-next"
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local spy = lust.spy
+local firmo = require "firmo"
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local spy = firmo.spy
 
 describe("Spy assertions", function()
   it("should check if function was called", function()
@@ -302,14 +302,14 @@ end)
 Here's a complete example of a well-structured test file:
 
 ```lua
--- Import lust-next
-local lust = require "lust-next"
+-- Import firmo
+local firmo = require "firmo"
 
 -- Import test functions
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import test lifecycle hooks
-local before, after = lust.before, lust.after
+local before, after = firmo.before, firmo.after
 
 -- Import module to test
 local calculator = require "calculator"
@@ -376,10 +376,10 @@ end)
 
 1. **Check imports**: Ensure you've imported test functions correctly:
    ```lua
-   local describe, it, expect = lust.describe, lust.it, lust.expect
+   local describe, it, expect = firmo.describe, firmo.it, firmo.expect
    ```
 
-2. **No explicit run call**: Ensure you don't have any `lust.run()` or similar calls in the test file
+2. **No explicit run call**: Ensure you don't have any `firmo.run()` or similar calls in the test file
 
 3. **Command line**: Make sure you're running tests with the correct command:
    ```bash
@@ -394,7 +394,7 @@ end)
 
 3. **Chain syntax**: Make sure you're using `.to.be.a()` not `.to_be_a()`
 
-4. **Comparing tables**: Complex tables might need custom comparison logic; lust-next does basic deep comparison
+4. **Comparing tables**: Complex tables might need custom comparison logic; firmo does basic deep comparison
 
 ### Setup/Teardown Issues
 
@@ -406,7 +406,7 @@ end)
 
 ## Conclusion
 
-The expect-style assertions in lust-next provide a readable, chainable way to express test expectations. By following the patterns in this guide, you'll write consistent, maintainable tests that clearly communicate your code's intended behavior.
+The expect-style assertions in firmo provide a readable, chainable way to express test expectations. By following the patterns in this guide, you'll write consistent, maintainable tests that clearly communicate your code's intended behavior.
 
 Remember these key points:
 

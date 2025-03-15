@@ -1,14 +1,14 @@
--- Tests that the standalone assertion module works in exactly the same way as the original lust-next expect
+-- Tests that the standalone assertion module works in exactly the same way as the original firmo expect
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo") 3:7:local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Explicitly require the standalone assertion module
 local assertion = require("lib.assertion")
 
 describe("Assertion Module Integration", function()
   describe("API Compatibility", function()
-    it("should have the same behavior as lust-next expect", function()
+    it("should have the same behavior as firmo expect", function()
       -- Set up test values
       local num = 42
       local str = "test"
@@ -64,10 +64,10 @@ describe("Assertion Module Integration", function()
     
     it("should handle error cases in the same way", function()
       -- Both should generate errors for failing assertions
-      local lust_error
+      local firmo_error
       pcall(function() 
         expect(5).to.equal(6)
-      end, function(err) lust_error = err end)
+      end, function(err) firmo_error = err end)
       
       local assertion_error
       pcall(function() 
@@ -75,11 +75,11 @@ describe("Assertion Module Integration", function()
       end, function(err) assertion_error = err end)
       
       -- Both errors should indicate the values are not equal
-      expect(lust_error).to_not.be(nil)
+      expect(firmo_error).to_not.be(nil)
       expect(assertion_error).to_not.be(nil)
       
       -- The error messages should indicate the same fundamental issue
-      if lust_error and assertion_error then
+      if firmo_error and assertion_error then
         expect(assertion_error:match("not equal")).to_not.be(nil)
       end
     end)

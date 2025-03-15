@@ -125,7 +125,7 @@ tmp/
 .tmp/
 .sass-cache/
 
-# Project specific files - lust-next
+# Project specific files - firmo
 # Generated report output directories (now in examples/reports)
 # But allow the files tracked in git
 examples/reports/auto-generated/*/

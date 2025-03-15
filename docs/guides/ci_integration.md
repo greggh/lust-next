@@ -1,5 +1,5 @@
-# CI/CD Integration with Lust-Next
-This guide explains how to set up Lust-Next in various Continuous Integration (CI) environments to automate your Lua testing workflow.
+# CI/CD Integration with Firmo
+This guide explains how to set up Firmo in various Continuous Integration (CI) environments to automate your Lua testing workflow.
 
 ## Benefits of CI Integration
 
@@ -25,7 +25,7 @@ on:
     branches: [ main, master ]
 jobs:
   test:
-    name: Run Lust-Next Tests
+    name: Run Firmo Tests
     runs-on: ubuntu-latest
     steps:
 
@@ -38,12 +38,12 @@ jobs:
       - name: Run tests
         run: |
           # Run all tests in the tests directory
-          lua lust-next.lua --dir ./tests
+          lua firmo.lua --dir ./tests
 
       - name: Generate test report (optional)
         run: |
           # If using a reporter/formatter
-          lua lust-next.lua --dir ./tests --reporter junit > test-results.xml
+          lua firmo.lua --dir ./tests --reporter junit > test-results.xml
 
       - name: Upload test results
         if: always()
@@ -73,7 +73,7 @@ run_tests:
   stage: test
   script:
 
-    - lua lust-next.lua --dir ./tests
+    - lua firmo.lua --dir ./tests
   artifacts:
     when: always
     paths:
@@ -109,7 +109,7 @@ jobs:
       - run:
           name: Run tests
           command: |
-            lua lust-next.lua --dir ./tests
+            lua firmo.lua --dir ./tests
 
       - store_test_results:
           path: test-results
@@ -139,7 +139,7 @@ pipeline {
         }
         stage('Test') {
             steps {
-                sh 'lua lust-next.lua --dir ./tests'
+                sh 'lua firmo.lua --dir ./tests'
             }
             post {
                 always {
@@ -165,7 +165,7 @@ Structure your tests in a way that makes them easy to run in CI:
 
 ```lua
 describe("Database module", function()
-  lust.tags("integration", "database")
+  firmo.tags("integration", "database")
   it("connects to the database", function()
     -- Test code
   end)
@@ -175,8 +175,8 @@ end)
 In your CI configuration, you can run specific test groups:
 
 ```bash
-lua lust-next.lua --tags unit  # Run only unit tests
-lua lust-next.lua --tags integration  # Run only integration tests
+lua firmo.lua --tags unit  # Run only unit tests
+lua firmo.lua --tags integration  # Run only integration tests
 
 ```text
 
@@ -196,7 +196,7 @@ steps:
 
   - name: Run integration tests
     run: |
-      lua lust-next.lua --tags integration
+      lua firmo.lua --tags integration
 
 ```text
 
@@ -211,7 +211,7 @@ steps:
   - name: Run tests with timeout
     timeout-minutes: 10
     run: |
-      lua lust-next.lua --dir ./tests
+      lua firmo.lua --dir ./tests
 
 ```text
 
@@ -230,15 +230,15 @@ jobs:
 
       - name: Run tests
         run: |
-          lua lust-next.lua --tags ${{ matrix.test-group }}
+          lua firmo.lua --tags ${{ matrix.test-group }}
 
 ```text
 
 ## Interpreting Test Results
-Lust-Next provides different output formats to help you interpret test results in CI environments.
+Firmo provides different output formats to help you interpret test results in CI environments.
 
 ### Standard Output
-By default, Lust-Next outputs test results to the console:
+By default, Firmo outputs test results to the console:
 
 ```text
 Math operations
@@ -253,7 +253,7 @@ Math operations
 For better CI integration, use the JUnit XML reporter:
 
 ```bash
-lua lust-next.lua --dir ./tests --reporter junit > test-results.xml
+lua firmo.lua --dir ./tests --reporter junit > test-results.xml
 
 ```text
 This generates an XML file that most CI systems can parse and display as test reports.
@@ -262,7 +262,7 @@ This generates an XML file that most CI systems can parse and display as test re
 For custom processing of test results:
 
 ```bash
-lua lust-next.lua --dir ./tests --reporter json > test-results.json
+lua firmo.lua --dir ./tests --reporter json > test-results.json
 
 ```text
 
@@ -275,7 +275,7 @@ lua lust-next.lua --dir ./tests --reporter json > test-results.json
 1. **Scheduled runs**: Set up scheduled test runs for nightly builds or integration tests.
 
 ## Complete Example: GitHub Actions Workflow
-This comprehensive example shows a complete GitHub Actions workflow for testing a Lua project with Lust-Next:
+This comprehensive example shows a complete GitHub Actions workflow for testing a Lua project with Firmo:
 
 ```yaml
 name: Lua Testing
@@ -311,11 +311,11 @@ jobs:
           luarocks install luasocket
 
       - name: Run unit tests
-        run: lua lust-next.lua --tags unit --reporter junit > unit-test-results.xml
+        run: lua firmo.lua --tags unit --reporter junit > unit-test-results.xml
 
       - name: Run integration tests
         if: success() || failure() # Run even if unit tests fail
-        run: lua lust-next.lua --tags integration --reporter junit > integration-test-results.xml
+        run: lua firmo.lua --tags integration --reporter junit > integration-test-results.xml
 
       - name: Upload test results
         if: always()

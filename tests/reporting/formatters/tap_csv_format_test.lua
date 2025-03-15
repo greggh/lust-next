@@ -1,6 +1,6 @@
 -- Tests for TAP and CSV report formats
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import reporting module directly for testing
 local reporting = require("lib.reporting")

@@ -1,4 +1,4 @@
--- Asynchronous testing support for lust-next
+-- Asynchronous testing support for firmo
 -- Provides async(), await(), wait_until(), parallel_async(), and it_async() functions
 
 local async_module = {}

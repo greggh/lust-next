@@ -9,9 +9,9 @@ file operations, showing both modules working together to generate test reports.
 -- Add the project directory to the module path
 package.path = package.path .. ";./?.lua;./?/init.lua"
 
--- Load lust-next
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+-- Load firmo
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Load the modules directly for demonstration
 local reporting = require("lib.reporting")

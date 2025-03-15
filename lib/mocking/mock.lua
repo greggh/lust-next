@@ -1,4 +1,4 @@
--- mock.lua - Object mocking implementation for lust-next
+-- mock.lua - Object mocking implementation for firmo
 
 local spy = require("lib.mocking.spy")
 local stub = require("lib.mocking.stub")
@@ -17,7 +17,7 @@ local _mocks = {}
 
 -- Helper function to check if a table is a mock
 local function is_mock(obj)
-  return type(obj) == "table" and obj._is_lust_mock == true
+  return type(obj) == "table" and obj._is_firmo_mock == true
 end
 
 -- Helper function to register a mock for cleanup
@@ -291,7 +291,7 @@ function mock.create(target, options)
   -- Use protected call to create the mock object
   local success, mock_obj, err = error_handler.try(function()
     local obj = {
-      _is_lust_mock = true,
+      _is_firmo_mock = true,
       target = target,
       _stubs = {},
       _originals = {},

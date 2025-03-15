@@ -1,16 +1,16 @@
 #!/usr/bin/env lua
--- Main test runner script for lust-next
+-- Main test runner script for firmo
 
 -- Get the root directory
-local lust_dir = arg[0]:match("(.-)[^/\\]+$") or "./"
-if lust_dir == "" then lust_dir = "./" end
-lust_dir = lust_dir .. "../"
+local firmo_dir = arg[0]:match("(.-)[^/\\]+$") or "./"
+if firmo_dir == "" then firmo_dir = "./" end
+firmo_dir = firmo_dir .. "../"
 
 -- Add scripts directory to package path
-package.path = lust_dir .. "?.lua;" .. lust_dir .. "scripts/?.lua;" .. lust_dir .. "src/?.lua;" .. package.path
+package.path = firmo_dir .. "?.lua;" .. firmo_dir .. "scripts/?.lua;" .. firmo_dir .. "src/?.lua;" .. package.path
 
--- Load lust-next and utility modules
-local lust_next = require("lust-next")
+-- Load firmo and utility modules
+local firmo = require("firmo")
 local discover = require("discover")
 local runner = require("runner")
 
@@ -211,15 +211,15 @@ if codefix_enabled then
   os.exit(success and 0 or 1)
 end
 
--- Add reset method to lust if not present
-if not lust_next.reset then
-  lust_next.reset = function()
-    lust_next.level = 0
-    lust_next.passes = 0
-    lust_next.errors = 0
-    lust_next.befores = {}
-    lust_next.afters = {}
-    lust_next.focus_mode = false
+-- Add reset method to firmo if not present
+if not firmo.reset then
+  firmo.reset = function()
+    firmo.level = 0
+    firmo.passes = 0
+    firmo.errors = 0
+    firmo.befores = {}
+    firmo.afters = {}
+    firmo.focus_mode = false
     collectgarbage()
   end
 end
@@ -227,18 +227,18 @@ end
 -- Run tests
 local success = false
 
--- Configure reporting options in lust_next
+-- Configure reporting options in firmo
 if reporting then
-  -- Pass the report configuration to lust_next
-  lust_next.report_config = report_config
+  -- Pass the report configuration to firmo
+  firmo.report_config = report_config
   
   -- Update the coverage and quality options to use the report configuration
-  if lust_next.coverage_options then
-    lust_next.coverage_options.report_config = report_config
+  if firmo.coverage_options then
+    firmo.coverage_options.report_config = report_config
   end
   
-  if lust_next.quality_options then
-    lust_next.quality_options.report_config = report_config
+  if firmo.quality_options then
+    firmo.quality_options.report_config = report_config
   end
 end
 
@@ -265,7 +265,7 @@ if interactive_mode_enabled then
   }
   
   logger.info("Starting interactive mode...")
-  success = interactive.start(lust_next, options)
+  success = interactive.start(firmo, options)
   os.exit(success and 0 or 1)
 -- Check for watch mode  
 elseif watch_mode_enabled then
@@ -276,7 +276,7 @@ elseif watch_mode_enabled then
   success = runner.watch_mode(
     watch_dirs, 
     test_dirs, 
-    lust_next, 
+    firmo, 
     {
       pattern = pattern,
       exclude_patterns = exclude_patterns,
@@ -294,7 +294,7 @@ else
       results_format = report_config.results_format,
       json_output = report_config.results_format == "json"
     }
-    local results = runner.run_file(run_single_file, lust_next, runner_options)
+    local results = runner.run_file(run_single_file, firmo, runner_options)
     success = results.success and results.errors == 0
   else
     -- Find and run all tests
@@ -303,7 +303,7 @@ else
       results_format = report_config.results_format,
       json_output = report_config.results_format == "json"
     }
-    success = runner.run_all(files, lust_next, runner_options)
+    success = runner.run_all(files, firmo, runner_options)
   end
   
   -- Exit with appropriate status

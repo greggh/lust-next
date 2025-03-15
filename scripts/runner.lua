@@ -1,4 +1,4 @@
--- Test runner for lust-next
+-- Test runner for firmo
 -- A universal test runner that can:
 -- 1. Run a single test file
 -- 2. Run all tests in a directory (recursively)
@@ -33,17 +33,17 @@ local cyan = string.char(27) .. '[36m'
 local normal = string.char(27) .. '[0m'
 
 -- Run a specific test file
-function runner.run_file(file_path, lust, options)
+function runner.run_file(file_path, firmo, options)
   options = options or {}
   
   -- Initialize counter properties if they don't exist
-  if lust.passes == nil then lust.passes = 0 end
-  if lust.errors == nil then lust.errors = 0 end
-  if lust.skipped == nil then lust.skipped = 0 end
+  if firmo.passes == nil then firmo.passes = 0 end
+  if firmo.errors == nil then firmo.errors = 0 end
+  if firmo.skipped == nil then firmo.skipped = 0 end
   
-  local prev_passes = lust.passes
-  local prev_errors = lust.errors
-  local prev_skipped = lust.skipped
+  local prev_passes = firmo.passes
+  local prev_errors = firmo.errors
+  local prev_skipped = firmo.skipped
   
   logger.info("Running file", {file_path = file_path})
   
@@ -98,13 +98,13 @@ function runner.run_file(file_path, lust, options)
   -- Restore original print function
   _G.print = original_print
   
-  -- Use counted results if available, otherwise use lust counters
+  -- Use counted results if available, otherwise use firmo counters
   local results = {
     success = success,
     error = err,
-    passes = pass_count > 0 and pass_count or (lust.passes - prev_passes),
-    errors = fail_count > 0 and fail_count or (lust.errors - prev_errors),
-    skipped = skip_count > 0 and skip_count or (lust.skipped - prev_skipped),
+    passes = pass_count > 0 and pass_count or (firmo.passes - prev_passes),
+    errors = fail_count > 0 and fail_count or (firmo.errors - prev_errors), 106:48:    errors = fail_count > 0 and fail_count or (firmo.errors - prev_errors),
+    skipped = skip_count > 0 and skip_count or (firmo.skipped - prev_skipped),
     total = 0,
     elapsed = elapsed_time,
     output = table.concat(output_buffer, "\n")
@@ -292,7 +292,7 @@ function runner.find_test_files(dir_path, options)
 end
 
 -- Run tests in a directory or file list
-function runner.run_all(files_or_dir, lust, options)
+function runner.run_all(files_or_dir, firmo, options)
   options = options or {}
   local files
   
@@ -314,7 +314,7 @@ function runner.run_all(files_or_dir, lust, options)
   
   -- Initialize module reset if available
   if module_reset_loaded and module_reset then
-    module_reset.register_with_lust(lust)
+    module_reset.register_with_firmo(firmo)
     
     -- Configure isolation options
     module_reset.configure({
@@ -374,7 +374,7 @@ function runner.run_all(files_or_dir, lust, options)
   end
   
   for _, file in ipairs(files) do
-    local results = runner.run_file(file, lust, options)
+    local results = runner.run_file(file, firmo, options)
     
     -- Count passed/failed files
     if results.success and results.errors == 0 then
@@ -503,7 +503,7 @@ function runner.run_all(files_or_dir, lust, options)
       
       -- Create aggregated test results
       local test_results = {
-        name = "lust-next-tests",
+        name = "firmo-tests",
         timestamp = os.date("!%Y-%m-%dT%H:%M:%S"),
         tests = total_passes + total_failures + total_skipped,
         failures = total_failures,
@@ -526,7 +526,7 @@ function runner.run_all(files_or_dir, lust, options)
 end
 
 -- Watch mode for continuous testing
-function runner.watch_mode(path, lust, options)
+function runner.watch_mode(path, firmo, options)
   if not has_watcher then
     logger.error("Watch mode unavailable", {reason = "Watcher module not found"})
     return false
@@ -610,11 +610,11 @@ function runner.watch_mode(path, lust, options)
       -- Clear terminal
       io.write("\027[2J\027[H")
       
-      lust.reset()
+      firmo.reset()
       
       -- Run tests based on the files we found earlier
       if #files > 0 then
-        run_success = runner.run_all(files, lust, runner_options)
+        run_success = runner.run_all(files, firmo, runner_options)
       else
         logger.warn("No test files found to run")
         run_success = true
@@ -768,13 +768,13 @@ function runner.main(args)
     return false
   end
   
-  -- Try to load lust-next
-  local lust_loaded, lust = pcall(require, "lust-next")
-  if not lust_loaded then
+  -- Try to load firmo
+  local firmo_loaded, firmo = pcall(require, "firmo")
+  if not firmo_loaded then
     -- Try again with relative path
-    lust_loaded, lust = pcall(require, "../lust-next")
-    if not lust_loaded then
-      logger.error("Failed to load lust-next", {error = error_handler.format_error(lust)})
+    firmo_loaded, firmo = pcall(require, "../firmo")
+    if not firmo_loaded then
+      logger.error("Failed to load firmo", {error = error_handler.format_error(firmo)})
       return false
     end
   end
@@ -782,7 +782,7 @@ function runner.main(args)
   -- Check if we're running in watch mode
   if options.watch then
     -- Setup watch mode for continuous testing
-    return runner.watch_mode(path, lust, options)
+    return runner.watch_mode(path, firmo, options)
   end
   
   -- Check if path is a file or directory
@@ -790,10 +790,10 @@ function runner.main(args)
   if fs.directory_exists(path) then
     -- Run all tests in directory
     logger.info("Detected directory path", {path = path})
-    return runner.run_all(path, lust, options)
+    return runner.run_all(path, firmo, options)
   elseif fs.file_exists(path) then
     -- Run a single test file
-    local result = runner.run_file(path, lust, options)
+    local result = runner.run_file(path, firmo, options)
     return result.success and result.errors == 0
   else
     -- Path not found

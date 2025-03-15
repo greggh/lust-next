@@ -9,7 +9,7 @@ This session aimed at completing the test update plan by addressing the last few
 ### File Fixes and Improvements:
 
 1. **Fixed large_file_test.lua**:
-   - Replaced print statements with structured logging using lust_next.log
+   - Replaced print statements with structured logging using firmo.log
    - Fixed hardcoded absolute paths to use dynamic project root reference
    - Used fs.get_absolute_path and fs.join_paths for portable path handling
    - Added descriptive parameter tables for log messages
@@ -61,9 +61,9 @@ This session aimed at completing the test update plan by addressing the last few
 
 3. **Test Structure Consistency**:
    - Most tests already had good describe/it block structure
-   - Few issues with explicit lust() calls were found
+   - Few issues with explicit firmo() calls were found
    - Most recent tests already used the filesystem module correctly
-   - Consistent import patterns (local lust = require("lust-next"))
+   - Consistent import patterns (local firmo = require("firmo"))
 
 ## Next Steps
 

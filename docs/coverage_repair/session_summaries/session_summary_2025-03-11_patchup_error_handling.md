@@ -2,7 +2,7 @@
 
 ## Overview
 
-Today we successfully implemented comprehensive error handling in the patchup.lua module, following the standardized error handling patterns established in the error_handler_pattern_analysis.md document. This implementation continues our work on ensuring consistent, robust error handling throughout the lust-next codebase.
+Today we successfully implemented comprehensive error handling in the patchup.lua module, following the standardized error handling patterns established in the error_handler_pattern_analysis.md document. This implementation continues our work on ensuring consistent, robust error handling throughout the firmo codebase.
 
 ## Changes Made
 

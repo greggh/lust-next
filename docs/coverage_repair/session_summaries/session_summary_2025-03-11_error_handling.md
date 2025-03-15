@@ -2,7 +2,7 @@
 
 ## Overview
 
-This session focused on implementing comprehensive error handling in the coverage module of the lust-next project. The implementation follows the error handling implementation plan created in the previous session, focusing on Phase 1 (Error Handling Module Review and Enhancement) and beginning Phase 2 (Core Module Implementation).
+This session focused on implementing comprehensive error handling in the coverage module of the firmo project. The implementation follows the error handling implementation plan created in the previous session, focusing on Phase 1 (Error Handling Module Review and Enhancement) and beginning Phase 2 (Core Module Implementation).
 
 ## Completed Tasks
 

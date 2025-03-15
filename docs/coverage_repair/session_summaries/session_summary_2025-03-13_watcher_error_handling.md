@@ -4,7 +4,7 @@
 
 ## Overview
 
-This session focused on implementing comprehensive error handling in the `watcher.lua` module, which provides file change monitoring capabilities for the lust-next framework. The implementation follows the patterns established in the project-wide error handling plan, with adaptations for the specific requirements of the file watching functionality.
+This session focused on implementing comprehensive error handling in the `watcher.lua` module, which provides file change monitoring capabilities for the firmo framework. The implementation follows the patterns established in the project-wide error handling plan, with adaptations for the specific requirements of the file watching functionality.
 
 ## Implementation Approach
 

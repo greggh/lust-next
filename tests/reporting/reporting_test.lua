@@ -2,10 +2,10 @@
 -- Tests for the reporting module
 
 -- Import the test framework properly
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
-local before_each, after_each = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
+local before_each, after_each = firmo.before, firmo.after
 
 -- Try to load the logging module
 local logging, logger
@@ -189,7 +189,7 @@ describe("Reporting Module", function()
       expect(result).to.be.a("string")
       -- Should contain HTML structure
       expect(result:find("<!DOCTYPE html>") ~= nil).to.be_truthy()
-      expect(result:find("Lust%-Next Coverage Report") ~= nil).to.be_truthy()
+      expect(result:find("Firmo%-Next Coverage Report") ~= nil).to.be_truthy()
     end)
     
     it("should format coverage data as LCOV", function()
@@ -233,7 +233,7 @@ describe("Reporting Module", function()
       expect(result).to.be.a("string")
       -- Should contain HTML structure
       expect(result:find("<!DOCTYPE html>") ~= nil).to.be_truthy()
-      expect(result:find("Lust%-Next Test Quality Report") ~= nil).to.be_truthy()
+      expect(result:find("Firmo%-Next Test Quality Report") ~= nil).to.be_truthy()
     end)
     
     it("should default to summary format if format is invalid", function()
@@ -245,7 +245,7 @@ describe("Reporting Module", function()
   
   describe("File Operations", function()
     local fs = require("lib.tools.filesystem")
-    local temp_file = "/tmp/lust-next-test-report.txt"
+    local temp_file = "/tmp/firmo-test-report.txt"
     local test_content = "Test content for file operations"
     
     after_each(function()
@@ -264,14 +264,14 @@ describe("Reporting Module", function()
     end)
     
     it("should create directories if needed", function()
-      local nested_dir = "/tmp/lust-next-test-nested/subdir"
+      local nested_dir = "/tmp/firmo-test-nested/subdir"
       local nested_file = nested_dir .. "/test-file.txt"
       local test_content = "Test content for nested directory test"
       
       -- Clean up first in case the directory already exists
       fs.delete_file(nested_file)
       fs.delete_directory(nested_dir, true)
-      fs.delete_directory("/tmp/lust-next-test-nested", true)
+      fs.delete_directory("/tmp/firmo-test-nested", true)
       
       -- Try to write to nested file (should create directories)
       local success, err = reporting_module.write_file(nested_file, test_content)
@@ -285,13 +285,13 @@ describe("Reporting Module", function()
       -- Clean up
       fs.delete_file(nested_file)
       fs.delete_directory(nested_dir, true)
-      fs.delete_directory("/tmp/lust-next-test-nested", true)
+      fs.delete_directory("/tmp/firmo-test-nested", true)
     end)
   end)
   
   describe("Report Saving", function()
     local fs = require("lib.tools.filesystem")
-    local temp_dir = "/tmp/lust-next-test-reports"
+    local temp_dir = "/tmp/firmo-test-reports"
     local formats = {"html", "json", "lcov"}
     
     after_each(function()
@@ -507,7 +507,7 @@ describe("Reporting Module", function()
         properties = {
           lua_version = "Lua 5.3",
           platform = "Linux",
-          framework = "lust-next"
+          framework = "firmo"
         },
         test_cases = {
           {
@@ -586,7 +586,7 @@ describe("Reporting Module", function()
     
     it("should save test results report to file", function()
       local fs = require("lib.tools.filesystem")
-      local temp_file = "/tmp/lust-next-test-junit.xml"
+      local temp_file = "/tmp/firmo-test-junit.xml"
       
       -- Clean up first in case the file exists
       fs.delete_file(temp_file)
@@ -618,7 +618,7 @@ describe("Reporting Module", function()
     
     it("should include JUnit XML in auto-save reports", function()
       local fs = require("lib.tools.filesystem")
-      local temp_dir = "/tmp/lust-next-test-reports-junit"
+      local temp_dir = "/tmp/firmo-test-reports-junit"
       
       -- Clean up first
       fs.delete_directory(temp_dir, true)
@@ -652,4 +652,4 @@ describe("Reporting Module", function()
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

@@ -1,4 +1,4 @@
--- lust-next reporting module
+-- firmo reporting module
 -- Centralized module for all report generation and file output
 
 local M = {}

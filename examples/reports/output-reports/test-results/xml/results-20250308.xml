@@ -2,7 +2,7 @@
 <testsuites name="TAP and CSV Output Example" tests="6" failures="1" errors="1" skipped="1" time="0.05">
   <testsuite name="TAP and CSV Output Example" tests="6" failures="1" errors="1" skipped="1" time="0.05" timestamp="2025-03-09T01:41:12">
     <properties>
-      <property name="lust_next_version" value="0.7.5"/>
+      <property name="firmo_version" value="0.7.5"/>
     </properties>
     <testcase name="can add numbers" classname="Math operations" time="0.001"/>
     <testcase name="can subtract numbers" classname="Math operations" time="0.001"/>

@@ -45,7 +45,7 @@ This session continued our work on the test framework update plan. We fixed a cr
 ### Assertions Test Updates
 
 1. **Simple Update of assertions_test.lua**:
-   - Fixed import path to use standard pattern: `require("lust-next")` instead of relative path
+   - Fixed import path to use standard pattern: `require("firmo")` instead of relative path
    - Removed explicit `return true` at the end of the file
    - Added proper end comment explaining tests are run by external runners
 
@@ -88,7 +88,7 @@ This session continued our work on the test framework update plan. We fixed a cr
    - Structured logging with parameter tables is more readable and maintainable than string concatenation
 
 3. **Test Framework Insights**:
-   - Tests should not call `lust()` or `lust.run()` at the end - this is handled by external runners
+   - Tests should not call `firmo()` or `firmo.run()` at the end - this is handled by external runners
    - Proper use of before/after hooks is critical for test isolation
    - Structured logging with proper parameter tables provides better debugging information
 

@@ -6,8 +6,8 @@
 
 -- Import modules
 package.path = package.path .. ";./?.lua"
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local coverage = require("lib.coverage")
 
 -- Sample module with functions to test

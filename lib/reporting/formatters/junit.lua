@@ -389,7 +389,7 @@ function M.format_results(results_data)
     local errors = tonumber(results_data.errors) or 0
     local skipped = tonumber(results_data.skipped) or 0
     local time = tonumber(results_data.time) or 0
-    local name = results_data.name or "lust-next"
+    local name = results_data.name or "firmo"
     
     -- Main testsuites element
     table.insert(xml, string.format('<testsuites name="%s" tests="%d" failures="%d" errors="%d" skipped="%d" time="%s">',
@@ -467,17 +467,17 @@ function M.format_results(results_data)
     table.insert(xml, string.format('      <property name="junit_schema" value="%s"/>', 
                                     escape_xml(config.schema_version)))
                                     
-    -- Add lust-next version with error handling
+    -- Add firmo version with error handling
     local version = "0.7.5" -- Default version
-    local version_success, lust_or_err = error_handler.try(function()
-      return require("lust-next")
+    local version_success, firmo_or_err = error_handler.try(function()
+      return require("firmo")
     end)
     
-    if version_success and lust_or_err and lust_or_err._VERSION then
-      version = lust_or_err._VERSION
+    if version_success and firmo_or_err and firmo_or_err._VERSION then
+      version = firmo_or_err._VERSION
     end
     
-    table.insert(xml, string.format('      <property name="lust_next_version" value="%s"/>', version))
+    table.insert(xml, string.format('      <property name="firmo_version" value="%s"/>', version))
     table.insert(xml, '    </properties>')
     
     return xml
@@ -503,7 +503,7 @@ function M.format_results(results_data)
       table.insert(xml, '<?xml version="1.0" encoding="UTF-8"?>')
     end
     table.insert(xml, '<testsuites>')
-    table.insert(xml, '  <testsuite name="lust-next" tests="0" failures="0" errors="1" skipped="0" time="0">')
+    table.insert(xml, '  <testsuite name="firmo" tests="0" failures="0" errors="1" skipped="0" time="0">')
     table.insert(xml, '    <properties>')
     table.insert(xml, '      <property name="junit_schema" value="2.0"/>')
     table.insert(xml, '      <property name="error" value="Failed to build XML structure"/>')
@@ -532,7 +532,7 @@ function M.format_results(results_data)
     logger.error(err.message, err.context)
     
     -- Add an error test case as a fallback
-    table.insert(xml, '    <testcase name="junit_formatter_error" classname="lust.formatter.junit" time="0">')
+    table.insert(xml, '    <testcase name="junit_formatter_error" classname="firmo.formatter.junit" time="0">')
     table.insert(xml, '      <error message="Failed to format test cases" type="FormatterError">JUnit formatter failed to process test cases</error>')
     table.insert(xml, '    </testcase>')
   end
@@ -598,7 +598,7 @@ function M.format_results(results_data)
     )
     logger.error(err.message, err.context)
     
-    return '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites><testsuite name="lust-next" tests="0" failures="0" errors="1" skipped="0"><error>Failed to generate report</error></testsuite></testsuites>'
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites><testsuite name="firmo" tests="0" failures="0" errors="1" skipped="0"><error>Failed to generate report</error></testsuite></testsuites>'
   end
   
   -- Apply XML formatting if enabled

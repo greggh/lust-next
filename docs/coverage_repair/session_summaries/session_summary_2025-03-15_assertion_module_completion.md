@@ -4,12 +4,12 @@
 
 ## Overview
 
-In this session, we successfully completed the assertion module extraction and integration, which was the first major milestone in our coverage module repair plan. We created a standalone assertion module that resolves circular dependencies, implemented consistent error handling, and integrated it seamlessly with lust-next.lua while maintaining backward compatibility.
+In this session, we successfully completed the assertion module extraction and integration, which was the first major milestone in our coverage module repair plan. We created a standalone assertion module that resolves circular dependencies, implemented consistent error handling, and integrated it seamlessly with firmo.lua while maintaining backward compatibility.
 
 ## Key Changes
 
 1. **Created Standalone Assertion Module**
-   - Created `lib/assertion.lua` with all assertion functionality extracted from lust-next.lua
+   - Created `lib/assertion.lua` with all assertion functionality extracted from firmo.lua
    - Implemented proper lazy loading to avoid circular dependencies
    - Added comprehensive error handling using error_handler module
 
@@ -18,9 +18,9 @@ In this session, we successfully completed the assertion module extraction and i
    - Added integration tests in `tests/assertions/assertion_module_integration_test.lua`
    - Verified backward compatibility with existing test suite
 
-3. **Integrated with lust-next.lua**
-   - Removed all assertion-related code (over 1000 lines) from lust-next.lua
-   - Updated lust_next.expect() to use the new module
+3. **Integrated with firmo.lua**
+   - Removed all assertion-related code (over 1000 lines) from firmo.lua
+   - Updated firmo.expect() to use the new module
    - Preserved quality module integration
    - Exported paths for plugins and extensions
 
@@ -75,12 +75,12 @@ The assertion module provides a clean, modular implementation with these key com
 The integration maintained the original API while delegating to the new module:
 
 ```lua
-function lust_next.expect(v)
+function firmo.expect(v)
   -- Count assertion
-  lust_next.assertion_count = (lust_next.assertion_count or 0) + 1
+  firmo.assertion_count = (firmo.assertion_count or 0) + 1
   
   -- Track assertion in quality module if enabled
-  if lust_next.quality_options.enabled and quality then
+  if firmo.quality_options.enabled and quality then
     quality.track_assertion("expect", debug.getinfo(2, "n").name)
   end
   
@@ -133,7 +133,7 @@ We performed comprehensive testing at multiple levels:
    - Tested negation support and table comparisons
 
 2. **Integration Testing**
-   - Verified that both lust-next.expect and assertion.expect behave identically
+   - Verified that both firmo.expect and assertion.expect behave identically
    - Tested error message consistency
    - Validated API compatibility
 
@@ -172,7 +172,7 @@ All tests passed successfully, confirming that our implementation maintains back
    ```
 
 4. **Challenge**: Maintaining quality module integration
-   **Solution**: Kept the quality tracking code in lust_next.expect while delegating to assertion.expect
+   **Solution**: Kept the quality tracking code in firmo.expect while delegating to assertion.expect
 
 ## Next Steps
 

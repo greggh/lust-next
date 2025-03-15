@@ -2,7 +2,7 @@
 
 ## Overview
 
-During testing, we observed that when the optional configuration file (`.lust-next-config.lua`) was not found, the system was inappropriately logging this as an ERROR message. Since the configuration file is optional, this normal condition should be logged as INFO, not ERROR.
+During testing, we observed that when the optional configuration file (`.firmo-config.lua`) was not found, the system was inappropriately logging this as an ERROR message. Since the configuration file is optional, this normal condition should be logged as INFO, not ERROR.
 
 ## Issues Identified
 
@@ -34,18 +34,18 @@ During testing, we observed that when the optional configuration file (`.lust-ne
 We verified the fix by running a simple test:
 
 ```bash
-cd /home/gregg/Projects/lua-library/lust-next && lua -e "local lust = require('lust-next'); print('Successfully loaded lust-next')"
+cd /home/gregg/Projects/lua-library/firmo && lua -e "local firmo = require('firmo'); print('Successfully loaded firmo')"
 ```
 
 **Before Fix**:
 ```
-2025-03-11 22:03:02 | ERROR | ErrorHandler | I/O operation failed: .lust-next-config.lua | (source_line=1031, source_file=./lib/core/central_config.lua, category=IO, context={...})
-2025-03-11 22:03:02 | ERROR | central_config | Error checking if config file exists | (path=.lust-next-config.lua, error=I/O operation failed: .lust-next-config.lua)
+2025-03-11 22:03:02 | ERROR | ErrorHandler | I/O operation failed: .firmo-config.lua | (source_line=1031, source_file=./lib/core/central_config.lua, category=IO, context={...})
+2025-03-11 22:03:02 | ERROR | central_config | Error checking if config file exists | (path=.firmo-config.lua, error=I/O operation failed: .firmo-config.lua)
 ```
 
 **After Fix**:
 ```
-2025-03-11 22:08:13 | INFO | central_config | Config file not found, using defaults | (path=.lust-next-config.lua, operation=load_from_file)
+2025-03-11 22:08:13 | INFO | central_config | Config file not found, using defaults | (path=.firmo-config.lua, operation=load_from_file)
 ```
 
 ## Broader Implications
@@ -54,4 +54,4 @@ This fix has implications beyond just the configuration file case. The improved 
 
 ## Conclusion
 
-This relatively small change significantly improves the clarity of logging and error handling in the lust-next framework. By properly distinguishing between errors and normal negative results, we've made the system more intuitive and less confusing for users.
+This relatively small change significantly improves the clarity of logging and error handling in the firmo framework. By properly distinguishing between errors and normal negative results, we've made the system more intuitive and less confusing for users

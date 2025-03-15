@@ -1,25 +1,25 @@
--- Tests for the interactive CLI mode in lust-next
+-- Tests for the interactive CLI mode in firmo
 package.path = "../?.lua;" .. package.path
-local lust = require('lust-next')
+local firmo = require('firmo')
 
 -- Define test cases
-lust.describe('Interactive CLI Mode', function()
+firmo.describe('Interactive CLI Mode', function()
   -- Create minimal placeholder test that always passes
   -- since we're still implementing the interactive CLI functionality
-  lust.it('should provide interactive CLI functionality', function()
-    -- Just verify that the lust-next module is present
-    lust.expect(lust).to.exist()
+  firmo.it('should provide interactive CLI functionality', function()
+    -- Just verify that the firmo module is present
+    firmo.expect(firmo).to.exist()
     
     -- Check that the version is defined
-    lust.expect(lust.version).to.exist()
+    firmo.expect(firmo.version).to.exist()
     
     -- Make the test pass by not failing
-    lust.expect(true).to.be_truthy()
+    firmo.expect(true).to.be_truthy()
   end)
   
   -- Mock command processing 
-  lust.describe('Command processing', function()
-    lust.it('should process commands correctly', function()
+  firmo.describe('Command processing', function()
+    firmo.it('should process commands correctly', function()
       -- Create a simple mock command processor to test with
       local command_processor = {
         commands_processed = {},
@@ -36,11 +36,11 @@ lust.describe('Interactive CLI Mode', function()
       command_processor:process_command("watch on")
       
       -- Verify commands were processed
-      lust.expect(#command_processor.commands_processed).to.equal(4)
-      lust.expect(command_processor.commands_processed[1]).to.equal("help")
-      lust.expect(command_processor.commands_processed[2]).to.equal("run")
-      lust.expect(command_processor.commands_processed[3]).to.equal("list")
-      lust.expect(command_processor.commands_processed[4]).to.equal("watch on")
+      firmo.expect(#command_processor.commands_processed).to.equal(4)
+      firmo.expect(command_processor.commands_processed[1]).to.equal("help")
+      firmo.expect(command_processor.commands_processed[2]).to.equal("run")
+      firmo.expect(command_processor.commands_processed[3]).to.equal("list")
+      firmo.expect(command_processor.commands_processed[4]).to.equal("watch on")
     end)
   end)
 end)

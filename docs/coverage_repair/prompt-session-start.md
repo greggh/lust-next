@@ -1,15 +1,15 @@
 # Coverage Repair Session Start Prompt
 
-Claude, I'm continuing work on the lust-next coverage module repair project. Please read CLAUDE.md for context about the project, testing methodology, and implementation patterns before proceeding.
+Claude, I'm continuing work on the firmo coverage module repair project. Please read CLAUDE.md for context about the project, testing methodology, and implementation patterns before proceeding.
 
 ## PRE-AUTHORIZATION FOR AUTONOMOUS OPERATION
 
 I EXPLICITLY AUTHORIZE YOU TO:
 
-1. Read any files in the lust-next project WITHOUT asking permission
+1. Read any files in the firmo project WITHOUT asking permission
 2. Use the LS command to explore directories WITHOUT asking permission
 3. Update documentation files in the docs/coverage_repair directory WITHOUT asking permission
-4. View, analyze, and understand code in any lust-next files WITHOUT asking permission
+4. View, analyze, and understand code in any firmo files WITHOUT asking permission
 5. Update test files in the tests directory WITHOUT asking permission
 6. Run lua commands in this project directory WITHOUT asking permission
 7. Run grep, cat, tail, head, find, and other standard commands WITHOUT asking permission
@@ -57,8 +57,8 @@ As we work on the coverage module repair, you MUST:
 
 Please read the following key documents for the current task:
 
-1. `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/consolidated_plan.md`
-2. `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/assertion_extraction_plan.md`
-3. `/home/gregg/Projects/lua-library/lust-next/docs/coverage_repair/error_handling_test_plan.md`
+1. `/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/consolidated_plan.md`
+2. `/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/assertion_extraction_plan.md`
+3. `/home/gregg/Projects/lua-library/firmo/docs/coverage_repair/error_handling_test_plan.md`
 
 Let's continue work on the current task from where we left off.

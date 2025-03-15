@@ -1,6 +1,6 @@
 # Reporting Tests
 
-This directory contains tests for the lust-next reporting system. The reporting module generates test results and coverage data in various formats.
+This directory contains tests for the firmo reporting system. The reporting module generates test results and coverage data in various formats.
 
 ## Directory Contents
 
@@ -17,7 +17,7 @@ This directory contains tests for the lust-next reporting system. The reporting 
 
 ## Reporting System Features
 
-The lust-next reporting system provides:
+The firmo reporting system provides:
 
 - Multiple output formats (HTML, JSON, XML, TAP, CSV)
 - Coverage data visualization

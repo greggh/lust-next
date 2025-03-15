@@ -1,12 +1,12 @@
 -- JSON Output Example
--- Shows how lust-next can output test results in JSON format with markers
+-- Shows how firmo can output test results in JSON format with markers
 -- This is used by the parallel execution system to collect results
 
 -- Import the testing framework
-local lust = require "../lust-next"
+local firmo = require "../firmo"
 
 -- Define aliases
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Example test suite
 describe("JSON Output Example", function()
@@ -19,7 +19,7 @@ describe("JSON Output Example", function()
   end)
   
   it("should skip this test", function()
-    lust.pending("Skipping for the example")
+    firmo.pending("Skipping for the example")
   end)
   
   it("should fail this test for demonstration", function()

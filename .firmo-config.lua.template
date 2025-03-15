@@ -1,8 +1,8 @@
 --[[
-lust-next configuration file
+firmo configuration file
 
-This file contains the default configuration for lust-next.
-Copy this template to .lust-next-config.lua and edit as needed.
+This file contains the default configuration for firmo.
+Copy this template to .firmo-config.lua and edit as needed.
 ]]
 
 return {
@@ -56,7 +56,7 @@ return {
       "**/*.lua",                     -- All Lua files in subdirectories
     },
     exclude = {                       -- Files to exclude from coverage (appended to defaults when use_default_patterns is true)
-      "*_test.lua",                   -- Test files with suffix 
+      "*_test.lua",                   -- Test files with suffix
       "test_*.lua",                   -- Test files with prefix
       "tests/**/*.lua",               -- All files in tests directory
     },
@@ -80,15 +80,15 @@ return {
     enabled = false,                  -- Enable code fixing functionality
     verbose = false,                  -- Enable verbose output
     debug = false,                    -- Enable debug output
-    
+
     -- StyLua options
     use_stylua = true,                -- Use StyLua for formatting
     stylua_path = "stylua",           -- Path to StyLua executable
-    
+
     -- Luacheck options
     use_luacheck = true,              -- Use Luacheck for linting
     luacheck_path = "luacheck",       -- Path to Luacheck executable
-    
+
     -- Custom fixers
     custom_fixers = {
       trailing_whitespace = true,     -- Fix trailing whitespace in strings
@@ -98,7 +98,7 @@ return {
       lua_version_compat = false,     -- Fix Lua version compatibility issues (disabled by default)
     },
   },
-  
+
   -- Report Configuration
   reporting = {
     report_dir = "./coverage-reports", -- Base directory for reports
@@ -111,7 +111,7 @@ return {
     },
     verbose = false,                  -- Enable verbose output during report generation
   },
-  
+
   -- Watch Mode
   watch = {
     dirs = { "." },                   -- Directories to watch
@@ -119,7 +119,7 @@ return {
     debounce = 500,                   -- Debounce time in milliseconds
     clear_console = true,             -- Clear console before re-running tests
   },
-  
+
   -- Interactive CLI Mode
   interactive = {
     history_size = 100,               -- Number of commands to keep in history
@@ -127,7 +127,7 @@ return {
     default_dir = "./tests",          -- Default directory for test discovery
     default_pattern = "*_test.lua",   -- Default pattern for test files
   },
-  
+
   -- Custom Formatters
   formatters = {
     module = nil,                     -- Custom formatter module to load
@@ -135,33 +135,33 @@ return {
     quality = nil,                    -- Custom format for quality reports
     results = nil,                    -- Custom format for test results
   },
-  
+
   -- Module Reset System
   module_reset = {
     enabled = true,                   -- Enable module reset between test files
     track_memory = true,              -- Track memory usage during reset
     protected_modules = {             -- Modules that should never be reset
-      "string", "table", "math", 
-      "io", "os", "coroutine", 
+      "string", "table", "math",
+      "io", "os", "coroutine",
       "debug", "package"
     },
     exclude_patterns = {              -- Patterns to exclude from reset
       "^_G$", "^package%.", "^debug%."
     },
   },
-  
+
   -- Logging Configuration
   logging = {
     level = 3,                       -- Default log level (ERROR=1, WARN=2, INFO=3, DEBUG=4, VERBOSE=5)
     timestamps = true,               -- Include timestamps in log entries
     use_colors = true,               -- Use colors for console output
-    output_file = "lust-next.log",   -- Log file name (nil for console-only output)
+    output_file = "firmo.log",   -- Log file name (nil for console-only output)
     log_dir = "logs",                -- Log directory (relative to current directory)
     max_file_size = 50 * 1024,       -- Max log file size before rotation (50KB)
     max_log_files = 5,               -- Number of rotated log files to keep
     date_pattern = "%Y-%m-%d",       -- Date pattern for log timestamps
     silent = false,                  -- Suppress all log output when true
-    
+
     -- Module-specific log levels
     modules = {
       coverage = 3,                  -- INFO level for coverage module

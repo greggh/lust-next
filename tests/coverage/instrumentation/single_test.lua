@@ -1,5 +1,5 @@
 -- Single test for instrumentation module
-local lust = require("lust-next")
+local firmo = require("firmo")
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
 local error_handler = require("lib.tools.error_handler")
@@ -8,8 +8,8 @@ local logger = logging.get_logger("test.instrumentation")
 local instrumentation = require("lib.coverage.instrumentation")
 
 -- Import test functions correctly
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Test helper functions
 local function create_test_file(content)

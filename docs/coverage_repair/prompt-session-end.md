@@ -1,6 +1,6 @@
 # Coverage Repair Session End Prompt
 
-Claude, we're ending our current session on the lust-next coverage module repair project. Please summarize what we've accomplished today and create a session summary.
+Claude, we're ending our current session on the firmo coverage module repair project. Please summarize what we've accomplished today and create a session summary.
 
 ## Session Summary Task
 
@@ -25,4 +25,4 @@ Claude, we're ending our current session on the lust-next coverage module repair
 
 After creating the session summary and updating documentation, please provide a brief 2-3 line recap of what we accomplished today and what we plan to work on next time.
 
-Thank you for your help with the lust-next coverage module repair project!
+Thank you for your help with the firmo coverage module repair project

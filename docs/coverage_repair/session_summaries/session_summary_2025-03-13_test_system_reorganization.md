@@ -2,7 +2,7 @@
 
 ## Overview
 
-This session focused on implementing the Test System Reorganization plan outlined in `docs/coverage_repair/test_system_reorganization_plan.md`. The goal was to standardize how tests are run in the lust-next project, making the testing system more maintainable and consistent.
+This session focused on implementing the Test System Reorganization plan outlined in `docs/coverage_repair/test_system_reorganization_plan.md`. The goal was to standardize how tests are run in the firmo project, making the testing system more maintainable and consistent.
 
 ## Accomplishments
 
@@ -39,7 +39,7 @@ This session focused on implementing the Test System Reorganization plan outline
    - Created comprehensive test suite file (`tests/all_tests.lua`)
 
 3. **Improved Test Organization**:
-   - Converted special-purpose test runners into standard lust-next test files
+   - Converted special-purpose test runners into standard firmo test files
    - Standardized test initialization with proper before/after hooks
    - Ensured proper configuration through hooks rather than global settings
 
@@ -60,7 +60,7 @@ mkdir -p tests/core tests/coverage/instrumentation tests/coverage/hooks tests/qu
 
 ### 2. Converting Special Test Files
 
-Converted special-purpose test runners (`run-instrumentation-tests.lua` and `run-single-test.lua`) into standard lust-next test files:
+Converted special-purpose test runners (`run-instrumentation-tests.lua` and `run-single-test.lua`) into standard firmo test files:
 
 1. `tests/coverage/instrumentation/instrumentation_test.lua`:
    - Moved logic from `run-instrumentation-tests.lua`
@@ -106,6 +106,6 @@ Created `tests/all_tests.lua` that loads all test files:
 
 ## Conclusion
 
-We've successfully implemented Phases 1 and 2 of the Test System Reorganization Plan. This provides a solid foundation for a more maintainable and consistent testing system in lust-next. The new directory structure aligns with the library's organization, making it easier to locate and understand tests.
+We've successfully implemented Phases 1 and 2 of the Test System Reorganization Plan. This provides a solid foundation for a more maintainable and consistent testing system in firmo. The new directory structure aligns with the library's organization, making it easier to locate and understand tests.
 
 By converting special-purpose test runners into standard test files, we've improved test isolation and reduced special-case code. The comprehensive test suite file provides a single entry point for running all tests, with proper organization by category.

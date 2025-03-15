@@ -1,5 +1,5 @@
 -- Test script for lpeglabel integration
-package.path = "/home/gregg/Projects/lua-library/lust-next/?.lua;" .. package.path
+package.path = "/home/gregg/Projects/lua-library/firmo/?.lua;" .. package.path
 
 -- Initialize logging system
 local logging

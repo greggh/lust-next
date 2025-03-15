@@ -2,11 +2,11 @@
 
 ## Overview
 
-In today's session, we completed the task of removing logger conditionals from lust-next.lua and identified/fixed several critical error handling issues in the codebase. We encountered and resolved syntax errors in the framework's main file and discovered additional issues with return value processing in filesystem module functions.
+In today's session, we completed the task of removing logger conditionals from firmo.lua and identified/fixed several critical error handling issues in the codebase. We encountered and resolved syntax errors in the framework's main file and discovered additional issues with return value processing in filesystem module functions.
 
 ## Progress Made
 
-### 1. Completed Logger Conditionals Removal in lust-next.lua
+### 1. Completed Logger Conditionals Removal in firmo.lua
 
 - ✅ Fixed test execution functions (it, fit, xit) with direct logger usage
 - ✅ Removed conditionals in before/after hooks handling
@@ -46,7 +46,7 @@ In today's session, we completed the task of removing logger conditionals from l
 
 ## Technical Details
 
-### Syntax Error Fixes in lust-next.lua
+### Syntax Error Fixes in firmo.lua
 
 We found three locations where extra `end` statements were causing syntax errors:
 

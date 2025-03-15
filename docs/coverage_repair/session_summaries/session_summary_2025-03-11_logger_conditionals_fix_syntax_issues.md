@@ -1,13 +1,13 @@
-# Session Summary: Syntax Issues with Logger Conditionals in lust-next.lua (2025-03-11)
+# Session Summary: Syntax Issues with Logger Conditionals in firmo.lua (2025-03-11)
 
 ## Overview
 
-While implementing the removal of logger conditionals throughout lust-next.lua, we encountered syntax errors that need to be resolved. This session focused on identifying and addressing these issues.
+While implementing the removal of logger conditionals throughout firmo.lua, we encountered syntax errors that need to be resolved. This session focused on identifying and addressing these issues.
 
 ## Findings
 
 1. **Syntax Error in Original File**:
-   - We discovered that the original lust-next.lua file already contained a syntax error
+   - We discovered that the original firmo.lua file already contained a syntax error
    - The error is reported at line 1135: `<eof> expected near 'end'`
    - Initial investigation shows this error exists in both the original file and our modified version
 
@@ -38,7 +38,7 @@ To resolve these issues, we need to:
 3. **Document the Issues**:
    - Update phase4_progress.md to reflect that we found and fixed syntax errors
    - Update project_wide_error_handling_plan.md with details of the issues
-   - Create a comprehensive guide for lust-next developers on syntax validation
+   - Create a comprehensive guide for firmo developers on syntax validation
 
 ## Next Steps
 

@@ -1,7 +1,7 @@
 -- Simple example of block coverage for quick testing
-local lust = require("lust-next")
+local firmo = require("firmo")
 local coverage = require("lib.coverage")
-local expect = lust.expect
+local expect = firmo.expect
 
 -- Simple function with conditions
 local function check_value(value)
@@ -24,12 +24,12 @@ coverage.init({
 coverage.start()
 
 -- Run tests
-lust.describe("Simple Block Example", function()
-  lust.it("should handle large value", function()
+firmo.describe("Simple Block Example", function()
+  firmo.it("should handle large value", function()
     expect(check_value(15)).to.equal("large")
   end)
   
-  lust.it("should handle small value", function()
+  firmo.it("should handle small value", function()
     expect(check_value(5)).to.equal("small")
   end)
 end)

@@ -1,10 +1,10 @@
-local lust = require("lust-next")
+local firmo = require("firmo")
 local fs = require("lib.tools.filesystem")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Filesystem Module", function()
-    local test_dir = "/tmp/lust-next-fs-test"
-    local test_file = "/tmp/lust-next-fs-test/test.txt"
+    local test_dir = "/tmp/firmo-fs-test"
+    local test_file = "/tmp/firmo-fs-test/test.txt"
     local test_content = "Hello, world!"
     
     -- Helper function to clean up test directory
@@ -44,7 +44,7 @@ describe("Filesystem Module", function()
         end)
         
         it("should copy files", function()
-            local copy_file = "/tmp/lust-next-fs-test/test-copy.txt"
+            local copy_file = "/tmp/firmo-fs-test/test-copy.txt"
             local success = fs.copy_file(test_file, copy_file)
             expect(success).to.be_truthy()
             expect(fs.file_exists(copy_file)).to.be_truthy()
@@ -54,8 +54,8 @@ describe("Filesystem Module", function()
         end)
         
         it("should move files", function()
-            local moved_file = "/tmp/lust-next-fs-test/test-moved.txt"
-            local copy_file = "/tmp/lust-next-fs-test/test-copy.txt"
+            local moved_file = "/tmp/firmo-fs-test/test-moved.txt"
+            local copy_file = "/tmp/firmo-fs-test/test-copy.txt"
             
             local success = fs.move_file(copy_file, moved_file)
             expect(success).to.be_truthy()
@@ -64,7 +64,7 @@ describe("Filesystem Module", function()
         end)
         
         it("should delete files", function()
-            local moved_file = "/tmp/lust-next-fs-test/test-moved.txt"
+            local moved_file = "/tmp/firmo-fs-test/test-moved.txt"
             local success = fs.delete_file(moved_file)
             expect(success).to.be_truthy()
             expect(fs.file_exists(moved_file)).to_not.be_truthy()
@@ -73,7 +73,7 @@ describe("Filesystem Module", function()
     
     describe("Directory Operations", function()
         it("should ensure directory exists", function()
-            local nested_dir = "/tmp/lust-next-fs-test/nested/path"
+            local nested_dir = "/tmp/firmo-fs-test/nested/path"
             local success = fs.ensure_directory_exists(nested_dir)
             expect(success).to.be_truthy()
             expect(fs.directory_exists(nested_dir)).to.be_truthy()
@@ -81,8 +81,8 @@ describe("Filesystem Module", function()
         
         it("should get directory contents", function()
             -- Create a few test files
-            fs.write_file("/tmp/lust-next-fs-test/file1.txt", "File 1")
-            fs.write_file("/tmp/lust-next-fs-test/file2.txt", "File 2")
+            fs.write_file("/tmp/firmo-fs-test/file1.txt", "File 1")
+            fs.write_file("/tmp/firmo-fs-test/file2.txt", "File 2")
             
             local contents = fs.get_directory_contents(test_dir)
             expect(#contents).to.be.at_least(3) -- file1.txt, file2.txt, nested/ directory
@@ -104,7 +104,7 @@ describe("Filesystem Module", function()
         end)
         
         it("should delete directories", function()
-            local nested_dir = "/tmp/lust-next-fs-test/nested"
+            local nested_dir = "/tmp/firmo-fs-test/nested"
             
             -- Try non-recursive delete on non-empty directory (should fail)
             local success, err = fs.delete_directory(nested_dir, false)
@@ -194,16 +194,16 @@ describe("Filesystem Module", function()
         
         it("should discover files", function()
             -- Create test directory structure
-            fs.ensure_directory_exists("/tmp/lust-next-fs-test/discover/a")
-            fs.ensure_directory_exists("/tmp/lust-next-fs-test/discover/b")
-            fs.write_file("/tmp/lust-next-fs-test/discover/file1.lua", "test")
-            fs.write_file("/tmp/lust-next-fs-test/discover/file2.txt", "test")
-            fs.write_file("/tmp/lust-next-fs-test/discover/a/file3.lua", "test")
-            fs.write_file("/tmp/lust-next-fs-test/discover/b/file4.lua", "test")
+            fs.ensure_directory_exists("/tmp/firmo-fs-test/discover/a")
+            fs.ensure_directory_exists("/tmp/firmo-fs-test/discover/b")
+            fs.write_file("/tmp/firmo-fs-test/discover/file1.lua", "test")
+            fs.write_file("/tmp/firmo-fs-test/discover/file2.txt", "test")
+            fs.write_file("/tmp/firmo-fs-test/discover/a/file3.lua", "test")
+            fs.write_file("/tmp/firmo-fs-test/discover/b/file4.lua", "test")
             
-            local files = fs.discover_files({"/tmp/lust-next-fs-test/discover"}, {"*.lua"})
+            local files = fs.discover_files({"/tmp/firmo-fs-test/discover"}, {"*.lua"})
             
-            -- No longer using lust.log, which doesn't exist
+            -- No longer using firmo.log, which doesn't exist
             -- Use a logger we know exists
             local logger = require("lib.tools.logging").get_logger("test.filesystem")
             logger.debug("discover_files result", { count = #files })
@@ -215,7 +215,7 @@ describe("Filesystem Module", function()
             
             -- Test with exclude patterns
             local filtered_files = fs.discover_files(
-                {"/tmp/lust-next-fs-test/discover"}, 
+                {"/tmp/firmo-fs-test/discover"}, 
                 {"*.lua"}, 
                 {"a/*"}
             )
@@ -223,17 +223,17 @@ describe("Filesystem Module", function()
         end)
         
         it("should scan directory", function()
-            local files = fs.scan_directory("/tmp/lust-next-fs-test/discover", false)
+            local files = fs.scan_directory("/tmp/firmo-fs-test/discover", false)
             expect(#files).to.equal(2) -- Should only get files in the root, not subdirectories
             
-            local all_files = fs.scan_directory("/tmp/lust-next-fs-test/discover", true)
+            local all_files = fs.scan_directory("/tmp/firmo-fs-test/discover", true)
             expect(#all_files).to.equal(4) -- Should get all files recursively
         end)
         
         it("should find matches", function()
-            local all_files = fs.scan_directory("/tmp/lust-next-fs-test/discover", true)
+            local all_files = fs.scan_directory("/tmp/firmo-fs-test/discover", true)
             
-            -- No longer using lust.log, which doesn't exist
+            -- No longer using firmo.log, which doesn't exist
             -- Use a logger we know exists
             local logger = require("lib.tools.logging").get_logger("test.filesystem")
             logger.debug("scan_directory result", { count = #all_files })

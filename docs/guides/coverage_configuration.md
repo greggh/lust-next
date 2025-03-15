@@ -1,13 +1,13 @@
-# Configuring Code Coverage in lust-next
+# Configuring Code Coverage in firmo
 
-This guide explains the various coverage configuration options in lust-next and when to use them to get the most accurate and useful coverage results.
+This guide explains the various coverage configuration options in firmo and when to use them to get the most accurate and useful coverage results.
 
 ## Basic Coverage Configuration
 
-lust-next provides a robust code coverage module with numerous configuration options. The most basic configuration looks like this:
+firmo provides a robust code coverage module with numerous configuration options. The most basic configuration looks like this:
 
 ```lua
-lust.coverage_options = {
+firmo.coverage_options = {
   enabled = true,                  -- Enable coverage tracking
   threshold = 90,                  -- Minimum coverage percentage (default: 90%)
   format = "html",                 -- Output format (summary, html, json, lcov)
@@ -20,7 +20,7 @@ lust.coverage_options = {
 You can control which files are included in coverage analysis:
 
 ```lua
-lust.coverage_options = {
+firmo.coverage_options = {
   enabled = true,
   source_dirs = {"src", "lib"},    -- Directories to scan for source files
   include = {"**/*.lua"},          -- Patterns of files to include
@@ -31,10 +31,10 @@ lust.coverage_options = {
 
 ## Advanced Coverage Options
 
-lust-next provides several advanced coverage options to fine-tune the analysis:
+firmo provides several advanced coverage options to fine-tune the analysis:
 
 ```lua
-lust.coverage_options = {
+firmo.coverage_options = {
   enabled = true,
   track_blocks = true,             -- Track code blocks (if/else, loops)
   use_static_analysis = true,      -- Use static analysis for improved accuracy
@@ -46,7 +46,7 @@ lust.coverage_options = {
 
 ## Understanding Control Flow Keywords Configuration
 
-The `control_flow_keywords_executable` option controls how lust-next treats control flow keywords like `end`, `else`, `until`, etc. in coverage calculations.
+The `control_flow_keywords_executable` option controls how firmo treats control flow keywords like `end`, `else`, `until`, etc. in coverage calculations.
 
 ### When control_flow_keywords_executable = true (default)
 
@@ -103,7 +103,7 @@ end                  -- NOT executable (with this setting)
 For the most comprehensive coverage analysis, combine control flow keyword settings with block coverage:
 
 ```lua
-lust.coverage_options = {
+firmo.coverage_options = {
   enabled = true,
   track_blocks = true,
   use_static_analysis = true,

@@ -1,4 +1,4 @@
--- Instrumentation approach benchmarking example for lust-next coverage
+-- Instrumentation approach benchmarking example for firmo coverage
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
 local benchmark = require("lib.tools.benchmark")
@@ -346,7 +346,7 @@ local complexity = tonumber(args[1]) or DEFAULT_COMPLEXITY
 local iterations = tonumber(args[2]) or DEFAULT_ITERATIONS
 
 -- Print benchmark header
-print("\n=== Lust-Next Coverage Benchmark ===")
+print("\n=== Firmo Coverage Benchmark ===")
 print("Comparing different coverage approaches with varied code complexity")
 print("Complexity level: " .. complexity .. " (higher = more code)")
 print("Iterations: " .. iterations)

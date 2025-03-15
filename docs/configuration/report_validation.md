@@ -1,6 +1,6 @@
 # Report Validation Configuration
 
-This document describes how to configure the report validation system in lust-next. The report validation system ensures that coverage reports are accurate and consistent by validating data structure, performing statistical analysis, and cross-checking with static analysis.
+This document describes how to configure the report validation system in firmo. The report validation system ensures that coverage reports are accurate and consistent by validating data structure, performing statistical analysis, and cross-checking with static analysis.
 
 ## Configuration Options
 
@@ -30,9 +30,9 @@ When using `auto_save_reports()` or saving reports through the reporting API, yo
 | `validation_report` | boolean | `false` | If true, generates a separate validation report |
 | `validation_report_path` | string | nil | Custom path for the validation report |
 
-## Configuration in .lust-next-config.lua
+## Configuration in .firmo-config.lua
 
-You can configure the validation system in your `.lust-next-config.lua` file:
+You can configure the validation system in your `.firmo-config.lua` file:
 
 ```lua
 return {
@@ -172,7 +172,7 @@ When generating a validation report (by setting `validation_report = true`), the
 For Continuous Integration environments, it's recommended to use strict validation to ensure accurate reports:
 
 ```lua
--- In .lust-next-config.lua for CI environments
+-- In .firmo-config.lua for CI environments
 return {
   reporting = {
     validation = {

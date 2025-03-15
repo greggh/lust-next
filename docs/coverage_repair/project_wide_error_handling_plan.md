@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines a comprehensive plan for implementing consistent error handling patterns across the entire lust-next project. The goal is to ensure that all modules follow standardized error handling practices, leading to a more robust, maintainable, and user-friendly codebase.
+This document outlines a comprehensive plan for implementing consistent error handling patterns across the entire firmo project. The goal is to ensure that all modules follow standardized error handling practices, leading to a more robust, maintainable, and user-friendly codebase.
 
 ## Guiding Principles
 
@@ -237,7 +237,7 @@ end
      - ✅ Implemented error handling for version requirement checking
      - ✅ Added fallback mechanisms for error handler loading
      - ✅ Enhanced with structured logging and parameter validation
-   - ✅ Implement error handling in main lust-next.lua
+   - ✅ Implement error handling in main firmo.lua
      - ✅ Added direct error_handler require to ensure it's always available
      - ✅ Replaced try_require fallbacks with error_handler.try
      - ✅ Enhanced test discovery, execution, and core test functions
@@ -349,7 +349,7 @@ We will use the following indicators in this document:
 
 ## Current Priorities
 
-0. **✅ COMPLETED (2025-03-12)**: Fix Logger Conditionals in lust-next.lua
+0. **✅ COMPLETED (2025-03-12)**: Fix Logger Conditionals in firmo.lua
    - ✅ Updated logger initialization to treat it as a required dependency
    - ✅ Fixed core functions (discover, run_file, format, describe, and variants)
    - ✅ Updated tag handling functions (tags, only_tags, filter, reset_filters)
@@ -506,7 +506,7 @@ We will use the following indicators in this document:
 
 ## Conclusion
 
-This comprehensive error handling implementation will significantly improve the lust-next project's reliability, maintainability, and user experience. By applying consistent error handling patterns across all modules, we establish a robust foundation for future development and ensure a better experience for users of the framework.
+This comprehensive error handling implementation will significantly improve the firmo project's reliability, maintainability, and user experience. By applying consistent error handling patterns across all modules, we establish a robust foundation for future development and ensure a better experience for users of the framework.
 
 ---
 

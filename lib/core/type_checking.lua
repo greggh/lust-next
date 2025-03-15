@@ -1,4 +1,4 @@
--- Enhanced type checking for lust-next
+-- Enhanced type checking for firmo
 -- Implements advanced type and class validation features
 
 local type_checking = {}

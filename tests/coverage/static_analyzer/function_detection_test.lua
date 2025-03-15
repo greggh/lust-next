@@ -1,6 +1,6 @@
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 local static_analyzer = require("lib.coverage.static_analyzer")
 local error_handler = require("lib.tools.error_handler")

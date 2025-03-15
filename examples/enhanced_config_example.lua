@@ -1,10 +1,10 @@
--- Enhanced Configuration System Example for lust-next
+-- Enhanced Configuration System Example for firmo
 --
 -- This comprehensive example demonstrates the centralized configuration system
 -- including report validation, formatter configuration, and more.
 -- Run with: lua examples/enhanced_config_example.lua
 
-local lust = require("lust-next")
+local firmo = require("firmo")
 local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
 
@@ -12,7 +12,7 @@ local logging = require("lib.tools.logging")
 local logger = logging.get_logger("ConfigExample")
 logging.configure({level = "info"})
 
-print("lust-next Enhanced Configuration System Example")
+print("firmo Enhanced Configuration System Example")
 print("===============================================")
 print("")
 
@@ -21,7 +21,7 @@ print("Step 1: Creating a comprehensive configuration file")
 local temp_config_path = "temp_enhanced_config.lua"
 
 local config_content = [[
--- Comprehensive lust-next configuration file
+-- Comprehensive firmo configuration file
 return {
   -- Core options
   debug = false,
@@ -355,18 +355,18 @@ else
   end
 end
 
--- Step 10: Use configuration with lust API
-print("\nStep 10: Using configuration with lust API")
+-- Step 10: Use configuration with firmo API
+print("\nStep 10: Using configuration with firmo API")
 
--- Apply configuration to lust
-lust.config.set_centralized_config(central_config)
+-- Apply configuration to firmo
+firmo.config.set_centralized_config(central_config)
 
 -- Run a simple test with the configuration
 print("Running a simple test with applied configuration:")
 
-lust.describe("Configuration Example", function()
-  lust.it("should pass", function()
-    lust.expect(central_config.get("coverage.threshold")).to.be(80)
+firmo.describe("Configuration Example", function()
+  firmo.it("should pass", function()
+    firmo.expect(central_config.get("coverage.threshold")).to.be(80)
   end)
 end)
 
@@ -381,9 +381,9 @@ else
   print("Failed to remove temporary config file: " .. (delete_err or "unknown error"))
 end
 
-print("\nThis example demonstrated the centralized configuration system in lust-next.")
-print("In a real project, create a .lust-next-config.lua file in your project root.")
-print("Use 'lua lust-next.lua --create-config' to generate a template configuration file.")
+print("\nThis example demonstrated the centralized configuration system in firmo.")
+print("In a real project, create a .firmo-config.lua file in your project root.")
+print("Use 'lua firmo.lua --create-config' to generate a template configuration file.")
 
 print("\nFor more information, see the configuration documentation:")
 print("- docs/configuration/central_config_guide.md")

@@ -1,7 +1,7 @@
--- Tests for the lust-next codefix module
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+-- Tests for the firmo codefix module
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Import filesystem module
 local fs = require("lib.tools.filesystem")
@@ -26,7 +26,7 @@ local log = try_load_logger()
 local function create_test_file(filename, content)
   local success, err = fs.write_file(filename, content)
   if not success then
-    lust.log.error({ message = "Failed to create test file", filename = filename, error = err })
+    firmo.log.error({ message = "Failed to create test file", filename = filename, error = err })
     return false
   end
   return true
@@ -35,7 +35,7 @@ end
 local function read_test_file(filename)
   local content, err = fs.read_file(filename)
   if not content then
-    lust.log.error({ message = "Failed to read test file", filename = filename, error = err })
+    firmo.log.error({ message = "Failed to read test file", filename = filename, error = err })
     return nil
   end
   return content
@@ -45,18 +45,18 @@ end
 describe("Codefix Module", function()
   
   -- Initialize the codefix module
-  lust.codefix_options = lust.codefix_options or {}
-  lust.codefix_options.enabled = true
-  lust.codefix_options.verbose = false
-  lust.codefix_options.debug = false
-  lust.codefix_options.backup = true
-  lust.codefix_options.backup_ext = ".bak"
+  firmo.codefix_options = firmo.codefix_options or {}
+  firmo.codefix_options.enabled = true
+  firmo.codefix_options.verbose = false
+  firmo.codefix_options.debug = false
+  firmo.codefix_options.backup = true
+  firmo.codefix_options.backup_ext = ".bak"
   
   -- Temporary files for testing
   local test_files = {}
   
   -- Create test files
-  lust.before(function()
+  firmo.before(function()
     -- Test file with unused variables
     local unused_vars_file = "unused_vars_test.lua"
     local unused_vars_content = [[
@@ -159,7 +159,7 @@ return test_function
   it("should fix unused variables", function()
     local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
-      return lust.pending("Codefix module fix_file function not available")
+      return firmo.pending("Codefix module fix_file function not available")
     end
     
     -- Enable the module and specific fixers
@@ -182,7 +182,7 @@ return test_function
   it("should fix trailing whitespace in multiline strings", function()
     local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
-      lust.pending("Codefix module fix_file function not available")
+      firmo.pending("Codefix module fix_file function not available")
       return
     end
     
@@ -203,7 +203,7 @@ return test_function
   it("should optimize string concatenation", function()
     local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
-      lust.pending("Codefix module fix_file function not available")
+      firmo.pending("Codefix module fix_file function not available")
       return
     end
     
@@ -224,7 +224,7 @@ return test_function
   it("should use StyLua for formatting if available", function()
     local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
-      lust.pending("Codefix module fix_file function not available")
+      firmo.pending("Codefix module fix_file function not available")
       return
     end
     
@@ -255,7 +255,7 @@ return badlyFormattedFunction
       local content = read_test_file(format_file)
       expect(type(content)).to.equal("string")
     else
-      lust.pending("Could not create test file")
+      firmo.pending("Could not create test file")
     end
   end)
   
@@ -263,7 +263,7 @@ return badlyFormattedFunction
   it("should create backup files when configured", function()
     local codefix = require("../lib/tools/codefix")
     if not codefix.fix_file then
-      lust.pending("Codefix module fix_file function not available")
+      firmo.pending("Codefix module fix_file function not available")
       return
     end
     
@@ -288,7 +288,7 @@ return badlyFormattedFunction
   it("should fix multiple files", function()
     local codefix = require("../lib/tools/codefix")
     if not codefix.fix_files then
-      return lust.pending("Codefix module fix_files function not available")
+      return firmo.pending("Codefix module fix_files function not available")
     end
     
     -- Enable module
@@ -318,8 +318,8 @@ return badlyFormattedFunction
     -- Create a test directory
     local success, err = fs.create_directory(test_dir)
     if not success then
-      lust.log.error({ message = "Failed to create test directory", directory = test_dir, error = err })
-      return lust.pending("Could not create test directory")
+      firmo.log.error({ message = "Failed to create test directory", directory = test_dir, error = err })
+      return firmo.pending("Could not create test directory")
     end
     
     -- Create test files directly in the directory
@@ -379,7 +379,7 @@ return multiline
       -- Clean up directory
       fs.delete_directory(test_dir, true)
     else
-      lust.pending("fix_lua_files function not available")
+      firmo.pending("fix_lua_files function not available")
     end
   end)
   
@@ -405,7 +405,7 @@ return multiline
     -- Check if the run_cli function exists
     local codefix = require("../lib/tools/codefix")
     if not codefix.run_cli then
-      lust.pending("run_cli function not found")
+      firmo.pending("run_cli function not found")
       return
     end
     

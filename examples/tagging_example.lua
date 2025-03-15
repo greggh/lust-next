@@ -1,7 +1,7 @@
 -- Example demonstrating test tagging and filtering
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Process command-line arguments for this example
 local tags, filter
@@ -20,10 +20,10 @@ end
 if tags then
   -- Use table.unpack for Lua 5.2+ or unpack for Lua 5.1
   local unpack_func = table.unpack or unpack
-  lust_next.only_tags(unpack_func(tags))
+  firmo.only_tags(unpack_func(tags))
 end
 if filter then
-  lust_next.filter(filter)
+  firmo.filter(filter)
 end
 
 -- To show tagging in action, run this file with:
@@ -46,7 +46,7 @@ local calculator = {
 describe("Calculator Tests", function()
   describe("Basic Operations", function()
     -- Tag tests as "unit" and "fast"
-    lust_next.tags("unit", "fast")
+    firmo.tags("unit", "fast")
     
     it("adds two numbers correctly", function()
       expect(calculator.add(2, 3)).to.equal(5)
@@ -67,7 +67,7 @@ describe("Calculator Tests", function()
   
   describe("Error Handling", function()
     -- Tag these tests as "unit" and "error-handling"
-    lust_next.tags("unit", "error-handling")
+    firmo.tags("unit", "error-handling")
     
     it("throws error when dividing by zero", function()
       expect(function() calculator.divide(5, 0) end).to.fail.with("Cannot divide by zero")
@@ -76,7 +76,7 @@ describe("Calculator Tests", function()
   
   describe("Advanced Calculations", function()
     -- Tag these tests as "api" and "slow"
-    lust_next.tags("api", "slow")
+    firmo.tags("api", "slow")
     
     it("performs complex calculation pipeline", function()
       local result = calculator.add(

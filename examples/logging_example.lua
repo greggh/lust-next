@@ -1,5 +1,5 @@
 -- Example showing how to use the logging module
-local lust_next = require('lust-next')
+local firmo = require('firmo')
 local logging = require('lib.tools.logging')
 
 print("Logging Module Example")
@@ -88,10 +88,10 @@ verbose_logger.verbose("Verbose message visible because verbose=true")
 print("\nConfiguring file output:")
 print("-----------------------")
 logging.configure({
-  output_file = "/tmp/lust-next-log.txt"
+  output_file = "/tmp/firmo-log.txt"
 })
 
 app_logger.info("This message goes to both console and file")
-print("Check /tmp/lust-next-log.txt for the log file")
+print("Check /tmp/firmo-log.txt for the log file")
 
 print("\nDone! Your logging module is working correctly.")

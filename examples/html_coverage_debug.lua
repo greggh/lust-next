@@ -5,8 +5,8 @@
   source code display in the HTML formatter.
 ]]
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
 local logger = logging.get_logger("Debug")

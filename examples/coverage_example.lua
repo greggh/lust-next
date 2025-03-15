@@ -1,5 +1,5 @@
 -- Example to demonstrate coverage tracking
-local lust_next = require('lust-next')
+local firmo = require('firmo')
 local coverage = require("lib.coverage")  -- Directly reference the coverage module
 
 -- OS detection helper function
@@ -8,10 +8,10 @@ function is_windows()
 end
 
 -- Expose the test functions and assertions
-local describe, it = lust_next.describe, lust_next.it
+local describe, it = firmo.describe, firmo.it
 
 -- Create shorthand for expect
-local expect = lust_next.expect
+local expect = firmo.expect
 
 -- Import the functions we want to test
 local example_module = {}
@@ -93,7 +93,7 @@ describe("Example module coverage demo", function()
 end)
 
 -- Enable coverage with comprehensive options
-lust_next.coverage_options = {
+firmo.coverage_options = {
   enabled = true,                   -- Enable coverage tracking
   source_dirs = {".", "examples"}, -- Directories to scan for source files
   discover_uncovered = true,        -- Find files that aren't executed by tests
@@ -237,4 +237,4 @@ end
 -- lua examples/coverage_example.lua
 -- 
 -- Or from command line:
--- lua lust-next.lua --coverage --discover-uncovered=true --source-dirs=".,examples" examples/coverage_example.lua
+-- lua firmo.lua --coverage --discover-uncovered=true --source-dirs=".,examples" examples/coverage_example.lu

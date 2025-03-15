@@ -1,5 +1,5 @@
 # Codefix API
-The codefix module in lust-next provides comprehensive code quality checking and fixing capabilities. It integrates with external tools like StyLua and Luacheck while also providing custom fixers for issues that neither tool handles well.
+The codefix module in firmo provides comprehensive code quality checking and fixing capabilities. It integrates with external tools like StyLua and Luacheck while also providing custom fixers for issues that neither tool handles well.
 
 ## Overview
 The codefix module can:
@@ -11,10 +11,10 @@ The codefix module can:
 5. Be used through a simple CLI interface
 
 ## Configuration Options
-The codefix module can be configured through the `lust.codefix_options` table:
+The codefix module can be configured through the `firmo.codefix_options` table:
 
 ```lua
-lust.codefix_options = {
+firmo.codefix_options = {
   enabled = true,            -- Enable code fixing functionality
   verbose = true,            -- Enable verbose output
   debug = false,             -- Enable debug output (more detailed logs)
@@ -52,18 +52,18 @@ lust.codefix_options = {
 ### In Lua Scripts
 
 ```lua
-local lust = require("lust-next")
+local firmo = require("firmo")
 -- Enable codefix
-lust.codefix_options.enabled = true
+firmo.codefix_options.enabled = true
 -- Fix a specific file
-local success = lust.fix_file("path/to/file.lua")
+local success = firmo.fix_file("path/to/file.lua")
 -- Fix multiple files
-local success = lust.fix_files({
+local success = firmo.fix_files({
   "path/to/file1.lua",
   "path/to/file2.lua"
 })
 -- Find and fix Lua files in a directory
-local success = lust.fix_lua_files("path/to/directory")
+local success = firmo.fix_lua_files("path/to/directory")
 
 ```text
 
@@ -72,19 +72,19 @@ local success = lust.fix_lua_files("path/to/directory")
 ```bash
 
 # Fix a specific file
-lua lust-next.lua --fix path/to/file.lua
+lua firmo.lua --fix path/to/file.lua
 
 # Fix all Lua files in a directory
-lua lust-next.lua --fix path/to/directory
+lua firmo.lua --fix path/to/directory
 
 # Check a file without fixing
-lua lust-next.lua --check path/to/file.lua
+lua firmo.lua --check path/to/file.lua
 
 ```text
 
 ## API Reference
 
-### `lust.fix_file(file_path)`
+### `firmo.fix_file(file_path)`
 Fixes a single Lua file by applying StyLua, Luacheck, and custom fixers.
 **Parameters:**
 
@@ -95,7 +95,7 @@ Fixes a single Lua file by applying StyLua, Luacheck, and custom fixers.
 **Example:**
 
 ```lua
-local success = lust.fix_file("src/module.lua")
+local success = firmo.fix_file("src/module.lua")
 if success then
   print("File fixed successfully")
 else
@@ -104,7 +104,7 @@ end
 
 ```text
 
-### `lust.fix_files(file_paths)`
+### `firmo.fix_files(file_paths)`
 Fixes multiple Lua files.
 **Parameters:**
 
@@ -120,11 +120,11 @@ local files = {
   "src/module2.lua",
   "src/module3.lua"
 }
-local success = lust.fix_files(files)
+local success = firmo.fix_files(files)
 
 ```text
 
-### `lust.fix_lua_files(directory)`
+### `firmo.fix_lua_files(directory)`
 Finds and fixes all Lua files in a directory that match the include/exclude patterns.
 **Parameters:**
 
@@ -135,7 +135,7 @@ Finds and fixes all Lua files in a directory that match the include/exclude patt
 **Example:**
 
 ```lua
-local success = lust.fix_lua_files("src")
+local success = firmo.fix_lua_files("src")
 
 ```text
 

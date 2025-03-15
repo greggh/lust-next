@@ -1,4 +1,4 @@
--- lust-next test quality validation module
+-- firmo test quality validation module
 -- Implementation of test quality analysis with level-based validation
 
 -- Lazy loading of dependencies to avoid circular references
@@ -1302,7 +1302,7 @@ function M.html_report()
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Lust-Next Test Quality Report</title>
+  <title>Firmo Test Quality Report</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     h1 { color: #333; }
@@ -1320,7 +1320,7 @@ function M.html_report()
   </style>
 </head>
 <body>
-  <h1>Lust-Next Test Quality Report</h1>
+  <h1>Firmo Test Quality Report</h1>
   <div class="summary">
     <h2>Quality Summary</h2>
     <p>Quality Level: ]].. report.level_name .. " (Level " .. report.level .. [[ of 5)</p>

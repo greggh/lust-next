@@ -1,61 +1,61 @@
 #!/usr/bin/env lua
--- Example demonstrating the interactive CLI mode of lust-next
+-- Example demonstrating the interactive CLI mode of firmo
 -- This example shows how to use the interactive CLI for running and managing tests
 
--- Get the root directory of lust-next
-local lust_dir = arg[0]:match("(.-)[^/\\]+$") or "./"
-if lust_dir == "" then lust_dir = "./" end
-lust_dir = lust_dir .. "../"
+-- Get the root directory of firmo
+local firmo_dir = arg[0]:match("(.-)[^/\\]+$") or "./"
+if firmo_dir == "" then firmo_dir = "./" end
+firmo_dir = firmo_dir .. "../"
 
 -- Add necessary directories to package path
-package.path = lust_dir .. "?.lua;" .. lust_dir .. "scripts/?.lua;" .. lust_dir .. "src/?.lua;" .. package.path
+package.path = firmo_dir .. "?.lua;" .. firmo_dir .. "scripts/?.lua;" .. firmo_dir .. "src/?.lua;" .. package.path
 
--- Load lust-next and the interactive module
-local lust = require("lust-next")
+-- Load firmo and the interactive module
+local firmo = require("firmo")
 local interactive = require("src.interactive")
 
 -- Define a simple set of tests
-lust.describe("Example Tests for Interactive Mode", function()
-  lust.before(function()
+firmo.describe("Example Tests for Interactive Mode", function()
+  firmo.before(function()
     -- Setup code runs before each test
     print("Setting up test environment...")
   end)
 
-  lust.after(function()
+  firmo.after(function()
     -- Cleanup code runs after each test
     print("Cleaning up test environment...")
   end)
 
-  lust.it("should pass a simple test", function()
-    lust.assert.equals(2 + 2, 4)
+  firmo.it("should pass a simple test", function()
+    firmo.assert.equals(2 + 2, 4)
   end)
 
-  lust.it("can be tagged with 'basic'", function()
-    lust.tags('basic')
-    lust.assert.is_true(true)
+  firmo.it("can be tagged with 'basic'", function()
+    firmo.tags('basic')
+    firmo.assert.is_true(true)
   end)
 
-  lust.it("can be tagged with 'advanced'", function()
-    lust.tags('advanced')
-    lust.assert.is_false(false)
+  firmo.it("can be tagged with 'advanced'", function()
+    firmo.tags('advanced')
+    firmo.assert.is_false(false)
   end)
 
-  lust.it("demonstrates expect assertions", function()
-    lust.expect(5).to.be.a("number")
-    lust.expect("test").to_not.be.a("number")
-    lust.expect(true).to.be.truthy()
-    lust.expect(false).to.be.falsey()
+  firmo.it("demonstrates expect assertions", function()
+    firmo.expect(5).to.be.a("number")
+    firmo.expect("test").to_not.be.a("number")
+    firmo.expect(true).to.be.truthy()
+    firmo.expect(false).to.be.falsey()
   end)
 
-  lust.describe("Nested test group", function()
-    lust.it("should support focused tests", function()
-      lust.focus(true) -- This test can be specifically targeted with the focus command
-      lust.assert.equals(4 * 4, 16)
+  firmo.describe("Nested test group", function()
+    firmo.it("should support focused tests", function()
+      firmo.focus(true) -- This test can be specifically targeted with the focus command
+      firmo.assert.equals(4 * 4, 16)
     end)
 
-    lust.it("demonstrates mocking", function()
+    firmo.it("demonstrates mocking", function()
       local original_func = function(x) return x * 2 end
-      local mock = lust.mock(original_func)
+      local mock = firmo.mock(original_func)
       
       -- Setup the mock to return a specific value
       mock.returns(42)
@@ -64,16 +64,16 @@ lust.describe("Example Tests for Interactive Mode", function()
       local result = mock(10)
       
       -- Verify the mock worked
-      lust.assert.equals(result, 42)
-      lust.assert.is_true(mock.called)
-      lust.assert.equals(mock.calls[1][1], 10)
+      firmo.assert.equals(result, 42)
+      firmo.assert.is_true(mock.called)
+      firmo.assert.equals(mock.calls[1][1], 10)
     end)
   end)
 end)
 
 -- Start the interactive CLI
-print("Starting interactive CLI for lust-next...")
-interactive.start(lust, {
-  test_dir = lust_dir .. "examples",
+print("Starting interactive CLI for firmo...")
+interactive.start(firmo, {
+  test_dir = firmo_dir .. "examples",
   pattern = "interactive_mode_example.lua",
 })

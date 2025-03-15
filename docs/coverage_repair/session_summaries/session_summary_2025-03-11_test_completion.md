@@ -9,7 +9,7 @@ This session focused on completing the final test file updates, particularly the
 ### logging_test.lua Comprehensive Fixes:
 
 1. **Fixed All Print Statements**:
-   - Replaced 12 print statements with structured logging using lust.log
+   - Replaced 12 print statements with structured logging using firmo.log
    - Used proper parameter tables for error logging
    - Added descriptive context for each log message
    - Used appropriate log levels (primarily error for failure conditions)

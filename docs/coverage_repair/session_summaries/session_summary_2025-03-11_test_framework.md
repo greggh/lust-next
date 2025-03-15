@@ -5,7 +5,7 @@ Date: 2025-03-11
 ## Goals for the Session
 
 1. Begin implementing the test update plan by fixing the highest priority test files
-2. Ensure the proper usage of the lust-next testing API across all fixed files
+2. Ensure the proper usage of the firmo testing API across all fixed files
 3. Update documentation to reflect progress
 4. Address config deprecation warnings by updating tests to use central_config
 
@@ -15,22 +15,22 @@ Date: 2025-03-11
 
 We successfully updated three high-priority test files to use correct testing patterns:
 
-1. **lust_test.lua** - Core framework test:
-   - Updated imports to use consistent pattern: `local lust = require("lust-next")`
-   - Added proper function extraction: `local describe, it, expect = lust.describe, lust.it, lust.expect`
-   - Added lifecycle hooks import: `local before, after = lust.before, lust.after`
+1. **firmo_test.lua** - Core framework test:
+   - Updated imports to use consistent pattern: `local firmo = require("firmo")`
+   - Added proper function extraction: `local describe, it, expect = firmo.describe, firmo.it, firmo.expect`
+   - Added lifecycle hooks import: `local before, after = firmo.before, firmo.after`
    - Added structured logging integration
-   - Replaced references to `lust_next` with `lust` for consistency
+   - Replaced references to `firmo` with `firmo` for consistency
    - Removed explicit test execution calls at the end of file
    - Added explanatory comment about test execution by runner
 
 2. **expect_assertions_test.lua** - Core assertions test:
-   - Added missing lifecycle hooks import: `local before, after = lust.before, lust.after` 
+   - Added missing lifecycle hooks import: `local before, after = firmo.before, firmo.after` 
    - Removed explicit test execution call at the end of file
    - Added explanatory comment about test execution by runner
 
 3. **coverage_module_test.lua** - Coverage system test:
-   - Updated imports to use consistent pattern: `local lust = require("lust-next")`
+   - Updated imports to use consistent pattern: `local firmo = require("firmo")`
    - Added proper function extraction with consistent naming
    - Added lifecycle hooks import and usage
    - Added structured logging integration throughout the test
@@ -94,4 +94,4 @@ Updated the following documentation files:
 
 ## Summary
 
-This session successfully began the implementation of the test update plan by fixing three high-priority test files. We established consistent patterns for test imports, logging, and configuration that will guide the remaining test updates. By addressing the config deprecation warnings, we've also improved the sustainability of the codebase by migrating to the newer central_config module. The session represents significant progress toward establishing reliable testing patterns that will support all future development of the lust-next framework.
+This session successfully began the implementation of the test update plan by fixing three high-priority test files. We established consistent patterns for test imports, logging, and configuration that will guide the remaining test updates. By addressing the config deprecation warnings, we've also improved the sustainability of the codebase by migrating to the newer central_config module. The session represents significant progress toward establishing reliable testing patterns that will support all future development of the firmo framework

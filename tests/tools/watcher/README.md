@@ -1,6 +1,6 @@
 # File Watcher Tests
 
-This directory contains tests for the lust-next file watching system. The watcher module enables continuous testing by detecting file changes and automatically running tests.
+This directory contains tests for the firmo file watching system. The watcher module enables continuous testing by detecting file changes and automatically running tests.
 
 ## Directory Contents
 
@@ -8,7 +8,7 @@ This directory contains tests for the lust-next file watching system. The watche
 
 ## File Watcher Features
 
-The lust-next watcher module provides:
+The firmo watcher module provides:
 
 - **Automatic file change detection** - Monitor files for changes
 - **Continuous test execution** - Run tests when files change
@@ -28,7 +28,7 @@ Watch mode can be enabled via:
 lua test.lua --watch tests/
 
 -- API
-lust.run_tests({
+firmo.run_tests({
   path = "tests/",
   watch = true,
   watch_dirs = {"lib/", "tests/"},

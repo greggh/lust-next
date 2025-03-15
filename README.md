@@ -1,20 +1,22 @@
 <div align="center">
 
-# Lust-Next
-[![CI](https://github.com/greggh/lust-next/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/greggh/lust-next/actions/workflows/ci.yml)
-[![Documentation](https://github.com/greggh/lust-next/actions/workflows/docs.yml/badge.svg?style=flat-square)](https://github.com/greggh/lust-next/actions/workflows/docs.yml)
-[![GitHub License](https://img.shields.io/github/license/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/blob/main/LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/greggh/lust-next?style=flat-square)](https://github.com/greggh/lust-next/stargazers)
-[![Version](https://img.shields.io/badge/Version-0.7.5-blue?style=flat-square)](https://github.com/greggh/lust-next/releases/tag/v0.7.5)
-[![Discussions](https://img.shields.io/github/discussions/greggh/lust-next?style=flat-square&logo=github)](https://github.com/greggh/lust-next/discussions)
-*A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original.*
+# Firmo
+
+[![CI](https://github.com/greggh/firmo/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/greggh/firmo/actions/workflows/ci.yml)
+[![Documentation](https://github.com/greggh/firmo/actions/workflows/docs.yml/badge.svg?style=flat-square)](https://github.com/greggh/firmo/actions/workflows/docs.yml)
+[![GitHub License](https://img.shields.io/github/license/greggh/firmo?style=flat-square)](https://github.com/greggh/firmo/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/greggh/firmo?style=flat-square)](https://github.com/greggh/firmo/stargazers)
+[![Version](https://img.shields.io/badge/Version-0.7.5-blue?style=flat-square)](https://github.com/greggh/firmo/releases/tag/v0.7.5)
+[![Discussions](https://img.shields.io/github/discussions/greggh/firmo?style=flat-square&logo=github)](https://github.com/greggh/firmo/discussions)
+_A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original._
 [Features](#features) •
 [Installation](#installation) •
 [Quick Start](#quick-start) •
 [Documentation](#documentation) •
 [Contributing](#contributing) •
 [License](#license) •
-[Discussions](https://github.com/greggh/lust-next/discussions)
+[Discussions](https://github.com/greggh/firmo/discussions)
+
 </div>
 
 ## Features
@@ -41,13 +43,14 @@
 - 🧹 **Code Fixing** - Fix common Lua code issues with custom fixers and tool integration (StyLua, Luacheck)
 
 ## Quick Start
-Copy the `lust-next.lua` file to your project and require it:
+
+Copy the `firmo.lua` file to your project and require it:
 
 ### Option 1: Expose all functions globally (new in v0.7.1)
 
-```lua
-local lust_next = require('lust-next')
-lust_next.expose_globals() -- Makes all test functions available globally
+````lua
+local firmo = require('firmo')
+firmo.expose_globals() -- Makes all test functions available globally
 describe('my project', function()
   before_each(function()
     -- This gets run before every test.
@@ -68,10 +71,10 @@ end)
 ### Option 2: Import specific functions (traditional approach)
 
 ```lua
-local lust = require 'lust-next'
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require 'firmo'
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 describe('my project', function()
-  lust.before(function()
+  firmo.before(function()
     -- This gets run before every test.
   end)
   describe('module1', function() -- Can be nested
@@ -88,13 +91,13 @@ end)
 ```text
 
 ## Modular Reporting System
-Lust-Next includes a powerful modular reporting system for generating coverage and quality reports:
+firmo includes a powerful modular reporting system for generating coverage and quality reports:
 
 ```lua
 -- Enable coverage tracking
-lust.coverage_options.enabled = true
+firmo.coverage_options.enabled = true
 -- Run tests with coverage analysis
-lust.run_discovered("./tests", "*_test.lua", {
+firmo.run_discovered("./tests", "*_test.lua", {
   coverage = {
     enabled = true,          -- Enable coverage tracking
     format = "html",         -- Output format (html, json, lcov, summary)
@@ -105,12 +108,12 @@ lust.run_discovered("./tests", "*_test.lua", {
   }
 })
 -- Generate coverage report programmatically
-lust.generate_coverage_report("html", "./coverage/report.html")
+firmo.generate_coverage_report("html", "./coverage/report.html")
 -- Enable quality validation
-lust.quality_options.enabled = true
-lust.quality_options.level = 3 -- Quality level (1-5)
+firmo.quality_options.enabled = true
+firmo.quality_options.level = 3 -- Quality level (1-5)
 -- Generate quality report
-lust.generate_quality_report("html", "./quality-report.html")
+firmo.generate_quality_report("html", "./quality-report.html")
 
 ```text
 
@@ -132,12 +135,12 @@ The modular reporting architecture ensures reliable report generation:
 - Directory creation with multiple fallback methods
 
 ## Integration with hooks-util
-Lust-Next is integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework, providing a standardized testing experience for Lua-based Neovim projects:
+firmo is integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework, providing a standardized testing experience for Lua-based Neovim projects:
 
 ```lua
--- From hooks-util, set up a project with lust-next testing
-local lust_next = require("hooks-util.lust-next")
-lust_next.setup_project("/path/to/your/project")
+-- From hooks-util, set up a project with firmo testing
+local firmo = require("hooks-util.firmo")
+firmo.setup_project("/path/to/your/project")
 
 ```text
 This integration provides:
@@ -147,7 +150,7 @@ This integration provides:
 - CI workflow generation for GitHub/GitLab/Azure
 - Pre-commit hook integration
 - Coverage and quality validation in pre-commit hooks
-See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using lust-next with hooks-util.
+See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using firmo with hooks-util.
 
 ## Upcoming Features
 
@@ -166,13 +169,13 @@ The quality module will be available as a standalone component as well as integr
 Full documentation is available in the [docs](docs/) directory:
 
 - [Getting Started](docs/guides/getting-started.md) - Detailed guide for beginners
-- [API Reference](docs/api/README.md) - Complete API documentation 
+- [API Reference](docs/api/README.md) - Complete API documentation
 - [Examples](examples/) - Example scripts demonstrating features
 - [Migration Guide](docs/guides/migrating.md) - Migrating from other test frameworks
 
 ### Core Functions
 
-#### `lust.describe(name, func)`, `lust.fdescribe(name, func)`, `lust.xdescribe(name, func)`
+#### `firmo.describe(name, func)`, `firmo.fdescribe(name, func)`, `firmo.xdescribe(name, func)`
 Used to declare a group of tests. Groups created using `describe` can be nested.
 
 ```lua
@@ -188,7 +191,7 @@ end)
 
 ```text
 
-#### `lust.it(name, func)`, `lust.fit(name, func)`, `lust.xit(name, func)`
+#### `firmo.it(name, func)`, `firmo.fit(name, func)`, `firmo.xit(name, func)`
 Used to declare a test, which consists of a set of assertions.
 
 ```lua
@@ -207,7 +210,7 @@ end)
 
 ```text
 
-#### `lust.before(fn)` and `lust.after(fn)`
+#### `firmo.before(fn)` and `firmo.after(fn)`
 Set up functions that run before or after each test in a describe block.
 
 ```lua
@@ -226,7 +229,7 @@ end)
 ```text
 
 ### Assertions
-Lust uses "expect style" assertions that can be chained for readable tests:
+firmo uses "expect style" assertions that can be chained for readable tests:
 
 ```lua
 expect(value).to.equal(expected)
@@ -299,7 +302,7 @@ expect(value).to.be_approximately(target, delta)
 
 ```lua
 -- Enhanced error checking
-expect(function_that_throws).to.throw.error()  
+expect(function_that_throws).to.throw.error()
 expect(function_that_throws).to.throw.error_matching("pattern")
 expect(function_that_throws).to.throw.error_type("string")
 
@@ -309,7 +312,7 @@ expect(function_that_throws).to.throw.error_type("string")
 Spies track function calls and their arguments:
 
 ```lua
-local spy = lust.spy(myFunction)
+local spy = firmo.spy(myFunction)
 spy(1, 2, 3)
 expect(#spy).to.equal(1)
 expect(spy[1][1]).to.equal(1)
@@ -320,14 +323,14 @@ expect(spy[1][1]).to.equal(1)
 You can add custom assertions:
 
 ```lua
-lust.paths.empty = {
+firmo.paths.empty = {
   test = function(value)
     return #value == 0,
       'expected ' .. tostring(value) .. ' to be empty',
       'expected ' .. tostring(value) .. ' to not be empty'
   end
 }
-table.insert(lust.paths.be, 'empty')
+table.insert(firmo.paths.be, 'empty')
 expect({}).to.be.empty()
 
 ```text
@@ -339,7 +342,7 @@ Configure the test output format to your preference:
 
 ```lua
 -- Configure output format programmatically
-lust.format({
+firmo.format({
   use_color = true,          -- Whether to use color codes in output
   indent_char = '  ',        -- Character to use for indentation (tab or spaces)
   indent_size = 2,           -- How many indent_chars to use per level
@@ -350,7 +353,7 @@ lust.format({
   summary_only = false       -- Show only summary, not individual tests
 })
 -- Or disable colors
-lust.nocolor()
+firmo.nocolor()
 
 ```text
 Available command-line options when running tests:
@@ -358,18 +361,18 @@ Available command-line options when running tests:
 ```bash
 
 # Use different output formats
-lua lust-next.lua --format dot       # Minimal output with dots (. for pass, F for fail)
-lua lust-next.lua --format compact   # Compact output with minimal details
-lua lust-next.lua --format summary   # Show only the final summary
-lua lust-next.lua --format detailed  # Show full details including stack traces
+lua firmo.lua --format dot       # Minimal output with dots (. for pass, F for fail)
+lua firmo.lua --format compact   # Compact output with minimal details
+lua firmo.lua --format summary   # Show only the final summary
+lua firmo.lua --format detailed  # Show full details including stack traces
 
 # Control indentation
-lua lust-next.lua --indent space     # Use spaces for indentation
-lua lust-next.lua --indent tab       # Use tabs for indentation
-lua lust-next.lua --indent 4         # Use 4 spaces for indentation
+lua firmo.lua --indent space     # Use spaces for indentation
+lua firmo.lua --indent tab       # Use tabs for indentation
+lua firmo.lua --indent 4         # Use 4 spaces for indentation
 
 # Disable colors
-lua lust-next.lua --no-color
+lua firmo.lua --no-color
 
 ```text
 
@@ -396,14 +399,14 @@ describe("other module", function()
 })
 
 ```text
-When any `fdescribe` or `fit` is present, lust-next enters "focus mode" where only focused tests run. This is useful for working on a specific feature or debugging a failure.
+When any `fdescribe` or `fit` is present, firmo enters "focus mode" where only focused tests run. This is useful for working on a specific feature or debugging a failure.
 
 #### Automatic Test Discovery
 Automatically find and run all test files:
 
 ```lua
 -- Run all test files in the current directory and subdirectories
-lust.run_discovered(".")
+firmo.run_discovered(".")
 
 ```text
 
@@ -412,13 +415,13 @@ Ensure clean state between tests with module reset utilities:
 
 ```lua
 -- Reset a module to get a fresh instance
-local fresh_module = lust.reset_module("path.to.module")
+local fresh_module = firmo.reset_module("path.to.module")
 -- Ensure modules are reset between tests
 describe("Database tests", function()
   local db
   before_each(function()
     -- Reset the module before each test to ensure clean state
-    db = lust.reset_module("my.database")
+    db = firmo.reset_module("my.database")
   end)
   it("performs operations correctly", function()
     -- Test with a fresh module instance
@@ -427,7 +430,7 @@ describe("Database tests", function()
   end)
 end)
 -- Run a test with a fresh module in a single call
-lust.with_fresh_module("path.to.module", function(mod)
+firmo.with_fresh_module("path.to.module", function(mod)
   -- Test code using the fresh module instance
   mod.function_call()
   expect(mod.result).to.equal(expected)
@@ -446,40 +449,40 @@ Tag tests and run only specific tags:
 
 ```lua
 -- Add tags to a test
-lust.tags("unit", "math")
+firmo.tags("unit", "math")
 it("adds numbers correctly", function()
   expect(1 + 1).to.equal(2)
 end)
 -- Add tags to a group of tests
 describe("Math operations", function()
-  lust.tags("unit", "math")
+  firmo.tags("unit", "math")
   it("test1", function() end)
   it("test2", function() end)
   -- Both tests inherit the "unit" and "math" tags
 end)
 -- Filter by tag programmatically
-lust.only_tags("unit")
-lust.run_discovered("./tests")
+firmo.only_tags("unit")
+firmo.run_discovered("./tests")
 -- Filter by test name pattern
-lust.filter("math")
-lust.run_discovered("./tests")
+firmo.filter("math")
+firmo.run_discovered("./tests")
 -- Reset all filters
-lust.reset_filters()
+firmo.reset_filters()
 -- Command line filtering (when running directly)
--- lua lust-next.lua --tags unit,math
--- lua lust-next.lua --filter "addition"
+-- lua firmo.lua --tags unit,math
+-- lua firmo.lua --filter "addition"
 
 ```text
 You can use the filtering system to run specific subsets of your tests:
 
 ```lua
 -- Run tests with options
-lust.run_discovered("./tests", "*_test.lua", {
+firmo.run_discovered("./tests", "*_test.lua", {
   tags = {"unit", "fast"},
   filter = "calculation"
 })
 -- Run filtered tests from CLI
--- lua lust-next.lua --dir ./tests --tags unit,fast --filter calculation
+-- lua firmo.lua --dir ./tests --tags unit,fast --filter calculation
 
 ```text
 
@@ -491,11 +494,11 @@ Test asynchronous code with await/async:
 it_async("tests async code", function()
   local result = nil
   -- Start async operation
-  startAsyncOperation(function(data) 
+  startAsyncOperation(function(data)
     result = data
   end)
   -- Wait for a specific amount of time
-  lust.await(100) -- Wait 100ms
+  firmo.await(100) -- Wait 100ms
   -- Make assertions after the wait
   expect(result).to.equal("expected result")
 end)
@@ -505,18 +508,18 @@ it_async("waits for a condition", function()
   -- Start async operation that will set value to true
   setTimeout(function() value = true end, 50)
   -- Wait until value becomes true or timeout after 200ms
-  lust.wait_until(function() return value end, 200)
+  firmo.wait_until(function() return value end, 200)
   -- Assert after condition is met
   expect(value).to.be.truthy()
 end)
 -- Custom timeouts per test
-it("tests with custom timeout", lust.async(function()
+it("tests with custom timeout", firmo.async(function()
   -- Test code here
-  lust.await(500)
+  firmo.await(500)
   expect(true).to.be.truthy()
 end, 1000)) -- 1 second timeout
 -- Set global default timeout
-lust.set_timeout(5000) -- 5 seconds for all async tests
+firmo.set_timeout(5000) -- 5 seconds for all async tests
 -- Run multiple async operations in parallel
 it_async("handles parallel operations", function()
   -- Define multiple async operations
@@ -544,12 +547,12 @@ end)
 ```text
 Key async features:
 
-- `lust.async(fn, timeout)` - Wraps a function to be executed asynchronously
-- `lust.it_async(name, fn, timeout)` - Shorthand for async tests
-- `lust.await(ms)` - Waits for the specified time in milliseconds
-- `lust.wait_until(condition_fn, timeout, check_interval)` - Waits until a condition function returns true
-- `lust.parallel_async(fn1, fn2, ...)` - Runs multiple async functions in parallel and returns all results
-- `lust.set_timeout(ms)` - Sets the default timeout for async tests
+- `firmo.async(fn, timeout)` - Wraps a function to be executed asynchronously
+- `firmo.it_async(name, fn, timeout)` - Shorthand for async tests
+- `firmo.await(ms)` - Waits for the specified time in milliseconds
+- `firmo.wait_until(condition_fn, timeout, check_interval)` - Waits until a condition function returns true
+- `firmo.parallel_async(fn1, fn2, ...)` - Runs multiple async functions in parallel and returns all results
+- `firmo.set_timeout(ms)` - Sets the default timeout for async tests
 
 #### Mocking
 Create and manage mocks with a comprehensive mocking system:
@@ -557,22 +560,22 @@ Create and manage mocks with a comprehensive mocking system:
 ```lua
 -- Basic spy usage - track function calls while preserving behavior
 local my_fn = function(a, b) return a + b end
-local spy_fn = lust.spy(my_fn)
+local spy_fn = firmo.spy(my_fn)
 spy_fn(5, 10)  -- Call the function
 expect(spy_fn.called).to.be.truthy()
 expect(spy_fn.call_count).to.equal(1)
 expect(spy_fn:called_with(5, 10)).to.be.truthy()
 -- Spy on an object method
 local calculator = { add = function(a, b) return a + b end }
-local add_spy = lust.spy(calculator, "add")
+local add_spy = firmo.spy(calculator, "add")
 calculator.add(2, 3)  -- Call the method
 expect(add_spy.called).to.be.truthy()
 add_spy:restore()  -- Restore original method
 -- Create a simple stub that returns a value
-local config_stub = lust.stub({debug = true, version = "1.0"})
+local config_stub = firmo.stub({debug = true, version = "1.0"})
 local config = config_stub()  -- Returns the stubbed value
 -- Create complete mocks of objects
-local db_mock = lust.mock(database)
+local db_mock = firmo.mock(database)
 -- Stub methods with implementation functions
 db_mock:stub("query", function(query_string)
   expect(query_string).to.match("SELECT")
@@ -581,22 +584,22 @@ end)
 -- Or stub with simple values
 db_mock:stub("connect", true)
 -- Use argument matchers for flexible verification
-local api_mock = lust.mock(api)
+local api_mock = firmo.mock(api)
 api_mock:stub("get_users", {users = {{id = 1, name = "Test"}}})
 api.get_users({filter = "active", limit = 10})
 -- Verify with powerful argument matchers
 expect(api_mock._stubs.get_users:called_with(
-  lust.arg_matcher.table_containing({filter = "active"})
+  firmo.arg_matcher.table_containing({filter = "active"})
 )).to.be.truthy()
 -- Set expectations with fluent API before calls
-api_mock:expect("get_users").with(lust.arg_matcher.any()).to.be.called.times(1)
-api_mock:expect("get_user").with(lust.arg_matcher.number()).to.not_be.called()
+api_mock:expect("get_users").with(firmo.arg_matcher.any()).to.be.called.times(1)
+api_mock:expect("get_user").with(firmo.arg_matcher.number()).to.not_be.called()
 -- Verify call sequence
 expect(api_mock:verify_sequence({
-  {method = "get_users", args = {lust.arg_matcher.table()}}
+  {method = "get_users", args = {firmo.arg_matcher.table()}}
 })).to.be.truthy()
 -- Use with context manager for automatic cleanup
-lust.with_mocks(function(mock)
+firmo.with_mocks(function(mock)
   local api_mock = mock(api)
   api_mock:stub("get_data", {success = true, items = {}})
   -- Test code that uses api.get_data()
@@ -620,23 +623,23 @@ The enhanced mocking system includes:
 ## Installation
 
 ### Method 1: Direct File
-Simply copy `lust-next.lua` into your project directory:
+Simply copy `firmo.lua` into your project directory:
 
 ```bash
 
 # Download the file
-curl -O https://raw.githubusercontent.com/greggh/lust-next/main/lust-next.lua
+curl -O https://raw.githubusercontent.com/greggh/firmo/main/firmo.lua
 
 # Or clone and copy
-git clone https://github.com/greggh/lust-next.git
-cp lust-next/lust-next.lua your-project/
+git clone https://github.com/greggh/firmo.git
+cp firmo/firmo.lua your-project/
 
 ```text
 
 ### Method 2: LuaRocks
 
 ```bash
-luarocks install lust-next
+luarocks install firmo
 
 ```text
 
@@ -645,10 +648,10 @@ luarocks install lust-next
 ```bash
 
 # Add as submodule
-git submodule add https://github.com/greggh/lust-next.git deps/lust-next
+git submodule add https://github.com/greggh/firmo.git deps/firmo
 
 # Update your package path in your main Lua file
-package.path = package.path .. ";./deps/lust-next/?.lua"
+package.path = package.path .. ";./deps/firmo/?.lua"
 
 ```text
 
@@ -656,9 +659,9 @@ package.path = package.path .. ";./deps/lust-next/?.lua"
 
 ```lua
 use {
-  'greggh/lust-next',
+  'greggh/firmo',
   ft = 'lua',
-  cmd = { 'LustRun' }
+  cmd = { 'FirmoRun' }
 }
 
 ```text
@@ -667,9 +670,9 @@ use {
 
 ```lua
 {
-  'greggh/lust-next',
+  'greggh/firmo',
   ft = 'lua',
-  cmd = { 'LustRun' },
+  cmd = { 'FirmoRun' },
 }
 
 ```text
@@ -678,7 +681,7 @@ use {
 If Lua is embedded in an application without ANSI color support:
 
 ```lua
-local lust = require('lust').nocolor()
+local firmo = require('firmo').nocolor()
 
 ```text
 
@@ -689,13 +692,14 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 MIT, see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
-Lust-Next builds on the original [lust](https://github.com/bjornbytes/lust) testing framework and takes inspiration from several excellent Lua testing libraries:
+firmo builds on the original [Lust](https://github.com/bjornbytes/lust) testing framework and takes inspiration from several excellent Lua testing libraries:
 
 - [lunarmodules/busted](https://github.com/lunarmodules/busted) - A powerful, flexible testing framework with rich features
 - [lunarmodules/luassert](https://github.com/lunarmodules/luassert) - An extensible assertion library with advanced matching capabilities
-We're grateful to these projects for advancing the state of Lua testing and providing inspiration for Lust-Next's enhanced features.
+We're grateful to these projects for advancing the state of Lua testing and providing inspiration for firmo's enhanced features.
 ---
 <div align="center">
   <p>Made with ❤️ by <a href="https://github.com/greggh">Gregg Housh</a></p>
 </div>
 
+````

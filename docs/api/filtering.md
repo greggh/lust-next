@@ -1,8 +1,8 @@
 # Test Filtering API
-This document describes the test filtering and tagging capabilities provided by Lust-Next.
+This document describes the test filtering and tagging capabilities provided by Firmo.
 
 ## Overview
-Lust-Next provides a powerful system for filtering tests based on tags and name patterns. This allows you to run specific subsets of tests, which is particularly useful for:
+Firmo provides a powerful system for filtering tests based on tags and name patterns. This allows you to run specific subsets of tests, which is particularly useful for:
 
 - Running only unit tests or only integration tests
 - Running tests for a specific feature
@@ -11,19 +11,19 @@ Lust-Next provides a powerful system for filtering tests based on tags and name 
 
 ## Tagging Functions
 
-### lust.tags(...)
+### firmo.tags(...)
 Adds tags to a test or describe block. Tags are inherited by nested tests.
 **Parameters:**
 
 - `...` (strings): One or more tags to apply
 **Returns:**
 
-- The lust object (for chaining)
+- The firmo object (for chaining)
 **Example:**
 
 ```lua
 describe("Database operations", function()
-  lust.tags("db", "integration")
+  firmo.tags("db", "integration")
   it("connects to the database", function()
     -- This test has the "db" and "integration" tags
   end)
@@ -31,7 +31,7 @@ describe("Database operations", function()
     it("executes a SELECT query", function()
       -- This test also has the "db" and "integration" tags
     end)
-    lust.tags("slow")
+    firmo.tags("slow")
     it("performs a complex join", function()
       -- This test has "db", "integration", and "slow" tags
     end)
@@ -40,60 +40,60 @@ end)
 
 ```text
 
-### lust.only_tags(...)
+### firmo.only_tags(...)
 Filters tests to only run those with the specified tags.
 **Parameters:**
 
 - `...` (strings): One or more tags to filter by
 **Returns:**
 
-- The lust object (for chaining)
+- The firmo object (for chaining)
 **Example:**
 
 ```lua
 -- Only run tests tagged with "unit"
-lust.only_tags("unit")
+firmo.only_tags("unit")
 -- Only run tests tagged with both "fast" and "critical"
-lust.only_tags("fast", "critical")
+firmo.only_tags("fast", "critical")
 
 ```text
 
-### lust.filter(pattern)
+### firmo.filter(pattern)
 Filters tests to only run those with names matching the specified pattern.
 **Parameters:**
 
 - `pattern` (string): A Lua pattern to match against test names
 **Returns:**
 
-- The lust object (for chaining)
+- The firmo object (for chaining)
 **Example:**
 
 ```lua
 -- Only run tests with "validation" in their name
-lust.filter("validation")
+firmo.filter("validation")
 -- Only run tests that match a specific pattern
-lust.filter("^user%s+%w+$")
+firmo.filter("^user%s+%w+$")
 
 ```text
 
-### lust.reset_filters()
+### firmo.reset_filters()
 Clears all active filters.
 **Returns:**
 
-- The lust object (for chaining)
+- The firmo object (for chaining)
 **Example:**
 
 ```lua
 -- Apply a filter
-lust.only_tags("unit")
+firmo.only_tags("unit")
 -- Run some tests...
 -- Clear the filter
-lust.reset_filters()
+firmo.reset_filters()
 
 ```text
 
 ## Filtering from the Command Line
-Lust-Next supports filtering tests from the command line when running tests directly.
+Firmo supports filtering tests from the command line when running tests directly.
 
 ### --tags Option
 The `--tags` option allows you to specify tags to filter by, separated by commas.
@@ -102,10 +102,10 @@ The `--tags` option allows you to specify tags to filter by, separated by commas
 ```bash
 
 # Run only tests tagged with "unit"
-lua lust-next.lua --tags unit
+lua firmo.lua --tags unit
 
 # Run tests tagged with either "fast" or "critical"
-lua lust-next.lua --tags fast,critical
+lua firmo.lua --tags fast,critical
 
 ```text
 
@@ -116,7 +116,7 @@ The `--filter` option allows you to specify a pattern to match against test name
 ```bash
 
 # Run only tests with "validation" in their name
-lua lust-next.lua --filter validation
+lua firmo.lua --filter validation
 
 ```text
 
@@ -127,7 +127,7 @@ You can combine tag and pattern filters to further narrow the tests that run.
 ```bash
 
 # Run only "unit" tests with "validation" in their name
-lua lust-next.lua --tags unit --filter validation
+lua firmo.lua --tags unit --filter validation
 
 ```text
 
@@ -138,21 +138,21 @@ lua lust-next.lua --tags unit --filter validation
 ```lua
 -- Define tests with tags
 describe("User module", function()
-  lust.tags("unit")
+  firmo.tags("unit")
   it("validates username", function()
     -- Test code here
   end)
   it("validates email", function()
     -- Test code here
   end)
-  lust.tags("integration", "slow")
+  firmo.tags("integration", "slow")
   it("stores user in database", function()
     -- Test code here
   end)
 end)
 -- Run only unit tests
-lust.only_tags("unit")
-lust.run_discovered("./tests")
+firmo.only_tags("unit")
+firmo.run_discovered("./tests")
 
 ```text
 
@@ -168,8 +168,8 @@ describe("String utilities", function()
   end)
 end)
 -- Run only tests related to formatting
-lust.filter("format")
-lust.run_discovered("./tests")
+firmo.filter("format")
+firmo.run_discovered("./tests")
 
 ```text
 
@@ -179,17 +179,17 @@ lust.run_discovered("./tests")
 -- Test suite setup
 local function run_tests(options)
   -- Reset any previous filters
-  lust.reset_filters()
+  firmo.reset_filters()
   -- Apply tags filter if specified
   if options.tags then
-    lust.only_tags(unpack(options.tags))
+    firmo.only_tags(unpack(options.tags))
   end
   -- Apply name filter if specified
   if options.pattern then
-    lust.filter(options.pattern)
+    firmo.filter(options.pattern)
   end
   -- Run the tests
-  return lust.run_discovered("./tests")
+  return firmo.run_discovered("./tests")
 end
 -- Examples of usage
 run_tests({}) -- Run all tests
@@ -203,18 +203,18 @@ run_tests({tags = {"unit"}, pattern = "validation"}) -- Run only unit validation
 
 ```lua
 -- ci_tests.lua
-local lust = require("lust-next")
+local firmo = require("firmo")
 -- Based on environment variable, run different test subsets
 local test_type = os.getenv("TEST_TYPE") or "all"
 if test_type == "unit" then
-  lust.only_tags("unit")
+  firmo.only_tags("unit")
 elseif test_type == "integration" then
-  lust.only_tags("integration")
+  firmo.only_tags("integration")
 elseif test_type == "performance" then
-  lust.only_tags("performance")
+  firmo.only_tags("performance")
 end
 -- Run the filtered tests
-local success = lust.run_discovered("./tests")
+local success = firmo.run_discovered("./tests")
 os.exit(success and 0 or 1)
 
 ```text
@@ -223,12 +223,12 @@ os.exit(success and 0 or 1)
 
 ```lua
 -- user_test.lua
-local lust = require("lust-next")
-local describe, it = lust.describe, lust.it
+local firmo = require("firmo")
+local describe, it = firmo.describe, firmo.it
 describe("User module", function()
   -- Authentication tests
   describe("Authentication", function()
-    lust.tags("auth", "unit")
+    firmo.tags("auth", "unit")
     it("validates credentials", function()
       -- Test code
     end)
@@ -238,11 +238,11 @@ describe("User module", function()
   end)
   -- Profile tests
   describe("Profile", function()
-    lust.tags("profile", "unit")
+    firmo.tags("profile", "unit")
     it("updates user info", function()
       -- Test code
     end)
-    lust.tags("profile", "integration")
+    firmo.tags("profile", "integration")
     it("saves profile to database", function()
       -- Test code
     end)

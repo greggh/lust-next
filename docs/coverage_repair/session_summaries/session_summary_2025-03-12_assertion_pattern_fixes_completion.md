@@ -34,7 +34,7 @@ We've standardized assertion patterns across all identified test files with issu
 4. `/tests/coverage/instrumentation/instrumentation_test.lua` - 9 instances - ✅ Fixed but has runtime errors
 5. `/tests/reporting/report_validation_test.lua` - 8 instances - ✅ Fixed
 
-However, during verification testing, we encountered runtime errors in the instrumentation tests. The error "attempt to compare number with string" occurs in lust-next.lua when using `expect().to.equal()` to compare values that may have different types. This issue requires additional fixes to the assertion implementation or adjustments to ensure consistent type handling.
+However, during verification testing, we encountered runtime errors in the instrumentation tests. The error "attempt to compare number with string" occurs in firmo.lua when using `expect().to.equal()` to compare values that may have different types. This issue requires additional fixes to the assertion implementation or adjustments to ensure consistent type handling.
 
 The standardized patterns we've consistently applied are:
 - For boolean checks: `expect(value).to.be_truthy()` and `expect(value).to_not.be_truthy()`
@@ -43,11 +43,11 @@ The standardized patterns we've consistently applied are:
 - For type checks: `expect(value).to.be.a("type")`
 
 Tests in `/tests/filesystem_test.lua` have been verified to run successfully with the new patterns. We also identified and fixed additional issues:
-- Fixed logging calls in `filesystem_test.lua` that were using a non-existent `lust.log` object
+- Fixed logging calls in `filesystem_test.lua` that were using a non-existent `firmo.log` object
 
 ## Next Steps
 
-1. Address the type comparison issues in the lust-next expect implementation:
+1. Address the type comparison issues in the firmo expect implementation:
    - Fix type comparison in `expect().to.equal()` to better handle mixed types
    - Consider adding type-explicit assertions for numeric comparisons
    - Update problematic tests that may be comparing mixed types

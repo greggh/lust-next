@@ -59,6 +59,6 @@ In this session, we focused on fixing function name consistency issues in the te
 
 ## Conclusion
 
-The fixes implemented in this session address a specific issue with function name consistency in `codefix_test.lua`. By fixing these inconsistencies, we've resolved one more test failure and improved the overall codebase consistency. These changes contribute to the ongoing effort to enhance error handling and improve code quality throughout the lust-next framework.
+The fixes implemented in this session address a specific issue with function name consistency in `codefix_test.lua`. By fixing these inconsistencies, we've resolved one more test failure and improved the overall codebase consistency. These changes contribute to the ongoing effort to enhance error handling and improve code quality throughout the firmo framework.
 
 The progress demonstrates the importance of maintaining consistent function naming and proper error handling. Our approach of fixing the root causes rather than implementing workarounds ensures that the codebase becomes more maintainable and robust over time.

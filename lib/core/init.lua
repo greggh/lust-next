@@ -1,4 +1,4 @@
--- lib/core/init.lua - Core module for lust-next
+-- lib/core/init.lua - Core module for firmo
 local M = {}
 
 -- Try to load a module without failing

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Today we focused on improving the organization and standardization of documentation in the lust-next coverage module repair project. This involved creating a dedicated subdirectory for session summaries, standardizing dates, and updating references to session summaries throughout the project documentation.
+Today we focused on improving the organization and standardization of documentation in the firmo coverage module repair project. This involved creating a dedicated subdirectory for session summaries, standardizing dates, and updating references to session summaries throughout the project documentation.
 
 ## Issues Addressed
 
@@ -95,7 +95,7 @@ The following tasks should be prioritized in future sessions:
    - module_reset.lua
    - filesystem.lua
    - version.lua
-   - main lust-next.lua
+   - main firmo.lua
 
 ## Impact Assessment
 

@@ -1,9 +1,9 @@
--- Coverage approach comparison example for lust-next
+-- Coverage approach comparison example for firmo
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
-local lust = require("lust-next")
+local firmo = require("firmo")
 
-local describe, it, expect, before_all, after_all = lust.describe, lust.it, lust.expect, lust.before_all, lust.after_all
+local describe, it, expect, before_all, after_all = firmo.describe, firmo.it, firmo.expect, firmo.before_all, firmo.after_all
 
 -- Create a sample file to test coverage approaches
 local temp_dir = os.tmpname():gsub("([^/]+)$", "")
@@ -327,4 +327,4 @@ describe("Coverage approach comparison", function()
 end)
 
 -- Run the tests
-lust()
+firmo()

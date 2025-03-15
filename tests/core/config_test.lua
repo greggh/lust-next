@@ -1,8 +1,8 @@
 -- Configuration Module Tests
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
-local before, after = lust.before, lust.after
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Try to load the logging module
 local logging, logger
@@ -32,7 +32,7 @@ describe("Configuration Module", function()
   local fs = require("lib.tools.filesystem")
   local central_config = require("lib.core.central_config")
   local coverage_module = require("lib.coverage")
-  local temp_config_path = "/tmp/test-lust-next-config.lua"
+  local temp_config_path = "/tmp/test-firmo-config.lua"
   
   -- Store original configuration values
   local original_coverage_config
@@ -264,4 +264,4 @@ describe("Configuration Module", function()
 end)
 
 -- Tests are run by run_all_tests.lua or scripts/runner.lua
--- No need to call lust() explicitly here
+-- No need to call firmo() explicitly here

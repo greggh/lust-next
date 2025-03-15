@@ -1,8 +1,8 @@
 -- Parallel JSON Output Example
--- Shows how lust-next can use JSON output for parallel test execution
+-- Shows how firmo can use JSON output for parallel test execution
 
 -- Import the testing framework
-local lust = require "../lust-next"
+local firmo = require "../firmo"
 local fs = require("lib.tools.filesystem")
 
 -- Create multiple test files
@@ -12,8 +12,8 @@ local function write_test_file(name, pass, fail, skip)
   local content = [[
 -- Test file: ]] .. name .. [[
 
-local lust = require "lust-next"
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require "firmo"
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("]] .. name .. [[", function()
 ]]
@@ -40,7 +40,7 @@ describe("]] .. name .. [[", function()
   for i = 1, skip do
     content = content .. [[
   it("should skip test ]] .. i .. [[", function()
-    lust.pending("Skipped for example")
+    firmo.pending("Skipped for example")
   end)
 ]]
   end
@@ -71,7 +71,7 @@ end
 
 -- Run the tests in parallel
 local parallel = require "lib.tools.parallel"
-parallel.register_with_lust(lust)
+parallel.register_with_firmo(firmo)
 
 local results = parallel.run_tests(test_files, {
   workers = 2,

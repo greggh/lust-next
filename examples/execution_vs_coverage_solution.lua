@@ -10,8 +10,8 @@
   4. Non-executable lines (comments, blank lines, etc.)
 ]]
 
-local lust = require("lust-next")
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import required modules
 local coverage = require("lib.coverage")

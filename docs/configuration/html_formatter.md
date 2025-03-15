@@ -1,6 +1,6 @@
 # HTML Formatter Configuration
 
-This document describes how to configure the HTML formatter in lust-next. The HTML formatter generates visually rich coverage reports with syntax highlighting, code state visualization, execution counts, and block coverage indicators.
+This document describes how to configure the HTML formatter in firmo. The HTML formatter generates visually rich coverage reports with syntax highlighting, code state visualization, execution counts, and block coverage indicators.
 
 ## Configuration Options
 
@@ -19,9 +19,9 @@ The HTML formatter can be configured both programmatically and through the confi
 | `display_block_coverage` | boolean | `true` | Highlights code blocks (functions, if statements, loops) |
 | `enhance_tooltips` | boolean | `true` | Shows detailed information in tooltips |
 
-## Configuration in .lust-next-config.lua
+## Configuration in .firmo-config.lua
 
-You can configure the HTML formatter in your `.lust-next-config.lua` file:
+You can configure the HTML formatter in your `.firmo-config.lua` file:
 
 ```lua
 return {
@@ -176,7 +176,7 @@ reporting.configure_formatter("html", {
 For the best results, combine HTML formatting with report validation:
 
 ```lua
--- In .lust-next-config.lua
+-- In .firmo-config.lua
 return {
   reporting = {
     formatters = {

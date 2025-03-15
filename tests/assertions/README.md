@@ -1,6 +1,6 @@
 # Assertion Tests
 
-This directory contains tests for the lust-next assertion system. Assertions are the foundation of the testing framework, allowing clear validation of expected behaviors.
+This directory contains tests for the firmo assertion system. Assertions are the foundation of the testing framework, allowing clear validation of expected behaviors.
 
 ## Directory Contents
 
@@ -10,7 +10,7 @@ This directory contains tests for the lust-next assertion system. Assertions are
 
 ## Assertion Patterns
 
-The lust-next framework uses expect-style assertions with chainable syntax:
+The firmo framework uses expect-style assertions with chainable syntax:
 
 ```lua
 expect(value).to.exist()

@@ -1,7 +1,7 @@
 -- Special fixed test file just for testing timeouts
 package.path = "../?.lua;" .. package.path
-local lust_next = require("lust-next")
-local describe, it, expect = lust_next.describe, lust_next.it, lust_next.expect
+local firmo = require("firmo")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Async Timeout Testing", function()
   it("simulates a timeout test for parallel_async", function()

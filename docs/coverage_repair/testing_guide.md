@@ -1,14 +1,14 @@
-# Testing Guide for lust-next
+# Testing Guide for firmo
 
 ## Introduction
 
-This guide provides comprehensive information about writing and running tests for the lust-next project. It covers the standardized testing approach, best practices for writing tests, and specific considerations for testing different components of the framework.
+This guide provides comprehensive information about writing and running tests for the firmo project. It covers the standardized testing approach, best practices for writing tests, and specific considerations for testing different components of the framework.
 
 ## Standardized Testing Approach
 
 ### Universal Command Interface
 
-All tests in lust-next are run through a standardized command interface using `test.lua` in the project root:
+All tests in firmo are run through a standardized command interface using `test.lua` in the project root:
 
 ```bash
 lua test.lua [options] [path]
@@ -105,14 +105,14 @@ tests/
 All test files follow this basic structure:
 
 ```lua
--- Import lust-next
-local lust = require "lust-next"
+-- Import firmo
+local firmo = require "firmo"
 
 -- Import test functions
-local describe, it, expect = lust.describe, lust.it, lust.expect
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Import test lifecycle hooks (optional)
-local before, after = lust.before, lust.after
+local before, after = firmo.before, firmo.after
 
 -- Import module to test
 local module_to_test = require "path.to.module"
@@ -210,7 +210,7 @@ end)
 
 ### Assertion Basics
 
-lust-next uses expect-style assertions:
+firmo uses expect-style assertions:
 
 ```lua
 -- Basic assertions
@@ -264,11 +264,11 @@ For detailed assertion patterns, see [Assertion Pattern Mapping](assertion_patte
 
 ### Testing with Mocks
 
-Use the lust mocking system for isolation:
+Use the firmo mocking system for isolation:
 
 ```lua
 -- Import mocking tools
-local mock, spy = lust.mock, lust.spy
+local mock, spy = firmo.mock, firmo.spy
 
 describe("Module with dependencies", function()
   local module_under_test
@@ -327,10 +327,10 @@ end)
 
 ### Testing Asynchronous Code
 
-For testing async code, use lust's async capabilities:
+For testing async code, use firmo's async capabilities:
 
 ```lua
-local async = lust.async
+local async = firmo.async
 
 describe("Async functions", function()
   it("should handle asynchronous operations", async(function(done)
@@ -588,7 +588,7 @@ end)
 
 ## Conclusion
 
-Writing effective tests is crucial for maintaining the quality and reliability of the lust-next framework. By following the standardized approach and best practices outlined in this guide, you'll create tests that are easy to understand, maintain, and extend.
+Writing effective tests is crucial for maintaining the quality and reliability of the firmo framework. By following the standardized approach and best practices outlined in this guide, you'll create tests that are easy to understand, maintain, and extend.
 
 For more detailed information on assertions, see the [Assertion Pattern Mapping](assertion_pattern_mapping.md) document.
 

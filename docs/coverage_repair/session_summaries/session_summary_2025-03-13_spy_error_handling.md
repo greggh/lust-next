@@ -112,7 +112,7 @@ function spy.new(fn)
   -- Use protected call to create the spy object
   local success, spy_obj, err = error_handler.try(function()
     local obj = {
-      _is_lust_spy = true,
+      _is_firmo_spy = true,
       calls = {},
       called = false,
       call_count = 0,

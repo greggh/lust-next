@@ -1,4 +1,4 @@
--- File watcher module for lust-next
+-- File watcher module for firmo
 local watcher = {}
 local logging = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Generic test runner for lust-next
+# Generic test runner for firmo
 # Usage: runner.sh [test_file] [additional_arguments]
 # Example: runner.sh tests/coverage_error_handling_test.lua --verbose
 

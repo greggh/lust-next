@@ -2,7 +2,7 @@
 
 ## Overview
 
-In this session, we reorganized and consolidated the documentation for the lust-next coverage module repair project. The goal was to reduce token usage during chat sessions while preserving the essential information needed for ongoing work. We also updated the CLAUDE.md file with comprehensive guidelines extracted from various documentation files.
+In this session, we reorganized and consolidated the documentation for the firmo coverage module repair project. The goal was to reduce token usage during chat sessions while preserving the essential information needed for ongoing work. We also updated the CLAUDE.md file with comprehensive guidelines extracted from various documentation files.
 
 ## Key Changes
 
@@ -90,7 +90,7 @@ Updated CLAUDE.md with:
 
 1. Begin implementation of the assertion module extraction:
    - Create the basic module structure at `lib/assertion.lua`
-   - Extract core assertion types from lust-next.lua
+   - Extract core assertion types from firmo.lua
    - Implement proper error handling in assertions
 
 2. Prepare for the coverage/init.lua rewrite:

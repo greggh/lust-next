@@ -1,5 +1,5 @@
 -- Example to demonstrate test quality validation
-local lust_next = require('lust-next')
+local firmo = require('firmo') 2:28:local firmo = require('firmo')
 
 -- A simple calculator module to test
 local calculator = {}
@@ -133,7 +133,7 @@ describe("Calculator - Level 4 (Advanced)", function()
       local original_power = calculator.power
       
       -- Create a spy that tracks calls to the power function
-      local spy = lust_next.spy(calculator, "power")
+      local spy = firmo.spy(calculator, "power")
       
       calculator.power(3, 2)
       calculator.power(2, 8)
@@ -206,8 +206,8 @@ describe("Calculator - Level 5 (Complete)", function()
 end)
 
 -- Run this example with quality validation:
--- lua lust-next.lua --quality --quality-level=3 examples/quality_example.lua
+-- lua firmo.lua --quality --quality-level=3 examples/quality_example.lua
 -- 
 -- Try different quality levels:
--- lua lust-next.lua --quality --quality-level=1 examples/quality_example.lua
--- lua lust-next.lua --quality --quality-level=5 examples/quality_example.lua
+-- lua firmo.lua --quality --quality-level=1 examples/quality_example.lua
+-- lua firmo.lua --quality --quality-level=5 examples/quality_example.lu

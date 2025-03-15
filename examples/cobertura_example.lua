@@ -1,5 +1,5 @@
 -- Example demonstrating Cobertura XML coverage report generation
-local lust = require('../lust-next')
+local firmo = require('../firmo')
 
 -- Mock coverage data for the example
 local mock_coverage_data = {

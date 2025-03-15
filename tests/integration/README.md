@@ -1,6 +1,6 @@
 # Integration Tests
 
-This directory contains cross-component integration tests for the lust-next framework. These tests verify that different modules work together correctly.
+This directory contains cross-component integration tests for the firmo framework. These tests verify that different modules work together correctly.
 
 ## Purpose
 
