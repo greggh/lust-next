@@ -9,6 +9,7 @@ THIS IS ALPHA SOFTWARE, DO NOT USE UNLESS YOU UNDERSTAND THAT, AND ARE LOOKING T
 [![GitHub Stars](https://img.shields.io/github/stars/greggh/firmo?style=flat-square)](https://github.com/greggh/firmo/stargazers)
 [![Version](https://img.shields.io/badge/Version-0.7.5-blue?style=flat-square)](https://github.com/greggh/firmo/releases/tag/v0.7.5)
 [![Discussions](https://img.shields.io/github/discussions/greggh/firmo?style=flat-square&logo=github)](https://github.com/greggh/firmo/discussions)
+
 _A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original._
 [Features](#features) •
 [Installation](#installation) •
