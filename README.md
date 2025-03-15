@@ -11,6 +11,7 @@ THIS IS ALPHA SOFTWARE, DO NOT USE UNLESS YOU UNDERSTAND THAT, AND ARE LOOKING T
 [![Discussions](https://img.shields.io/github/discussions/greggh/firmo?style=flat-square&logo=github)](https://github.com/greggh/firmo/discussions)
 
 _A lightweight, powerful testing library for Lua projects. This enhanced fork of [lust](https://github.com/bjornbytes/lust) adds significant new functionality while maintaining the simplicity and elegance of the original._
+
 [Features](#features) •
 [Installation](#installation) •
 [Quick Start](#quick-start) •
