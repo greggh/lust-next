@@ -114,96 +114,96 @@ function M.process_line_for_comments(line_text, line_num, context)
   -- Track if this line was initially in a comment
   local was_in_comment = context.in_comment
   
-  -- Find all comment markers in this line
-  local comment_markers = {}
-  
-  -- Look for --[[ style comment starts
-  local pos = 1
-  while true do
-    local start_pos = line_text:find("%-%-%[%[", pos)
-    if not start_pos then break end
-    table.insert(comment_markers, {pos = start_pos, type = "start", style = "dash"})
-    pos = start_pos + 4
+  -- Empty lines or whitespace-only lines should be considered non-executable
+  if line_text:match("^%s*$") then
+    context.line_status[line_num] = true
+    return true
   end
   
-  -- Look for [[ style markers (only if not in string context)
-  -- Note: This is simplified and doesn't handle string context perfectly
-  pos = 1
-  while true do
-    local start_pos = line_text:find("%[%[", pos)
-    if not start_pos then break end
+  -- If we're already inside a multiline comment from a previous line,
+  -- check if this line contains a comment end marker
+  if context.in_comment then
+    -- Look for comment end markers
+    local end_pos = line_text:find("%]%]")
     
-    -- Check if this is likely a string rather than comment
-    -- (very basic heuristic - could be improved)
-    local prefix = line_text:sub(1, start_pos-1)
-    if not prefix:match("['\"]%s*$") and 
-       not prefix:match("=%s*$") and 
-       not prefix:match("return%s+$") then
-      table.insert(comment_markers, {pos = start_pos, type = "start", style = "bracket"})
-    end
-    pos = start_pos + 2
-  end
-  
-  -- Look for ]] markers
-  pos = 1
-  while true do
-    local end_pos = line_text:find("%]%]", pos)
-    if not end_pos then break end
-    table.insert(comment_markers, {pos = end_pos, type = "end"})
-    pos = end_pos + 2
-  end
-  
-  -- Sort markers by position to process them in order
-  table.sort(comment_markers, function(a, b) return a.pos < b.pos end)
-  
-  -- Process markers in order with proper nesting
-  local changed_in_this_line = false
-  
-  for _, marker in ipairs(comment_markers) do
-    if marker.type == "start" and not context.in_comment then
-      context.in_comment = true
-      table.insert(context.state_stack, marker.style) -- Push style onto stack
-      changed_in_this_line = true
-    elseif marker.type == "end" and context.in_comment then
-      -- Only pop if we have items on the stack
-      if #context.state_stack > 0 then
-        table.remove(context.state_stack) -- Pop the stack
-        
-        -- Only clear in_comment flag if stack is empty
-        if #context.state_stack == 0 then
-          context.in_comment = false
-        end
-      end
-      changed_in_this_line = true
-    end
-  end
-  
-  -- Determine if this line is a comment based on its state
-  local is_comment_line = was_in_comment or context.in_comment
-  
-  -- Also check for single-line comments (--) if not already marked as comment
-  if not is_comment_line then
-    -- Check for single line comments, but ignore any code before the comment
-    local comment_pos = line_text:find("%-%-")
-    if comment_pos then
-      -- Check if this is a multiline comment start (--[[)
-      local ml_start = line_text:match("^%s*%-%-%[%[", comment_pos)
-      if not ml_start then
-        -- This is a regular single-line comment
-        is_comment_line = true
+    if end_pos then
+      -- End of multiline comment found on this line
+      -- Everything before end_pos is still a comment
+      context.in_comment = false
+      context.state_stack = {}
+      
+      -- Check if there's another comment start after this end
+      -- For the rare case of ]]--> some code <-- --[[ 
+      local new_start = line_text:find("%-%-%[%[", end_pos + 2)
+      if new_start then
+        context.in_comment = true
+        table.insert(context.state_stack, "dash")
       end
     end
     
-    -- Also check for empty lines
-    if not is_comment_line and line_text:match("^%s*$") then
-      is_comment_line = true
+    -- This entire line is part of a comment
+    context.line_status[line_num] = true
+    return true
+  end
+  
+  -- Check for single-line comments first (simpler case)
+  local comment_pos = line_text:find("%-%-[^%[]") -- Match -- but not --[
+  local ml_comment_pos = line_text:find("%-%-%[%[")
+  
+  -- Handle the case where we have both a single-line comment and a multiline comment start
+  if comment_pos and ml_comment_pos and comment_pos < ml_comment_pos then
+    -- Single line comment comes first, so the multiline marker is commented out
+    context.line_status[line_num] = true
+    return true
+  end
+  
+  -- Check for multiline comment start
+  if ml_comment_pos then
+    context.in_comment = true
+    table.insert(context.state_stack, "dash")
+    
+    -- Check if the comment also ends on this line
+    local end_pos = line_text:find("%]%]", ml_comment_pos + 4)
+    if end_pos then
+      context.in_comment = false
+      context.state_stack = {}
+      
+      -- Check if there's any code after the comment end
+      local after_comment = line_text:sub(end_pos + 2)
+      if after_comment:match("^%s*$") or after_comment:match("^%s*%-%-") then
+        -- Nothing but whitespace or another comment after the multiline comment
+        context.line_status[line_num] = true
+        return true
+      else
+        -- There's actual code after the multiline comment
+        context.line_status[line_num] = false
+        return false
+      end
+    end
+    
+    -- Entire line is a comment
+    context.line_status[line_num] = true
+    return true
+  end
+  
+  -- Check for regular single line comments
+  if comment_pos then
+    -- Look for anything but whitespace before the comment
+    local before_comment = line_text:sub(1, comment_pos - 1)
+    if before_comment:match("^%s*$") then
+      -- Line starts with comment, mark as non-executable
+      context.line_status[line_num] = true
+      return true
+    else
+      -- Line has code before the comment, mark as executable
+      context.line_status[line_num] = false
+      return false
     end
   end
   
-  -- Update the context with the comment status for this line
-  context.line_status[line_num] = is_comment_line
-  
-  return is_comment_line
+  -- Not a comment line
+  context.line_status[line_num] = false
+  return false
 end
 
 -- Handles single-line comment detection
@@ -212,17 +212,34 @@ local function is_single_line_comment(line)
     return true -- Empty lines are treated as comments
   end
   
-  -- Check for single line comments (--), but be careful about multiline comments
-  local comment_pos = line:find("%-%-")
-  if comment_pos then
-    -- Check if this is a multiline comment start (--[[)
-    local ml_start = line:match("^%s*%-%-%[%[", comment_pos)
-    if not ml_start then
-      -- Check for any non-whitespace before the comment
-      local prefix = line:sub(1, comment_pos - 1)
-      if prefix:match("^%s*$") then
-        return true -- Nothing but whitespace before comment, so whole line is comment
+  -- First check if it's a multiline comment start
+  local ml_comment_pos = line:find("%-%-%[%[")
+  if ml_comment_pos then
+    -- Check if comment also ends on this line
+    local end_pos = line:find("%]%]", ml_comment_pos + 4)
+    if end_pos then
+      -- Check if there's any code after the comment end
+      local after_comment = line:sub(end_pos + 2)
+      if after_comment:match("^%s*$") or after_comment:match("^%s*%-%-") then
+        -- Nothing but whitespace or another comment after the multiline comment
+        return true
+      else
+        -- There's actual code after the multiline comment
+        return false
       end
+    else
+      -- Multiline comment without end on this line
+      return true
+    end
+  end
+  
+  -- Check for regular single line comments (--), but not --[[
+  local comment_pos = line:find("%-%-[^%[]")
+  if comment_pos then
+    -- Check for any non-whitespace before the comment
+    local prefix = line:sub(1, comment_pos - 1)
+    if prefix:match("^%s*$") then
+      return true -- Nothing but whitespace before comment, so whole line is comment
     end
   end
   
@@ -382,47 +399,21 @@ function M.classify_line_simple(file_path, line_num)
   
   local line_text = lines[line_num]
   
-  -- Check for comments and empty lines
-  if is_single_line_comment(line_text) or line_text:match("^%s*$") then
+  -- Check for empty lines
+  if line_text:match("^%s*$") then
     return M.LINE_TYPES.NON_EXECUTABLE
   end
   
-  -- Check multiline comments
-  local in_multiline_comment = false
-  local comment_level = 0
-  
+  -- Use our improved multiline comment detection
+  -- Create a multiline comment context and process all lines up to the target line
+  local context = M.create_multiline_comment_context()
   for i = 1, line_num do
-    local curr_line = lines[i]
-    
-    -- Look for multiline comment starts
-    local comment_starts = 0
-    for _ in curr_line:gmatch("%-%-%[%[") do
-      comment_starts = comment_starts + 1
-    end
-    
-    -- Look for non-commented [[ starts
-    -- This is a simplification - perfect solution would
-    -- need full lexer/parser
-    if not in_multiline_comment then
-      for _ in curr_line:gmatch("[^-]%[%[") do
-        comment_starts = comment_starts + 1
-      end
-    end
-    
-    -- Look for comment ends
-    local comment_ends = 0
-    for _ in curr_line:gmatch("%]%]") do
-      comment_ends = comment_ends + 1
-    end
-    
-    -- Update comment_level
-    comment_level = comment_level + comment_starts - comment_ends
-    in_multiline_comment = comment_level > 0
-    
-    -- If we're at our target line and in a comment, return non-executable
-    if i == line_num and in_multiline_comment then
-      return M.LINE_TYPES.NON_EXECUTABLE
-    end
+    M.process_line_for_comments(lines[i], i, context)
+  end
+  
+  -- If the target line is a comment, it's non-executable
+  if context.line_status[line_num] then
+    return M.LINE_TYPES.NON_EXECUTABLE
   end
   
   -- Check for specific line types

@@ -1262,20 +1262,52 @@ function M.validate_coverage_data(coverage_data)
   return is_valid, issues
 end
 
+-- Validate report format (can be called directly)
+function M.validate_report_format(formatted_data, format)
+  local validation = get_validation_module()
+  
+  logger.debug("Validating report format", {
+    format = format,
+    has_data = formatted_data ~= nil,
+    data_type = type(formatted_data)
+  })
+  
+  -- Run validation
+  local is_valid, error_message = validation.validate_report_format(formatted_data, format)
+  
+  logger.info("Format validation results", {
+    is_valid = is_valid,
+    format = format,
+    error = error_message or "none"
+  })
+  
+  return is_valid, error_message
+end
+
 -- Perform comprehensive validation of coverage report
-function M.validate_report(coverage_data)
+function M.validate_report(coverage_data, formatted_output, format)
   local validation = get_validation_module()
   
   logger.debug("Running comprehensive report validation", {
-    has_data = coverage_data ~= nil
+    has_data = coverage_data ~= nil,
+    has_formatted_output = formatted_output ~= nil,
+    format = format
   })
   
+  -- Setup options for validation
+  local options = {}
+  if formatted_output and format then
+    options.formatted_output = formatted_output
+    options.format = format
+  end
+  
   -- Run full validation
-  local result = validation.validate_report(coverage_data)
+  local result = validation.validate_report(coverage_data, options)
   
   logger.info("Comprehensive validation results", {
     is_valid = result.validation.is_valid,
     issues = result.validation.issues and #result.validation.issues or 0,
+    format_valid = result.format_validation and result.format_validation.is_valid,
     outliers = result.statistics and result.statistics.outliers and #result.statistics.outliers or 0,
     anomalies = result.statistics and result.statistics.anomalies and #result.statistics.anomalies or 0,
     cross_check_files = result.cross_check and result.cross_check.files_checked or 0
@@ -1421,6 +1453,47 @@ function M.save_coverage_report(file_path, coverage_data, format, options)
   else
     -- For backward compatibility with formatters that return strings directly
     content = formatted
+  end
+  
+  -- Validate the formatted output if requested
+  if options.validate_format ~= false then
+    logger.debug("Validating formatted output", {
+      format = format,
+      content_sample = type(content) == "string" and content:sub(1, 50) .. "..." or "non-string content"
+    })
+    
+    -- Only attempt format validation for certain types
+    if (format == "json" and type(content) == "table") or type(content) == "string" then
+      local validation_success, format_valid, format_err = error_handler.try(function()
+        return M.validate_report_format(content, format)
+      end)
+      
+      if validation_success and not format_valid then
+        logger.warn("Format validation failed", {
+          format = format,
+          error = format_err
+        })
+        
+        -- If strict validation enabled, don't save the file
+        if options.strict_validation then
+          local validation_err = error_handler.validation_error(
+            "Not saving report due to format validation failure (strict mode)",
+            {
+              file_path = file_path,
+              format = format,
+              operation = "save_coverage_report",
+              module = "reporting",
+              error = format_err
+            }
+          )
+          logger.error(validation_err.message, validation_err.context)
+          return nil, validation_err
+        end
+        
+        -- Otherwise just warn but continue
+        logger.warn("Saving report despite format validation issues (non-strict mode)")
+      end
+    end
   end
   
   -- Write to file with error handling

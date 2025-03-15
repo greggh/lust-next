@@ -1,62 +1,123 @@
 --[[
-  Execution vs Coverage Solution Proposal
+  execution_vs_coverage_solution.lua
   
-  After thorough investigation, we've found that the debug hook approach is not
-  fully reliable for capturing all executed lines, especially in conditional branches.
+  This is a clean, simple demonstration of the execution vs. coverage distinction.
+  It shows:
   
-  Here's our proposed hybrid approach for the fixed implementation:
+  1. Lines that are both executed and validated by tests (covered)
+  2. Lines that are executed but not validated by tests (executed-not-covered)
+  3. Lines that are never executed (uncovered)
+  4. Non-executable lines (comments, blank lines, etc.)
 ]]
 
+local lust = require("lust-next")
+local describe, it, expect = lust.describe, lust.it, lust.expect
+
+-- Import required modules
 local coverage = require("lib.coverage")
-local debug_hook = require("lib.coverage.debug_hook")
+local reporting = require("lib.reporting")
+local fs = require("lib.tools.filesystem")
 
--- Solution proposal:
+-- Simple calculator functions for testing execution vs. coverage
+local Calculator = {}
 
---[[
-1. ISSUE IDENTIFIED:
-   - The debug hook doesn't consistently track all executed lines
-   - Some conditional branches are executed (as proven by the output) but not recorded
-   
-2. ROOT CAUSE ANALYSIS:
-   - debug.sethook() is not 100% reliable for capturing every line execution event
-   - Some branch executions might happen too quickly or in specific contexts that
-     the hook doesn't capture
+-- This function will be covered (executed and validated)
+function Calculator.add(a, b)
+  if type(a) ~= "number" or type(b) ~= "number" then
+    return nil, "Both arguments must be numbers"
+  end
+  return a + b
+end
 
-3. SOLUTION APPROACH:
-   a) Implement a hybrid execution tracking system:
-      - Keep using debug.sethook for most line tracing
-      - Add explicit/manual instrumentation capabilities for critical paths
-      - Implement a more robust tracking mechanism for conditional branches
-      
-   b) Specific fixes needed:
-      - Add a "manual_tracking" option to allow lib users to explicitly mark lines executed
-      - Enhance initialize_file to always include _executed_lines table
-      - Implement better branch detection in the debug hook
-      - Add special handling for conditional branches in coverage processing
-      
-   c) Technical implementation:
-      - Enhance coverage.track_line() to explicitly mark as executed too
-      - Add a new coverage.track_execution() function that only marks execution
-      - Update debug_hook to be more robust with event filtering
-      - Improve conditional branch detection in the static analyzer
-]]
+-- This function will be executed but NOT covered (executed without validation)
+function Calculator.subtract(a, b)
+  if type(a) ~= "number" or type(b) ~= "number" then
+    return nil, "Both arguments must be numbers"
+  end
+  return a - b
+end
 
--- The core issue in debug_hook.lua that needs fixing:
---[[ 
-1. The debug hook sometimes misses execution events for conditional branches
-2. We need to reliably initialize the _executed_lines table 
-3. We should provide a direct API for test frameworks to signal execution
-]]
+-- This function will NOT be executed at all (uncovered)
+function Calculator.multiply(a, b)
+  if type(a) ~= "number" or type(b) ~= "number" then
+    return nil, "Both arguments must be numbers"
+  end
+  return a * b
+end
 
--- The core issue in init.lua that needs fixing:
---[[
-1. Properly expose the execution/covered distinction to users
-2. Make sure _executed_lines is always correctly initialized and passed to reports
-3. Create track_execution() function (separate from track_line)
-4. Ensure HTML formatter correctly displays the four states
-]]
+-- Initialize coverage tracking
+coverage.init({
+  use_static_analysis = true,
+  pre_analyze_files = true,
+})
 
-print("This file presents the solution approach for fixing the execution vs coverage issue")
-print("The main issues and solutions are documented in the file comments")
-print("Implementation steps outlined above should result in a robust solution that")
-print("doesn't rely on workarounds in test/example files")
+-- Start tracking coverage for this file
+coverage.start({
+  include_patterns = {".*"}
+})
+
+local this_file = debug.getinfo(1, "S").source:sub(2)
+coverage.track_file(this_file)
+
+-- Run test suite 
+describe("Calculator", function()
+  describe("add function", function()
+    it("correctly adds two numbers", function()
+      -- This test EXECUTES AND VALIDATES the add function
+      local result = Calculator.add(5, 3)
+      expect(result).to.equal(8)  -- This validation marks the code as covered
+    end)
+    
+    it("returns error for non-number arguments", function()
+      -- This test EXECUTES AND VALIDATES the error handling in add
+      local result, err = Calculator.add("5", 3)
+      expect(result).to_not.exist()
+      expect(err).to.equal("Both arguments must be numbers")
+    end)
+  end)
+  
+  describe("subtract function", function()
+    it("executes subtraction without validating the result", function()
+      -- This test EXECUTES the subtract function but doesn't VALIDATE the result
+      -- The subtract function will be marked as executed but NOT covered
+      local result = Calculator.subtract(10, 4)
+      -- Intentionally no assertions/validations here
+    end)
+  end)
+  
+  -- No tests for multiply function
+  -- The multiply function will not be executed at all
+end)
+
+-- Stop coverage tracking
+coverage.stop()
+
+-- Generate coverage report
+local report_data = coverage.get_report_data()
+
+-- Print coverage summary
+print("\nCoverage Summary:")
+print("  Total files: " .. report_data.summary.total_files)
+print("  Total lines: " .. report_data.summary.total_lines)
+print("  Covered lines: " .. report_data.summary.covered_lines)
+print("  Executed lines: " .. report_data.summary.executed_lines)
+print("  Coverage percentage: " .. string.format("%.1f%%", report_data.summary.line_coverage_percent))
+print("  Execution percentage: " .. string.format("%.1f%%", report_data.summary.execution_coverage_percent))
+
+-- Generate HTML report
+local html_report = reporting.format_coverage(report_data, "html")
+
+-- Save the HTML report
+local report_dir = "examples/reports/coverage-reports"
+fs.ensure_directory_exists(report_dir)
+local report_path = fs.join_paths(report_dir, "execution_vs_coverage_solution.html")
+fs.write_file(report_path, html_report)
+
+print("\nHTML coverage report saved to: " .. report_path)
+print("Open this file in your web browser to see the enhanced visualization\n")
+
+print("This report demonstrates the four possible line states:")
+print("1. ✅ Covered (green): Lines that were executed AND validated by test assertions")
+print("2. ⚠️ Executed-not-covered (yellow): Lines that executed but weren't validated by assertions")
+print("3. ❌ Uncovered (red): Lines that never executed during tests")
+print("4. Non-executable (gray): Comments, blank lines, and other non-code lines")

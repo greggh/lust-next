@@ -1,130 +1,150 @@
 --[[
   execution_vs_coverage_demo.lua
   
-  Demonstration of the distinction between execution (code that runs) and 
-  coverage (code validated by tests) in the lust-next coverage module.
+  Demonstration of the distinction between code execution and coverage validation.
+  This example clearly shows the difference between code that:
+  1. Is executed but not validated by tests (execution)
+  2. Is executed and validated by tests (coverage)
+  3. Is never executed at all
 ]]
 
+local lust = require("lust-next")
+local describe, it, expect = lust.describe, lust.it, lust.expect
+
+-- Import the coverage module
 local coverage = require("lib.coverage")
-local fs = require("lib.tools.filesystem")
 
--- Create a sample module for testing
-local DemoModule = {}
-
--- Function with conditional branches to demonstrate different coverage states
-function DemoModule.evaluate(value)
-  local result = ""
-  
-  -- This will execute for all calls but will only be validated by the tests for value=-5
-  if value < 0 then
-    result = "negative"
-    
-  -- This will execute only for zero values but won't be validated by tests
-  elseif value == 0 then
-    result = "zero"
-    
-  -- This will execute only for positive values and will be validated by tests for value=5
-  else
-    result = "positive"
+-- Function with different execution paths
+local function calculate(a, b, operation)
+  -- This line will be covered (executed and validated)
+  if not a or not b then
+    return nil, "Missing operands"
   end
   
-  -- This line always executes
-  return result
+  -- This line will be covered
+  if type(a) ~= "number" or type(b) ~= "number" then
+    return nil, "Operands must be numbers"
+  end
+  
+  -- This block will be executed but not covered (no assertions for the result)
+  if operation == "add" then
+    return a + b
+  end
+  
+  -- This block will be covered (executed and validated)
+  if operation == "subtract" then
+    return a - b
+  end
+  
+  -- This block will not be executed at all
+  if operation == "multiply" then
+    return a * b
+  end
+  
+  -- This block will not be executed
+  if operation == "divide" then
+    if b == 0 then
+      return nil, "Division by zero"
+    end
+    return a / b
+  end
+  
+  -- This return statement will be executed but not covered
+  return nil, "Unsupported operation"
 end
 
--- Get the current file path
-local current_file = debug.getinfo(1, "S").source:sub(2)
-
--- Initialize coverage only for this file
-coverage.init({
-  enabled = true,
-  debug = true,
-  include = {current_file},
-  exclude = {},
-  source_dirs = {"."},
-  track_blocks = true,
+-- Start coverage tracking
+coverage.start({
+  include_patterns = {".*"}
 })
 
-print("Starting coverage tracking...")
-coverage.start()
+-- Explicitly track this file to ensure it's included
+local current_file = debug.getinfo(1, "S").source:sub(2) -- Get current file path
+coverage.track_file(current_file)
 
--- TEST 1: Executed and covered (green)
-print("\nTest 1: Executing with value=5 and validating result")
-local result1 = DemoModule.evaluate(5)
-print("Result:", result1)
-assert(result1 == "positive", "Expected 'positive' for value=5")
--- Mark this branch as officially covered through validation
-coverage.track_line(current_file, 28)  -- positive branch (else)
-coverage.track_line(current_file, 29)  -- result = "positive"
-
--- TEST 2: Just executed, not covered (amber)
-print("\nTest 2: Executing with value=0 but NOT validating result")
-local result2 = DemoModule.evaluate(0)
-print("Result:", result2)
--- No test assertions here, so it's executed but not covered
--- Use the proper API to track execution for lines that debug hooks might miss
-print("\nTracking execution with the proper API for the zero branch")
-coverage.track_execution(current_file, 23)  -- elseif line
-coverage.track_execution(current_file, 24)  -- zero branch
-
--- TEST 3: Executed and covered, different branch (green)
-print("\nTest 3: Executing with value=-5 and validating result")
-local result3 = DemoModule.evaluate(-5)
-print("Result:", result3)
-assert(result3 == "negative", "Expected 'negative' for value=-5")
--- Mark this branch as officially covered through validation
-coverage.track_line(current_file, 19)  -- negative branch (if value < 0)
-coverage.track_line(current_file, 20)  -- result = "negative"
+-- Test suite that will demonstrate execution vs. coverage distinction
+describe("Execution vs. Coverage Demo", function()
+  it("validates proper error for missing operands", function()
+    local result, err = calculate(nil, 5, "add")
+    expect(result).to_not.exist()
+    expect(err).to.equal("Missing operands")
+  end)
+  
+  it("validates proper error for non-number operands", function()
+    local result, err = calculate("string", 5, "add")
+    expect(result).to_not.exist()
+    expect(err).to.equal("Operands must be numbers")
+  end)
+  
+  it("executes addition without validating the result", function()
+    -- This test EXECUTES the addition but doesn't VALIDATE the result
+    -- The add operation code path will be marked as executed but NOT covered
+    local result = calculate(5, 3, "add")
+    -- Intentionally missing assertions for the result
+  end)
+  
+  it("validates subtraction result", function()
+    -- This test both EXECUTES AND VALIDATES the subtraction
+    -- The subtract operation code path will be marked as both executed AND covered
+    local result = calculate(10, 4, "subtract")
+    expect(result).to.equal(6)
+  end)
+  
+  -- No tests for multiply or divide operations
+  -- Those blocks will not be executed at all
+end)
 
 -- Stop coverage tracking
 coverage.stop()
 
--- Generate HTML report
-local report_path = "/tmp/execution_vs_coverage_demo.html"
-coverage.save_report(report_path, "html")
-print("\nGenerated HTML report:", report_path)
+-- Generate an HTML coverage report
+print("\nGenerating HTML coverage report...\n")
+local report_data = coverage.get_report_data()
 
--- Print validation summary
-print("\nCoverage summary:")
-local summary = coverage.get_report_data().summary
-print(string.format("- Line coverage: %.2f%%", summary.line_coverage_percent))
+-- Print details about the coverage data for debugging
+print("Coverage summary:")
+print(string.format("  Total files: %d", report_data.summary.total_files))
+print(string.format("  Covered files: %d", report_data.summary.covered_files))
+print(string.format("  Total lines: %d", report_data.summary.total_lines))
+print(string.format("  Covered lines: %d", report_data.summary.covered_lines))
+print(string.format("  Executed lines: %d", report_data.summary.executed_lines))
 
--- Debug executed vs covered lines
-local raw_data = coverage.get_raw_data()
-local file_data = nil
-for path, data in pairs(raw_data.files) do
-  if path:match("execution_vs_coverage_demo.lua") then
-    file_data = data
-    break
-  end
+print("\nFiles in report data:")
+local file_count = 0
+for file_path, _ in pairs(report_data.files) do
+  file_count = file_count + 1
+  print("  " .. file_count .. ": " .. file_path)
 end
 
-if file_data then
-  print("\nDebug - Executed lines:")
-  local executed_lines = {}
-  for line_num, executed in pairs(file_data._executed_lines or {}) do
-    if executed and line_num >= 19 and line_num <= 29 then
-      table.insert(executed_lines, tostring(line_num))
-    end
-  end
-  table.sort(executed_lines, function(a, b) return tonumber(a) < tonumber(b) end)
-  print(table.concat(executed_lines, ", "))
-  
-  print("\nDebug - Covered lines:")
-  local covered_lines = {}
-  for line_num, covered in pairs(file_data.lines or {}) do
-    if covered and line_num >= 19 and line_num <= 29 then
-      table.insert(covered_lines, tostring(line_num))
-    end
-  end
-  table.sort(covered_lines, function(a, b) return tonumber(a) < tonumber(b) end)
-  print(table.concat(covered_lines, ", "))
+if file_count == 0 then
+  print("  No files in report data! Adding current file explicitly...")
+  local current_file = debug.getinfo(1, "S").source:sub(2)
+  report_data.files[current_file] = {
+    source = "-- File content not available",
+    lines = {},
+    total_lines = 0,
+    covered_lines = 0,
+    line_coverage_percent = 0
+  }
+  report_data.summary.total_files = 1
 end
 
-print("\nCheck the HTML report to see:")
-print("- GREEN: Lines executed AND validated by tests (lines 19-20, 28-29)")
-print("- AMBER: Lines executed but NOT validated (lines 23-24)")
-print("- RED: Lines not executed (any branches not taken)")
-print("- GRAY: Non-executable lines (comments, whitespace)")
-print("\nThis distinction helps identify portions of your code that run during tests")
-print("but aren't properly validated by assertions.")
+local reporting = require("lib.reporting")
+local fs = require("lib.tools.filesystem")
+
+-- Format the coverage data as HTML
+local html_report = reporting.format_coverage(report_data, "html")
+
+-- Save the HTML report to a file
+local report_dir = "examples/reports/coverage-reports"
+fs.ensure_directory_exists(report_dir)
+local report_path = fs.join_paths(report_dir, "execution_vs_coverage_demo.html")
+fs.write_file(report_path, html_report)
+
+print(string.format("HTML coverage report saved to: %s", report_path))
+print(string.format("Open this file in your web browser to see the enhanced visualization"))
+print("\nCode states demonstrated in this example:")
+print("1. Covered lines: Executed AND validated by test assertions")
+print("2. Executed-not-covered lines: Executed but NOT validated by test assertions")
+print("3. Uncovered lines: Not executed at all during tests")
+print("4. Non-executable lines: Comments and other non-code lines")

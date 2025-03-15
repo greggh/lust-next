@@ -85,8 +85,8 @@ local test_results = {
   }
 }
 
--- Create a reports directory using the filesystem module
-local reports_base_dir = "html-report-examples"
+-- Use the existing reports directory structure
+local reports_base_dir = "examples/reports/html-report-examples"
 fs.ensure_directory_exists(reports_base_dir)
 
 -- Run a simple test for demonstration

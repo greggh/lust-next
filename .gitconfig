@@ -1,0 +1,53 @@
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential
+
+[credential "https://gist.github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential
+
+[user]
+	email = greggatghc@gmail.com
+	name = Gregg Housh
+
+[url "https://"]
+	insteadOf = git://
+
+[url "https://github.com/"]
+	insteadOf = git@github.com:
+
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = false
+
+[core]
+  editor = /usr/bin/nvim
+  pager=bat
+
+[color]
+    branch = auto
+    diff = auto
+    status = auto
+
+[color "branch"]
+    current = red reverse
+    local = blue
+    remote = green
+
+[color "diff"]
+    meta = yellow
+    frag = magenta
+    old = red bold
+    new = green
+    plain = white
+
+[color "status"]
+    added = yellow
+    changed = green
+    untracked = cyan
+
+[alias]
+    # undo from here http://megakemp.com/2016/08/25/git-undo/
+    undo = "!f() { git reset --hard $(git rev-parse --abbrev-ref HEAD)@{${1-1}}; }; f"

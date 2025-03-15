@@ -446,6 +446,32 @@ function M.validate_coverage_data(coverage_data)
     return false, validation_issues
   end
   
+  -- Schema validation
+  local schema_validation_ok = true
+  local schema_error
+  local schema_module
+  
+  -- Try to load schema module
+  local schema_load_success, module = pcall(require, "lib.reporting.schema")
+  if schema_load_success then
+    schema_module = module
+    
+    -- Perform schema validation
+    schema_validation_ok, schema_error = schema_module.validate(coverage_data, "COVERAGE_SCHEMA")
+    if not schema_validation_ok then
+      add_issue("schema_validation", "Coverage data failed schema validation: " .. tostring(schema_error), "error", {
+        error = schema_error
+      })
+    else
+      logger.debug("Schema validation passed")
+    end
+  else
+    -- Schema module not available
+    logger.debug("Schema module not available, skipping schema validation", {
+      error = tostring(module)
+    })
+  end
+  
   -- Run specific validation checks
   local line_counts_valid = validate_line_counts(coverage_data)
   local percentages_valid = validate_percentages(coverage_data)
@@ -453,12 +479,13 @@ function M.validate_coverage_data(coverage_data)
   local cross_module_valid = validate_cross_module(coverage_data)
   
   -- All validations must pass for the data to be considered valid
-  local is_valid = line_counts_valid and percentages_valid and 
+  local is_valid = schema_validation_ok and line_counts_valid and percentages_valid and 
                    file_paths_valid and cross_module_valid
   
   logger.info("Coverage report validation complete", {
     valid = is_valid,
     issues_found = #validation_issues,
+    schema_validation_ok = schema_validation_ok,
     line_counts_valid = line_counts_valid,
     percentages_valid = percentages_valid,
     file_paths_valid = file_paths_valid,
@@ -706,8 +733,48 @@ function M.reset_validation_issues()
   validation_issues = {}
 end
 
+-- Validate report format against its schema
+function M.validate_report_format(data, format)
+  logger.debug("Validating report format", {format = format})
+  
+  -- Try to load schema module
+  local schema_module
+  local ok, module = pcall(require, "lib.reporting.schema")
+  if ok then
+    schema_module = module
+    
+    -- Use schema module to validate format
+    local is_valid, err = schema_module.validate_format(data, format)
+    
+    if not is_valid then
+      add_issue("format_validation", "Report format validation failed: " .. tostring(err), "error", {
+        format = format,
+        error = err
+      })
+      return false, "Format validation failed: " .. tostring(err)
+    end
+    
+    logger.debug("Format validation successful", {format = format})
+    return true
+  else
+    logger.debug("Schema module not available, skipping format validation", {
+      error = tostring(module)
+    })
+    -- Skip validation if schema module is not available
+    return true
+  end
+end
+
 -- Complete report validation
-function M.validate_report(coverage_data)
+function M.validate_report(coverage_data, options)
+  options = options or {}
+  
+  logger.debug("Running comprehensive report validation", {
+    has_data = coverage_data ~= nil,
+    has_options = options ~= nil,
+    format = options.format
+  })
+  
   -- Start with basic validation
   local is_valid, issues = M.validate_coverage_data(coverage_data)
   
@@ -717,6 +784,31 @@ function M.validate_report(coverage_data)
   -- Cross-check with static analysis
   local cross_check = M.cross_check_with_static_analysis(coverage_data)
   
+  -- Formatted output validation
+  local format_validation = {
+    is_valid = true,
+    issues = {}
+  }
+  
+  -- If format is provided, validate the formatted output
+  if options.format and options.formatted_output then
+    local format_valid, format_error = M.validate_report_format(options.formatted_output, options.format)
+    
+    format_validation.is_valid = format_valid
+    if not format_valid then
+      format_validation.issues = {
+        {
+          category = "format_validation",
+          message = "Format validation failed for " .. options.format,
+          details = {
+            format = options.format,
+            error = format_error
+          }
+        }
+      }
+    end
+  end
+  
   -- Combine all results
   local result = {
     validation = {
@@ -724,8 +816,20 @@ function M.validate_report(coverage_data)
       issues = issues
     },
     statistics = stats,
-    cross_check = cross_check
+    cross_check = cross_check,
+    format_validation = format_validation
   }
+  
+  logger.info("Comprehensive validation complete", {
+    data_valid = is_valid,
+    format_valid = format_validation.is_valid,
+    issues = #issues,
+    format_issues = #format_validation.issues,
+    statistics = {
+      outliers = #stats.outliers,
+      anomalies = #stats.anomalies
+    }
+  })
   
   return result
 end

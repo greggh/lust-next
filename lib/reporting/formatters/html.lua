@@ -167,13 +167,14 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       -- Non-executable line (comments, blank lines, etc.)
       return {
         class = "non-executable",
-        tooltip = nil
+        tooltip = ' title="Non-executable line: Comment, blank line, or syntax element"'
       }
     elseif is_covered and is_executable then
       -- Fully covered (executed and validated)
       return {
         class = "covered",
-        tooltip = string.format(' data-execution-count="%d" title="Executed %d times"', exec_count, exec_count)
+        tooltip = string.format(' data-execution-count="%d" title="✓ Covered: Executed %d times and validated by tests"', 
+                              exec_count, exec_count)
       }
     elseif is_executed and is_executable then
       -- Executed but not properly covered by tests
@@ -186,14 +187,14 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       
       return {
         class = "executed-not-covered",
-        tooltip = string.format(' data-execution-count="%d" title="Executed %d times but not properly validated by tests"', 
+        tooltip = string.format(' data-execution-count="%d" title="⚠ Execution without validation: Line executed %d times but not properly validated by tests. Add assertions to validate this code."', 
                            exec_count, exec_count)
       }
     else
       -- Executable but not executed at all
       return {
         class = "uncovered",
-        tooltip = ' title="Not executed"'
+        tooltip = ' title="❌ Not executed: Line was never reached during test execution"'
       }
     end
   end)
@@ -270,8 +271,14 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       if executed then
         block_info = block_info .. string.format(' data-block-executed="true" data-block-execution-count="%d"', block_exec_count)
         -- Enhance tooltip with block information
-        tooltip_data = string.format(' title="Line executed %d times. %s block executed %d times."', 
-                               exec_count, block_type:gsub("^%l", string.upper), block_exec_count)
+        tooltip_data = string.format(' title="Line executed %d times. %s block executed %d times. [Block Start: %s]"', 
+                               exec_count, block_type:gsub("^%l", string.upper), block_exec_count,
+                               block.id or block_type)
+      else
+        block_info = block_info .. ' data-block-executed="false"'
+        -- Add warning tooltip for unexecuted blocks
+        tooltip_data = string.format(' title="Line never executed. %s block (start) never executed. Add tests to cover this code path."', 
+                               block_type:gsub("^%l", string.upper))
       end
       
       -- If there are additional start blocks, add them as data attributes
@@ -313,8 +320,14 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         if executed then
           block_info = block_info .. string.format(' data-block-executed="true" data-block-execution-count="%d"', block_exec_count)
           -- Enhance tooltip with block information
-          tooltip_data = string.format(' title="Line executed %d times. %s block executed %d times."', 
-                                  exec_count, block_type:gsub("^%l", string.upper), block_exec_count)
+          tooltip_data = string.format(' title="Line executed %d times. %s block executed %d times. [Block End: %s]"', 
+                                  exec_count, block_type:gsub("^%l", string.upper), block_exec_count,
+                                  block.id or block_type)
+        else
+          block_info = block_info .. ' data-block-executed="false"'
+          -- Add warning tooltip for unexecuted blocks
+          tooltip_data = string.format(' title="Line never executed. %s block (end) never executed. Add tests to cover this code path."', 
+                                  block_type:gsub("^%l", string.upper))
         end
       end
       
@@ -347,8 +360,14 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         if executed then
           block_info = block_info .. string.format(' data-inside-block-executed="true" data-inside-block-execution-count="%d"', block_exec_count)
           -- Enhance tooltip with block information
-          tooltip_data = string.format(' title="Line executed %d times. Inside %s block executed %d times."', 
-                                  exec_count, block_type:gsub("^%l", string.upper), block_exec_count)
+          tooltip_data = string.format(' title="Line executed %d times. Inside %s block executed %d times. [Block ID: %s, Lines: %d-%d]"', 
+                                  exec_count, block_type:gsub("^%l", string.upper), block_exec_count,
+                                  block.id or block_type, block.start_line or 0, block.end_line or 0)
+        else
+          block_info = block_info .. ' data-inside-block-executed="false"'
+          -- Add warning tooltip for unexecuted blocks
+          tooltip_data = string.format(' title="Line never executed. Inside %s block that was never executed. Add tests to cover this code path."', 
+                                  block_type:gsub("^%l", string.upper))
         end
       end
       
@@ -406,13 +425,34 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       -- Enhance tooltip with condition information
       local condition_tooltip
       if innermost_condition.executed_true and innermost_condition.executed_false then
-        condition_tooltip = "Condition evaluated both ways"
+        -- Calculate execution counts if available
+        local true_count = innermost_condition.true_count or "unknown"
+        local false_count = innermost_condition.false_count or "unknown"
+        
+        if type(true_count) == "number" and type(false_count) == "number" then
+          condition_tooltip = string.format("✓✓ Condition fully covered: Evaluated as TRUE %d times and FALSE %d times", 
+                                         true_count, false_count)
+        else
+          condition_tooltip = "✓✓ Condition fully covered: Evaluated both as TRUE and FALSE"
+        end
       elseif innermost_condition.executed_true then
-        condition_tooltip = "Condition evaluated as true only"
+        local true_count = innermost_condition.true_count or "unknown"
+        if type(true_count) == "number" then
+          condition_tooltip = string.format("✓❌ Condition partially covered: Evaluated as TRUE %d times but never as FALSE. Add tests for the FALSE case.", 
+                                         true_count)
+        else
+          condition_tooltip = "✓❌ Condition partially covered: Evaluated as TRUE only. Add tests for the FALSE case."
+        end
       elseif innermost_condition.executed_false then
-        condition_tooltip = "Condition evaluated as false only"
+        local false_count = innermost_condition.false_count or "unknown"
+        if type(false_count) == "number" then
+          condition_tooltip = string.format("❌✓ Condition partially covered: Evaluated as FALSE %d times but never as TRUE. Add tests for the TRUE case.", 
+                                         false_count)
+        else
+          condition_tooltip = "❌✓ Condition partially covered: Evaluated as FALSE only. Add tests for the TRUE case."
+        end
       else
-        condition_tooltip = "Condition not fully evaluated"
+        condition_tooltip = "❌❌ Condition not evaluated: Add tests to cover this condition"
       end
       
       -- Update tooltip to include condition information
@@ -830,20 +870,47 @@ function M.format_coverage(coverage_data)
       --progress-fill-gradient: linear-gradient(to right, #ff6666 0%, #ffdd66 60%, #66ff66 80%);
       --file-header-bg: #f3f3f3;
       --file-item-border: #eee;
-      --covered-bg: #e6ffe6;      /* Light green */
-      --covered-highlight: #4CAF50; /* Brighter green for executed lines */
-      --executed-not-covered-bg: #e6c300; /* Amber/orange for executed but not covered */
-      --uncovered-bg: #ffe6e6;    /* Light red */
+      
+      /* Coverage state colors - Light theme */
+      --covered-bg: #c8e6c9;             /* Light green base */
+      --covered-highlight: #4CAF50;      /* Brighter green for executed lines */
+      --covered-border: #388e3c;         /* Dark green border for emphasis */
+      
+      --executed-not-covered-bg: #fff59d; /* Light amber/yellow for executed but not covered */
+      --executed-not-covered-highlight: #fdd835; /* Brighter amber/yellow */
+      --executed-not-covered-border: #fbc02d; /* Darker amber/yellow border */
+      
+      --uncovered-bg: #ffcdd2;           /* Light red for uncovered code */
+      --uncovered-highlight: #e57373;    /* Brighter red for highlighting */
+      --uncovered-border: #d32f2f;       /* Dark red border */
+      
+      --non-executable-bg: #f5f5f5;      /* Light gray for non-executable lines */
+      --non-executable-text: #9e9e9e;    /* Gray text for non-executable lines */
+      
+      /* Syntax highlighting */
       --syntax-keyword: #0000ff;  /* Blue */
       --syntax-string: #008000;   /* Green */
       --syntax-comment: #808080;  /* Gray */
       --syntax-number: #ff8000;   /* Orange */
       
       /* Block highlighting */
-      --block-start-color: #f0f0ff;
-      --block-end-color: #f0f0ff;
-      --block-executed-border: #4CAF50;
-      --block-not-executed-border: #ff6666;
+      --block-start-color: #e3f2fd;      /* Light blue background for block start */
+      --block-end-color: #e3f2fd;        /* Light blue background for block end */
+      --block-executed-border: #2196f3;  /* Blue border for executed blocks */
+      --block-executed-bg: rgba(33, 150, 243, 0.1); /* Subtle blue background */
+      --block-not-executed-border: #f44336; /* Red border for unexecuted blocks */
+      --block-not-executed-bg: rgba(244, 67, 54, 0.1); /* Subtle red background */
+      
+      /* Condition highlighting */
+      --condition-both-color: #4caf50;   /* Green for fully covered conditions */
+      --condition-true-color: #ff9800;   /* Orange for true-only conditions */
+      --condition-false-color: #2196f3;  /* Blue for false-only conditions */
+      --condition-none-color: #f44336;   /* Red for uncovered conditions */
+      
+      /* Tooltip styling */
+      --tooltip-bg: #424242;
+      --tooltip-text: #ffffff;
+      --tooltip-border: #616161;
     }
     
     /* Dark theme variables */
@@ -859,20 +926,47 @@ function M.format_coverage(coverage_data)
       --progress-fill-gradient: linear-gradient(to right, #ff6666 0%, #ffdd66 60%, #66ff66 80%);
       --file-header-bg: #2d2d2d;
       --file-item-border: #444;
-      --covered-bg: #1a5c1a;      /* Brighter dark green for better contrast */
-      --covered-highlight: #4CAF50; /* Brighter green for executed lines */
-      --executed-not-covered-bg: #b28600; /* Brighter amber/orange for executed but not covered */
-      --uncovered-bg: #661a1a;    /* Brighter red for dark mode */
+      
+      /* Coverage state colors - Dark theme */
+      --covered-bg: #1b5e20;             /* Darker green base for dark theme */
+      --covered-highlight: #4CAF50;      /* Brighter green for emphasis */
+      --covered-border: #81c784;         /* Lighter green border for contrast */
+      
+      --executed-not-covered-bg: #f9a825; /* Darker amber for dark theme */
+      --executed-not-covered-highlight: #fdd835; /* Brighter amber/yellow */
+      --executed-not-covered-border: #fff176; /* Lighter yellow border for contrast */
+      
+      --uncovered-bg: #b71c1c;           /* Darker red for dark theme */
+      --uncovered-highlight: #e57373;    /* Lighter red for highlighting */
+      --uncovered-border: #ef9a9a;       /* Light red border for contrast */
+      
+      --non-executable-bg: #2d2d2d;      /* Darker gray for non-executable lines */
+      --non-executable-text: #9e9e9e;    /* Gray text */
+      
+      /* Syntax highlighting - Dark theme */
       --syntax-keyword: #569cd6;  /* Blue */
       --syntax-string: #6a9955;   /* Green */
       --syntax-comment: #608b4e;  /* Lighter green */
       --syntax-number: #ce9178;   /* Orange */
       
-      /* Block highlighting */
-      --block-start-color: #3e3d4a;
-      --block-end-color: #3e3d4a;
-      --block-executed-border: #4CAF50;
-      --block-not-executed-border: #ff6666;
+      /* Block highlighting - Dark theme */
+      --block-start-color: #1e3a5f;      /* Darker blue for block start */
+      --block-end-color: #1e3a5f;        /* Darker blue for block end */
+      --block-executed-border: #64b5f6;  /* Lighter blue border for contrast */
+      --block-executed-bg: rgba(33, 150, 243, 0.2); /* Slightly more visible blue background */
+      --block-not-executed-border: #ef5350; /* Lighter red border */
+      --block-not-executed-bg: rgba(244, 67, 54, 0.2); /* Slightly more visible red background */
+      
+      /* Condition highlighting - Dark theme */
+      --condition-both-color: #66bb6a;   /* Lighter green for dark theme */
+      --condition-true-color: #ffb74d;   /* Lighter orange */
+      --condition-false-color: #64b5f6;  /* Lighter blue */
+      --condition-none-color: #ef5350;   /* Lighter red */
+      
+      /* Tooltip styling - Dark theme */
+      --tooltip-bg: #212121;
+      --tooltip-text: #ffffff;
+      --tooltip-border: #424242;
     }
     
     body { 
@@ -923,18 +1017,54 @@ function M.format_coverage(coverage_data)
       display: flex; 
       border-top: 1px solid var(--file-item-border); 
     }
-    .covered { 
-      background-color: var(--covered-highlight); 
+    /* Line coverage state styling */
+    .line.covered { 
+      background-color: var(--covered-bg); 
+      border-left: 3px solid var(--covered-border);
+      color: var(--text-color);
+    }
+    
+    /* Apply highlight effect on hover for covered lines */
+    .line.covered:hover {
+      background-color: var(--covered-highlight);
       color: #ffffff;
       font-weight: 500;
-    } 
-    .executed-not-covered {
-      background-color: var(--executed-not-covered-bg, #6b5d1b);  /* Darker amber/orange shade */
-      color: #ffffff;
     }
-    .uncovered { 
+    
+    /* Executed but not covered styling */
+    .line.executed-not-covered {
+      background-color: var(--executed-not-covered-bg);
+      border-left: 3px solid var(--executed-not-covered-border);
+      color: var(--text-color);
+    }
+    
+    /* Apply highlight effect on hover for executed-not-covered lines */
+    .line.executed-not-covered:hover {
+      background-color: var(--executed-not-covered-highlight);
+      color: #000000;
+      font-weight: 500;
+    }
+    
+    /* Uncovered line styling */
+    .line.uncovered { 
       background-color: var(--uncovered-bg);
-    } 
+      border-left: 3px solid var(--uncovered-border);
+      color: var(--text-color);
+    }
+    
+    /* Apply highlight effect on hover for uncovered lines */
+    .line.uncovered:hover {
+      background-color: var(--uncovered-highlight);
+      color: #ffffff;
+      font-weight: 500;
+    }
+    
+    /* Non-executable line styling */
+    .line.non-executable {
+      background-color: var(--non-executable-bg);
+      color: var(--non-executable-text);
+      border-left: 3px solid transparent;
+    }
     
     /* Syntax highlight in source view */
     .keyword { color: var(--syntax-keyword); }
@@ -971,7 +1101,7 @@ function M.format_coverage(coverage_data)
       background-color: #2a2a2a;
     }
     
-    /* Block highlighting - improved styling */
+    /* Block highlighting - enhanced styling */
     .line.block-start { 
       border-top: 2px solid var(--block-start-color); 
       position: relative; 
@@ -989,30 +1119,60 @@ function M.format_coverage(coverage_data)
       border-right: 2px solid var(--block-end-color);
     }
     
-    /* Executed blocks - green borders */
+    /* Executed blocks - blue borders and subtle background */
     .line.block-start.block-executed { 
       border-top: 2px solid var(--block-executed-border);
       border-left: 2px solid var(--block-executed-border);
       border-right: 2px solid var(--block-executed-border);
+      background-color: var(--block-executed-bg);
     }
     
     .line.block-end.block-executed { 
       border-bottom: 2px solid var(--block-executed-border);
       border-left: 2px solid var(--block-executed-border);
       border-right: 2px solid var(--block-executed-border);
+      background-color: var(--block-executed-bg);
     }
     
-    /* Non-executed blocks - red borders */
+    /* Non-executed blocks - red borders and subtle background */
     .line.block-start.block-not-executed { 
       border-top: 2px solid var(--block-not-executed-border);
       border-left: 2px solid var(--block-not-executed-border);
       border-right: 2px solid var(--block-not-executed-border);
+      background-color: var(--block-not-executed-bg);
     }
     
     .line.block-end.block-not-executed { 
       border-bottom: 2px solid var(--block-not-executed-border);
       border-left: 2px solid var(--block-not-executed-border);
       border-right: 2px solid var(--block-not-executed-border);
+      background-color: var(--block-not-executed-bg);
+    }
+    
+    /* Execution count badge for blocks */
+    .line.block-start:after {
+      content: attr(data-block-type);
+      position: absolute;
+      right: 10px;
+      top: 0;
+      font-size: 10px;
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 3px;
+      opacity: 0.9;
+      z-index: 5;
+    }
+    
+    /* Executed block badge styling */
+    .line.block-start.block-executed:after {
+      background-color: var(--block-executed-border);
+      content: attr(data-block-type) " (" attr(data-block-execution-count) ")";
+    }
+    
+    /* Non-executed block badge styling */
+    .line.block-start.block-not-executed:after {
+      background-color: var(--block-not-executed-border);
+      content: attr(data-block-type) " (0)";
     }
     
     /* Block hover information */
@@ -1055,31 +1215,83 @@ function M.format_coverage(coverage_data)
       border-left: 2px solid var(--block-not-executed-border);
     }
     
-    /* Condition highlighting */
+    /* Condition highlighting - enhanced with better visuals */
     .line.condition {
       position: relative;
     }
     
+    /* Base condition indicator */
     .line.condition:after {
       content: "⚡";
       position: absolute;
       right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
       font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      color: #fff;
+      background-color: var(--condition-none-color);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
     }
     
+    /* True-only condition styling */
     .line.condition-true:after {
       content: "✓";
-      color: var(--block-executed-border);
+      background-color: var(--condition-true-color);
+      animation: pulse-true 2s infinite;
     }
     
+    /* False-only condition styling */
     .line.condition-false:after {
       content: "✗";
-      color: var(--block-not-executed-border);
+      background-color: var(--condition-false-color);
+      animation: pulse-false 2s infinite;
     }
     
+    /* Fully covered condition styling */
     .line.condition-both:after {
       content: "✓✗";
-      color: gold;
+      background-color: var(--condition-both-color);
+    }
+    
+    /* Pulse animations for partially covered conditions */
+    @keyframes pulse-true {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    
+    @keyframes pulse-false {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    
+    /* Enhanced tooltips for all elements */
+    [title] {
+      position: relative;
+      cursor: help;
+    }
+    
+    [title]:hover:after {
+      content: attr(title);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      border: 1px solid var(--tooltip-border);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 10;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     
     /* Coverage legend styling */
@@ -1220,6 +1432,57 @@ function M.format_coverage(coverage_data)
       border-radius: 4px;
       cursor: pointer;
     }
+    
+    /* Filter controls styling */
+    .filter-controls {
+      margin: 15px 0;
+      padding: 10px;
+      background-color: var(--summary-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+    }
+    
+    .filter-controls h3 {
+      margin-top: 0;
+      font-size: 16px;
+      color: var(--text-color);
+    }
+    
+    .filter-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    
+    .filter-btn {
+      padding: 6px 12px;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    
+    .filter-btn:hover {
+      background-color: #f0f0f0;
+    }
+    
+    .filter-btn.active {
+      background-color: #4285f4;
+      color: white;
+      border-color: #3367d6;
+    }
+    
+    [data-theme="dark"] .filter-btn:hover {
+      background-color: #444;
+    }
+    
+    [data-theme="dark"] .filter-btn.active {
+      background-color: #4285f4;
+      color: white;
+    }
   </style>
   
   <script>
@@ -1234,6 +1497,70 @@ function M.format_coverage(coverage_data)
         root.setAttribute('data-theme', 'light');
       }
     }
+    
+    // Filter coverage display to show specific coverage states
+    function filterCoverage(filterType) {
+      // Update active button state
+      const buttons = document.querySelectorAll('.filter-btn');
+      buttons.forEach(btn => {
+        if (btn.dataset.filter === filterType) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      
+      // Apply filtering to all lines
+      const lines = document.querySelectorAll('.line');
+      
+      if (filterType === 'all') {
+        // Show all lines
+        lines.forEach(line => {
+          line.style.display = '';
+        });
+      } else {
+        // Filter to show only lines matching the selected coverage state
+        lines.forEach(line => {
+          if (line.classList.contains(filterType)) {
+            line.style.display = '';
+          } else {
+            // Special case: always show non-executable lines for context
+            if (line.classList.contains('non-executable')) {
+              line.style.display = '';
+            } else {
+              line.style.display = 'none';
+            }
+          }
+        });
+      }
+      
+      // Set active state on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        // Set "All" as the default active filter
+        const allButton = document.querySelector('.filter-btn[data-filter="all"]');
+        if (allButton) allButton.classList.add('active');
+      });
+    }
+    
+    // Add collapsible functionality for source blocks
+    function toggleBlock(blockId) {
+      const block = document.getElementById(blockId);
+      if (block) {
+        const isCollapsed = block.classList.toggle('collapsed');
+        
+        // Update all related elements with the same block ID
+        const relatedLines = document.querySelectorAll(`[data-block-id="${blockId}"]`);
+        relatedLines.forEach(line => {
+          if (line !== block) {
+            if (isCollapsed) {
+              line.style.display = 'none';
+            } else {
+              line.style.display = '';
+            }
+          }
+        });
+      }
+    }
   </script>
 </head>
 <body>
@@ -1245,6 +1572,17 @@ function M.format_coverage(coverage_data)
     
     <div class="summary">
       <h2>Summary</h2>
+      
+      <!-- Filter controls for coverage visualization -->
+      <div class="filter-controls">
+        <h3>Filter View</h3>
+        <div class="filter-buttons">
+          <button class="filter-btn" data-filter="all" onclick="filterCoverage('all')">All Coverage States</button>
+          <button class="filter-btn" data-filter="executed-not-covered" onclick="filterCoverage('executed-not-covered')">Show Executed-Not-Covered Only</button>
+          <button class="filter-btn" data-filter="uncovered" onclick="filterCoverage('uncovered')">Show Uncovered Only</button>
+          <button class="filter-btn" data-filter="covered" onclick="filterCoverage('covered')">Show Covered Only</button>
+        </div>
+      </div>
       
       <div class="summary-row">
         <span class="summary-label">Files:</span>
@@ -1383,10 +1721,15 @@ function M.format_coverage(coverage_data)
       html = html .. file_entry_html
       
       -- Add source code container (if source is available)
-      -- Get original file data from coverage_data
+      -- First try to get from original_files (backward compatibility)
       local original_file_data = coverage_data and 
                                 coverage_data.original_files and
                                 coverage_data.original_files[filename]
+      
+      -- If not found, use the file_data directly (new approach)
+      if not original_file_data or not original_file_data.source then
+        original_file_data = file_stats
+      end
       
       if original_file_data and original_file_data.source then
         html = html .. '<div class="source-code">'
@@ -1422,10 +1765,29 @@ function M.format_coverage(coverage_data)
         
         -- Display source with coverage highlighting
         for i, line_content in ipairs(lines) do
-          local is_covered = original_file_data.lines and original_file_data.lines[i] or false
+          -- Check coverage status
+          local is_covered = false
+          if original_file_data.lines and original_file_data.lines[i] then
+            -- If lines is a table of tables
+            if type(original_file_data.lines[i]) == "table" then
+              is_covered = original_file_data.lines[i].covered
+            else
+              -- If lines is a table of booleans (old format)
+              is_covered = original_file_data.lines[i]
+            end
+          end
           
           -- Check if line was executed (separate from covered)
-          local is_executed = original_file_data._executed_lines and original_file_data._executed_lines[i] or false
+          local is_executed = false
+          
+          -- Try different ways to get execution status
+          if original_file_data._executed_lines and original_file_data._executed_lines[i] then
+            is_executed = original_file_data._executed_lines[i]
+          elseif original_file_data.lines and original_file_data.lines[i] and 
+                 type(original_file_data.lines[i]) == "table" and original_file_data.lines[i].executed then
+            -- If new format with executed field
+            is_executed = original_file_data.lines[i].executed
+          end
           
           -- FIX: Default to non-executable instead of executable
           local is_executable = false -- Default to non-executable for safety
@@ -1434,6 +1796,12 @@ function M.format_coverage(coverage_data)
           if original_file_data.executable_lines and 
              original_file_data.executable_lines[i] ~= nil then
             is_executable = original_file_data.executable_lines[i]
+          elseif original_file_data.lines and 
+                 original_file_data.lines[i] and
+                 type(original_file_data.lines[i]) == "table" and
+                 original_file_data.lines[i].executable ~= nil then
+            -- If lines has executable field in the table
+            is_executable = original_file_data.lines[i].executable
           else
             -- If executability info is missing, use the map we built earlier
             is_executable = executable_lines[i] or false

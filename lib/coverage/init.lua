@@ -80,6 +80,52 @@ local function init_static_analyzer()
   return static_analyzer
 end
 
+-- Get file information from current stack frame
+-- This is a utility function that's useful for automatic line tracking
+local function get_caller_info(level)
+  level = level or 2 -- Default to the caller of the function that calls this
+  local info = debug.getinfo(level, "Sl")
+  if not info or not info.source or info.source:sub(1, 1) ~= "@" then
+    return nil, error_handler.validation_error(
+      "Unable to determine caller information",
+      {
+        level = level,
+        operation = "get_caller_info"
+      }
+    )
+  end
+  
+  local file_path = info.source:sub(2) -- Remove @ prefix
+  local line_num = info.currentline
+  
+  -- Validate the information
+  if not file_path or file_path == "" then
+    return nil, error_handler.validation_error(
+      "Unable to determine caller file path",
+      {
+        level = level,
+        operation = "get_caller_info"
+      }
+    )
+  end
+  
+  if not line_num or line_num <= 0 then
+    return nil, error_handler.validation_error(
+      "Unable to determine caller line number",
+      {
+        level = level,
+        file_path = file_path,
+        operation = "get_caller_info"
+      }
+    )
+  end
+  
+  return {
+    file_path = file_path,
+    line_num = line_num
+  }
+end
+
 -- Normalize file path with proper validation
 local function normalize_file_path(file_path)
   if type(file_path) ~= "string" then
@@ -420,7 +466,7 @@ function M.track_line(file_path, line_num)
   local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
   
   -- Enhanced logging to trace coverage issues
-  logger.info("Track line called", {
+  logger.debug("Track line called", {
     file_path = normalized_path,
     line_num = line_num,
     operation = "track_line"
@@ -461,20 +507,16 @@ function M.track_line(file_path, line_num)
     end
   end
   
-  -- Track the line as both executed and covered (validation)
+  -- Track the line using our enhanced track_line function
+  -- This handles both execution tracking AND coverage tracking
   local success, err = error_handler.try(function()
-    local track_result = debug_hook.track_line(normalized_path, line_num)
-    local exe_result = debug_hook.set_line_executable(normalized_path, line_num, true)
-    local cov_result = debug_hook.set_line_covered(normalized_path, line_num, true)
-    
-    -- Add line to the global covered_lines tracking
-    local normalized_key = fs.normalize_path(normalized_path)
-    local line_key = normalized_key .. ":" .. line_num
-    local coverage_data = debug_hook.get_coverage_data()
-    coverage_data.covered_lines[line_key] = true
-    coverage_data.executed_lines[line_key] = true
-    
-    return track_result and exe_result and cov_result
+    -- Use the debug_hook's track_line function directly which has been enhanced
+    -- to handle both execution and coverage with clear distinction
+    return debug_hook.track_line(normalized_path, line_num, {
+      is_executable = true,  -- Mark line as executable
+      is_covered = true,     -- Mark line as covered (validation)
+      operation = "track_line_direct"
+    })
   end)
   
   if not success then
@@ -489,6 +531,88 @@ function M.track_line(file_path, line_num)
   
   if not success then
     logger.error("Failed to activate file for line tracking: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  return true
+end
+
+-- Mark a line as covered (validated by assertions)
+-- This is a key function for explicitly marking lines that have been validated by assertions
+function M.mark_line_covered(file_path, line_num)
+  if not active or not config.enabled then
+    logger.debug("Coverage not active or disabled, ignoring mark_line_covered", {
+      file_path = file_path,
+      line_num = line_num
+    })
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" then
+    local err = error_handler.validation_error(
+      "File path must be a string",
+      {
+        provided_type = type(file_path),
+        operation = "mark_line_covered"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if type(line_num) ~= "number" then
+    local err = error_handler.validation_error(
+      "Line number must be a number",
+      {
+        provided_type = type(line_num),
+        operation = "mark_line_covered"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  if line_num <= 0 then
+    local err = error_handler.validation_error(
+      "Line number must be a positive number",
+      {
+        provided_value = line_num,
+        operation = "mark_line_covered"
+      }
+    )
+    logger.error(err.message, err.context)
+    return false, err
+  end
+  
+  -- Normalize path to prevent issues with path formatting (double slashes, etc.)
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  
+  -- Debug logging for tracking
+  logger.debug("Mark line as covered called", {
+    file_path = normalized_path,
+    line_num = line_num,
+    operation = "mark_line_covered",
+    source = "assertion_validation"
+  })
+  
+  -- Use the debug_hook's mark_line_covered function
+  local success, err = error_handler.try(function()
+    return debug_hook.mark_line_covered(normalized_path, line_num)
+  end)
+  
+  if not success then
+    logger.error("Failed to mark line as covered: " .. error_handler.format_error(err))
+    return false, err
+  end
+  
+  -- Make sure file is active for reporting
+  local success, err = error_handler.try(function()
+    return debug_hook.activate_file(normalized_path)
+  end)
+  
+  if not success then
+    logger.error("Failed to activate file for line coverage: " .. error_handler.format_error(err))
     return false, err
   end
   
@@ -1495,6 +1619,66 @@ function M.get_report_data()
   end
   
   return result
+end
+
+-- Check if a line has been executed
+-- This is a key function for the execution vs. coverage distinction
+function M.was_line_executed(file_path, line_num)
+  -- Return false if coverage is not active
+  if not active or not config.enabled then
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" or type(line_num) ~= "number" or line_num <= 0 then
+    return false
+  end
+  
+  -- Normalize path
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  
+  -- Use the debug_hook to check execution status
+  return debug_hook.was_line_executed(normalized_path, line_num)
+end
+
+-- Check if a line has been covered (validated by tests)
+-- This is a key function for the execution vs. coverage distinction
+function M.was_line_covered(file_path, line_num)
+  -- Return false if coverage is not active
+  if not active or not config.enabled then
+    return false
+  end
+  
+  -- Validate parameters
+  if type(file_path) ~= "string" or type(line_num) ~= "number" or line_num <= 0 then
+    return false
+  end
+  
+  -- Normalize path
+  local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
+  
+  -- Use the debug_hook to check coverage status
+  return debug_hook.was_line_covered(normalized_path, line_num)
+end
+
+-- Mark the current line as covered by extracting caller information
+-- This is convenient for assertions to automatically mark their caller lines as covered
+function M.mark_current_line_covered(level)
+  -- Return false if coverage is not active
+  if not active or not config.enabled then
+    return false
+  end
+  
+  -- Get caller information
+  level = level or 2 -- Default to the caller of this function
+  local caller_info, err = get_caller_info(level)
+  if not caller_info then
+    logger.debug("Failed to get caller info: " .. error_handler.format_error(err))
+    return false
+  end
+  
+  -- Mark the line as covered
+  return M.mark_line_covered(caller_info.file_path, caller_info.line_num)
 end
 
 return M
