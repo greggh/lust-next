@@ -48,7 +48,7 @@ Copy the `firmo.lua` file to your project and require it:
 
 ### Option 1: Expose all functions globally (new in v0.7.1)
 
-````lua
+```lua
 local firmo = require('firmo')
 firmo.expose_globals() -- Makes all test functions available globally
 describe('my project', function()
@@ -65,8 +65,7 @@ describe('my project', function()
     end)
   end)
 end)
-
-```text
+```
 
 ### Option 2: Import specific functions (traditional approach)
 
@@ -87,10 +86,10 @@ describe('my project', function()
     end)
   end)
 end)
-
-```text
+```
 
 ## Modular Reporting System
+
 firmo includes a powerful modular reporting system for generating coverage and quality reports:
 
 ```lua
@@ -114,10 +113,10 @@ firmo.quality_options.enabled = true
 firmo.quality_options.level = 3 -- Quality level (1-5)
 -- Generate quality report
 firmo.generate_quality_report("html", "./quality-report.html")
-
-```text
+```
 
 ### Report Formats
+
 The reporting system supports multiple output formats:
 
 - **HTML**: Visual reports with color-coded coverage information
@@ -126,6 +125,7 @@ The reporting system supports multiple output formats:
 - **Summary**: Text-based overview of results
 
 ### Robust Implementation
+
 The modular reporting architecture ensures reliable report generation:
 
 - Separation of concerns between data collection and reporting
@@ -135,14 +135,15 @@ The modular reporting architecture ensures reliable report generation:
 - Directory creation with multiple fallback methods
 
 ## Integration with hooks-util
+
 firmo is integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework, providing a standardized testing experience for Lua-based Neovim projects:
 
 ```lua
 -- From hooks-util, set up a project with firmo testing
 local firmo = require("hooks-util.firmo")
 firmo.setup_project("/path/to/your/project")
+```
 
-```text
 This integration provides:
 
 - Automatic test discovery and setup
@@ -150,11 +151,12 @@ This integration provides:
 - CI workflow generation for GitHub/GitLab/Azure
 - Pre-commit hook integration
 - Coverage and quality validation in pre-commit hooks
-See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using firmo with hooks-util.
+  See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using firmo with hooks-util.
 
 ## Upcoming Features
 
 ### Comprehensive Lua Code Quality Module
+
 We're developing a powerful Lua code quality module that goes beyond what existing tools like StyLua and Luacheck can do:
 
 - **Advanced Fixing Capabilities**: Automatically fix issues that other tools can only detect
@@ -163,9 +165,10 @@ We're developing a powerful Lua code quality module that goes beyond what existi
 - **Custom Fixers**: Special handling for multiline strings, unused variables, and more
 - **Flexible Configuration**: Adapt to different Lua codebases and style preferences
 - **hooks-util Integration**: Built into the hooks-util pre-commit system
-The quality module will be available as a standalone component as well as integrated with hooks-util.
+  The quality module will be available as a standalone component as well as integrated with hooks-util.
 
 ## Documentation
+
 Full documentation is available in the [docs](docs/) directory:
 
 - [Getting Started](docs/guides/getting-started.md) - Detailed guide for beginners
@@ -176,9 +179,10 @@ Full documentation is available in the [docs](docs/) directory:
 ### Core Functions
 
 #### `firmo.describe(name, func)`, `firmo.fdescribe(name, func)`, `firmo.xdescribe(name, func)`
+
 Used to declare a group of tests. Groups created using `describe` can be nested.
 
-```lua
+````lua
 describe("math operations", function()
   -- Regular test group - runs normally
 end)
@@ -225,17 +229,16 @@ describe("database tests", function()
     -- Test here
   end)
 end)
-
-```text
+````
 
 ### Assertions
+
 firmo uses "expect style" assertions that can be chained for readable tests:
 
 ```lua
 expect(value).to.equal(expected)
 expect(value).to_not.be.nil()
-
-```text
+```
 
 #### Basic Assertions
 
@@ -265,8 +268,7 @@ expect(table).to.contain.values({"one", "two"})
 expect(small_table).to.contain.subset(big_table)
 -- Check for exact key set
 expect(table).to.contain.exactly({"only", "these", "keys"})
-
-```text
+```
 
 ##### String Assertions
 
@@ -275,7 +277,7 @@ expect(table).to.contain.exactly({"only", "these", "keys"})
 expect(str).to.start_with("hello")
 expect(str).to.end_with("world")
 
-```text
+```
 
 ##### Type Assertions
 
@@ -284,8 +286,7 @@ expect(str).to.end_with("world")
 expect(fn).to.be_type("callable")  -- Function or callable table
 expect(num).to.be_type("comparable")  -- Can use < operator
 expect(table).to.be_type("iterable")  -- Can iterate with pairs()
-
-```text
+```
 
 ##### Numeric Assertions
 
@@ -295,8 +296,7 @@ expect(value).to.be_greater_than(minimum)
 expect(value).to.be_less_than(maximum)
 expect(value).to.be_between(min, max)  -- Inclusive
 expect(value).to.be_approximately(target, delta)
-
-```text
+```
 
 ##### Error Assertions
 
@@ -305,10 +305,10 @@ expect(value).to.be_approximately(target, delta)
 expect(function_that_throws).to.throw.error()
 expect(function_that_throws).to.throw.error_matching("pattern")
 expect(function_that_throws).to.throw.error_type("string")
-
-```text
+```
 
 ### Spies
+
 Spies track function calls and their arguments:
 
 ```lua
@@ -316,10 +316,10 @@ local spy = firmo.spy(myFunction)
 spy(1, 2, 3)
 expect(#spy).to.equal(1)
 expect(spy[1][1]).to.equal(1)
-
-```text
+```
 
 ### Custom Assertions
+
 You can add custom assertions:
 
 ```lua
@@ -332,12 +332,12 @@ firmo.paths.empty = {
 }
 table.insert(firmo.paths.be, 'empty')
 expect({}).to.be.empty()
-
-```text
+```
 
 ### New Features
 
 #### Output Formatting
+
 Configure the test output format to your preference:
 
 ```lua
@@ -354,8 +354,8 @@ firmo.format({
 })
 -- Or disable colors
 firmo.nocolor()
+```
 
-```text
 Available command-line options when running tests:
 
 ```bash
@@ -373,10 +373,10 @@ lua firmo.lua --indent 4         # Use 4 spaces for indentation
 
 # Disable colors
 lua firmo.lua --no-color
-
-```text
+```
 
 #### Focused and Excluded Tests
+
 Run only specific tests using focus and exclude features:
 
 ```lua
@@ -397,20 +397,21 @@ describe("other module", function()
     -- This test runs because it's focused
   end)
 })
+```
 
-```text
 When any `fdescribe` or `fit` is present, firmo enters "focus mode" where only focused tests run. This is useful for working on a specific feature or debugging a failure.
 
 #### Automatic Test Discovery
+
 Automatically find and run all test files:
 
 ```lua
 -- Run all test files in the current directory and subdirectories
 firmo.run_discovered(".")
-
-```text
+```
 
 #### Module Reset Utilities
+
 Ensure clean state between tests with module reset utilities:
 
 ```lua
@@ -435,8 +436,8 @@ firmo.with_fresh_module("path.to.module", function(mod)
   mod.function_call()
   expect(mod.result).to.equal(expected)
 end)
+```
 
-```text
 The module reset utilities provide several benefits:
 
 - Ensures each test runs with a fresh module state
@@ -445,6 +446,7 @@ The module reset utilities provide several benefits:
 - Automatically available as globals with `expose_globals()`
 
 #### Test Filtering and Tagging
+
 Tag tests and run only specific tags:
 
 ```lua
@@ -471,8 +473,8 @@ firmo.reset_filters()
 -- Command line filtering (when running directly)
 -- lua firmo.lua --tags unit,math
 -- lua firmo.lua --filter "addition"
+```
 
-```text
 You can use the filtering system to run specific subsets of your tests:
 
 ```lua
@@ -483,10 +485,10 @@ firmo.run_discovered("./tests", "*_test.lua", {
 })
 -- Run filtered tests from CLI
 -- lua firmo.lua --dir ./tests --tags unit,fast --filter calculation
-
-```text
+```
 
 #### Async Testing
+
 Test asynchronous code with await/async:
 
 ```lua
@@ -543,8 +545,8 @@ it_async("handles parallel operations", function()
   expect(results[2]).to.equal("op2 result")
   expect(results[3]).to.equal("op3 result")
 end)
+```
 
-```text
 Key async features:
 
 - `firmo.async(fn, timeout)` - Wraps a function to be executed asynchronously
@@ -555,6 +557,7 @@ Key async features:
 - `firmo.set_timeout(ms)` - Sets the default timeout for async tests
 
 #### Mocking
+
 Create and manage mocks with a comprehensive mocking system:
 
 ```lua
@@ -607,8 +610,8 @@ firmo.with_mocks(function(mock)
   api_mock:verify_expectations()
   -- No need to restore - happens automatically
 end)
+```
 
-```text
 The enhanced mocking system includes:
 
 - **Spies**: Track function calls without changing behavior
@@ -623,6 +626,7 @@ The enhanced mocking system includes:
 ## Installation
 
 ### Method 1: Direct File
+
 Simply copy `firmo.lua` into your project directory:
 
 ```bash
@@ -633,27 +637,23 @@ curl -O https://raw.githubusercontent.com/greggh/firmo/main/firmo.lua
 # Or clone and copy
 git clone https://github.com/greggh/firmo.git
 cp firmo/firmo.lua your-project/
-
-```text
+```
 
 ### Method 2: LuaRocks
 
 ```bash
 luarocks install firmo
-
-```text
+```
 
 ### Method 3: As a Git Submodule
 
 ```bash
-
 # Add as submodule
 git submodule add https://github.com/greggh/firmo.git deps/firmo
 
 # Update your package path in your main Lua file
 package.path = package.path .. ";./deps/firmo/?.lua"
-
-```text
+```
 
 ### Method 4: With [packer.nvim](https://github.com/wbthomason/packer.nvim)
 
@@ -663,8 +663,7 @@ use {
   ft = 'lua',
   cmd = { 'FirmoRun' }
 }
-
-```text
+```
 
 ### Method 5: With [lazy.nvim](https://github.com/folke/lazy.nvim)
 
@@ -674,32 +673,34 @@ use {
   ft = 'lua',
   cmd = { 'FirmoRun' },
 }
-
-```text
+```
 
 ## Usage with Non-Console Environments
+
 If Lua is embedded in an application without ANSI color support:
 
 ```lua
 local firmo = require('firmo').nocolor()
-
-```text
+```
 
 ## Contributing
+
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
+
 MIT, see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
+
 firmo builds on the original [Lust](https://github.com/bjornbytes/lust) testing framework and takes inspiration from several excellent Lua testing libraries:
 
 - [lunarmodules/busted](https://github.com/lunarmodules/busted) - A powerful, flexible testing framework with rich features
 - [lunarmodules/luassert](https://github.com/lunarmodules/luassert) - An extensible assertion library with advanced matching capabilities
-We're grateful to these projects for advancing the state of Lua testing and providing inspiration for firmo's enhanced features.
+  We're grateful to these projects for advancing the state of Lua testing and providing inspiration for firmo's enhanced features.
+
 ---
+
 <div align="center">
   <p>Made with ❤️ by <a href="https://github.com/greggh">Gregg Housh</a></p>
 </div>
-
-````
