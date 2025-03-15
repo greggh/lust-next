@@ -43,7 +43,6 @@ $RECYCLE.BIN/
 
 # Dependency directories
 node_modules/
-vendor/
 .bundle/
 bower_components/
 jspm_packages/
