@@ -24,6 +24,7 @@ benchmark.options = {
 
 -- Return high-resolution time (with nanosecond precision if available)
 local has_socket, socket = pcall(require, "socket")
+---@diagnostic disable-next-line: unused-local
 local has_ffi, ffi = pcall(require, "ffi")
 
 local function high_res_time()
@@ -125,6 +126,7 @@ function benchmark.measure(func, args, options)
   }
 
   -- Warmup phase
+  ---@diagnostic disable-next-line: unused-local
   for i = 1, warmup do
     if gc_before then
       collectgarbage("collect")
@@ -148,6 +150,7 @@ function benchmark.measure(func, args, options)
   end
 
   -- Main benchmark phase
+  ---@diagnostic disable-next-line: unused-local
   for i = 1, iterations do
     if gc_before then
       collectgarbage("collect")
@@ -241,10 +244,12 @@ end
 -- Print benchmark results
 function benchmark.print_result(result, options)
   options = options or {}
+  ---@diagnostic disable-next-line: unused-local
   local precision = options.precision or benchmark.options.precision
   local report_memory = (options.report_memory ~= nil) and options.report_memory or benchmark.options.report_memory
   local report_stats = (options.report_stats ~= nil) and options.report_stats or benchmark.options.report_stats
 
+  ---@diagnostic disable-next-line: unused-local
   local label = result.label or "Benchmark"
 
   -- Basic execution time
@@ -443,6 +448,7 @@ print(
 local function run_tests_with_isolation(suite_dir, iterations)
   collectgarbage("collect")
 
+  ---@diagnostic disable-next-line: undefined-global
   if module_reset_loaded then
     firmo.module_reset.configure({
       reset_modules = true,
@@ -479,6 +485,7 @@ end
 local function run_tests_without_isolation(suite_dir, iterations)
   collectgarbage("collect")
 
+  ---@diagnostic disable-next-line: undefined-global
   if module_reset_loaded then
     firmo.module_reset.configure({
       reset_modules = false,

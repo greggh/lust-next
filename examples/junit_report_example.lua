@@ -2,7 +2,7 @@
 -- Example demonstrating JUnit XML reporting for CI integration
 
 -- Make sure we're using firmo with globals
-local firmo = require('../firmo')
+local firmo = require('firmo')
 firmo.expose_globals()
 
 -- Optional: Try to load reporting module directly

@@ -1,10 +1,11 @@
 -- Example to demonstrate coverage tracking
-local firmo = require('firmo')
-local coverage = require("lib.coverage")  -- Directly reference the coverage module
+local firmo = require("firmo")
+local coverage = require("lib.coverage") -- Directly reference the coverage module
 
 -- OS detection helper function
+---@diagnostic disable-next-line: lowercase-global
 function is_windows()
-  return package.config:sub(1,1) == '\\'
+  return package.config:sub(1, 1) == "\\"
 end
 
 -- Expose the test functions and assertions
@@ -30,7 +31,7 @@ example_module.categorize_number = function(n)
   if type(n) ~= "number" then
     return "not a number"
   end
-  
+
   if n < 0 then
     return "negative"
   elseif n == 0 then
@@ -57,7 +58,7 @@ describe("Example module coverage demo", function()
     expect(example_module.is_even(1)).to.equal(false)
     expect(example_module.is_even(3)).to.equal(false)
   end)
-  
+
   -- Test is_odd
   it("should correctly identify odd numbers", function()
     expect(example_module.is_odd(1)).to.equal(true)
@@ -66,7 +67,7 @@ describe("Example module coverage demo", function()
     expect(example_module.is_odd(4)).to.equal(false)
     expect(example_module.is_odd(0)).to.equal(false)
   end)
-  
+
   -- Test categorize_number (partially)
   describe("categorize_number", function()
     it("should handle non-numbers", function()
@@ -74,40 +75,40 @@ describe("Example module coverage demo", function()
       expect(example_module.categorize_number({})).to.equal("not a number")
       expect(example_module.categorize_number(nil)).to.equal("not a number")
     end)
-    
+
     it("should identify negative numbers", function()
       expect(example_module.categorize_number(-1)).to.equal("negative")
       expect(example_module.categorize_number(-10)).to.equal("negative")
     end)
-    
+
     it("should identify zero", function()
       expect(example_module.categorize_number(0)).to.equal("zero")
     end)
-    
+
     -- Note: We don't test the "small positive" or "large positive" branches
     -- This will show up as incomplete coverage
   end)
-  
+
   -- Note: We don't test the unused_function at all
   -- This will show up as a completely uncovered function
 end)
 
 -- Enable coverage with comprehensive options
 firmo.coverage_options = {
-  enabled = true,                   -- Enable coverage tracking
-  source_dirs = {".", "examples"}, -- Directories to scan for source files
-  discover_uncovered = true,        -- Find files that aren't executed by tests
-  debug = true,                     -- Enable verbose debug output
-  threshold = 70,                   -- Set coverage threshold to 70%
-  
+  enabled = true, -- Enable coverage tracking
+  source_dirs = { ".", "examples" }, -- Directories to scan for source files
+  discover_uncovered = true, -- Find files that aren't executed by tests
+  debug = true, -- Enable verbose debug output
+  threshold = 70, -- Set coverage threshold to 70%
+
   -- Override default patterns to focus just on example files
-  use_default_patterns = false,     -- Don't use default patterns
+  use_default_patterns = false, -- Don't use default patterns
   include = {
-    "examples/*.lua",              -- Include just files in examples directory
+    "examples/*.lua", -- Include just files in examples directory
   },
   exclude = {
-    "examples/*_test.lua",         -- Exclude test files
-  }
+    "examples/*_test.lua", -- Exclude test files
+  },
 }
 
 -- Initialize and start coverage tracking
@@ -115,7 +116,7 @@ coverage.init({
   enabled = true,
   debug = true,
   discover_uncovered = true,
-  threshold = 70
+  threshold = 70,
 })
 
 -- Start tracking coverage
@@ -133,15 +134,19 @@ local is_even_results = {
   { value = 4, expected = true },
   { value = 0, expected = true },
   { value = 1, expected = false },
-  { value = 3, expected = false }
+  { value = 3, expected = false },
 }
 
 for _, test in ipairs(is_even_results) do
   local result = example_module.is_even(test.value)
-  print(string.format("  is_even(%d) -> %s - %s", 
-                      test.value, 
-                      tostring(result), 
-                      result == test.expected and "PASS" or "FAIL"))
+  print(
+    string.format(
+      "  is_even(%d) -> %s - %s",
+      test.value,
+      tostring(result),
+      result == test.expected and "PASS" or "FAIL"
+    )
+  )
 end
 
 -- Run tests for is_odd function
@@ -151,15 +156,14 @@ local is_odd_results = {
   { value = 3, expected = true },
   { value = 2, expected = false },
   { value = 4, expected = false },
-  { value = 0, expected = false }
+  { value = 0, expected = false },
 }
 
 for _, test in ipairs(is_odd_results) do
   local result = example_module.is_odd(test.value)
-  print(string.format("  is_odd(%d) -> %s - %s", 
-                      test.value, 
-                      tostring(result), 
-                      result == test.expected and "PASS" or "FAIL"))
+  print(
+    string.format("  is_odd(%d) -> %s - %s", test.value, tostring(result), result == test.expected and "PASS" or "FAIL")
+  )
 end
 
 -- Run tests for categorize_number function
@@ -172,15 +176,19 @@ local categorize_results = {
   { value = -10, expected = "negative" },
   { value = 0, expected = "zero" },
   { value = 5, expected = "small positive" },
-  { value = 15, expected = "large positive" }
+  { value = 15, expected = "large positive" },
 }
 
 for _, test in ipairs(categorize_results) do
   local result = example_module.categorize_number(test.value)
-  print(string.format("  categorize_number(%s) -> %s - %s", 
-                      tostring(test.value), 
-                      tostring(result), 
-                      result == test.expected and "PASS" or "FAIL"))
+  print(
+    string.format(
+      "  categorize_number(%s) -> %s - %s",
+      tostring(test.value),
+      tostring(result),
+      result == test.expected and "PASS" or "FAIL"
+    )
+  )
 end
 
 -- Stop coverage tracking
@@ -197,10 +205,10 @@ if coverage then
   -- Generate detailed HTML report
   local html_path = "/tmp/coverage_example_report.html"
   local success = coverage.save_report(html_path, "html")
-  
+
   if success then
     print("\nHTML coverage report saved to: " .. html_path)
-    
+
     -- Try to open the report in the browser automatically
     if is_windows() then
       os.execute('start "" "' .. html_path .. '"')
@@ -211,7 +219,7 @@ if coverage then
       end
       print("(Report should open automatically in browser)")
     end
-    
+
     -- Also save in the standard location
     local standard_path = "./coverage-reports/coverage-example.html"
     coverage.save_report(standard_path, "html")
@@ -219,7 +227,7 @@ if coverage then
   else
     print("Failed to generate HTML report")
   end
-  
+
   -- Check if we meet the coverage threshold
   local report_data = coverage.get_report_data()
   if report_data and report_data.summary.overall_percent >= 70 then
@@ -235,6 +243,6 @@ end
 
 -- Run this example with coverage enabled:
 -- lua examples/coverage_example.lua
--- 
+--
 -- Or from command line:
 -- lua firmo.lua --coverage --discover-uncovered=true --source-dirs=".,examples" examples/coverage_example.lu

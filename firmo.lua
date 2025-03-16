@@ -21,6 +21,7 @@ local assertion = require("lib.assertion")
 
 -- Try to require optional modules
 local function try_require(name)
+  ---@diagnostic disable-next-line: unused-local
   local success, mod, err = error_handler.try(function()
     return require(name)
   end)
@@ -68,6 +69,7 @@ if not logging then
     { module = "firmo" }
   )
 end
+---@diagnostic disable-next-line: need-check-nil
 local logger = logging.get_logger("firmo-core")
 
 -- Optional modules for advanced features
@@ -76,6 +78,7 @@ local quality = try_require("lib.quality")
 local codefix = try_require("lib.tools.codefix")
 local reporting = try_require("lib.reporting")
 local watcher = try_require("lib.tools.watcher")
+---@diagnostic disable-next-line: unused-local
 local json = try_require("lib.reporting.json")
 local type_checking = try_require("lib.core.type_checking")
 local async_module = try_require("lib.async")
@@ -88,6 +91,7 @@ local module_reset_module = try_require("lib.core.module_reset")
 
 -- Configure logging (now a required component)
 local success, err = error_handler.try(function()
+  ---@diagnostic disable-next-line: need-check-nil
   logging.configure_from_config("firmo-core")
 end)
 
@@ -322,6 +326,7 @@ if discover_module then
       local files = {}
 
       local content, read_err = error_handler.safe_io_operation(function()
+        ---@diagnostic disable-next-line: need-check-nil
         return fs.read_file("firmo_temp_files.txt")
       end, "firmo_temp_files.txt", { operation = "read_temp_file", context = "discover" })
 
@@ -399,8 +404,10 @@ if discover_module then
     })
 
     -- Load the test file using error_handler.try
+    ---@diagnostic disable-next-line: unused-local
     local success, result, load_err = error_handler.try(function()
       -- First check if the file exists
+      ---@diagnostic disable-next-line: need-check-nil
       local exists, exists_err = fs.file_exists(file)
       if not exists then
         return nil, error_handler.io_error("Test file does not exist", {
@@ -924,7 +931,9 @@ firmo.format_options = {
 local red = string.char(27) .. "[31m"
 local green = string.char(27) .. "[32m"
 local yellow = string.char(27) .. "[33m"
+---@diagnostic disable-next-line: unused-local
 local blue = string.char(27) .. "[34m"
+---@diagnostic disable-next-line: unused-local
 local magenta = string.char(27) .. "[35m"
 local cyan = string.char(27) .. "[36m"
 local normal = string.char(27) .. "[0m"
@@ -948,6 +957,7 @@ function firmo.nocolor()
   -- Apply change with error handling in case of any terminal-related issues
   local success, err = error_handler.try(function()
     firmo.format_options.use_color = false
+    ---@diagnostic disable-next-line: unused-local
     red, green, yellow, blue, magenta, cyan, normal = "", "", "", "", "", "", ""
     return true
   end)
@@ -1061,12 +1071,15 @@ function firmo.format(options)
     if not firmo.format_options.use_color then
       -- Call nocolor but catch errors explicitly here
       firmo.format_options.use_color = false
+      ---@diagnostic disable-next-line: unused-local
       red, green, yellow, blue, magenta, cyan, normal = "", "", "", "", "", "", ""
     else
       red = string.char(27) .. "[31m"
       green = string.char(27) .. "[32m"
       yellow = string.char(27) .. "[33m"
+      ---@diagnostic disable-next-line: unused-local
       blue = string.char(27) .. "[34m"
+      ---@diagnostic disable-next-line: unused-local
       magenta = string.char(27) .. "[35m"
       cyan = string.char(27) .. "[36m"
       normal = string.char(27) .. "[0m"
@@ -1219,6 +1232,7 @@ function firmo.describe(name, fn, options)
   end
 
   -- Store the current focus state at this level
+  ---@diagnostic disable-next-line: unused-local
   local prev_focused = options._parent_focused or focused
 
   -- Run the function with improved error handling
@@ -1342,6 +1356,7 @@ function firmo.fdescribe(name, fn)
     name = name,
   })
 
+  ---@diagnostic disable-next-line: unused-local
   local success, result, err = error_handler.try(function()
     return firmo.describe(name, fn, { focused = true })
   end)
@@ -1417,6 +1432,7 @@ function firmo.xdescribe(name, fn)
     name = name,
   })
 
+  ---@diagnostic disable-next-line: unused-local
   local success, result, err = error_handler.try(function()
     -- Use an empty function to ensure none of the tests within it ever run
     -- This is more robust than just marking it excluded
@@ -1606,6 +1622,7 @@ function firmo.filter(pattern)
   local success, err = error_handler.try(function()
     -- Verify the pattern is a valid Lua pattern
     -- This may raise an error if the pattern is invalid
+    ---@diagnostic disable-next-line: discard-returns
     string.match("test", pattern)
 
     firmo.filter_pattern = pattern
@@ -1725,6 +1742,7 @@ local function should_run_test(name, tags)
   end
 
   -- Use error_handler.try for the implementation
+  ---@diagnostic disable-next-line: unused-local
   local success, result, err = error_handler.try(function()
     -- If no filters are set, run everything
     if #firmo.active_tags == 0 and not firmo.filter_pattern then
@@ -2205,6 +2223,7 @@ function firmo.fit(name, fn)
     name = name,
   })
 
+  ---@diagnostic disable-next-line: unused-local
   local success, result, err = error_handler.try(function()
     return firmo.it(name, fn, { focused = true })
   end)
@@ -2280,6 +2299,7 @@ function firmo.xit(name, fn)
     name = name,
   })
 
+  ---@diagnostic disable-next-line: unused-local
   local success, result, err = error_handler.try(function()
     -- Important: Replace the function with a dummy that never runs
     -- This ensures the test is completely skipped, not just filtered
@@ -2305,14 +2325,17 @@ function firmo.xit(name, fn)
 end
 
 -- Asynchronous version of it
+---@diagnostic disable-next-line: unused-local
 function firmo.it_async(name, fn, timeout)
   if not async_module then
     error("it_async requires the async module to be available", 2)
   end
 
   -- Delegate to the async module for the implementation
+  ---@diagnostic disable-next-line: redundant-parameter
   local async_fn = firmo.async(fn)
   return firmo.it(name, function()
+    ---@diagnostic disable-next-line: need-check-nil
     return async_fn()()
   end)
 end
@@ -2342,6 +2365,7 @@ end
 
 -- Using assertion module's paths table
 -- Export assertion paths for plugins and extensions
+---@diagnostic disable-next-line: unused-local
 local paths = assertion.paths
 
 function firmo.expect(v)
@@ -2769,6 +2793,7 @@ local module = setmetatable({
           end
 
           -- Check all interface keys
+          ---@diagnostic disable-next-line: unused-local
           for key, expected in pairs(interface) do
             if object[key] == nil then
               error(message or ("Object missing required property: " .. key), 2)
@@ -2859,6 +2884,7 @@ local module = setmetatable({
   end,
 
   -- Main entry point when called
+  ---@diagnostic disable-next-line: unused-vararg
   __call = function(_, ...)
     -- Check if we are running tests directly or just being required
     local info = debug.getinfo(2, "S")

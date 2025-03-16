@@ -780,7 +780,7 @@ function runner.main(args)
   local firmo_loaded, firmo = pcall(require, "firmo")
   if not firmo_loaded then
     -- Try again with relative path
-    firmo_loaded, firmo = pcall(require, "../firmo")
+    firmo_loaded, firmo = pcall(require, "firmo")
     if not firmo_loaded then
       logger.error("Failed to load firmo", { error = error_handler.format_error(firmo) })
       return false

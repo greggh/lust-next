@@ -20,7 +20,7 @@ local logger
 if logging then
   logger = logging.get_logger("config")
   logger.warn("DEPRECATED: lib.core.config module is deprecated and will be removed in a future version", {
-    recommendation = "Use lib.core.central_config directly instead"
+    recommendation = "Use lib.core.central_config directly instead",
   })
 else
   print("WARNING: lib.core.config module is deprecated and will be removed in a future version.")
@@ -31,7 +31,7 @@ end
 if not central_config then
   if logger then
     logger.error("Cannot load central_config module - please ensure it exists", {
-      file = "lib/core/central_config.lua"
+      file = "lib/core/central_config.lua",
     })
   else
     print("ERROR: Cannot load central_config module. Please ensure lib/core/central_config.lua exists.")
@@ -50,7 +50,7 @@ local function forward_to_central_config()
       config[name] = function(...)
         if logger then
           logger.debug("Forwarding deprecated call to central_config", {
-            method = name
+            method = name,
           })
         end
         return func(...)
@@ -69,21 +69,21 @@ config.load_from_file = central_config.load_from_file
 config.apply_to_firmo = function(firmo)
   if logger then
     logger.warn("DEPRECATED: config.apply_to_firmo is deprecated", {
-      recommendation = "Update your code to use central_config directly"
+      recommendation = "Update your code to use central_config directly",
     })
   end
-  
+
   -- We still need to apply the configuration to maintain compatibility
   if not firmo then
     error("Cannot apply configuration: firmo is nil", 2)
   end
-  
+
   -- Load config if not already loaded
   local cfg = config.get()
   if not cfg then
     return firmo
   end
-  
+
   -- Apply test discovery configuration
   if cfg.test_discovery then
     firmo.test_discovery = firmo.test_discovery or {}
@@ -91,7 +91,7 @@ config.apply_to_firmo = function(firmo)
       firmo.test_discovery[k] = v
     end
   end
-  
+
   -- Apply format options
   if cfg.format then
     if firmo.format_options then
@@ -101,7 +101,7 @@ config.apply_to_firmo = function(firmo)
         end
       end
     end
-    
+
     -- Apply default format if specified
     if cfg.format.default_format and firmo.format then
       firmo.format({
@@ -110,30 +110,30 @@ config.apply_to_firmo = function(firmo)
         summary_only = cfg.format.default_format == "summary",
         show_success_detail = cfg.format.default_format == "detailed",
         show_trace = cfg.format.default_format == "detailed",
-        use_color = cfg.format.default_format ~= "plain"
+        use_color = cfg.format.default_format ~= "plain",
       })
     end
   end
-  
+
   -- Apply async configuration
   if cfg.async and firmo.async_options then
     for k, v in pairs(cfg.async) do
       firmo.async_options[k] = v
     end
-    
+
     -- Configure the async module with our options
     if firmo.async_module and firmo.async_module.set_timeout and cfg.async.timeout then
       firmo.async_module.set_timeout(cfg.async.timeout)
     end
   end
-  
+
   -- Apply parallel execution configuration
   if cfg.parallel and firmo.parallel and firmo.parallel.options then
     for k, v in pairs(cfg.parallel) do
       firmo.parallel.options[k] = v
     end
   end
-  
+
   -- Apply coverage configuration
   if cfg.coverage and firmo.coverage_options then
     -- Handle coverage settings in a compatible way
@@ -142,27 +142,27 @@ config.apply_to_firmo = function(firmo)
         firmo.coverage_options[k] = v
       end
     end
-    
+
     -- Handle special cases for arrays
-    for _, key in ipairs({"include", "exclude", "source_dirs"}) do
+    for _, key in ipairs({ "include", "exclude", "source_dirs" }) do
       if cfg.coverage[key] then
         firmo.coverage_options[key] = cfg.coverage[key]
       end
     end
-    
+
     -- Update coverage module if available
     if firmo.coverage_module and firmo.coverage_module.init then
       firmo.coverage_module.init(firmo.coverage_options)
     end
   end
-  
+
   -- Apply quality configuration
   if cfg.quality and firmo.quality_options then
     for k, v in pairs(cfg.quality) do
       firmo.quality_options[k] = v
     end
   end
-  
+
   -- Apply other module configurations
   for module_name, module_config in pairs(cfg) do
     if module_name == "logging" and firmo.logging and type(firmo.logging.configure) == "function" then
@@ -207,7 +207,7 @@ config.apply_to_firmo = function(firmo)
           firmo.module_reset[k] = v
         end
       end
-      
+
       -- Handle arrays separately
       if module_config.protected_modules and #module_config.protected_modules > 0 then
         for _, mod in ipairs(module_config.protected_modules) do
@@ -216,7 +216,7 @@ config.apply_to_firmo = function(firmo)
           end
         end
       end
-      
+
       if module_config.exclude_patterns and #module_config.exclude_patterns > 0 then
         for _, pattern in ipairs(module_config.exclude_patterns) do
           if firmo.module_reset.add_exclude_pattern then
@@ -226,55 +226,55 @@ config.apply_to_firmo = function(firmo)
       end
     end
   end
-  
+
   return firmo
 end
 
 config.register_with_firmo = function(firmo)
   if logger then
     logger.warn("DEPRECATED: config.register_with_firmo is deprecated", {
-      recommendation = "Update your code to use central_config directly"
+      recommendation = "Update your code to use central_config directly",
     })
   end
-  
+
   -- Store reference to firmo
   config.firmo = firmo
-  
+
   -- Register firmo version with central_config
   central_config.register_module("firmo", {
     field_types = {
-      version = "string"
-    }
+      version = "string",
+    },
   }, {
-    version = firmo.version
+    version = firmo.version,
   })
-  
+
   -- Add config functionality to firmo
   firmo.config = config
-  
+
   -- Apply configuration from .firmo-config.lua if exists
   config.apply_to_firmo(firmo)
-  
+
   -- Add CLI options for configuration
   local original_parse_args = firmo.parse_args
   if original_parse_args then
     firmo.parse_args = function(args)
       local options = original_parse_args(args)
-      
+
       -- Check for config file option
       local i = 1
       while i <= #args do
         local arg = args[i]
-        if arg == "--config" and args[i+1] then
+        if arg == "--config" and args[i + 1] then
           -- Load the specified config file
-          local config_path = args[i+1]
+          local config_path = args[i + 1]
           local user_config, err = central_config.load_from_file(config_path)
-          
+
           if not user_config then
             if logger then
               logger.warn("Failed to load config file", {
                 path = config_path,
-                error = err and err.message or "unknown error"
+                error = err and err.message or "unknown error",
               })
             else
               print("Warning: Failed to load config file: " .. config_path)
@@ -288,31 +288,32 @@ config.register_with_firmo = function(firmo)
           i = i + 1
         end
       end
-      
+
       -- Process CLI args as config options
       central_config.configure_from_options(options)
-      
+
       return options
     end
   end
-  
+
   -- Extend help text to include config options
   local original_show_help = firmo.show_help
   if original_show_help then
     firmo.show_help = function()
       original_show_help()
-      
+
       print("\nConfiguration Options:")
       print("  --config FILE             Use the specified configuration file instead of .firmo-config.lua")
       print("  --create-config           Create a default configuration file at .firmo-config.lua")
     end
   end
-  
+
   -- Add CLI command to create a default config file
   local original_cli_run = firmo.cli_run
   if original_cli_run then
     firmo.cli_run = function(args)
       -- Check for create-config option
+      ---@diagnostic disable-next-line: unused-local
       for i, arg in ipairs(args) do
         if arg == "--create-config" then
           -- Create a default config file
@@ -320,19 +321,19 @@ config.register_with_firmo = function(firmo)
           return true
         end
       end
-      
+
       -- Call the original cli_run
       return original_cli_run(args)
     end
   end
-  
+
   return firmo
 end
 
 config.create_default_config = function()
   if logger then
     logger.warn("DEPRECATED: config.create_default_config is deprecated", {
-      recommendation = "Use central_config.save_to_file() instead"
+      recommendation = "Use central_config.save_to_file() instead",
     })
   end
   return central_config.save_to_file()

@@ -1,19 +1,21 @@
 -- Schema validation test suite
 local firmo = require("firmo")
 local expect = firmo.expect
-3:16:local expect = firmo.expect
 local it = firmo.it
+---@diagnostic disable-next-line: unused-local
 local before = firmo.before
-local after = firmo.after
+---@diagnostic disable-next-line: unused-local
 local after = firmo.after
 
 -- Import modules
 local reporting = require("lib.reporting")
+---@diagnostic disable-next-line: unused-local
 local validation
 
 -- Try to load validation module directly
 local ok, module = pcall(require, "lib.reporting.validation")
 if ok then
+  ---@diagnostic disable-next-line: unused-local
   validation = module
 end
 
@@ -33,22 +35,22 @@ local function create_mock_coverage_data(valid)
       covered_lines = 120,
       line_coverage_percent = 80.0,
       function_coverage_percent = 80.0,
-      overall_percent = 80.0
+      overall_percent = 80.0,
     },
     files = {
       ["/path/to/example.lua"] = {
         total_lines = 100,
         covered_lines = 80,
         line_coverage_percent = 80.0,
-        function_coverage_percent = 80.0
+        function_coverage_percent = 80.0,
       },
       ["/path/to/another.lua"] = {
         total_lines = 50,
         covered_lines = 40,
         line_coverage_percent = 80.0,
-        function_coverage_percent = 80.0
-      }
-    }
+        function_coverage_percent = 80.0,
+      },
+    },
   }
 
   -- If we want invalid data, introduce schema violations
@@ -75,7 +77,7 @@ local function create_mock_test_results_data(valid)
         name = "test_one",
         classname = "TestClass",
         time = 0.1,
-        status = "pass"
+        status = "pass",
       },
       {
         name = "test_two",
@@ -85,10 +87,10 @@ local function create_mock_test_results_data(valid)
         failure = {
           message = "Assertion failed",
           type = "AssertionError",
-          details = "Expected 5, got 4"
-        }
-      }
-    }
+          details = "Expected 5, got 4",
+        },
+      },
+    },
   }
 
   -- If we want invalid data, introduce schema violations
@@ -104,9 +106,9 @@ end
 local function create_mock_formatted_output(format, valid)
   if format == "html" then
     if valid then
-      return '<!DOCTYPE html><html><head><title>Coverage Report</title></head><body></body></html>'
+      return "<!DOCTYPE html><html><head><title>Coverage Report</title></head><body></body></html>"
     else
-      return '<wrong>Invalid HTML</wrong>'
+      return "<wrong>Invalid HTML</wrong>"
     end
   elseif format == "json" then
     if valid then
@@ -115,26 +117,26 @@ local function create_mock_formatted_output(format, valid)
           ["/path/to/file.lua"] = {
             total_lines = 100,
             covered_lines = 80,
-            line_coverage_percent = 80.0
-          }
+            line_coverage_percent = 80.0,
+          },
         },
         summary = {
           total_files = 1,
           total_lines = 100,
           covered_lines = 80,
-          line_coverage_percent = 80.0
-        }
+          line_coverage_percent = 80.0,
+        },
       }
     else
       return {
-        wrong_key = "Invalid JSON structure"
+        wrong_key = "Invalid JSON structure",
       }
     end
   elseif format == "lcov" then
     if valid then
-      return 'TN:lcov\nSF:/path/to/file.lua\nDA:1,1\nend_of_record'
+      return "TN:lcov\nSF:/path/to/file.lua\nDA:1,1\nend_of_record"
     else
-      return 'INVALID:lcov\nInvalid LCOV format'
+      return "INVALID:lcov\nInvalid LCOV format"
     end
   end
 

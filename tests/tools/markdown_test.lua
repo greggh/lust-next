@@ -1,6 +1,7 @@
 -- Tests for the markdown fixing functionality
 local firmo = require("firmo")
 local markdown = require("lib.tools.markdown")
+---@diagnostic disable-next-line: different-requires
 local codefix = require("lib.tools.codefix")
 
 -- Expose test functions
@@ -41,7 +42,7 @@ describe("Markdown Module", function()
     expect(markdown.fix_heading_levels).to.exist()
     expect(markdown.fix_list_numbering).to.exist()
   end)
-  
+
   describe("fix_heading_levels", function()
     it("should fix heading levels", function()
       local test_content = [[## This should be a level 1 heading
@@ -49,31 +50,36 @@ describe("Markdown Module", function()
 Some content
 
 ### Subheading]]
-      
+
       local fixed = markdown.fix_heading_levels(test_content)
-      
+
       -- Check that all heading levels were properly adjusted
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("^# This should be a level 1 heading")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("## Subheading")).to.exist()
     end)
-    
+
     it("should maintain heading hierarchy", function()
       local test_content = [[### First Heading
 Content
 #### Second Heading
 More content
 ##### Third Heading]]
-      
+
       local fixed = markdown.fix_heading_levels(test_content)
-      
+
       -- Check that heading hierarchy was maintained with level 1 start
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("^# First Heading")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("## Second Heading")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("### Third Heading")).to.exist()
       -- Original heading levels have been reduced by 2
     end)
   end)
-  
+
   describe("fix_list_numbering", function()
     it("should fix ordered list numbering", function()
       local test_content = [[
@@ -89,7 +95,7 @@ More content
       local fixed = markdown.fix_list_numbering(test_content)
       expect(fixed).to.equal(expected)
     end)
-    
+
     it("should handle nested lists", function()
       local test_content = [[
 1. Top level item 1
@@ -99,16 +105,21 @@ More content
    5. Another nested item 1 should be 1
 ]]
       local fixed = markdown.fix_list_numbering(test_content)
-      
+
       -- Check that nested lists are properly numbered
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("1%. Top level item 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("   1%. Nested item 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("   2%. Nested item 2")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("2%. Top level item 2")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil
       expect(fixed:match("   1%. Another nested item")).to.exist()
     end)
   end)
-  
+
   describe("fix_comprehensive", function()
     it("should add blank lines around headings", function()
       local test_content = [[
@@ -116,53 +127,60 @@ More content
 Content right after heading
 ## Heading 2
 More content]]
-      
+
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Check for blank lines after headings
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("# Heading 1\n\nContent")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Content right after heading\n\n## Heading 2")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("## Heading 2\n\nMore content")).to.exist()
     end)
-    
+
     it("should add blank lines around lists", function()
       local test_content = [[
 Some text
 * List item 1
 * List item 2
 More text]]
-      
+
       -- Create a special test file that works with our test cases
       local test_dir = os.tmpname() .. "_blank_lines_test"
       fs.create_directory(test_dir)
       local test_file = fs.join_paths(test_dir, "test.md")
-      
+
       fs.write_file(test_file, test_content)
-      
+
       -- Apply the fix and read it back
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Cleanup
       fs.delete_directory(test_dir, true)
-      
+
       -- Check for blank lines around list
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Some text\n\n%* List item 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("%* List item 2\n\nMore text")).to.exist()
     end)
-    
+
     it("should add language specifier to code blocks", function()
       local test_content = [[
 ```
 code block without language
 ```]]
-      
+
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Check for added language specifier
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("```text")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("code block without language")).to.exist()
     end)
-    
+
     it("should add blank lines around code blocks", function()
       local test_content = [[
 Some text
@@ -170,15 +188,18 @@ Some text
 local x = 1
 ```
 More text]]
-      
+
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Check for blank lines around code block
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Some text\n\n```lua")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("```\n\nMore text")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("local x = 1")).to.exist()
     end)
-    
+
     it("should handle complex document structures", function()
       local test_content = [[
 # Main Heading
@@ -196,32 +217,42 @@ end
 More text after code
 ### Another subheading
 Final paragraph]]
-      
+
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Check for proper spacing throughout document
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("# Main Heading\n\nSome intro")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("intro text\n\n## Subheading")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Subheading\n\n%* List item")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("List item 2\n\nCode example")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Code example:\n\n```lua")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("end\n```\n\nMore text")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("More text after code\n\n### Another")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Another subheading\n\nFinal paragraph")).to.exist()
     end)
-    
+
     it("should fix emphasis used as heading", function()
       local test_content = [[
 *Last updated: 2023-01-01*
 ]]
-      
+
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Check for converted heading
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("### Last updated: 2023%-01%-01")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("%*Last updated")).to_not.exist()
     end)
-    
+
     it("should preserve list numbers in code blocks", function()
       local test_content = [[
 This example shows list numbering:
@@ -238,16 +269,21 @@ But outside of code blocks, the list should be fixed:
 3. Real list item 2
 5. Real list item 3
 ]]
-      
+
       local fixed = markdown.fix_comprehensive(test_content)
-      
+
       -- Verify code block exists and contains numbers
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("```text")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("First item in code block")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("should stay as 2")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("should stay as 3")).to.exist()
-      
+
       -- Find actual list numbers in code block
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       local code_block_content = fixed:match("```text\n(.-)\n```")
       if code_block_content then
         -- In code blocks, numbers should be preserved
@@ -255,45 +291,59 @@ But outside of code blocks, the list should be fixed:
         expect(code_block_content:match("2%. This should stay")).to.exist()
         expect(code_block_content:match("3%. This should stay")).to.exist()
       end
-      
+
       -- Check for list items outside code block
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Real list item 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Real list item 2")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("Real list item 3")).to.exist()
-      
+
       -- Verify list is sequential (actual numbers may vary based on implementation)
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       local list_start = fixed:find("Real list item 1")
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       local rest = fixed:sub(list_start)
       local numbers = {}
-      
+
       for num in rest:gmatch("(%d+)%. Real list item") do
         table.insert(numbers, tonumber(num))
       end
-      
+
       -- Code block content should be preserved
-      expect(fixed:match("```text\n1%. First item in code block\n2%. This should stay as 2\n3%. This should stay as 3\n```")).to.exist()
-      
+      expect(
+        ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
+        fixed:match("```text\n1%. First item in code block\n2%. This should stay as 2\n3%. This should stay as 3\n```")
+      ).to.exist()
+
       -- Real list should be fixed
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("1%. Real list item 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("2%. Real list item 2")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("3%. Real list item 3")).to.exist()
-      
+
       -- Should not contain the original wrong numbers
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("3%. Real list item 2")).to_not.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(fixed:match("5%. Real list item 3")).to_not.exist()
     end)
   end)
-  
+
   describe("Integration with codefix", function()
     it("should register with codefix module", function()
       -- Reset codefix module
       codefix.init({ enabled = true, verbose = false })
-      
+
       -- Register markdown module
       markdown.register_with_codefix(codefix)
-      
+
       -- Check if the markdown fixer is registered
       local has_markdown_fixer = false
+      ---@diagnostic disable-next-line: unused-local
       for name, fixer in pairs(codefix.config.custom_fixers or {}) do
         if name == "markdown" then
           has_markdown_fixer = true
@@ -302,7 +352,7 @@ But outside of code blocks, the list should be fixed:
       end
       expect(has_markdown_fixer).to.be_truthy()
     end)
-    
+
     it("should properly fix markdown files through codefix", function()
       -- Create a special test file that works with our test cases
       local test_content = [[
@@ -310,57 +360,67 @@ Some text
 * List item 1
 * List item 2
 More text]]
-      
+
       local test_file = fs.join_paths(test_dir, "test_markdown.md")
       fs.write_file(test_file, test_content)
-      
+
       -- Directly apply the fix rather than using codefix which has external dependencies
       local fixed_content = markdown.fix_comprehensive(test_content)
       fs.write_file(test_file, fixed_content)
-      
+
       -- Read the fixed file
       local result = fs.read_file(test_file)
-      
+
       -- Check for proper formatting with blank lines
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(result:match("Some text\n\n%* List item 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(result:match("%* List item 2\n\nMore text")).to.exist()
     end)
-    
+
     it("should fix all markdown files in a directory", function()
       -- Create multiple test files
       create_test_file("test1.md", "# Test 1\nContent\n## Subheading")
       create_test_file("test2.md", "*Last updated: 2023-01-01*\n# Test 2")
       create_test_file("test3.md", "Text\n```\ncode\n```\nMore text")
-      
+
       -- Fix all files in directory
       local fixed_count = markdown.fix_all_in_directory(test_dir)
-      
+
       -- Should have fixed all files
       expect(fixed_count).to.be.at_least(3)
-      
+
       -- Check if files were fixed properly
       local test1 = fs.read_file(fs.join_paths(test_dir, "test1.md"))
       local test2 = fs.read_file(fs.join_paths(test_dir, "test2.md"))
       local test3 = fs.read_file(fs.join_paths(test_dir, "test3.md"))
-      
+
       -- More flexible checks that verify content preservation
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(test1:match("# Test 1")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(test1:match("Content")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(test2:match("Last updated")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(test3:match("Text")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(test3:match("```")).to.exist()
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
       expect(test3:match("code")).to.exist()
-      
+
       -- Verify at least one file has blank lines added
-      local blank_lines_found = 
-        (test1:match("\n\n") ~= nil) or
-        (test2:match("\n\n") ~= nil) or
-        (test3:match("\n\n") ~= nil)
-      
+      ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
+      local blank_lines_found = (test1:match("\n\n") ~= nil)
+        ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
+        or (test2:match("\n\n") ~= nil)
+        ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
+        or (test3:match("\n\n") ~= nil)
+
       expect(blank_lines_found).to.be_truthy()
     end)
   end)
-  
+
   describe("Command-line interface", function()
     it("should have a fix_markdown.lua script", function()
       -- Check if the script exists
@@ -368,7 +428,7 @@ More text]]
       local exists = fs.file_exists(script_path)
       expect(exists).to.be_truthy("fix_markdown.lua script not found")
     end)
-    
+
     it("should contain command-line argument parsing", function()
       -- Check if the script contains arg parsing logic
       local script_path = "./scripts/fix_markdown.lua"
@@ -377,26 +437,28 @@ More text]]
         -- Check for common CLI argument patterns
         expect(script_content:match("arg%[")).to.exist("Script should process command-line arguments")
         expect(script_content:match("help") or script_content:match("%-h")).to.exist("Script should have help option")
-        expect(script_content:match("directory") or script_content:match("dir")).to.exist("Script should handle directory input")
+        expect(script_content:match("directory") or script_content:match("dir")).to.exist(
+          "Script should handle directory input"
+        )
       else
         expect(false).to.be_truthy("Failed to read fix_markdown.lua script")
       end
     end)
-    
+
     it("should support fixing specific markdown issues", function()
       -- Check if the script can fix specific markdown issues
       local script_path = "./scripts/fix_markdown.lua"
       local script_content = read_file(script_path)
       if script_content then
         -- Check for functions for specific fixes
-        expect(script_content:match("heading") or 
-               script_content:match("list") or 
-               script_content:match("comprehensive")).to.exist("Script should support specific markdown fixes")
+        expect(script_content:match("heading") or script_content:match("list") or script_content:match("comprehensive")).to.exist(
+          "Script should support specific markdown fixes"
+        )
       else
         expect(false).to.be_truthy("Failed to read fix_markdown.lua script")
       end
     end)
-    
+
     it("should support multiple file and directory arguments", function()
       -- Check if the script can handle multiple arguments
       local script_path = "./scripts/fix_markdown.lua"
@@ -405,7 +467,9 @@ More text]]
         -- Check for ability to handle multiple files/directories
         expect(script_content:match("paths%s*=%s*%{")).to.exist("Script should store multiple paths")
         expect(script_content:match("for%s*_%s*,%s*path%s+in%s+ipairs")).to.exist("Script should iterate through paths")
-        expect(script_content:match("is_file") and script_content:match("is_directory")).to.exist("Script should differentiate files and directories")
+        expect(script_content:match("is_file") and script_content:match("is_directory")).to.exist(
+          "Script should differentiate files and directories"
+        )
       else
         expect(false).to.be_truthy("Failed to read fix_markdown.lua script")
       end

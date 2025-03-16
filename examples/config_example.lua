@@ -26,13 +26,13 @@ return {
     show_success_detail = true,
     default_format = "dot", -- Use dot format for tests
   },
-  
+
   -- Parallel Execution
   parallel = {
     workers = 2,         -- Use only 2 workers for parallel execution
     timeout = 30,        -- Reduce timeout to 30 seconds
   },
-  
+
   -- Custom formatting
   reporting = {
     report_dir = "./custom-reports",
@@ -88,7 +88,7 @@ firmo.describe("Configuration Example", function()
   firmo.it("should pass", function()
     firmo.expect(true).to.be(true)
   end)
-  
+
   firmo.it("should fail for demonstration", function()
     firmo.expect(true).to.be(false)
   end)
@@ -102,4 +102,4 @@ else
   print("\nFailed to remove temporary config file: " .. (delete_err or "unknown error"))
 end
 print("\nIn a real project, you would create a .firmo-config.lua file in your project root.")
-print("Use 'lua firmo.lua --create-config' to generate a template configuration file."
+print("Use 'lua firmo.lua --create-config' to generate a template configuration file.")

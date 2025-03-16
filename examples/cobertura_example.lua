@@ -1,47 +1,48 @@
 -- Example demonstrating Cobertura XML coverage report generation
-local firmo = require('../firmo')
+---@diagnostic disable-next-line: unused-local
+local firmo = require("firmo")
 
 -- Mock coverage data for the example
 local mock_coverage_data = {
   files = {
     ["src/calculator.lua"] = {
       lines = {
-        [1] = true,  -- This line was covered
-        [2] = true,  -- This line was covered
-        [3] = true,  -- This line was covered
+        [1] = true, -- This line was covered
+        [2] = true, -- This line was covered
+        [3] = true, -- This line was covered
         [5] = false, -- This line was not covered
-        [6] = true,  -- This line was covered
+        [6] = true, -- This line was covered
         [8] = false, -- This line was not covered
-        [9] = false  -- This line was not covered
+        [9] = false, -- This line was not covered
       },
       functions = {
-        ["add"] = true,      -- This function was covered
+        ["add"] = true, -- This function was covered
         ["subtract"] = true, -- This function was covered
         ["multiply"] = false, -- This function was not covered
-        ["divide"] = false   -- This function was not covered
+        ["divide"] = false, -- This function was not covered
       },
       total_lines = 10,
       covered_lines = 4,
       total_functions = 4,
-      covered_functions = 2
+      covered_functions = 2,
     },
     ["src/utils.lua"] = {
       lines = {
-        [1] = true,  -- This line was covered
-        [2] = true,  -- This line was covered
-        [4] = true,  -- This line was covered
-        [5] = true,  -- This line was covered
-        [7] = false  -- This line was not covered
+        [1] = true, -- This line was covered
+        [2] = true, -- This line was covered
+        [4] = true, -- This line was covered
+        [5] = true, -- This line was covered
+        [7] = false, -- This line was not covered
       },
       functions = {
-        ["validate"] = true,  -- This function was covered
-        ["format"] = false    -- This function was not covered
+        ["validate"] = true, -- This function was covered
+        ["format"] = false, -- This function was not covered
       },
       total_lines = 8,
       covered_lines = 4,
       total_functions = 2,
-      covered_functions = 1
-    }
+      covered_functions = 1,
+    },
   },
   summary = {
     total_files = 2,
@@ -52,12 +53,12 @@ local mock_coverage_data = {
     covered_functions = 3,
     line_coverage_percent = 44.4, -- 8/18
     function_coverage_percent = 50.0, -- 3/6
-    overall_percent = 47.2 -- (44.4 + 50.0) / 2
-  }
+    overall_percent = 47.2, -- (44.4 + 50.0) / 2
+  },
 }
 
 -- Get the reporting module
-local reporting = require('lib.reporting')
+local reporting = require("lib.reporting")
 
 -- Generate and display Cobertura XML report
 print("Generating Cobertura XML report...")
@@ -66,11 +67,8 @@ print(xml_report)
 
 -- Save the report to a file
 print("\nSaving report to coverage-reports/coverage-report.cobertura...")
-local success, err = reporting.save_coverage_report(
-  "coverage-reports/coverage-report.cobertura",
-  mock_coverage_data,
-  "cobertura"
-)
+local success, err =
+  reporting.save_coverage_report("coverage-reports/coverage-report.cobertura", mock_coverage_data, "cobertura")
 
 if success then
   print("Report saved successfully!")
@@ -84,11 +82,7 @@ local results = reporting.auto_save_reports(mock_coverage_data)
 
 print("\nReport Generation Results:")
 for format, result in pairs(results) do
-  print(string.format("- %s: %s (%s)", 
-    format,
-    result.success and "Success" or "Failed",
-    result.path
-  ))
+  print(string.format("- %s: %s (%s)", format, result.success and "Success" or "Failed", result.path))
 end
 
 print("\nCobertura XML report is now saved and can be used with CI/CD systems that support this format.")

@@ -1,0 +1,10 @@
+{
+    "diagnostics.disable": [
+        "redefined-local"
+    ],
+    "diagnostics.globals": [
+        "vim",
+        "Snacks",
+        "is_windows"
+    ]
+}

@@ -48,27 +48,27 @@ function M.set_config(new_config)
   -- Validate input
   if type(new_config) ~= "table" then
     local err = error_handler.validation_error(
-      "Invalid configuration provided", 
+      "Invalid configuration provided",
       {type = type(new_config)}
     )
     logger.warn(err.message, {type = type(new_config)})
     return M
   end
-  
+
   for k, v in pairs(new_config) do
     config[k] = v
   end
-  
+
   -- Count config items
   local config_count = 0
   for _ in pairs(new_config) do
     config_count = config_count + 1
   end
-  
+
   logger.debug("Configuration updated", {
     config_count = config_count
   })
-  
+
   return M
 end
 
@@ -90,15 +90,17 @@ local function init_static_analyzer()
     end
     return static_analyzer
   end)
-  
+
   if not success then
     logger.error("Failed to initialize static analyzer", {
+---@diagnostic disable-next-line: need-check-nil, undefined-field
       error = err.message,
+---@diagnostic disable-next-line: need-check-nil, undefined-field
       category = err.category
     })
     return nil, err
   end
-  
+
   return result
 end
 
@@ -108,7 +110,7 @@ local function generate_sourcemap(original_source, instrumented_source, file_pat
   if not config.sourcemap_enabled then
     return nil
   end
-  
+
   if not original_source or not instrumented_source or not file_path then
     local err = error_handler.validation_error(
       "Missing required parameters for sourcemap generation",
@@ -121,13 +123,13 @@ local function generate_sourcemap(original_source, instrumented_source, file_pat
     logger.warn(err.message, err.context)
     return nil, err
   end
-  
+
   local sourcemap = {
     original_lines = {},
     instrumented_lines = {},
     file_path = file_path
   }
-  
+
   local success, err = error_handler.try(function()
     -- Parse original source into lines
     local original_line_map = {}
@@ -136,7 +138,7 @@ local function generate_sourcemap(original_source, instrumented_source, file_pat
       original_line_map[line_num] = line
       line_num = line_num + 1
     end
-    
+
     -- Parse instrumented source and map back to original
     local orig_line = 1
     local instr_line = 1
@@ -192,19 +194,19 @@ local function generate_sourcemap(original_source, instrumented_source, file_pat
       end
       instr_line = instr_line + 1
     end
-    
+
     logger.debug("Generated sourcemap", {
       file_path = file_path,
       original_lines = #original_line_map,
       instrumented_lines = instr_line - 1
     })
-    
+
     -- Cache the sourcemap
     sourcemap_cache[file_path] = sourcemap
-    
+
     return sourcemap
   end)
-  
+
   if not success then
     logger.error("Failed to generate sourcemap", {
       file_path = file_path,
@@ -213,7 +215,7 @@ local function generate_sourcemap(original_source, instrumented_source, file_pat
     })
     return nil, err
   end
-  
+
   return sourcemap
 end
 
@@ -227,7 +229,7 @@ function M.get_sourcemap(file_path)
     logger.warn(err.message, err.context)
     return nil, err
   end
-  
+
   return sourcemap_cache[file_path]
 end
 
@@ -246,18 +248,18 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
     logger.warn(err.message, err.context)
     return nil, err
   end
-  
+
   -- Normalize file path to prevent double slashes and other path issues
   file_path = file_path:gsub("//", "/"):gsub("\\", "/")
-  
+
   -- For non-executable lines, return unchanged
   if not is_executable then
     return line
   end
-  
+
     -- More comprehensive patterns for control structures based on Lua grammar
   -- Pattern matching with awareness of Lua syntax structure
-  
+
   -- Helper function to build tracking code
   local function build_tracking_code()
     -- Support static imports when configured
@@ -280,7 +282,7 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
       end
     end
   end
-  
+
   -- Special handling to ensure file activation - always needed
   local activation_code
   if config.use_static_imports then
@@ -288,48 +290,48 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
   else
     activation_code = string.format('require("lib.coverage.debug_hook").activate_file(%q);', file_path)
   end
-  
+
   -- Get indentation for preserving code style
   local indentation = line:match("^(%s*)")
-  
+
   -- Control flow structures that end with 'then'
   if line:match("^%s*if%s+.-then%s*$") or line:match("^%s*if%s+.-then%s*%-%-") or
      line:match("^%s*elseif%s+.-then%s*$") or line:match("^%s*elseif%s+.-then%s*%-%-") then
-    
+
     -- Extract the part before and after "then"
     local before_then, after_then = line:match("^(.+then)(.*)$")
     if before_then and after_then then
       -- Add tracking AFTER the "then" keyword
       return string.format('%s %s %s;%s',
-        before_then, 
-        activation_code, 
+        before_then,
+        activation_code,
         build_tracking_code(),
         after_then
       )
     end
-  
+
   -- Control flow structures that end with 'do'
   elseif line:match("^%s*for%s+.-do%s*$") or line:match("^%s*for%s+.-do%s*%-%-") or
          line:match("^%s*while%s+.-do%s*$") or line:match("^%s*while%s+.-do%s*%-%-") then
-    
+
     -- Extract the part before and after "do"
     local before_do, after_do = line:match("^(.+do)(.*)$")
     if before_do and after_do then
       -- Add tracking AFTER the "do" keyword
       return string.format('%s %s %s;%s',
         before_do,
-        activation_code, 
+        activation_code,
         build_tracking_code(),
         after_do
       )
     end
-  
+
   -- Function declarations
-  elseif line:match("^%s*function%s+.-%(%s*.-%)%s*$") or 
+  elseif line:match("^%s*function%s+.-%(%s*.-%)%s*$") or
          line:match("^%s*local%s+function%s+.-%(%s*.-%)%s*$") or
          line:match("^%s*local%s+[%w_]+%s*=%s*function%s*%(%s*.-%)%s*$") or
          line:match("^%s*[%w_%.%[%]\"']+%s*=%s*function%s*%(%s*.-%)%s*$") then
-    
+
     -- For function declarations, add tracking on the next line
     return string.format('%s\n%s%s %s;',
       line,
@@ -337,11 +339,11 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
       activation_code,
       build_tracking_code()
     )
-  
+
   -- Simple keywords that start blocks (do, repeat)
   elseif line:match("^%s*do%s*$") or line:match("^%s*do%s*%-%-") or
          line:match("^%s*repeat%s*$") or line:match("^%s*repeat%s*%-%-") then
-    
+
     -- For standalone block-starting keywords, add tracking on the next line
     return string.format('%s\n%s%s %s;',
       line,
@@ -349,12 +351,12 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
       activation_code,
       build_tracking_code()
     )
-  
+
   -- Block-ending keywords (end, until, else)
   elseif line:match("^%s*end%s*$") or line:match("^%s*end%s*%-%-") or
          line:match("^%s*until%s+.*$") or line:match("^%s*until%s+.*%-%-") or
          line:match("^%s*else%s*$") or line:match("^%s*else%s*%-%-") then
-         
+
     -- For block-ending keywords, add tracking on the next line
     -- This prevents syntax errors by keeping the tracking separate
     return string.format('%s\n%s%s %s;',
@@ -364,52 +366,53 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
       build_tracking_code()
     )
   end
-  
+
   -- Check if line is part of a table construct to handle it specially
   local is_table_constructor = line:match("^%s*[a-zA-Z0-9_]+%s*=%s*{") or
                               line:match("^%s*{") or
-                              line:match("^%s*local%s+[a-zA-Z0-9_]+%s*=%s*{") 
-  
-  local is_table_entry = line:match("^%s*[a-zA-Z0-9_]+%s*=%s*[^{]") and 
+                              line:match("^%s*local%s+[a-zA-Z0-9_]+%s*=%s*{")
+
+---@diagnostic disable-next-line: unused-local
+  local is_table_entry = line:match("^%s*[a-zA-Z0-9_]+%s*=%s*[^{]") and
                         (not line:match("function")) and
                         (not line:match("local%s+[a-zA-Z0-9_]+%s*="))
-  
+
   local is_table_end = line:match("^%s*}") or line:match("^%s*},") or line:match("^%s*}%s*$")
-  
+
   -- For table end markers, just return them unchanged to avoid breaking table syntax
   if is_table_end then
     return line
   end
-  
+
   -- Handle table constructors carefully to prevent syntax errors
   if is_table_constructor then
     -- For table constructors, we'll add tracking before the line to avoid breaking syntax
-    local tracking_code = build_tracking_code and build_tracking_code() or 
+    local tracking_code = build_tracking_code and build_tracking_code() or
                          string.format('require("lib.coverage").track_line(%q, %d)', file_path, line_num)
-                         
+
     -- Activation code defined earlier should be available here
     -- but we'll check just in case and redefine if not available
-    local act_code = activation_code or 
+    local act_code = activation_code or
                     string.format('require("lib.coverage.debug_hook").activate_file(%q);', file_path)
-    
-    return string.format('%s %s; %s', 
-                        act_code, 
-                        tracking_code, 
+
+    return string.format('%s %s; %s',
+                        act_code,
+                        tracking_code,
                         line)
   end
-  
+
   -- For all other executable lines, add tracking before the line
   -- Reuse activation_code and build_tracking_code if they were already defined
-  local act_code = activation_code or 
+  local act_code = activation_code or
                   string.format('require("lib.coverage.debug_hook").activate_file(%q);', file_path)
-                  
+
   local tracking_code = build_tracking_code and build_tracking_code() or
                        (block_info and config.track_blocks
-                        and string.format('require("lib.coverage").track_block(%q, %d, %q, %q)', 
+                        and string.format('require("lib.coverage").track_block(%q, %d, %q, %q)',
                                          file_path, line_num, block_info.id, block_info.type)
-                        or string.format('require("lib.coverage").track_line(%q, %d)', 
+                        or string.format('require("lib.coverage").track_line(%q, %d)',
                                         file_path, line_num))
-  
+
   -- Standard line tracking for everything else, adding before the line
   return string.format('%s %s; %s',
     act_code, tracking_code, line
@@ -419,14 +422,14 @@ end
 -- Instrument a Lua source file by adding coverage tracking with static analysis
 function M.instrument_file(file_path, options)
   options = options or {}
-  
+
   -- Copy relevant config values to options for easier access
   options.allow_fallback = options.allow_fallback or config.allow_fallback
   options.max_file_size = options.max_file_size or config.max_file_size
-  options.cache_instrumented_files = options.cache_instrumented_files ~= nil 
-                                     and options.cache_instrumented_files 
+  options.cache_instrumented_files = options.cache_instrumented_files ~= nil
+                                     and options.cache_instrumented_files
                                      or config.cache_instrumented_files
-  
+
   -- Validate file_path
   if not file_path then
     local err = error_handler.validation_error(
@@ -436,26 +439,26 @@ function M.instrument_file(file_path, options)
     logger.error(err.message, err.context)
     return nil, err
   end
-  
+
   -- Normalize file path to prevent double slashes and other path issues
   file_path = file_path:gsub("//", "/"):gsub("\\", "/")
-  
+
   -- Removed the problematic files hack. We need to fix the actual instrumentation
   -- process to handle all valid Lua files correctly without special cases.
-  
+
   -- Check if in cache first
   if options.cache_instrumented_files and instrumented_cache[file_path] and not options.force then
     logger.debug("Using cached instrumentation", {
       file_path = file_path
     })
-    
+
     -- Force cache reset if the content is from a different file (same path gets reused in tests)
     local original_source = error_handler.safe_io_operation(
       function() return fs.read_file(file_path) end,
       file_path,
       {operation = "read_file"}
     )
-    
+
     -- If the source content has changed but the path is the same, invalidate the cache
     if original_source and instrumented_cache[file_path .. "_source"] ~= original_source then
       logger.debug("File content changed, invalidating cache", {
@@ -468,52 +471,52 @@ function M.instrument_file(file_path, options)
       return instrumented_cache[file_path]
     end
   end
-  
+
   logger.debug("Instrumenting file", {
     file_path = file_path,
     use_static_analysis = config.use_static_analysis
   })
-  
+
   -- File existence check
   local exists = error_handler.safe_io_operation(
     function() return fs.file_exists(file_path) end,
     file_path,
     {operation = "file_exists"}
   )
-  
+
   if not exists then
     local err = error_handler.io_error(
-      "Instrumentation failed: file not found", 
+      "Instrumentation failed: file not found",
       {file_path = file_path}
     )
     logger.error(err.message, err.context)
     return nil, err
   end
-  
+
   -- Read file content
   local source, read_err = error_handler.safe_io_operation(
     function() return fs.read_file(file_path) end,
     file_path,
     {operation = "read_file"}
   )
-  
+
   if not source then
     logger.error("Instrumentation failed: could not read file", {
       file_path = file_path,
       error = read_err and read_err.message
     })
     return nil, read_err or error_handler.io_error(
-      "Could not read file", 
+      "Could not read file",
       {file_path = file_path}
     )
   end
-  
+
   -- Check for large files and implement fallback strategy
   local file_size = #source
   if file_size > options.max_file_size then
     -- Create a warning but continue with tracking
     local warning = error_handler.validation_error(
-      "File too large for instrumentation - using debug hook fallback", 
+      "File too large for instrumentation - using debug hook fallback",
       {
         file_path = file_path,
         size = file_size,
@@ -522,13 +525,13 @@ function M.instrument_file(file_path, options)
       }
     )
     logger.warn(warning.message, warning.context)
-    
+
     -- Register the file for tracking with debug_hook (will use debug hook method instead)
     if M.register_for_debug_hook then
       local success, err = error_handler.try(function()
         return M.register_for_debug_hook(file_path, source)
       end)
-      
+
       if not success then
         logger.warn("Failed to register large file for debug hook fallback", {
           file_path = file_path,
@@ -542,7 +545,7 @@ function M.instrument_file(file_path, options)
         })
       end
     end
-    
+
     -- For tests only - return a special marker instrumented code
     if options.allow_fallback then
       -- Create a minimal instrumented file that just loads the original
@@ -556,39 +559,40 @@ local coverage = require("lib.coverage")
 coverage.track_file(%q)
 return loadfile(%q)()
       ]], file_path, file_size, options.max_file_size, file_path, file_path)
-      
+
       return fallback_code
     end
-    
+
     -- Return structured error for normal operation
     return nil, warning
   end
-  
+
   -- Skip coverage module files unless explicitly enabled
-  local is_coverage_file = file_path:find("lib/coverage", 1, true) or 
+  local is_coverage_file = file_path:find("lib/coverage", 1, true) or
                           file_path:find("lib/tools/parser", 1, true)
-                          
+
   if is_coverage_file and not config.include_coverage_module then
     local err = error_handler.validation_error(
-      "Coverage module file excluded from instrumentation", 
+      "Coverage module file excluded from instrumentation",
       {file_path = file_path}
     )
     logger.debug(err.message, err.context)
     return nil, err
   end
-  
+
   logger.debug("Instrumenting source code", {
     file_path = file_path,
     source_length = #source
   })
-  
+
   -- Enhanced instrumentation with static analysis if available
   if config.use_static_analysis then
     local analyzer, init_err = init_static_analyzer()
-    
+
     if not analyzer then
       logger.warn("Static analyzer initialization failed, falling back to basic instrumentation", {
         file_path = file_path,
+---@diagnostic disable-next-line: undefined-field
         error = init_err and init_err.message
       })
       -- Continue with basic instrumentation
@@ -598,33 +602,33 @@ return loadfile(%q)()
         local ast, code_map = static_analyzer.parse_content(source, file_path)
         return {ast = ast, code_map = code_map}
       end)
-      
+
       if success and result.ast and result.code_map then
         logger.debug("Using static analysis for instrumentation", {
           file_path = file_path,
           has_blocks = result.code_map.blocks ~= nil,
           has_functions = result.code_map.functions ~= nil
         })
-        
+
         local lines = {}
         local line_num = 1
         local executable_lines = 0
         local instrumented_lines = 0
-        
+
         -- Process each line with static analysis information
         for line in source:gmatch("[^\r\n]+") do
           local is_executable = static_analyzer.is_line_executable(result.code_map, line_num)
-          
+
           -- Get block information for this line
           local blocks_for_line = static_analyzer.get_blocks_for_line(result.code_map, line_num)
           local block_info = blocks_for_line and blocks_for_line[1] or nil
-          
+
           if is_executable then
             -- Add tracking code before executable lines
             local instrumented_line, instr_err = instrument_line(
               line, file_path, line_num, is_executable, block_info
             )
-            
+
             if instrumented_line then
               table.insert(lines, instrumented_line)
               instrumented_lines = instrumented_lines + 1
@@ -642,15 +646,15 @@ return loadfile(%q)()
             -- For non-executable lines, keep them unchanged
             table.insert(lines, line)
           end
-          
+
           line_num = line_num + 1
         end
-        
+
         -- Add _ENV preservation to ensure proper environment variable access
         -- Also add advanced validation to check for balanced braces to prevent syntax errors
         local source_lines = table.concat(lines, "\n")
-        
-        -- Validate and fix balanced braces and function bodies in the generated code 
+
+        -- Validate and fix balanced braces and function bodies in the generated code
         local function validate_and_fix_syntax(str)
             local stack = {}
             local in_string = false
@@ -661,7 +665,7 @@ return loadfile(%q)()
             local line_start = true
             local current_line = 1
             local table_constructor_positions = {} -- Track table constructor positions
-            
+
             local function check_keyword(pos, str, keyword)
                 local end_pos = pos + #keyword - 1
                 if end_pos <= #str then
@@ -676,7 +680,7 @@ return loadfile(%q)()
                 end
                 return false
             end
-            
+
             -- First pass to handle required("lib.coverage") statements
             -- Create a map of positions where we have coverage tracking calls
             local coverage_calls = {}
@@ -686,11 +690,11 @@ return loadfile(%q)()
                 coverage_calls[s] = e
                 s, e = str:find(pattern, e + 1)
             end
-            
+
             while pos <= #str do
                 local char = str:sub(pos, pos)
                 local next_char = pos < #str and str:sub(pos+1, pos+1) or ""
-                
+
                 -- Track line numbers for better error reporting
                 if char == "\n" then
                     current_line = current_line + 1
@@ -698,7 +702,7 @@ return loadfile(%q)()
                 elseif not char:match("%s") then
                     line_start = false
                 end
-                
+
                 -- Handle comments
                 if not in_string and not in_comment and char == "-" and next_char == "-" then
                     in_comment = true
@@ -708,14 +712,14 @@ return loadfile(%q)()
                 elseif in_comment and char == "\n" then
                     in_comment = false
                 end
-                
+
                 -- Skip processing if in comment
                 if in_comment then
                     fixed_str = fixed_str .. char
                     pos = pos + 1
                     goto continue
                 end
-                
+
                 -- Check if we're at the start of a coverage call
                 local in_coverage_call = false
                 for start_pos, end_pos in pairs(coverage_calls) do
@@ -724,7 +728,7 @@ return loadfile(%q)()
                         break
                     end
                 end
-                
+
                 -- Handle string literals to ignore syntax in strings
                 if (char == "'" or char == '"' or (char == "[" and next_char == "[")) and not in_string and not in_coverage_call then
                     in_string = true
@@ -736,7 +740,7 @@ return loadfile(%q)()
                         goto continue
                     end
                 elseif in_string then
-                    if (char == string_delim) or 
+                    if (char == string_delim) or
                        (string_delim == "]]" and char == "]" and next_char == "]") then
                         in_string = false
                         if string_delim == "]]" then
@@ -746,7 +750,7 @@ return loadfile(%q)()
                         end
                     end
                 end
-                
+
                 -- Only track syntax elements outside of strings and not in coverage calls
                 if not in_string and not in_coverage_call then
                     -- Track braces for table constructors
@@ -776,7 +780,7 @@ return loadfile(%q)()
                             else
                                 -- Unmatched closing brace, ignore it
                                 logger.warn("Unmatched closing brace found", {
-                                    line = current_line, 
+                                    line = current_line,
                                     expected = last.type
                                 })
                                 pos = pos + 1
@@ -791,7 +795,7 @@ return loadfile(%q)()
                             goto continue
                         end
                     end
-                    
+
                     -- Track function definitions and control flow keywords
                     if line_start and (
                        check_keyword(pos, str, "function") or
@@ -809,7 +813,7 @@ return loadfile(%q)()
                         elseif check_keyword(pos, str, "repeat") then keyword = "repeat"
                         elseif check_keyword(pos, str, "do") then keyword = "do"
                         end
-                        
+
                         table.insert(stack, {type = keyword, line = current_line, pos = pos})
                         fixed_str = fixed_str .. keyword
                         pos = pos + #keyword
@@ -817,14 +821,14 @@ return loadfile(%q)()
                     elseif line_start and check_keyword(pos, str, "end") then
                         if #stack > 0 then
                             local last = stack[#stack]
-                            if last.type == "function" or last.type == "if" or 
+                            if last.type == "function" or last.type == "if" or
                                last.type == "for" or last.type == "while" or
                                last.type == "do" then
                                 table.remove(stack)
                             else
                                 -- Unmatched end, but keep it
                                 logger.warn("Unmatched 'end' found", {
-                                    line = current_line, 
+                                    line = current_line,
                                     expected = last.type
                                 })
                             end
@@ -841,7 +845,7 @@ return loadfile(%q)()
                             else
                                 -- Unmatched until, but keep it
                                 logger.warn("Unmatched 'until' found", {
-                                    line = current_line, 
+                                    line = current_line,
                                     expected = last.type
                                 })
                             end
@@ -851,7 +855,7 @@ return loadfile(%q)()
                             })
                         end
                     end
-                    
+
                     -- Special handling for "local" declarations with tables
                     if line_start and check_keyword(pos, str, "local") and not in_coverage_call then
                         -- Look ahead to see if this local declaration includes a table
@@ -865,16 +869,16 @@ return loadfile(%q)()
                         end
                     end
                 end
-                
+
                 fixed_str = fixed_str .. char
                 pos = pos + 1
                 ::continue::
             end
-            
+
             -- If there are unclosed constructs, add the missing closing statements
             if #stack > 0 then
                 logger.warn("Unclosed syntax constructs detected", {count = #stack})
-                
+
                 -- Build closure in reverse order (most nested first)
                 local additions = {}
                 for i = #stack, 1, -1 do
@@ -889,7 +893,7 @@ return loadfile(%q)()
                                 break
                             end
                         end
-                        
+
                         -- Add appropriate closing brace with proper formatting
                         if is_nested then
                             table.insert(additions, "}")
@@ -903,11 +907,11 @@ return loadfile(%q)()
                         table.insert(additions, "\nend")
                     end
                 end
-                
+
                 -- Add all closures
                 fixed_str = fixed_str .. table.concat(additions, "")
             end
-            
+
             -- Special handling for table constructors in instrumentation code
             for _, tbl in ipairs(table_constructor_positions) do
                 if not tbl.closed then
@@ -917,10 +921,10 @@ return loadfile(%q)()
                     })
                 end
             end
-            
+
             return fixed_str, #stack
         end
-        
+
         local fixed_source, unclosed_count = validate_and_fix_syntax(source_lines)
         if unclosed_count > 0 then
             logger.warn("Fixed unbalanced syntax constructs in generated code", {
@@ -928,11 +932,11 @@ return loadfile(%q)()
                 file_path = file_path
             })
         end
-        
+
         -- Add static imports preamble when configured
         local use_static_imports = options and options.use_static_imports or config.use_static_imports
         local instrumented_source = "local _ENV = _G\n"
-        
+
         -- Add static imports if configured
         if use_static_imports then
           instrumented_source = instrumented_source .. string.format([[
@@ -944,9 +948,9 @@ local _file_path = %q
 
 ]], file_path)
         end
-        
+
         instrumented_source = instrumented_source .. fixed_source
-        
+
         -- Generate sourcemap for error mapping
         if config.sourcemap_enabled then
           local _, map_err = generate_sourcemap(source, instrumented_source, file_path)
@@ -958,47 +962,48 @@ local _file_path = %q
             -- Continue without sourcemap
           end
         end
-        
+
         -- Cache the result if enabled
         if config.cache_instrumented_files then
           instrumented_cache[file_path] = instrumented_source
           -- Also store the original source to detect content changes for the same path
           instrumented_cache[file_path .. "_source"] = source
         end
-        
+
         logger.info("File instrumentation completed with static analysis", {
           file_path = file_path,
           total_lines = line_num - 1,
           executable_lines = executable_lines,
           instrumented_lines = instrumented_lines
         })
-        
+
         return instrumented_source
       else
         logger.warn("Static analysis failed, falling back to basic instrumentation", {
           file_path = file_path,
+---@diagnostic disable-next-line: undefined-field
           error = err and err.message
         })
         -- Continue with basic instrumentation
       end
     end
   end
-  
+
   -- Basic instrumentation (fallback if static analysis is disabled or failed)
   local success, result, err = error_handler.try(function()
     local lines = {}
     local line_num = 1
     local executable_lines = 0
     local instrumented_lines = 0
-    
+
     for line in source:gmatch("[^\r\n]+") do
       -- Basic heuristic to detect executable lines
       local is_executable = not line:match("^%s*%-%-") and not line:match("^%s*$")
-      
+
       if is_executable then
         -- Add tracking code before executable lines
         local use_static_imports = options and options.use_static_imports or config.use_static_imports
-        
+
         local instrumented_line
         if use_static_imports then
           -- Use static imports for better performance and to avoid recursion
@@ -1013,7 +1018,7 @@ local _file_path = %q
             file_path, line_num, line
           )
         end
-        
+
         table.insert(lines, instrumented_line)
         instrumented_lines = instrumented_lines + 1
         executable_lines = executable_lines + 1
@@ -1022,12 +1027,12 @@ local _file_path = %q
       end
       line_num = line_num + 1
     end
-    
+
     -- Add _ENV preservation to ensure proper environment variable access
     -- Also add advanced validation to check for balanced braces to prevent syntax errors
     local source_lines = table.concat(lines, "\n")
-    
-    -- Validate and fix balanced braces and function bodies in the generated code 
+
+    -- Validate and fix balanced braces and function bodies in the generated code
     local function validate_and_fix_syntax(str)
         local stack = {}
         local in_string = false
@@ -1038,7 +1043,7 @@ local _file_path = %q
         local line_start = true
         local current_line = 1
         local table_constructor_positions = {} -- Track table constructor positions
-        
+
         local function check_keyword(pos, str, keyword)
             local end_pos = pos + #keyword - 1
             if end_pos <= #str then
@@ -1053,7 +1058,7 @@ local _file_path = %q
             end
             return false
         end
-        
+
         -- First pass to handle required("lib.coverage") statements
         -- Create a map of positions where we have coverage tracking calls
         local coverage_calls = {}
@@ -1063,11 +1068,11 @@ local _file_path = %q
             coverage_calls[s] = e
             s, e = str:find(pattern, e + 1)
         end
-        
+
         while pos <= #str do
             local char = str:sub(pos, pos)
             local next_char = pos < #str and str:sub(pos+1, pos+1) or ""
-            
+
             -- Track line numbers for better error reporting
             if char == "\n" then
                 current_line = current_line + 1
@@ -1075,7 +1080,7 @@ local _file_path = %q
             elseif not char:match("%s") then
                 line_start = false
             end
-            
+
             -- Handle comments
             if not in_string and not in_comment and char == "-" and next_char == "-" then
                 in_comment = true
@@ -1085,14 +1090,14 @@ local _file_path = %q
             elseif in_comment and char == "\n" then
                 in_comment = false
             end
-            
+
             -- Skip processing if in comment
             if in_comment then
                 fixed_str = fixed_str .. char
                 pos = pos + 1
                 goto continue
             end
-            
+
             -- Check if we're at the start of a coverage call
             local in_coverage_call = false
             for start_pos, end_pos in pairs(coverage_calls) do
@@ -1101,7 +1106,7 @@ local _file_path = %q
                     break
                 end
             end
-            
+
             -- Handle string literals to ignore syntax in strings
             if (char == "'" or char == '"' or (char == "[" and next_char == "[")) and not in_string and not in_coverage_call then
                 in_string = true
@@ -1113,7 +1118,7 @@ local _file_path = %q
                     goto continue
                 end
             elseif in_string then
-                if (char == string_delim) or 
+                if (char == string_delim) or
                    (string_delim == "]]" and char == "]" and next_char == "]") then
                     in_string = false
                     if string_delim == "]]" then
@@ -1123,7 +1128,7 @@ local _file_path = %q
                     end
                 end
             end
-            
+
             -- Only track syntax elements outside of strings and not in coverage calls
             if not in_string and not in_coverage_call then
                 -- Track braces for table constructors
@@ -1153,7 +1158,7 @@ local _file_path = %q
                         else
                             -- Unmatched closing brace, ignore it
                             logger.warn("Unmatched closing brace found", {
-                                line = current_line, 
+                                line = current_line,
                                 expected = last.type
                             })
                             pos = pos + 1
@@ -1168,7 +1173,7 @@ local _file_path = %q
                         goto continue
                     end
                 end
-                
+
                 -- Track function definitions and control flow keywords
                 if line_start and (
                    check_keyword(pos, str, "function") or
@@ -1186,7 +1191,7 @@ local _file_path = %q
                     elseif check_keyword(pos, str, "repeat") then keyword = "repeat"
                     elseif check_keyword(pos, str, "do") then keyword = "do"
                     end
-                    
+
                     table.insert(stack, {type = keyword, line = current_line, pos = pos})
                     fixed_str = fixed_str .. keyword
                     pos = pos + #keyword
@@ -1194,14 +1199,14 @@ local _file_path = %q
                 elseif line_start and check_keyword(pos, str, "end") then
                     if #stack > 0 then
                         local last = stack[#stack]
-                        if last.type == "function" or last.type == "if" or 
+                        if last.type == "function" or last.type == "if" or
                            last.type == "for" or last.type == "while" or
                            last.type == "do" then
                             table.remove(stack)
                         else
                             -- Unmatched end, but keep it
                             logger.warn("Unmatched 'end' found", {
-                                line = current_line, 
+                                line = current_line,
                                 expected = last.type
                             })
                         end
@@ -1218,7 +1223,7 @@ local _file_path = %q
                         else
                             -- Unmatched until, but keep it
                             logger.warn("Unmatched 'until' found", {
-                                line = current_line, 
+                                line = current_line,
                                 expected = last.type
                             })
                         end
@@ -1228,7 +1233,7 @@ local _file_path = %q
                         })
                     end
                 end
-                
+
                 -- Special handling for "local" declarations with tables
                 if line_start and check_keyword(pos, str, "local") and not in_coverage_call then
                     -- Look ahead to see if this local declaration includes a table
@@ -1242,16 +1247,16 @@ local _file_path = %q
                     end
                 end
             end
-            
+
             fixed_str = fixed_str .. char
             pos = pos + 1
             ::continue::
         end
-        
+
         -- If there are unclosed constructs, add the missing closing statements
         if #stack > 0 then
             logger.warn("Unclosed syntax constructs detected", {count = #stack})
-            
+
             -- Build closure in reverse order (most nested first)
             local additions = {}
             for i = #stack, 1, -1 do
@@ -1266,7 +1271,7 @@ local _file_path = %q
                             break
                         end
                     end
-                    
+
                     -- Add appropriate closing brace with proper formatting
                     if is_nested then
                         table.insert(additions, "}")
@@ -1280,11 +1285,11 @@ local _file_path = %q
                     table.insert(additions, "\nend")
                 end
             end
-            
+
             -- Add all closures
             fixed_str = fixed_str .. table.concat(additions, "")
         end
-        
+
         -- Special handling for table constructors in instrumentation code
         for _, tbl in ipairs(table_constructor_positions) do
             if not tbl.closed then
@@ -1294,10 +1299,10 @@ local _file_path = %q
                 })
             end
         end
-        
+
         return fixed_str, #stack
     end
-    
+
     local fixed_source, unclosed_count = validate_and_fix_syntax(source_lines)
     if unclosed_count > 0 then
         logger.warn("Fixed unbalanced syntax constructs in generated code", {
@@ -1305,9 +1310,9 @@ local _file_path = %q
             file_path = file_path
         })
     end
-    
+
     local instrumented_source = "local _ENV = _G\n" .. fixed_source
-    
+
     -- Generate sourcemap for error mapping
     if config.sourcemap_enabled then
       local _, map_err = generate_sourcemap(source, instrumented_source, file_path)
@@ -1319,33 +1324,35 @@ local _file_path = %q
         -- Continue without sourcemap
       end
     end
-    
+
     -- Cache the result if enabled
     if config.cache_instrumented_files then
       instrumented_cache[file_path] = instrumented_source
       -- Also store the original source to detect content changes for the same path
       instrumented_cache[file_path .. "_source"] = source
     end
-    
+
     logger.info("File instrumentation completed with basic analysis", {
       file_path = file_path,
       total_lines = line_num - 1,
       executable_lines = executable_lines,
       instrumented_lines = instrumented_lines
     })
-    
+
     return instrumented_source
   end)
-  
+
   if not success then
     logger.error("Instrumentation failed with error", {
       file_path = file_path,
+---@diagnostic disable-next-line: undefined-field, need-check-nil
       error = err.message,
+---@diagnostic disable-next-line: undefined-field, need-check-nil
       category = err.category
     })
     return nil, err
   end
-  
+
   return result
 end
 
@@ -1354,6 +1361,7 @@ function M.clear_cache()
   -- Clear all instrumented code and source caches
   instrumented_cache = {}
   sourcemap_cache = {}
+---@diagnostic disable-next-line: lowercase-global
   module_path_cache = {}
   logger.debug("Instrumentation cache cleared")
   return M
@@ -1364,23 +1372,23 @@ end
 function M.create_isolated_environment()
   local env = setmetatable({}, {__index = _G})
   env._G = env  -- Self-reference for _G
-  
+
   -- Create a non-recursive require function
   env.require = function(module_name)
     -- Direct lookup in package.loaded without instrumentation
     if package.loaded[module_name] then
       return package.loaded[module_name]
     end
-    
+
     -- Use original require but don't instrument further
     local original_require = _G.require
     if type(original_require) == "function" then
       return original_require(module_name)
     end
-    
+
     return nil
   end
-  
+
   -- Define minimal fs operations to avoid recursion
   env.fs = {
     file_exists = function(path)
@@ -1388,7 +1396,7 @@ function M.create_isolated_environment()
       if file then file:close(); return true end
       return false
     end,
-    
+
     read_file = function(path)
       local file = io.open(path, "r")
       if not file then return nil end
@@ -1396,7 +1404,7 @@ function M.create_isolated_environment()
       file:close()
       return content
     end,
-    
+
     write_file = function(path, content)
       local file = io.open(path, "w")
       if not file then return false end
@@ -1405,7 +1413,7 @@ function M.create_isolated_environment()
       return true
     end
   }
-  
+
   -- Provide minimal logging to avoid recursion
   env.logger = {
     debug = function() end,
@@ -1414,7 +1422,7 @@ function M.create_isolated_environment()
     error = function() end,
     trace = function() end
   }
-  
+
   return env
 end
 
@@ -1422,25 +1430,27 @@ end
 function M.create_isolated_test_environment(test_module_path)
   local original_package_path = package.path
   local env = M.create_isolated_environment()
-  
+
   -- Setup proper module boundaries
   local function build_isolated_path(module_path)
     -- Extract directory from module path
     local dir = module_path:match("^(.+)/[^/]+$") or "."
     return dir .. "/?.lua;" .. original_package_path
   end
-  
+
+---@diagnostic disable-next-line: missing-fields
   env.package = {
     path = build_isolated_path(test_module_path),
     loaded = setmetatable({}, {__index = package.loaded})
   }
-  
+
   return env
 end
 
 -- Tables to track module loading and prevent recursion
 local instrumented_modules = {} -- Tracks files that have been instrumented by path
 local currently_instrumenting = {} -- Tracks modules being instrumented to prevent cycles
+---@diagnostic disable-next-line: unused-local
 local module_files = {} -- Maps module names to file paths for better tracking
 local required_modules = {} -- Tracks which modules were already processed
 local instrumentation_depth = 0 -- Tracks the recursion depth of instrumentation
@@ -1455,27 +1465,27 @@ local core_modules = {
   -- Coverage and instrumentation modules
   ["lib.coverage"] = true,
   ["lib.coverage.instrumentation"] = true,
-  ["lib.coverage.debug_hook"] = true, 
+  ["lib.coverage.debug_hook"] = true,
   ["lib.coverage.file_manager"] = true,
   ["lib.coverage.patchup"] = true,
   ["lib.coverage.static_analyzer"] = true,
   ["lib.coverage.init"] = true,
-  
+
   -- Essential utility modules used by instrumentation
   ["lib.tools.filesystem"] = true,
   ["lib.tools.error_handler"] = true,
   ["lib.tools.logging"] = true,
-  
+
   -- Parser modules
   ["lib.tools.parser"] = true,
   ["lib.tools.parser.init"] = true,
   ["lib.tools.parser.grammar"] = true,
   ["lib.tools.parser.pp"] = true,
   ["lib.tools.parser.validator"] = true,
-  
+
   -- Test/example modules
   ["instrumentation_test_.*"] = true,  -- Special pattern for test files
-  
+
   -- Core Lua modules that should never be instrumented
   ["package"] = true,
   ["io"] = true,
@@ -1493,7 +1503,7 @@ local function is_excluded_module(module_name)
   if core_modules[module_name] then
     return true
   end
-  
+
   -- Then check for pattern matches
   for pattern, _ in pairs(core_modules) do
     if pattern:find("*") or pattern:find("%.") or pattern:find("%+") then
@@ -1503,13 +1513,13 @@ local function is_excluded_module(module_name)
       end
     end
   end
-  
+
   -- Also exclude any module from coverage or parser paths
-  if module_name:match("^lib%.coverage") or 
+  if module_name:match("^lib%.coverage") or
      module_name:match("^lib%.tools%.parser") then
     return true
   end
-  
+
   return false
 end
 
@@ -1518,22 +1528,22 @@ local function find_module_file_non_recursive(module_name)
   if not module_name or type(module_name) ~= "string" then
     return nil
   end
-  
+
   -- Check cache first to avoid repeated lookups
   if module_path_cache[module_name] then
     return module_path_cache[module_name]
   end
-  
+
   local path_separator = package.config:sub(1,1)
   local path_pattern = package.path
-  
+
   -- Convert module name to file path for direct checking
   local file_path = module_name:gsub("%.", path_separator)
-  
+
   -- Try direct file checking with common extensions
   for _, ext in ipairs({".lua", "/init.lua"}) do
     local full_path = file_path .. ext
-    
+
     -- Use io.open directly instead of fs.file_exists
     local file = io.open(full_path, "r")
     if file then
@@ -1542,11 +1552,11 @@ local function find_module_file_non_recursive(module_name)
       return full_path
     end
   end
-  
+
   -- Try package.path patterns without using fs module
   for pattern in string.gmatch(path_pattern, "[^;]+") do
     local filename = string.gsub(pattern, "%?", module_name:gsub("%.", path_separator))
-    
+
     local file = io.open(filename, "r")
     if file then
       file:close()
@@ -1555,7 +1565,7 @@ local function find_module_file_non_recursive(module_name)
       return filename
     end
   end
-  
+
   return nil
 end
 
@@ -1576,39 +1586,39 @@ local function should_instrument_module(module_name, module_path)
     })
     return false
   end
-  
+
   -- Skip non-string module names
   if type(module_name) ~= "string" then
     return false
   end
-  
+
   -- Skip already processed modules
   if required_modules[module_name] then
     return false
   end
-  
+
   -- Skip excluded modules
   if is_excluded_module(module_name) then
     return false
   end
-  
+
   -- Skip modules already being instrumented (cycle detection)
   if currently_instrumenting[module_name] then
     return false
   end
-  
+
   -- Skip if the module path is in an excluded directory
   if module_path and (
-     module_path:find("lib/coverage", 1, true) or 
+     module_path:find("lib/coverage", 1, true) or
      module_path:find("lib/tools/parser", 1, true)) then
     return false
   end
-  
+
   -- Skip if the instrumentation predicate says no
   if not M.should_instrument or (module_path and not M.should_instrument(module_path)) then
     return false
   end
-  
+
   return true
 end
 
@@ -1617,7 +1627,7 @@ function M.instrument_require()
   logger.debug("Instrumenting require function", {
     operation = "instrument_require"
   })
-  
+
   -- Safety check to prevent double instrumentation
   if _G._INSTRUMENTED_REQUIRE then
     logger.warn("Require function already instrumented, skipping", {
@@ -1625,26 +1635,27 @@ function M.instrument_require()
     })
     return M
   end
-  
+
   local success, err = error_handler.try(function()
     -- Store the original require function
     local original_require = require
-    
+
     -- Mark require as instrumented to prevent double instrumentation
     _G._INSTRUMENTED_REQUIRE = true
-    
+
     -- Override the global require function
+---@diagnostic disable-next-line: duplicate-set-field
     _G.require = function(module_name)
       -- Skip instrumentation for non-string modules
       if type(module_name) ~= "string" then
         return original_require(module_name)
       end
-      
+
       -- Return already loaded modules immediately
       if package.loaded[module_name] then
         return package.loaded[module_name]
       end
-      
+
       -- Skip instrumentation for excluded modules
       if is_excluded_module(module_name) then
         logger.trace("Skipping excluded module", {
@@ -1653,10 +1664,10 @@ function M.instrument_require()
         })
         return original_require(module_name)
       end
-      
+
       -- Look up the module file path
       local module_path = find_module_file(module_name)
-      
+
       -- Check if we should instrument this module
       if not should_instrument_module(module_name, module_path) then
         logger.trace("Module not selected for instrumentation", {
@@ -1664,17 +1675,17 @@ function M.instrument_require()
           path = module_path,
           operation = "require"
         })
-        
+
         -- Just use the original require
         local result = original_require(module_name)
         required_modules[module_name] = true
-        
+
         -- Trigger module load callback if present
         if M.on_module_load then
           local callback_success, callback_err = error_handler.try(function()
             return M.on_module_load(module_name, result, module_path)
           end)
-          
+
           if not callback_success and callback_err then
             logger.warn("Module load callback error", {
               module = module_name,
@@ -1682,25 +1693,25 @@ function M.instrument_require()
             })
           end
         end
-        
+
         return result
       end
-      
+
       -- Mark that we're currently instrumenting this module to prevent recursion
       currently_instrumenting[module_name] = true
       instrumentation_depth = instrumentation_depth + 1
-      
+
       logger.debug("Instrumenting module", {
         module = module_name,
         path = module_path,
         depth = instrumentation_depth,
         operation = "require"
       })
-      
+
       -- Use a pcall to ensure we always clean up our state
       local result, instr_err = nil, nil
       local instr_success = false
-      
+
       local status, err = pcall(function()
         -- First check if we already instrumented this file
         if module_path and instrumented_modules[module_path] then
@@ -1709,23 +1720,23 @@ function M.instrument_require()
             path = module_path,
             operation = "require"
           })
-          
+
           -- Use original require for already instrumented modules
           result = original_require(module_name)
           instr_success = true
           return
         end
-        
+
         -- Attempt to instrument the file
         if not module_path then
           -- Can't instrument without a file path
           instr_err = "Module file not found"
           return
         end
-        
+
         -- Create isolated environment for instrumentation
         local isolated_env = M.create_isolated_environment()
-        
+
         -- Instrument the file within isolated environment to prevent recursion
         local instrumented, err
         local env_func = function()
@@ -1737,7 +1748,7 @@ function M.instrument_require()
             use_static_imports = true  -- Use static imports to avoid recursion
           })
         end
-        
+
         -- Use proper environment isolation based on Lua version
         if _VERSION == "Lua 5.1" then
           -- Lua 5.1 uses setfenv
@@ -1747,18 +1758,19 @@ function M.instrument_require()
           -- Lua 5.2+ uses _ENV
           -- Create function with isolated environment
           local wrapped_func = load(string.dump(env_func), nil, "b", isolated_env)
+---@diagnostic disable-next-line: need-check-nil
           instrumented = wrapped_func()
         end
-        
+
         if not instrumented then
           -- Failed to instrument, use original require
           instr_err = err
           return
         end
-        
+
         -- Mark this module as instrumented
         instrumented_modules[module_path] = true
-        
+
         -- Create a temporary file with instrumented code
         local temp_file = os.tmpname() .. ".lua"
         local file = io.open(temp_file, "w")
@@ -1766,11 +1778,12 @@ function M.instrument_require()
           instr_err = "Failed to create temporary file"
           return
         end
-        
+
         -- Write the instrumented code
+---@diagnostic disable-next-line: param-type-mismatch
         file:write(instrumented)
         file:close()
-        
+
         -- First check syntax
         local syntax_check, syntax_err = loadfile(temp_file)
         if not syntax_check then
@@ -1778,36 +1791,36 @@ function M.instrument_require()
           instr_err = "Syntax error in instrumented module: " .. tostring(syntax_err)
           return
         end
-        
+
         -- Load and execute the module
         local loaded_module = loadfile(temp_file)
-        
+
         -- Remove the temp file regardless of success
         os.remove(temp_file)
-        
+
         if not loaded_module then
           instr_err = "Failed to load instrumented module"
           return
         end
-        
+
         -- Execute the module with proper environment
         local exec_success, module_result_or_err = pcall(loaded_module)
         if not exec_success then
           instr_err = "Error executing instrumented module: " .. tostring(module_result_or_err)
           return
         end
-        
+
         -- Successfully instrumented and executed
         package.loaded[module_name] = module_result_or_err
         result = module_result_or_err
         instr_success = true
       end)
-      
+
       -- Always clean up tracking state, even if there was an error
       currently_instrumenting[module_name] = nil
       instrumentation_depth = instrumentation_depth - 1
       required_modules[module_name] = true
-      
+
       -- Handle errors in the instrumentation process
       if not status then
         logger.error("Error during module instrumentation", {
@@ -1815,7 +1828,7 @@ function M.instrument_require()
           error = err,
           operation = "require"
         })
-        
+
         -- Fall back to original require
         result = original_require(module_name)
       elseif not instr_success then
@@ -1823,19 +1836,19 @@ function M.instrument_require()
         logger.warn("Module instrumentation failed, using original", {
           module = module_name,
           error = instr_err,
-          operation = "require" 
+          operation = "require"
         })
-        
+
         -- Fall back to original require
         result = original_require(module_name)
       end
-      
+
       -- Call module load callback if present
       if M.on_module_load then
         local callback_success, callback_err = error_handler.try(function()
           return M.on_module_load(module_name, result, module_path)
         end)
-        
+
         if not callback_success and callback_err then
           logger.warn("Module load callback error", {
             module = module_name,
@@ -1843,17 +1856,17 @@ function M.instrument_require()
           })
         end
       end
-      
+
       return result
     end
-    
+
     logger.info("Require function instrumented successfully", {
       operation = "instrument_require"
     })
-    
+
     return true
   end)
-  
+
   if not success then
     logger.error("Failed to instrument require function", {
       error = err.message,
@@ -1861,7 +1874,7 @@ function M.instrument_require()
     })
     return nil, err
   end
-  
+
   return M
 end
 
@@ -1870,11 +1883,11 @@ function M.hook_loaders()
   logger.debug("Hooking Lua loaders", {
     operation = "hook_loaders"
   })
-  
+
   local success, err = error_handler.try(function()
     -- Save original loader
     local original_loadfile = loadfile
-    
+
     -- Replace with instrumented version
     _G.loadfile = function(filename)
       if not filename then
@@ -1883,23 +1896,24 @@ function M.hook_loaders()
         })
         return original_loadfile()
       end
-      
+
       logger.trace("Loadfile called", {
         filename = filename
       })
-      
+
       -- Check if we should instrument this file
       if M.should_instrument and M.should_instrument(filename) then
         logger.debug("Instrumenting file for loadfile", {
           filename = filename
         })
-        
+
         local instrumented, instr_err = M.instrument_file(filename)
         if instrumented then
           logger.debug("Successfully instrumented file for loadfile", {
             filename = filename,
             instrumented_length = #instrumented
           })
+---@diagnostic disable-next-line: param-type-mismatch
           return load(instrumented, "@" .. filename)
         else
           logger.warn("Failed to instrument file for loadfile", {
@@ -1912,11 +1926,11 @@ function M.hook_loaders()
           filename = filename
         })
       end
-      
+
       -- Use original loader for now
       return original_loadfile(filename)
     end
-    
+
     -- Similarly hook dofile if needed
     local original_dofile = dofile
     _G.dofile = function(filename)
@@ -1926,23 +1940,24 @@ function M.hook_loaders()
         })
         return original_dofile()
       end
-      
+
       logger.trace("Dofile called", {
         filename = filename
       })
-      
+
       -- Check if we should instrument this file
       if M.should_instrument and M.should_instrument(filename) then
         logger.debug("Instrumenting file for dofile", {
           filename = filename
         })
-        
+
         local instrumented, instr_err = M.instrument_file(filename)
         if instrumented then
           logger.debug("Successfully instrumented file for dofile", {
             filename = filename,
             instrumented_length = #instrumented
           })
+---@diagnostic disable-next-line: param-type-mismatch
           return load(instrumented, "@" .. filename)()
         else
           logger.warn("Failed to instrument file for dofile", {
@@ -1955,11 +1970,11 @@ function M.hook_loaders()
           filename = filename
         })
       end
-      
+
       -- Use original loader
       return original_dofile(filename)
     end
-    
+
     -- Hook load/loadstring functions if available
     if _G.load then
       local original_load = _G.load
@@ -1968,39 +1983,39 @@ function M.hook_loaders()
           chunk_name = chunk_name or "string",
           is_string = type(chunk) == "string"
         })
-        
+
         -- Only instrument string chunks with a name that looks like a file
-        if type(chunk) == "string" and type(chunk_name) == "string" and 
+        if type(chunk) == "string" and type(chunk_name) == "string" and
            chunk_name:match("^@(.+)%.lua$") and
            M.should_instrument and M.should_instrument(chunk_name:sub(2)) then
-           
+
           -- Extract file path from chunk name
           local file_path = chunk_name:sub(2)
           logger.debug("Instrumenting string chunk from load", {
             filename = file_path
           })
-          
+
           -- Create a temporary file to use our existing instrumentation logic
           local temp_file, temp_err = error_handler.safe_io_operation(
-            function() 
+            function()
               local tmp = os.tmpname() .. ".lua"
               return fs.write_file(tmp, chunk) and tmp or nil
             end,
             "temp_file",
             {operation = "create_temp_file"}
           )
-          
+
           if temp_file then
             -- Instrument the temporary file
             local instrumented, instr_err = M.instrument_file(temp_file)
-            
+
             -- Clean up temporary file
             local _, remove_err = error_handler.safe_io_operation(
               function() return os.remove(temp_file) end,
               temp_file,
               {operation = "remove_temp_file"}
             )
-            
+
             if remove_err then
               logger.warn("Failed to remove temporary file", {
                 filename = temp_file,
@@ -2008,12 +2023,13 @@ function M.hook_loaders()
               })
               -- Continue anyway
             end
-            
+
             if instrumented then
               logger.debug("Successfully instrumented string chunk", {
                 chunk_name = chunk_name,
                 instrumented_length = #instrumented
               })
+---@diagnostic disable-next-line: param-type-mismatch
               return original_load(instrumented, chunk_name, mode, env)
             else
               logger.warn("Failed to instrument string chunk", {
@@ -2027,20 +2043,20 @@ function M.hook_loaders()
             })
           end
         end
-        
+
         -- Use original load function
         return original_load(chunk, chunk_name, mode, env)
       end
     end
-    
+
     logger.info("Lua loaders successfully hooked", {
       operation = "hook_loaders",
       hooked_functions = "loadfile, dofile, load"
     })
-    
+
     return true
   end)
-  
+
   if not success then
     logger.error("Failed to hook Lua loaders", {
       error = err.message,
@@ -2048,7 +2064,7 @@ function M.hook_loaders()
     })
     return nil, err
   end
-  
+
   return true
 end
 
@@ -2057,11 +2073,11 @@ function M.set_module_load_callback(callback)
   logger.debug("Setting module load callback", {
     has_callback = callback ~= nil
   })
-  
+
   -- Validate callback
   if type(callback) ~= "function" then
     local err = error_handler.validation_error(
-      "Invalid callback provided - must be a function", 
+      "Invalid callback provided - must be a function",
       {
         operation = "set_module_load_callback",
         type = type(callback)
@@ -2070,12 +2086,12 @@ function M.set_module_load_callback(callback)
     logger.warn(err.message, err.context)
     return M
   end
-  
+
   M.on_module_load = callback
   logger.info("Module load callback set successfully", {
     operation = "set_module_load_callback"
   })
-  
+
   return M
 end
 
@@ -2084,11 +2100,11 @@ function M.set_debug_hook_fallback(callback)
   logger.debug("Setting debug hook fallback callback", {
     has_callback = callback ~= nil
   })
-  
+
   -- Validate callback
   if type(callback) ~= "function" then
     local err = error_handler.validation_error(
-      "Invalid fallback callback provided - must be a function", 
+      "Invalid fallback callback provided - must be a function",
       {
         operation = "set_debug_hook_fallback",
         type = type(callback)
@@ -2097,12 +2113,12 @@ function M.set_debug_hook_fallback(callback)
     logger.warn(err.message, err.context)
     return M
   end
-  
+
   M.register_for_debug_hook = callback
   logger.info("Debug hook fallback callback set successfully", {
     operation = "set_debug_hook_fallback"
   })
-  
+
   return M
 end
 
@@ -2111,11 +2127,11 @@ function M.set_instrumentation_predicate(predicate)
   logger.debug("Setting instrumentation predicate", {
     has_predicate = predicate ~= nil
   })
-  
+
   -- Validate predicate
   if type(predicate) ~= "function" then
     local err = error_handler.validation_error(
-      "Invalid predicate provided - must be a function", 
+      "Invalid predicate provided - must be a function",
       {
         operation = "set_instrumentation_predicate",
         type = type(predicate)
@@ -2124,12 +2140,12 @@ function M.set_instrumentation_predicate(predicate)
     logger.warn(err.message, err.context)
     return M
   end
-  
+
   M.should_instrument = predicate
   logger.info("Instrumentation predicate set successfully", {
     operation = "set_instrumentation_predicate"
   })
-  
+
   return M
 end
 
@@ -2143,52 +2159,53 @@ function M.translate_error(err)
     logger.warn(validation_err.message, validation_err.context)
     return err
   end
-  
+
   if not config.sourcemap_enabled then
     return err
   end
-  
+
   local success, result, translate_err = error_handler.try(function()
     -- Try to match file and line information in the error
     local file_path, line_num = err:match("(%S+):(%d+):")
     if not file_path or not line_num then
       return err
     end
-    
+
     -- Remove any @ prefix from file path
     if file_path:sub(1, 1) == "@" then
       file_path = file_path:sub(2)
     end
-    
+
     -- Get sourcemap for this file
     local sourcemap = sourcemap_cache[file_path]
     if not sourcemap then
       return err
     end
-    
+
     -- Convert line number to integer
     line_num = tonumber(line_num)
     if not line_num then
       return err
     end
-    
+
     -- Map instrumented line to original line
     local line_info = sourcemap.instrumented_lines[line_num]
     if line_info and line_info.original_line then
       -- Replace line number in error message
       return err:gsub(":" .. line_num .. ":", ":" .. line_info.original_line .. ":")
     end
-    
+
     return err
   end)
-  
+
   if not success then
     logger.warn("Error translation failed", {
+---@diagnostic disable-next-line: undefined-field
       error = translate_err and translate_err.message
     })
     return err
   end
-  
+
   return result
 end
 
@@ -2200,27 +2217,29 @@ function M.get_stats()
     for _ in pairs(instrumented_cache) do
       cached_files_count = cached_files_count + 1
     end
-    
+
     local cached_sourcemaps_count = 0
     for _ in pairs(sourcemap_cache) do
       cached_sourcemaps_count = cached_sourcemaps_count + 1
     end
-    
+
     return {
       cached_files = cached_files_count,
       cached_sourcemaps = cached_sourcemaps_count,
       configuration = config
     }
   end)
-  
+
   if not success then
     logger.error("Failed to get instrumentation stats", {
+---@diagnostic disable-next-line: need-check-nil, undefined-field
       error = err.message,
+---@diagnostic disable-next-line: need-check-nil, undefined-field
       category = err.category
     })
     return nil, err
   end
-  
+
   return result
 end
 

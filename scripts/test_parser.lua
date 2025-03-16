@@ -5,22 +5,28 @@ package.path = "/home/gregg/Projects/lua-library/firmo/?.lua;" .. package.path
 
 -- Initialize logging system
 local logging
-local ok, err = pcall(function() logging = require("lib.tools.logging") end)
+---@diagnostic disable-next-line: unused-local
+local ok, err = pcall(function()
+  logging = require("lib.tools.logging")
+end)
 if not ok or not logging then
   -- Fall back to standard print if logging module isn't available
   logging = {
     configure = function() end,
-    get_logger = function() return {
-      info = print,
-      error = print,
-      warn = print,
-      debug = print,
-      verbose = print
-    } end
+    get_logger = function()
+      return {
+        info = print,
+        error = print,
+        warn = print,
+        debug = print,
+        verbose = print,
+      }
+    end,
   }
 end
 
 -- Get logger for test_parser module
+---@diagnostic disable-next-line: redundant-parameter
 local logger = logging.get_logger("test_parser")
 -- Configure from config if possible
 logging.configure_from_config("test_parser")
@@ -43,7 +49,7 @@ local code = [[
 local function test(a, b, ...)
   local sum = a + b
   print("The sum is:", sum)
-  
+
   if sum > 10 then
     return true
   else
@@ -73,7 +79,9 @@ logger.info("\nTesting executable line detection...")
 local executable_lines = parser.get_executable_lines(ast, code)
 logger.info("Executable lines found: " .. (function()
   local count = 0
-  for _ in pairs(executable_lines) do count = count + 1 end
+  for _ in pairs(executable_lines) do
+    count = count + 1
+  end
   return count
 end)())
 
@@ -97,14 +105,17 @@ logger.info("Functions found: " .. #functions)
 
 -- Print function details
 for i, func in ipairs(functions) do
-  logger.info(string.format("Function %d: %s (lines %d-%d, params: %s%s)",
-    i,
-    func.name,
-    func.line_start,
-    func.line_end,
-    table.concat(func.params, ", "),
-    func.is_vararg and ", ..." or ""
-  ))
+  logger.info(
+    string.format(
+      "Function %d: %s (lines %d-%d, params: %s%s)",
+      i,
+      func.name,
+      func.line_start,
+      func.line_end,
+      table.concat(func.params, ", "),
+      func.is_vararg and ", ..." or ""
+    )
+  )
 end
 
 logger.info("\nTesting code map creation...")

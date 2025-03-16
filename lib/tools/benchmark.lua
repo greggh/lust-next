@@ -23,9 +23,11 @@ benchmark.options = {
 
 -- Return high-resolution time (with nanosecond precision if available)
 local has_socket, socket = pcall(require, "socket")
+---@diagnostic disable-next-line: unused-local
 local has_ffi, ffi = pcall(require, "ffi")
 
 local function high_res_time()
+  ---@diagnostic disable-next-line: unused-local
   local success, time, err = error_handler.try(function()
     if has_socket then
       return socket.gettime()
@@ -59,6 +61,7 @@ local function format_time(time_seconds)
     { time_type = type(time_seconds), value = tostring(time_seconds) }
   )
 
+  ---@diagnostic disable-next-line: unused-local
   local success, formatted, err = error_handler.try(function()
     if time_seconds < 0.000001 then
       return string.format("%.2f ns", time_seconds * 1e9)
@@ -100,6 +103,7 @@ local function calculate_stats(measurements)
     { measurements_count = #measurements }
   )
 
+  ---@diagnostic disable-next-line: unused-local
   local success, stats, err = error_handler.try(function()
     local sum = 0
     local min = math.huge
@@ -164,6 +168,7 @@ local function deep_clone(t)
     return t
   end
 
+  ---@diagnostic disable-next-line: unused-local
   local success, copy, err = error_handler.try(function()
     local result = {}
     for k, v in pairs(t) do
@@ -276,7 +281,9 @@ function benchmark.measure(func, args, options)
     end) or 0
 
     -- Execute function with arguments
+    ---@diagnostic disable-next-line: unused-local
     local success, result, exec_err = error_handler.try(function()
+      ---@diagnostic disable-next-line: param-type-mismatch
       return func(table.unpack(args_clone))
     end)
 
@@ -316,7 +323,9 @@ function benchmark.measure(func, args, options)
     end) or 0
 
     -- Execute function with arguments
+    ---@diagnostic disable-next-line: unused-local
     local success, result, exec_err = error_handler.try(function()
+      ---@diagnostic disable-next-line: param-type-mismatch
       return func(table.unpack(args_clone))
     end)
 
@@ -458,7 +467,7 @@ function benchmark.suite(suite_def, options)
   for idx, benchmark_def in ipairs(config.benchmarks) do
     local bench_success, bench_result = error_handler.try(function()
       -- Extract benchmark definition
-      local name = benchmark_def.name or "Benchmark #" .. idx
+      local name = (benchmark_def.name or "Benchmark #") .. idx
 
       error_handler.assert(
         benchmark_def.func ~= nil,

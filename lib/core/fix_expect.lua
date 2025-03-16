@@ -1,5 +1,5 @@
 -- Fix for the firmo expect assertion system
-local firmo = require('../firmo')
+local firmo = require('firmo')
 local logging = require("lib.tools.logging")
 
 -- Initialize module logger
@@ -13,7 +13,7 @@ local function validate_path(path_key, path_elements)
     logger.warn("Path not found", {path = path_key})
     return false
   end
-  
+
   -- Check if all expected elements are in the path
   for _, element in ipairs(path_elements) do
     local found = false
@@ -23,13 +23,13 @@ local function validate_path(path_key, path_elements)
         break
       end
     end
-    
+
     if not found then
       logger.warn("Element missing in path", {path = path_key, element = element})
       return false
     end
   end
-  
+
   return true
 end
 
@@ -64,7 +64,7 @@ end
 -- Function to fix expect assertion system
 local function fix_expect_system()
   logger.info("Fixing expect assertion system")
-  
+
   -- Make sure the has function exists
   local has_fn = firmo.has
   if not has_fn then
@@ -80,13 +80,13 @@ local function fix_expect_system()
   else
     logger.debug("has function exists")
   end
-  
+
   -- Ensure paths table exists
   if not firmo.paths then
     logger.warn("paths table missing", {action = "creating new table"})
     firmo.paths = {}
   end
-  
+
   -- Make sure the be path is properly set up with truthy
   if not firmo.paths.be then
     logger.info("Creating be path", {elements = "a, an, truthy, falsey, greater, less"})
@@ -97,26 +97,26 @@ local function fix_expect_system()
       logger.info("Adding truthy element", {path = "be"})
       table.insert(firmo.paths.be, 'truthy')
     end
-    
+
     -- Make sure falsey is in the be path
     if not firmo.has(firmo.paths.be, 'falsey') then
       logger.info("Adding falsey element", {path = "be"})
       table.insert(firmo.paths.be, 'falsey')
     end
-    
+
     -- Make sure greater is in the be path
     if not firmo.has(firmo.paths.be, 'greater') then
       logger.info("Adding greater element", {path = "be"})
       table.insert(firmo.paths.be, 'greater')
     end
-    
+
     -- Make sure less is in the be path
     if not firmo.has(firmo.paths.be, 'less') then
       logger.info("Adding less element", {path = "be"})
       table.insert(firmo.paths.be, 'less')
     end
   end
-  
+
   -- Make sure be_truthy is defined
   if not firmo.paths.be_truthy then
     logger.info("Adding path", {path = "be_truthy"})
@@ -128,7 +128,7 @@ local function fix_expect_system()
       end
     }
   end
-  
+
   -- Make sure be_falsey is defined
   if not firmo.paths.be_falsey then
     logger.info("Adding path", {path = "be_falsey"})
@@ -140,7 +140,7 @@ local function fix_expect_system()
       end
     }
   end
-  
+
   -- Make sure be_greater is defined
   if not firmo.paths.be_greater then
     logger.info("Adding path", {path = "be_greater"})
@@ -152,7 +152,7 @@ local function fix_expect_system()
       end
     }
   end
-  
+
   -- Make sure be_less is defined
   if not firmo.paths.be_less then
     logger.info("Adding path", {path = "be_less"})
@@ -164,7 +164,7 @@ local function fix_expect_system()
       end
     }
   end
-  
+
   -- Check for to_not and to.not
   if not firmo.paths.to_not then
     logger.info("Adding path", {path = "to_not"})
@@ -175,18 +175,18 @@ local function fix_expect_system()
       chain = function(a) a.negate = not a.negate end
     }
   end
-  
+
   -- Add to.not as an alias for to_not if it doesn't exist
   if not firmo.paths.to.not then
     logger.info("Adding alias", {alias = "to.not", target = "to_not"})
     firmo.paths.to.not = firmo.paths.to_not
   end
-  
+
   -- Test path validation
   local root_valid = validate_path('', {'to', 'to_not'})
   local to_valid = validate_path('to', {'be', 'equal', 'truthy', 'falsey'})
   local be_valid = validate_path('be', {'truthy', 'falsey'})
-  
+
   -- Final validation
   if root_valid and to_valid and be_valid then
     logger.info("Expect assertion paths successfully fixed")

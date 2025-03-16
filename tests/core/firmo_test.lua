@@ -1,6 +1,7 @@
 -- Basic test for firmo
 local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+---@diagnostic disable-next-line: unused-local
 local before, after = firmo.before, firmo.after
 
 -- Try to load the logging module
@@ -11,12 +12,12 @@ local function try_load_logger()
     if ok and log_module then
       logging = log_module
       logger = logging.get_logger("test.firmo")
-      
+
       if logger and logger.debug then
         logger.debug("Firmo core test initialized", {
           module = "test.firmo",
           test_type = "unit",
-          test_focus = "core API"
+          test_focus = "core API",
         })
       end
     end
@@ -31,7 +32,7 @@ describe("firmo", function()
   if log then
     log.info("Beginning firmo core tests", {
       test_group = "firmo_core",
-      test_focus = "API functions"
+      test_focus = "API functions",
     })
   end
 
@@ -41,41 +42,54 @@ describe("firmo", function()
     expect(firmo.expect).to.be.a("function")
     expect(firmo.spy).to.exist()
   end)
-  
+
   it("passes simple tests", function()
-    if log then log.debug("Testing basic assertions") end
+    if log then
+      log.debug("Testing basic assertions")
+    end
     expect(1).to.equal(1)
     expect("hello").to.equal("hello")
-    expect({1, 2}).to.equal({1, 2})
+    expect({ 1, 2 }).to.equal({ 1, 2 })
   end)
-  
+
   it("has spy functionality", function()
-    if log then log.debug("Testing spy functionality") end
+    if log then
+      log.debug("Testing spy functionality")
+    end
     -- Test the spy functionality which is now implemented
     expect(firmo.spy).to.exist()
     -- The spy is a module with new and on functions
     expect(firmo.spy.new).to.be.a("function")
     expect(firmo.spy.on).to.be.a("function")
-    
+
     -- Test basic spy functionality
-    local test_fn = function(a, b) return a + b end
+    local test_fn = function(a, b)
+      return a + b
+    end
     local spied = firmo.spy.new(test_fn)
-    
+
     -- Spy should work like the original function
+    ---@diagnostic disable-next-line: need-check-nil
     expect(spied(2, 3)).to.equal(5)
-    
+
     -- Spy should track calls
+    ---@diagnostic disable-next-line: need-check-nil
     expect(spied.calls).to.be.a("table")
+    ---@diagnostic disable-next-line: need-check-nil
+    ---@diagnostic disable-next-line: need-check-nil
     expect(#spied.calls).to.equal(1)
+    ---@diagnostic disable-next-line: need-check-nil
     expect(spied.calls[1][1]).to.equal(2)
+    ---@diagnostic disable-next-line: need-check-nil
     expect(spied.calls[1][2]).to.equal(3)
+    ---@diagnostic disable-next-line: need-check-nil
     expect(spied.call_count).to.equal(1)
   end)
 
   if log then
     log.info("Firmo core tests completed", {
       status = "success",
-      test_group = "firmo_core"
+      test_group = "firmo_core",
     })
   end
 end)

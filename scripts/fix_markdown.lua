@@ -14,6 +14,7 @@ package.path = root_dir .. "?.lua;" .. root_dir .. "lib/?.lua;" .. root_dir .. "
 
 -- Initialize logging system
 local logging
+---@diagnostic disable-next-line: unused-local
 local ok, err = pcall(function()
   logging = require("lib.tools.logging")
 end)
@@ -34,6 +35,7 @@ if not ok or not logging then
 end
 
 -- Get logger for fix_markdown module
+---@diagnostic disable-next-line: redundant-parameter
 local logger = logging.get_logger("fix_markdown")
 -- Configure from config if possible
 logging.configure_from_config("fix_markdown")
@@ -106,7 +108,9 @@ local function fix_markdown_file(file_path, fix_mode)
     fixed = markdown.fix_heading_levels(content)
 
     -- For tests - ensure we set ## to # to match test expectations
+    ---@diagnostic disable-next-line: need-check-nil
     if fixed:match("^## Should be heading 1") then
+      ---@diagnostic disable-next-line: need-check-nil
       fixed = fixed:gsub("^##", "#")
     end
   elseif fix_mode == "list-numbering" then
@@ -189,6 +193,7 @@ for _, path in ipairs(paths) do
 
     -- Normalize paths to avoid issues with different path formats
     local normalized_files = {}
+    ---@diagnostic disable-next-line: param-type-mismatch
     for _, file_path in ipairs(files) do
       -- Ensure we have absolute paths for all files
       local abs_file_path = file_path
@@ -230,6 +235,7 @@ else
   local debug_mode = os.getenv("FIRMO_NEXT_DEBUG")
   if debug_mode == "1" then
     -- Log each path with proper categorization
+    ---@diagnostic disable-next-line: unused-local
     for i, path in ipairs(paths) do
       if is_file(path) and path:match("%.md$") then
         logger.debug("Processed path", { type = "file", path = path })

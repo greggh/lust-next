@@ -3,7 +3,7 @@
 -- This is used by the parallel execution system to collect results
 
 -- Import the testing framework
-local firmo = require "../firmo"
+local firmo = require "firmo"
 
 -- Define aliases
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
