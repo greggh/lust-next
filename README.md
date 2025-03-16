@@ -184,7 +184,7 @@ Full documentation is available in the [docs](docs/) directory:
 
 Used to declare a group of tests. Groups created using `describe` can be nested.
 
-````lua
+```lua
 describe("math operations", function()
   -- Regular test group - runs normally
 end)
@@ -194,10 +194,10 @@ end)
 xdescribe("excluded group", function()
   -- Excluded test group - these tests NEVER run
 end)
-
-```text
+```
 
 #### `firmo.it(name, func)`, `firmo.fit(name, func)`, `firmo.xit(name, func)`
+
 Used to declare a test, which consists of a set of assertions.
 
 ```lua
@@ -214,9 +214,10 @@ xit("work in progress", function()
   expect(false).to.be.truthy() -- Won't fail since it's excluded
 end)
 
-```text
+```
 
 #### `firmo.before(fn)` and `firmo.after(fn)`
+
 Set up functions that run before or after each test in a describe block.
 
 ```lua
@@ -231,7 +232,7 @@ describe("database tests", function()
     -- Test here
   end)
 end)
-````
+```
 
 ### Assertions
 

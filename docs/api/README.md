@@ -33,7 +33,7 @@ end)
 firmo.before(function() -- Run before each test end)
 firmo.after(function() -- Run after each test end)
 
-```text
+```
 
 ### Assertions
 
@@ -48,7 +48,7 @@ expect(table).to.contain.values({"a", "b"})
 -- String assertions
 expect(str).to.start_with("prefix")
 
-```text
+```
 
 ### Async Testing
 
@@ -65,7 +65,7 @@ local results = firmo.parallel_async(
   function() firmo.await(200); return "second" end
 )
 
-```text
+```
 
 ### Module Reset
 
@@ -77,7 +77,7 @@ firmo.with_fresh_module("app.module", function(mod)
   -- Test using the fresh module
 end)
 
-```text
+```
 
 ### Mocking
 
@@ -88,7 +88,7 @@ mock_obj:stub("method", function() return "mocked" end)
 -- Create a spy
 local spy = firmo.spy(function() end)
 
-```text
+```
 
 ### Coverage and Quality
 
@@ -107,7 +107,7 @@ firmo.quality_options.level = 3 -- Comprehensive quality level
 -- Generate a quality report
 firmo.generate_quality_report("html", "./quality-report.html")
 
-```text
+```
 
 ### Reporting
 
@@ -120,7 +120,7 @@ local quality_data = firmo.get_quality_data()
 -- Auto-save all report formats
 reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 
-```text
+```
 
 ### Code Quality and Fixing
 
@@ -134,6 +134,6 @@ firmo.fix_files({"file1.lua", "file2.lua"})
 -- Find and fix all Lua files in a directory
 firmo.fix_lua_files("src")
 
-```text
+```
 See the individual sections for detailed documentation on each API area.
 

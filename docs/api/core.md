@@ -17,7 +17,7 @@ describe("Math operations", function()
   -- Tests go here
 end)
 
-```text
+```
 **Notes:**
 
 - `describe` blocks can be nested to create a hierarchical structure
@@ -38,7 +38,7 @@ it("adds two numbers correctly", function()
   expect(1 + 1).to.equal(2)
 end)
 
-```text
+```
 **Notes:**
 
 - Test names should describe the expected behavior, not the implementation
@@ -66,7 +66,7 @@ describe("Database tests", function()
   end)
 end)
 
-```text
+```
 **Notes:**
 
 - `before` hooks run in the order they are defined
@@ -92,7 +92,7 @@ describe("File operations", function()
   end)
 end)
 
-```text
+```
 **Notes:**
 
 - `after` hooks run in the order they are defined
@@ -133,7 +133,7 @@ describe("Calculator", function()
   end)
 end)
 
-```text
+```
 
 ### Test Organization Best Practices
 

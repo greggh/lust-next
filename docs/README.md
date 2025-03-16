@@ -52,7 +52,7 @@ Welcome to the Firmo documentation. firmo is a lightweight, powerful testing lib
 
 ## Installation
 
-````bash
+```bash
 
 # Option 1: Copy the single file to your project
 curl -o firmo.lua https://raw.githubusercontent.com/greggh/firmo/master/firmo.lua
@@ -60,7 +60,7 @@ curl -o firmo.lua https://raw.githubusercontent.com/greggh/firmo/master/firmo.lu
 # Option 2: Use as Git submodule
 git submodule add https://github.com/greggh/firmo.git deps/firmo
 
-```text
+```
 
 ## Basic Usage
 
@@ -78,9 +78,8 @@ describe("Calculator", function()
   end)
 end)
 
-```text
+```
 
 ## Contributing
-Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/firmo/blob/main/CONTRIBUTING.md) for details on how to get involved.
 
-````
+Contributions are welcome! See the [Contributing Guide](https://github.com/greggh/firmo/blob/main/CONTRIBUTING.md) for details on how to get involved.

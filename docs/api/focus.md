@@ -37,7 +37,7 @@ describe("User Profile", function()
   end)
 end)
 
-```text
+```
 
 ### fit(name, fn)
 Creates a focused test. When focus mode is active, only focused tests will run.
@@ -60,7 +60,7 @@ describe("Data Validation", function()
   end)
 end)
 
-```text
+```
 
 ## Excluded Tests
 
@@ -87,7 +87,7 @@ xdescribe("Database Operations", function()
   end)
 end)
 
-```text
+```
 
 ### xit(name, fn)
 Creates an excluded test. This test will be skipped.
@@ -110,7 +110,7 @@ describe("Data Validation", function()
   end)
 end)
 
-```text
+```
 
 ## Focus Mode Behavior
 When any test is marked as focused (using `fdescribe` or `fit`), Firmo enters "focus mode." In focus mode:
@@ -130,7 +130,7 @@ lua firmo.lua
 # Focus mode can be combined with other filters
 lua firmo.lua --tags unit
 
-```text
+```
 If filters are active (via tags or pattern) but no focused tests match the filters, no tests will run.
 
 ## Examples
@@ -155,7 +155,7 @@ describe("Calculator", function()
   end)
 end)
 
-```text
+```
 
 ### Nested Focus Example
 
@@ -182,7 +182,7 @@ describe("User System", function()
   end)
 end)
 
-```text
+```
 
 ### Temporary Debugging Example
 
@@ -202,7 +202,7 @@ describe("Complex Algorithm", function()
   end)
 end)
 
-```text
+```
 
 ## Best Practices
 

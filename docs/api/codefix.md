@@ -45,7 +45,7 @@ firmo.codefix_options = {
   backup_ext = ".bak",             -- Extension for backup files
 }
 
-```text
+```
 
 ## Basic Usage
 
@@ -65,7 +65,7 @@ local success = firmo.fix_files({
 -- Find and fix Lua files in a directory
 local success = firmo.fix_lua_files("path/to/directory")
 
-```text
+```
 
 ### From Command Line
 
@@ -80,7 +80,7 @@ lua firmo.lua --fix path/to/directory
 # Check a file without fixing
 lua firmo.lua --check path/to/file.lua
 
-```text
+```
 
 ## API Reference
 
@@ -102,7 +102,7 @@ else
   print("Failed to fix file")
 end
 
-```text
+```
 
 ### `firmo.fix_files(file_paths)`
 Fixes multiple Lua files.
@@ -122,7 +122,7 @@ local files = {
 }
 local success = firmo.fix_files(files)
 
-```text
+```
 
 ### `firmo.fix_lua_files(directory)`
 Finds and fixes all Lua files in a directory that match the include/exclude patterns.
@@ -137,7 +137,7 @@ Finds and fixes all Lua files in a directory that match the include/exclude patt
 ```lua
 local success = firmo.fix_lua_files("src")
 
-```text
+```
 
 ## Custom Fixers
 The codefix module includes several custom fixers for issues that StyLua and Luacheck don't handle well:
@@ -152,7 +152,7 @@ local str = [[
   on multiple lines   
 ]]
 
-```text
+```
 **After:**
 
 ```lua
@@ -161,7 +161,7 @@ local str = [[
   on multiple lines
 ]]
 
-```text
+```
 
 ### 2. Unused Variables
 Prefixes unused variables with underscore to indicate they're intentionally unused.
@@ -173,7 +173,7 @@ local function process(data, options, callback)
   return data.value
 end
 
-```text
+```
 **After:**
 
 ```lua
@@ -182,7 +182,7 @@ local function process(data, _options, _callback)
   return data.value
 end
 
-```text
+```
 
 ### 3. String Concatenation
 Optimizes string concatenation patterns.
@@ -191,13 +191,13 @@ Optimizes string concatenation patterns.
 ```lua
 local greeting = "Hello " .. "there " .. name .. "!"
 
-```text
+```
 **After:**
 
 ```lua
 local greeting = "Hello there " .. name .. "!"
 
-```text
+```
 
 ### 4. Type Annotations (Optional)
 Adds type annotations to function documentation.
@@ -208,7 +208,7 @@ function calculate(x, y)
   return x * y
 end
 
-```text
+```
 **After:**
 
 ```lua
@@ -220,7 +220,7 @@ function calculate(x, y)
   return x * y
 end
 
-```text
+```
 
 ### 5. Lua Version Compatibility (Optional)
 Fixes Lua version compatibility issues.
@@ -229,13 +229,13 @@ Fixes Lua version compatibility issues.
 ```lua
 local packed = table.pack(...)  -- Lua 5.2+ feature
 
-```text
+```
 **After:**
 
 ```lua
 local packed = {...}  -- table.pack replaced for Lua 5.1 compatibility
 
-```text
+```
 
 ## Integration with hooks-util
 The codefix module is designed to integrate seamlessly with the hooks-util framework:

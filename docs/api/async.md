@@ -24,7 +24,7 @@ it("performs async operation", firmo.async(function()
   expect(result).to.exist()
 end))
 
-```text
+```
 
 ### firmo.it_async(name, fn, [timeout])
 Convenient shorthand for creating an asynchronous test.
@@ -43,7 +43,7 @@ firmo.it_async("performs async operation", function()
   expect(result).to.exist()
 end)
 
-```text
+```
 
 ## Async Utilities
 
@@ -70,7 +70,7 @@ firmo.it_async("waits before checking result", function()
   expect(result).to.equal("done")
 end)
 
-```text
+```
 
 ### firmo.wait_until(condition_fn, [timeout], [check_interval])
 Waits until the condition function returns true or until the timeout is reached.
@@ -100,7 +100,7 @@ firmo.it_async("waits for condition", function()
   expect(value).to.equal("done")
 end)
 
-```text
+```
 
 ### firmo.parallel_async(operations, [timeout])
 Runs multiple async operations concurrently and waits for all to complete.
@@ -147,7 +147,7 @@ firmo.it_async("runs operations in parallel", function()
   expect(results[3][1].text).to.equal("Comment 1")
 end)
 
-```text
+```
 
 ### Configuring Timeouts
 To set the default timeout for all async operations, access the async module directly:
@@ -161,14 +161,14 @@ firmo.it_async("long running test", function()
   -- This test has up to 10 seconds to complete
 end)
 
-```text
+```
 Individual timeouts can also be specified when using `wait_until`:
 
 ```lua
 -- Wait for up to 5 seconds, checking every 100ms
 wait_until(condition_fn, 5000, 100)
 
-```text
+```
 
 ## Working with Asynchronous Code
 
@@ -195,7 +195,7 @@ firmo.it_async("tests callback-based async code", function()
   expect(result.data).to.equal("result")
 end)
 
-```text
+```
 
 ### Testing Promises
 
@@ -226,7 +226,7 @@ firmo.it_async("tests promise-like async code", function()
   expect(result.data).to.equal("result")
 end)
 
-```text
+```
 
 ### Handling Timeouts
 
@@ -252,7 +252,7 @@ firmo.it_async("handles timeouts gracefully", function()
   expect(result).to.equal(nil)
 end)
 
-```text
+```
 
 ## Best Practices
 

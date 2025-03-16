@@ -38,7 +38,7 @@ describe("Database operations", function()
   end)
 end)
 
-```text
+```
 
 ### firmo.only_tags(...)
 Filters tests to only run those with the specified tags.
@@ -56,7 +56,7 @@ firmo.only_tags("unit")
 -- Only run tests tagged with both "fast" and "critical"
 firmo.only_tags("fast", "critical")
 
-```text
+```
 
 ### firmo.filter(pattern)
 Filters tests to only run those with names matching the specified pattern.
@@ -74,7 +74,7 @@ firmo.filter("validation")
 -- Only run tests that match a specific pattern
 firmo.filter("^user%s+%w+$")
 
-```text
+```
 
 ### firmo.reset_filters()
 Clears all active filters.
@@ -90,7 +90,7 @@ firmo.only_tags("unit")
 -- Clear the filter
 firmo.reset_filters()
 
-```text
+```
 
 ## Filtering from the Command Line
 Firmo supports filtering tests from the command line when running tests directly.
@@ -107,7 +107,7 @@ lua firmo.lua --tags unit
 # Run tests tagged with either "fast" or "critical"
 lua firmo.lua --tags fast,critical
 
-```text
+```
 
 ### --filter Option
 The `--filter` option allows you to specify a pattern to match against test names.
@@ -118,7 +118,7 @@ The `--filter` option allows you to specify a pattern to match against test name
 # Run only tests with "validation" in their name
 lua firmo.lua --filter validation
 
-```text
+```
 
 ### Combining Filters
 You can combine tag and pattern filters to further narrow the tests that run.
@@ -129,7 +129,7 @@ You can combine tag and pattern filters to further narrow the tests that run.
 # Run only "unit" tests with "validation" in their name
 lua firmo.lua --tags unit --filter validation
 
-```text
+```
 
 ## Examples
 
@@ -154,7 +154,7 @@ end)
 firmo.only_tags("unit")
 firmo.run_discovered("./tests")
 
-```text
+```
 
 ### Pattern Filtering
 
@@ -171,7 +171,7 @@ end)
 firmo.filter("format")
 firmo.run_discovered("./tests")
 
-```text
+```
 
 ### Programmatic Control
 
@@ -197,7 +197,7 @@ run_tests({tags = {"unit"}}) -- Run only unit tests
 run_tests({pattern = "validation"}) -- Run only validation tests
 run_tests({tags = {"unit"}, pattern = "validation"}) -- Run only unit validation tests
 
-```text
+```
 
 ### Using with CI Systems
 
@@ -217,7 +217,7 @@ end
 local success = firmo.run_discovered("./tests")
 os.exit(success and 0 or 1)
 
-```text
+```
 
 ### Organizing Tests with Tags
 
@@ -249,7 +249,7 @@ describe("User module", function()
   end)
 end)
 
-```text
+```
 
 ## Best Practices
 

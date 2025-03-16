@@ -16,7 +16,7 @@ firmo.run_discovered('./tests')
 -- Generate a quality report
 local report = firmo.generate_quality_report('html', './quality-report.html')
 
-```text
+```
 From the command line:
 
 ```bash
@@ -24,7 +24,7 @@ From the command line:
 # Run tests with quality validation at level 3
 lua firmo.lua --quality --quality-level 3 tests/
 
-```text
+```
 
 ## Quality Levels
 The quality module defines five progressive quality levels:
@@ -70,7 +70,7 @@ firmo.quality_options = {
   }
 }
 
-```text
+```
 
 ## API Reference
 
@@ -97,7 +97,7 @@ firmo.with_quality({
   firmo.run_discovered('./tests')
 end)
 
-```text
+```
 
 ### `firmo.start_quality(options)`
 Start quality validation with the given options:
@@ -112,7 +112,7 @@ firmo.run_discovered('./tests')
 -- Stop quality validation
 firmo.stop_quality()
 
-```text
+```
 
 ### `firmo.stop_quality()`
 Stop quality validation and finalize data collection.
@@ -123,7 +123,7 @@ Get the collected quality data as a structured table:
 ```lua
 local quality_data = firmo.get_quality_data()
 
-```text
+```
 
 ### `firmo.generate_quality_report(format, output_path)`
 Generate a quality report:
@@ -136,7 +136,7 @@ firmo.generate_quality_report("json", "./quality-report.json")
 -- Generate a summary report (returns text, doesn't write to file)
 local summary = firmo.generate_quality_report("summary")
 
-```text
+```
 Parameters:
 
 - `format` (string): Output format (html, json, summary)
@@ -152,7 +152,7 @@ else
   print("Quality is below level 3!")
 end
 
-```text
+```
 Parameters:
 
 - `level` (number): Quality level threshold (1-5)
@@ -172,7 +172,7 @@ firmo.quality_options.custom_rules = {
   max_nesting_level = 3                -- Maximum nesting level for describes
 }
 
-```text
+```
 
 ## Examples
 
@@ -188,7 +188,7 @@ firmo.run_discovered('./tests')
 -- Generate report
 firmo.generate_quality_report("html", "./quality-report.html")
 
-```text
+```
 
 ### Custom Quality Configuration
 
@@ -218,7 +218,7 @@ end
 firmo.generate_quality_report("html", "./quality/report.html")
 firmo.generate_quality_report("json", "./quality/report.json")
 
-```text
+```
 
 ### Command Line Usage
 
@@ -239,5 +239,5 @@ lua firmo.lua --quality --quality-format html --quality-output ./reports/quality
 # Run with both quality and coverage
 lua firmo.lua --quality --quality-level 3 --coverage tests/
 
-```text
+```
 

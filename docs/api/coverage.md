@@ -15,7 +15,7 @@ firmo.run_discovered('./tests')
 -- Generate a coverage report
 local report = firmo.generate_coverage_report('html', './coverage-report.html')
 
-```text
+```
 From the command line:
 
 ```bash
@@ -23,7 +23,7 @@ From the command line:
 # Run tests with coverage enabled
 lua firmo.lua --coverage tests/
 
-```text
+```
 
 ## Configuration Options
 The coverage module can be configured through the `firmo.coverage_options` table:
@@ -42,7 +42,7 @@ firmo.coverage_options = {
   debug = false                           -- Enable debug output (default: false)
 }
 
-```text
+```
 
 ## API Reference
 
@@ -76,7 +76,7 @@ firmo.with_coverage({
   firmo.run_discovered('./tests')
 end)
 
-```text
+```
 
 ### `firmo.start_coverage(options)`
 Start coverage tracking with the given options:
@@ -91,7 +91,7 @@ firmo.run_discovered('./tests')
 -- Stop coverage
 firmo.stop_coverage()
 
-```text
+```
 
 ### `firmo.stop_coverage()`
 Stop coverage tracking and finalize data collection.
@@ -102,7 +102,7 @@ Get the collected coverage data as a structured table:
 ```lua
 local coverage_data = firmo.get_coverage_data()
 
-```text
+```
 
 ### `firmo.generate_coverage_report(format, output_path)`
 Generate a coverage report:
@@ -117,7 +117,7 @@ firmo.generate_coverage_report("lcov", "./coverage-report.lcov")
 -- Generate a summary report (returns text, doesn't write to file)
 local summary = firmo.generate_coverage_report("summary")
 
-```text
+```
 Parameters:
 
 - `format` (string): Output format (html, json, lcov, summary)
@@ -133,7 +133,7 @@ else
   print("Coverage is below threshold!")
 end
 
-```text
+```
 Parameters:
 
 - `threshold` (number): Coverage percentage threshold (0-100)
@@ -181,7 +181,7 @@ firmo.run_discovered('./tests')
 -- Generate report
 firmo.generate_coverage_report("html", "./coverage-report.html")
 
-```text
+```
 
 ### Custom Coverage Configuration
 
@@ -215,7 +215,7 @@ firmo.generate_coverage_report("html", "./coverage/report.html")
 firmo.generate_coverage_report("json", "./coverage/report.json")
 firmo.generate_coverage_report("lcov", "./coverage/report.lcov")
 
-```text
+```
 
 ### Command Line Usage
 
@@ -239,5 +239,5 @@ lua firmo.lua --coverage --coverage-format html --coverage-output ./reports/cove
 # Enable debug mode
 lua firmo.lua --coverage --debug tests/
 
-```text
+```
 

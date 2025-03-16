@@ -1,41 +1,47 @@
 # Migrating from firmo to firmo
+
 This guide helps users of the original [firmo](https://github.com/bjornbytes/firmo) testing framework migrate to firmo, which adds significant new functionality while maintaining backward compatibility.
 
 ## Overview of Differences
+
 Firmo is a direct enhancement of the original firmo, maintaining all existing functionality while adding numerous new features:
-| Aspect | Original firmo | firmo |
-|--------|--------------|-----------|
-| Core functions | describe, it, expect | Same core functions + additional variants |
-| Assertions | Basic assertions | Enhanced assertions + custom assertion support |
-| Setup/Teardown | before/after | Same + more flexible hooks |
-| Mocking | Basic spies | Comprehensive mocking system with spies, stubs, mocks |
-| Filtering | None | Tagging and filtering system |
-| Async Testing | None | Complete async testing support |
-| Focused Tests | None | fdescribe/fit for focusing tests |
-| Excluded Tests | None | xdescribe/xit for excluding tests |
-| Output formats | Basic | Multiple output formats (normal, dot, compact, summary) |
-| Test discovery | None | Automatic test discovery |
-| CLI support | None | Comprehensive CLI with filtering options |
+
+| Aspect         | Original firmo       | firmo                                                   |
+| -------------- | -------------------- | ------------------------------------------------------- |
+| Core functions | describe, it, expect | Same core functions + additional variants               |
+| Assertions     | Basic assertions     | Enhanced assertions + custom assertion support          |
+| Setup/Teardown | before/after         | Same + more flexible hooks                              |
+| Mocking        | Basic spies          | Comprehensive mocking system with spies, stubs, mocks   |
+| Filtering      | None                 | Tagging and filtering system                            |
+| Async Testing  | None                 | Complete async testing support                          |
+| Focused Tests  | None                 | fdescribe/fit for focusing tests                        |
+| Excluded Tests | None                 | xdescribe/xit for excluding tests                       |
+| Output formats | Basic                | Multiple output formats (normal, dot, compact, summary) |
+| Test discovery | None                 | Automatic test discovery                                |
+| CLI support    | None                 | Comprehensive CLI with filtering options                |
 
 ## Step-by-Step Migration
 
 ### 1. Installation
+
 **Original firmo:**
 
 ```lua
 -- Copy firmo.lua to your project
 local firmo = require 'firmo'
 
-```text
+```
+
 **firmo:**
 
 ```lua
 -- Copy firmo.lua to your project
 local firmo = require 'firmo'  -- You can keep the original require name
 
-```text
+```
 
 ### 2. Update Core Testing Patterns
+
 The basic structure of tests remains the same, so most tests should work without modification:
 
 ```lua
@@ -47,9 +53,10 @@ describe("My test suite", function()
   end)
 end)
 
-```text
+```
 
 ### 3. Take Advantage of Enhanced Assertions
+
 firmo includes many new assertion types that make tests more expressive:
 **Original firmo:**
 
@@ -63,7 +70,8 @@ expect(x).to.be.a(y)
 expect(x).to.have(y)
 expect(f).to.fail()
 
-```text
+```
+
 **firmo:**
 
 ```lua
@@ -83,9 +91,10 @@ expect(value).to.be_approximately(target, delta)
 expect(function_that_throws).to.throw.error_matching("pattern")
 expect(function_that_throws).to.throw.error_type("string")
 
-```text
+```
 
 ### 4. Upgrade Your Mocking Strategy
+
 The enhanced mocking system is one of the most significant improvements:
 **Original firmo:**
 
@@ -96,7 +105,8 @@ spy(1, 2, 3)
 expect(#spy).to.equal(1)
 expect(spy[1][1]).to.equal(1)
 
-```text
+```
+
 **firmo:**
 
 ```lua
@@ -116,9 +126,10 @@ end)
 -- Set expectations with fluent API
 db_mock:expect("get_users").with(firmo.arg_matcher.any()).to.be.called.times(1)
 
-```text
+```
 
 ### 5. Implement Focused and Excluded Tests
+
 Use focused and excluded tests to run specific subsets of your test suite:
 
 ```lua
@@ -140,9 +151,10 @@ describe("other module", function()
   end)
 })
 
-```text
+```
 
 ### 6. Add Async Testing Support
+
 For code that is asynchronous, use the new async testing support:
 
 ```lua
@@ -150,7 +162,7 @@ For code that is asynchronous, use the new async testing support:
 it_async("tests async code", function()
   local result = nil
   -- Start async operation
-  startAsyncOperation(function(data) 
+  startAsyncOperation(function(data)
     result = data
   end)
   -- Wait for a specific amount of time
@@ -169,9 +181,10 @@ it_async("waits for a condition", function()
   expect(value).to.be.truthy()
 end)
 
-```text
+```
 
 ### 7. Implement Test Tagging and Filtering
+
 Organize your tests with tags and filters:
 
 ```lua
@@ -194,11 +207,12 @@ firmo.run_discovered("./tests")
 -- lua firmo.lua --tags unit,math
 -- lua firmo.lua --filter "addition"
 
-```text
+```
 
 ## Code Examples: Before and After
 
 ### Example 1: Basic Test Structure
+
 **Original firmo:**
 
 ```lua
@@ -213,7 +227,8 @@ describe('math', function()
   end)
 end)
 
-```text
+```
+
 **firmo:** (Unchanged - backwards compatible)
 
 ```lua
@@ -228,9 +243,10 @@ describe('math', function()
   end)
 end)
 
-```text
+```
 
 ### Example 2: Using Enhanced Assertions
+
 **Original firmo:**
 
 ```lua
@@ -244,7 +260,8 @@ describe('user', function()
   end)
 end)
 
-```text
+```
+
 **firmo:**
 
 ```lua
@@ -259,9 +276,10 @@ describe('user', function()
   end)
 end)
 
-```text
+```
 
 ### Example 3: Mocking
+
 **Original firmo:**
 
 ```lua
@@ -278,7 +296,8 @@ describe('database', function()
   end)
 end)
 
-```text
+```
+
 **firmo:**
 
 ```lua
@@ -299,11 +318,12 @@ describe('database', function()
   end)
 end)
 
-```text
+```
 
 ## Common Migration Issues and Solutions
 
 ### Issue 1: Spy Usage Changes
+
 **Problem:** The spy API in firmo has been enhanced and differs from the original.
 **Solution:** Update spy usages to use the new properties:
 
@@ -317,13 +337,15 @@ expect(spy.calls[1][1]).to.equal("arg")
 -- or
 expect(spy:called_with("arg")).to.be.truthy()
 
-```text
+```
 
 ### Issue 2: New Features Causing Confusion
+
 **Problem:** New features like focused tests might cause unexpected behavior.
 **Solution:** Be aware that using `fdescribe` or `fit` will cause only focused tests to run. Remove these when you want to run all tests again.
 
 ### Issue 3: Output Format Changes
+
 **Problem:** Test output format looks different from the original firmo.
 **Solution:** Configure the output format to your liking:
 
@@ -341,9 +363,10 @@ firmo.format({
 -- Or use the basic mode
 firmo.format({ compact = true })
 
-```text
+```
 
 ### Issue 4: Test Discovery and Command-Line Options
+
 **Problem:** Running tests from the command line works differently.
 **Solution:** Use the new CLI options:
 
@@ -361,48 +384,49 @@ lua firmo.lua --tags unit,fast
 # Run with specific output format
 lua firmo.lua --format dot
 
-```text
+```
 
 ## Feature Comparison Table
-| Feature | Original firmo | firmo |
-|---------|--------------|-----------|
-| **Core Testing** | | |
-| describe/it blocks | ✅ | ✅ |
-| before/after hooks | ✅ | ✅ |
-| **Assertions** | | |
-| Basic assertions (.exist, .equal, etc.) | ✅ | ✅ |
-| Table assertions (.contains.key, etc.) | ❌ | ✅ |
-| String assertions (.start_with, etc.) | ❌ | ✅ |
-| Numeric assertions (.be_greater_than, etc.) | ❌ | ✅ |
-| Error assertions (.throw.error_matching, etc.) | ❌ | ✅ |
-| Custom assertions | ❌ | ✅ |
-| **Mocking** | | |
-| Function spies | ✅ (basic) | ✅ (enhanced) |
-| Method stubs | ❌ | ✅ |
-| Complete mock objects | ❌ | ✅ |
-| Argument matchers | ❌ | ✅ |
-| Call sequence verification | ❌ | ✅ |
-| **Test Organization** | | |
-| Nested describe blocks | ✅ | ✅ |
-| Focused tests (fdescribe/fit) | ❌ | ✅ |
-| Excluded tests (xdescribe/xit) | ❌ | ✅ |
-| Test tagging | ❌ | ✅ |
-| Test filtering | ❌ | ✅ |
-| **Async Testing** | | |
-| async/await support | ❌ | ✅ |
-| Timeouts and delays | ❌ | ✅ |
-| Conditional waiting | ❌ | ✅ |
-| **Reporting** | | |
-| Colored output | ✅ | ✅ |
-| Multiple output formats | ❌ | ✅ |
-| Detailed failure messages | ❌ | ✅ |
-| Test summaries | ❌ | ✅ |
-| **Usability** | | |
-| Test discovery | ❌ | ✅ |
-| Command-line interface | ❌ | ✅ |
-| Configuration options | ❌ | ✅ |
+
+| Feature                                        | Original firmo | firmo         |
+| ---------------------------------------------- | -------------- | ------------- |
+| **Core Testing**                               |                |               |
+| describe/it blocks                             | ✅             | ✅            |
+| before/after hooks                             | ✅             | ✅            |
+| **Assertions**                                 |                |               |
+| Basic assertions (.exist, .equal, etc.)        | ✅             | ✅            |
+| Table assertions (.contains.key, etc.)         | ❌             | ✅            |
+| String assertions (.start_with, etc.)          | ❌             | ✅            |
+| Numeric assertions (.be_greater_than, etc.)    | ❌             | ✅            |
+| Error assertions (.throw.error_matching, etc.) | ❌             | ✅            |
+| Custom assertions                              | ❌             | ✅            |
+| **Mocking**                                    |                |               |
+| Function spies                                 | ✅ (basic)     | ✅ (enhanced) |
+| Method stubs                                   | ❌             | ✅            |
+| Complete mock objects                          | ❌             | ✅            |
+| Argument matchers                              | ❌             | ✅            |
+| Call sequence verification                     | ❌             | ✅            |
+| **Test Organization**                          |                |               |
+| Nested describe blocks                         | ✅             | ✅            |
+| Focused tests (fdescribe/fit)                  | ❌             | ✅            |
+| Excluded tests (xdescribe/xit)                 | ❌             | ✅            |
+| Test tagging                                   | ❌             | ✅            |
+| Test filtering                                 | ❌             | ✅            |
+| **Async Testing**                              |                |               |
+| async/await support                            | ❌             | ✅            |
+| Timeouts and delays                            | ❌             | ✅            |
+| Conditional waiting                            | ❌             | ✅            |
+| **Reporting**                                  |                |               |
+| Colored output                                 | ✅             | ✅            |
+| Multiple output formats                        | ❌             | ✅            |
+| Detailed failure messages                      | ❌             | ✅            |
+| Test summaries                                 | ❌             | ✅            |
+| **Usability**                                  |                |               |
+| Test discovery                                 | ❌             | ✅            |
+| Command-line interface                         | ❌             | ✅            |
+| Configuration options                          | ❌             | ✅            |
 
 ## Conclusion
+
 Migrating from firmo to firmo should be a smooth process for most users. Since firmo is fully backward compatible, you can gradually adopt new features as needed. The enhancements provide significant improvements to test organization, assertion capabilities, and mocking functionality, making your tests more expressive and maintainable.
 For more information, consult the [API Reference](../api/README.md) and [Example Files](../../examples).
-

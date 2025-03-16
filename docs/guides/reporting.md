@@ -27,7 +27,7 @@ firmo.run_discovered('./tests')
 -- Generate an HTML report
 firmo.generate_coverage_report('html', './coverage-report.html')
 
-```text
+```
 From the command line:
 
 ```bash
@@ -35,7 +35,7 @@ From the command line:
 # Run tests with coverage and generate HTML report
 lua firmo.lua --coverage --coverage-format html tests/
 
-```text
+```
 
 ### Interpreting Coverage Reports
 Coverage reports provide several key metrics:
@@ -68,7 +68,7 @@ firmo.coverage_options = {
   threshold = 90         -- Require 90% coverage
 }
 
-```text
+```
 From the command line:
 
 ```bash
@@ -76,7 +76,7 @@ From the command line:
 # Set custom include/exclude patterns
 lua firmo.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
 
-```text
+```
 
 ## Getting Started with Quality Validation
 
@@ -93,7 +93,7 @@ firmo.run_discovered('./tests')
 -- Generate an HTML report
 firmo.generate_quality_report('html', './quality-report.html')
 
-```text
+```
 From the command line:
 
 ```bash
@@ -101,7 +101,7 @@ From the command line:
 # Run tests with quality validation at level 3
 lua firmo.lua --quality --quality-level 3 tests/
 
-```text
+```
 
 ### Understanding Quality Levels
 The quality module supports five progressive quality levels:
@@ -141,7 +141,7 @@ it("should add two numbers", function()
   expect(calculator.add(2, 3)).to.equal(5)
 end)
 
-```text
+```
 
 #### Level 2: Standard
 
@@ -154,7 +154,7 @@ it("should add two numbers correctly", function()
   expect(function() calculator.add("a", 2) end).to.fail()
 end)
 
-```text
+```
 
 #### Level 3: Comprehensive
 
@@ -184,7 +184,7 @@ describe("calculator.add", function()
   end)
 end)
 
-```text
+```
 
 #### Level 4: Advanced
 
@@ -230,7 +230,7 @@ describe("calculator.divide", function()
   end)
 end)
 
-```text
+```
 
 #### Level 5: Complete
 
@@ -290,7 +290,7 @@ describe("calculator.evaluate", function()
   end)
 end)
 
-```text
+```
 
 ## Using the Modular Reporting System
 The reporting system in firmo follows a modular architecture with clear separation of concerns:
@@ -323,7 +323,7 @@ reporting.write_file("./reports/coverage.html", html_coverage)
 reporting.write_file("./reports/coverage.json", json_coverage)
 reporting.write_file("./reports/quality.html", html_quality)
 
-```text
+```
 
 ### Auto-Save Functionality
 For convenience, the reporting module offers auto-save functionality:
@@ -347,7 +347,7 @@ reporting.auto_save_reports(coverage_data, quality_data, "./reports")
 -- ./reports/quality-report.html
 -- ./reports/quality-report.json
 
-```text
+```
 
 ### Command Line Usage
 The most convenient way to generate reports is through the command line:
@@ -363,7 +363,7 @@ lua firmo.lua --coverage --coverage-format html --quality --quality-format json 
 # Set custom output paths
 lua firmo.lua --coverage --coverage-output ./reports/coverage.html tests/
 
-```text
+```
 
 ## Robust Fallback Mechanisms
 The reporting system in firmo includes several fallback mechanisms to ensure reliable operation under all conditions:
@@ -385,7 +385,7 @@ if not mod then
   if ok then mod = loaded end
 end
 
-```text
+```
 
 ### Directory Creation Fallbacks
 
@@ -400,7 +400,7 @@ if not success then
   success = (os.execute(test_cmd) == 0)
 end
 
-```text
+```
 
 ### Data Collection Fallbacks
 
@@ -430,7 +430,7 @@ if not coverage_data or not coverage_data.files or not next(coverage_data.files)
   end
 end
 
-```text
+```
 
 ### File Writing Fallbacks
 
@@ -451,7 +451,7 @@ if not ok then
   end
 end
 
-```text
+```
 
 ## Best Practices
 

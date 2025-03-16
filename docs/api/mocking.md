@@ -36,7 +36,7 @@ local obj = { method = function(self, arg) return arg end }
 local spy_method = firmo.spy(obj, "method")
 obj:method("test") -- Calls original method, but tracks the call
 
-```text
+```
 
 ### spy.called
 A boolean value indicating whether the spy has been called.
@@ -48,7 +48,7 @@ local spy_fn = firmo.spy(fn)
 spy_fn()
 expect(spy_fn.called).to.be.truthy()
 
-```text
+```
 
 ### spy.call_count
 The number of times the spy has been called.
@@ -61,7 +61,7 @@ spy_fn()
 spy_fn()
 expect(spy_fn.call_count).to.equal(2)
 
-```text
+```
 
 ### spy.calls
 A table containing the arguments passed to each call of the spy.
@@ -75,7 +75,7 @@ spy_fn("a", "b")
 expect(spy_fn.calls[1][1]).to.equal(1) -- First call, first argument
 expect(spy_fn.calls[2][2]).to.equal("b") -- Second call, second argument
 
-```text
+```
 
 ### spy:called_with(...)
 Checks whether the spy was called with the specified arguments.
@@ -95,7 +95,7 @@ expect(spy_fn:called_with("test")).to.be.truthy() -- Checks just the first arg
 expect(spy_fn:called_with("test", 123)).to.be.truthy() -- Checks both args
 expect(spy_fn:called_with("wrong")).to.equal(false)
 
-```text
+```
 
 ### spy:called_times(n)
 Checks whether the spy was called exactly n times.
@@ -115,7 +115,7 @@ spy_fn()
 expect(spy_fn:called_times(2)).to.be.truthy()
 expect(spy_fn:called_times(3)).to.equal(false)
 
-```text
+```
 
 ### spy:not_called()
 Checks whether the spy was never called.
@@ -131,7 +131,7 @@ expect(spy_fn:not_called()).to.be.truthy()
 spy_fn()
 expect(spy_fn:not_called()).to.equal(false)
 
-```text
+```
 
 ### spy:called_once()
 Checks whether the spy was called exactly once.
@@ -148,7 +148,7 @@ expect(spy_fn:called_once()).to.be.truthy()
 spy_fn()
 expect(spy_fn:called_once()).to.equal(false)
 
-```text
+```
 
 ### spy:called_before(other_spy, [call_index])
 Checks whether any call to this spy happened before a specific call to another spy.
@@ -171,7 +171,7 @@ spy2() -- Called second
 expect(spy1:called_before(spy2)).to.be.truthy()
 expect(spy2:called_before(spy1)).to.equal(false)
 
-```text
+```
 
 ### spy:called_after(other_spy, [call_index])
 Checks whether any call to this spy happened after a specific call to another spy.
@@ -194,7 +194,7 @@ spy2() -- Called second
 expect(spy2:called_after(spy1)).to.be.truthy()
 expect(spy1:called_after(spy2)).to.equal(false)
 
-```text
+```
 
 ### spy:has_calls_with(...)
 Checks whether the spy has any calls that match the specified pattern of arguments.
@@ -215,7 +215,7 @@ expect(spy_fn:has_calls_with("test")).to.be.truthy()
 expect(spy_fn:has_calls_with(456)).to.be.truthy()
 expect(spy_fn:has_calls_with("missing")).to.equal(false)
 
-```text
+```
 
 ### spy:last_call()
 Gets the arguments from the most recent call to the spy.
@@ -233,7 +233,7 @@ local last_args = spy_fn:last_call()
 expect(last_args[1]).to.equal("second")
 expect(last_args[2]).to.equal("arg")
 
-```text
+```
 
 ### spy:restore()
 Restores the original function/method if the spy was created for an object method.
@@ -246,7 +246,7 @@ expect(obj.method()).to.equal("original") -- Calls through to original
 spy_method:restore()
 expect(obj.method).to.equal(obj.method) -- Original function is restored
 
-```text
+```
 
 ## Stub Functions
 
@@ -274,7 +274,7 @@ status() -- Returns "in_progress"
 status() -- Returns "complete"
 status() -- Returns nil (sequence exhausted)
 
-```text
+```
 
 ### stub:returns_in_sequence(values)
 Sets up a stub to return different values on successive calls.
@@ -299,7 +299,7 @@ counter() -- Returns 3
 counter() -- Returns 8 (from function call)
 counter() -- Returns nil (sequence exhausted)
 
-```text
+```
 
 ### stub:cycle_sequence(enable)
 Configures a stub with sequential return values to cycle through the values after reaching the end of the sequence.
@@ -319,7 +319,7 @@ light() -- Returns "green"
 light() -- Returns "red" (cycles back to beginning)
 light() -- Returns "yellow"
 
-```text
+```
 
 ### stub:when_exhausted(behavior, [custom_value])
 Configures what happens when a sequence of return values is exhausted.
@@ -352,7 +352,7 @@ mock_obj:stub_in_sequence("get_data", {"mocked"})
 obj.get_data() -- Returns "mocked"
 obj.get_data() -- Returns "original" (falls back)
 
-```text
+```
 
 ### stub:reset_sequence()
 Resets a sequence stub to start returning values from the beginning of the sequence again.
@@ -371,7 +371,7 @@ counter:reset_sequence() -- Reset to start from beginning
 counter() -- Returns 1 again
 counter() -- Returns 2 again
 
-```text
+```
 **Chain Configuration Example:**
 
 ```lua
@@ -385,7 +385,7 @@ api() -- Returns "processing"
 api() -- Returns "complete"
 api() -- Returns "pending" (cycles)
 
-```text
+```
 
 ### stub.called, stub.call_count, stub:called_with, etc.
 Stubs include all the same tracking and verification methods as spies.
@@ -412,7 +412,7 @@ local database = {
 }
 local db_mock = firmo.mock(database)
 
-```text
+```
 
 ### mock:stub(name, implementation_or_value)
 Stubs a method on the mock object with a specific implementation or return value.
@@ -435,7 +435,7 @@ end)
 -- Stub with a return value
 db_mock:stub("connect", {connected = true})
 
-```text
+```
 
 ### mock:stub_in_sequence(name, sequence_values)
 Stubs a method on the mock object to return different values on successive calls.
@@ -471,7 +471,7 @@ mock_api:stub_in_sequence("get_status", {
   "reconnected"
 })
 
-```text
+```
 
 ### mock:restore_stub(name)
 Restores the original implementation of a specific stubbed method.
@@ -488,7 +488,7 @@ expect(obj.method()).to.equal("stubbed")
 mock_obj:restore_stub("method")
 expect(obj.method()).to.equal("original")
 
-```text
+```
 
 ### mock:restore()
 Restores all stubbed methods to their original implementations.
@@ -506,7 +506,7 @@ mock_obj:restore()
 expect(obj.method1()).to.equal("original1")
 expect(obj.method2()).to.equal("original2")
 
-```text
+```
 
 ### mock:verify()
 Verifies that all expectations set on the mock were met.
@@ -526,7 +526,7 @@ obj.method() -- Call the stubbed method
 -- Verify all stubbbed methods were called
 mock_obj:verify() -- Passes because method was called
 
-```text
+```
 
 ### mock:verify_sequence(expected_sequence)
 Verifies that methods were called in a specific sequence.
@@ -563,7 +563,7 @@ mock_api:verify_sequence({
   {method = "disconnect"}
 }) -- Passes because calls were made in this order
 
-```text
+```
 
 ### mock:expect(method_name)
 Sets up expectations for how a method should be called. This returns a fluent interface for defining expectations.
@@ -589,7 +589,7 @@ api.get_user(123)
 -- Verify expectations
 mock_api:verify_expectations()
 
-```text
+```
 
 ### mock:verify_expectations()
 Verifies that all expectations set with `expect()` were met.
@@ -616,7 +616,7 @@ local success, err = pcall(function()
 end)
 expect(success).to.equal(false)
 
-```text
+```
 
 ### mock._stubs
 A table containing all the stubs created on the mock.
@@ -630,7 +630,7 @@ obj.method()
 expect(mock_obj._stubs.method.called).to.be.truthy()
 expect(mock_obj._stubs.method.call_count).to.equal(1)
 
-```text
+```
 
 ## Argument Matchers
 Argument matchers provide flexible ways to match arguments in function calls.
@@ -647,7 +647,7 @@ local spy_fn = firmo.spy(function() end)
 spy_fn("test")
 expect(spy_fn:called_with(firmo.arg_matcher.any())).to.be.truthy()
 
-```text
+```
 
 ### firmo.arg_matcher.string()
 Matches any string value.
@@ -663,7 +663,7 @@ spy_fn(123)
 expect(spy_fn:called_with(firmo.arg_matcher.string())).to.be.truthy()
 expect(spy_fn:called_with(firmo.arg_matcher.number())).to.be.truthy()
 
-```text
+```
 
 ### firmo.arg_matcher.number()
 Matches any number value.
@@ -699,7 +699,7 @@ expect(spy_fn:called_with(
   firmo.arg_matcher.table_containing({id = 123, name = "different"})
 )).to.equal(false)
 
-```text
+```
 
 ### firmo.arg_matcher.custom(fn, description)
 Creates a custom matcher using the provided function.
@@ -723,7 +723,7 @@ spy_fn(42)
 spy_fn(-10)
 expect(spy_fn:called_with(positive_matcher)).to.be.truthy()
 
-```text
+```
 
 ## Context Management
 
@@ -747,7 +747,7 @@ end)
 -- Outside the context, original method is restored
 expect(obj.method()).to.equal("original")
 
-```text
+```
 
 ## Examples
 
@@ -768,7 +768,7 @@ describe("Function stubbing", function()
   end)
 end)
 
-```text
+```
 
 ### Mocking Dependencies
 
@@ -812,7 +812,7 @@ describe("process_user", function()
   end)
 end)
 
-```text
+```
 
 ### Using the with_mocks Context
 
@@ -850,7 +850,7 @@ describe("with_mocks context", function()
   end)
 end)
 
-```text
+```
 
 ## Best Practices
 
@@ -914,7 +914,7 @@ describe("Order processing system", function()
   end)
 end)
 
-```text
+```
 
 ### Using Sequential Return Values
 
@@ -1020,7 +1020,7 @@ describe("API client with changing state", function()
   end)
 end)
 
-```text
+```
 
 ### Advanced Sequence Control Examples
 
@@ -1122,5 +1122,5 @@ describe("Advanced sequence behavior", function()
   end)
 end)
 
-```text
+```
 

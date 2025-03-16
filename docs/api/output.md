@@ -1,21 +1,24 @@
 # Output Formatting API
+
 This document describes the output formatting capabilities provided by Firmo, allowing you to customize how test results are displayed.
 
 ## Overview
+
 Firmo provides a flexible output formatting system that allows you to customize how test results are presented. This includes options for colors, indentation, verbosity levels, and specialized output formats.
 The output formatting options can dramatically improve the readability of your test output, especially when running large test suites.
 
 ## Formatting Functions
 
 ### firmo.format(options)
+
 Configures the output formatting options.
 **Parameters:**
 
 - `options` (table): A table of formatting options (see formatting options table below)
-**Returns:**
+  **Returns:**
 
 - The firmo object (for chaining)
-**Example:**
+  **Example:**
 
 ```lua
 -- Configure output formatting
@@ -26,32 +29,34 @@ firmo.format({
   compact = true
 })
 
-```text
+```
 
 ### firmo.nocolor()
+
 Disables colored output. This is a shorthand for `firmo.format({ use_color = false })`.
 **Returns:**
 
 - The firmo object (for chaining)
-**Example:**
+  **Example:**
 
 ```lua
 -- Disable colored output
 firmo.nocolor()
 
-```text
+```
 
 ## Formatting Options
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `use_color` | boolean | `true` | Whether to use ANSI color codes in output |
-| `indent_char` | string | `'\t'` | Character to use for indentation (tab or spaces) |
-| `indent_size` | number | `1` | How many indent_chars to use per level |
-| `show_trace` | boolean | `false` | Whether to show stack traces for errors |
-| `show_success_detail` | boolean | `true` | Whether to show details for successful tests |
-| `compact` | boolean | `false` | Use compact output format (less verbose) |
-| `dot_mode` | boolean | `false` | Use dot mode (. for pass, F for fail) |
-| `summary_only` | boolean | `false` | Show only summary, not individual tests |
+
+| Option                | Type    | Default | Description                                      |
+| --------------------- | ------- | ------- | ------------------------------------------------ |
+| `use_color`           | boolean | `true`  | Whether to use ANSI color codes in output        |
+| `indent_char`         | string  | `'\t'`  | Character to use for indentation (tab or spaces) |
+| `indent_size`         | number  | `1`     | How many indent_chars to use per level           |
+| `show_trace`          | boolean | `false` | Whether to show stack traces for errors          |
+| `show_success_detail` | boolean | `true`  | Whether to show details for successful tests     |
+| `compact`             | boolean | `false` | Use compact output format (less verbose)         |
+| `dot_mode`            | boolean | `false` | Use dot mode (. for pass, F for fail)            |
+| `summary_only`        | boolean | `false` | Show only summary, not individual tests          |
 
 ## Examples
 
@@ -73,7 +78,7 @@ describe("My feature", function()
   end)
 end)
 
-```text
+```
 
 ### Different Output Styles
 
@@ -86,14 +91,15 @@ firmo.format({
   compact = false
 })
 
-```text
+```
+
 This produces verbose output with colors:
 
-```text
+```
 My feature
   PASS Test works correctly
 
-```text
+```
 
 #### Compact Output
 
@@ -103,14 +109,15 @@ firmo.format({
   show_success_detail = false
 })
 
-```text
+```
+
 This produces less verbose output:
 
-```text
+```
 My feature
   .
 
-```text
+```
 
 #### Dot Mode
 
@@ -119,13 +126,14 @@ firmo.format({
   dot_mode = true
 })
 
-```text
+```
+
 This produces minimal output with dots for passing tests and 'F' for failing tests:
 
-```text
+```
 ...F..
 
-```text
+```
 
 #### Summary Only
 
@@ -134,13 +142,14 @@ firmo.format({
   summary_only = true
 })
 
-```text
+```
+
 This only shows the final summary:
 
-```text
+```
 5 passes, 1 failure
 
-```text
+```
 
 #### Plain Text (No Colors)
 
@@ -149,13 +158,15 @@ firmo.format({
   use_color = false
 })
 
-```text
+```
+
 or simply:
 
 ```lua
 firmo.nocolor()
 
-```text
+```
+
 This disables ANSI color codes, useful for environments that don't support them.
 
 ### Custom Indentation
@@ -172,7 +183,7 @@ firmo.format({
   indent_size = 1
 })
 
-```text
+```
 
 ### Showing Stack Traces
 
@@ -181,19 +192,21 @@ firmo.format({
   show_trace = true
 })
 
-```text
+```
+
 This shows full stack traces for errors:
 
-```text
+```
 FAIL Test that will fail
   stack traceback:
     test.lua:10: in function 'fn'
     firmo.lua:283: in upvalue 'subject'
     firmo.lua:289: in function <firmo.lua:278>
 
-```text
+```
 
 ## Command Line Integration
+
 When running tests via the command line, you can use the `--format` option to specify a predefined format.
 
 ```bash
@@ -213,7 +226,8 @@ lua firmo.lua --format detailed
 # Run tests with plain text (no colors)
 lua firmo.lua --format plain
 
-```text
+```
+
 You can also customize indentation from the command line:
 
 ```bash
@@ -227,7 +241,7 @@ lua firmo.lua --indent 4
 # Use tabs for indentation
 lua firmo.lua --indent tabs
 
-```text
+```
 
 ## Best Practices
 
@@ -251,6 +265,7 @@ lua firmo.lua --indent tabs
 ## Examples in Context
 
 ### Error Handling
+
 With detailed error output:
 
 ```lua
@@ -269,9 +284,10 @@ describe("Error handling", function()
   end)
 end)
 
-```text
+```
 
 ### CI Integration
+
 For CI environments, you might want summary-only output for logs:
 
 ```lua
@@ -291,9 +307,10 @@ else
   })
 end
 
-```text
+```
 
 ### Large Test Suites
+
 For large test suites, dot mode can provide a compact overview:
 
 ```lua
@@ -302,8 +319,7 @@ firmo.format({
 })
 -- When many tests run, you'll see something like:
 -- .........................F...........
--- 
+--
 -- Followed by details on the single failure
 
-```text
-
+```

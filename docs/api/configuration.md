@@ -7,7 +7,7 @@ The easiest way to create a configuration file is to use the built-in command:
 ```bash
 lua firmo.lua --create-config
 
-```text
+```
 This will create a `.firmo-config.lua` file in your current directory with all available configuration options and their default values.
 
 ## Configuration File Structure
@@ -37,7 +37,7 @@ return {
   -- More sections for other features...
 }
 
-```text
+```
 
 ## Using Different Configuration Files
 You can specify a different configuration file at runtime:
@@ -45,7 +45,7 @@ You can specify a different configuration file at runtime:
 ```bash
 lua firmo.lua --config my-custom-config.lua
 
-```text
+```
 
 ## Configuration Sections
 
@@ -60,7 +60,7 @@ test_discovery = {
   recursive = true,                 -- Recursively search directories
 }
 
-```text
+```
 
 ### Output Formatting
 Customizes the test output appearance:
@@ -78,7 +78,7 @@ format = {
   default_format = "detailed",      -- Default format (dot, compact, summary, detailed, plain)
 }
 
-```text
+```
 
 ### Asynchronous Testing
 Controls behavior of asynchronous tests:
@@ -90,7 +90,7 @@ async = {
   debug = false,                    -- Enable debug mode for async operations
 }
 
-```text
+```
 
 ### Parallel Execution
 Configure how tests run in parallel:
@@ -106,7 +106,7 @@ parallel = {
   aggregate_coverage = true,        -- Combine coverage data from all workers
 }
 
-```text
+```
 
 ### Coverage Analysis
 Configure code coverage analysis:
@@ -128,7 +128,7 @@ coverage = {
   control_flow_keywords_executable = true, -- Treat control flow keywords (end, else, etc.) as executable
 }
 
-```text
+```
 
 ### Test Quality Validation
 Configure test quality validation:
@@ -142,7 +142,7 @@ quality = {
   output = nil,                     -- Output file path (nil for console)
 }
 
-```text
+```
 
 ### Code Fixing/Linting
 Configure code fixing and linting:
@@ -171,7 +171,7 @@ codefix = {
   },
 }
 
-```text
+```
 
 ### Reporting Configuration
 Configure report generation:
@@ -189,7 +189,7 @@ reporting = {
   verbose = false,                  -- Enable verbose output during report generation
 }
 
-```text
+```
 
 ### Watch Mode
 Configure watch mode for continuous testing:
@@ -202,7 +202,7 @@ watch = {
   clear_console = true,             -- Clear console before re-running tests
 }
 
-```text
+```
 
 ### Interactive CLI Mode
 Configure the interactive CLI mode:
@@ -215,7 +215,7 @@ interactive = {
   default_pattern = "*_test.lua",   -- Default pattern for test files
 }
 
-```text
+```
 
 ### Custom Formatters
 Configure custom formatters:
@@ -228,7 +228,7 @@ formatters = {
   results = nil,                    -- Custom format for test results
 }
 
-```text
+```
 
 ### Module Reset System
 Configure the module reset system (used to prevent test state leakage):
@@ -247,7 +247,7 @@ module_reset = {
   },
 }
 
-```text
+```
 
 ## Programmatic Usage
 You can also load and use the configuration system programmatically:
@@ -259,7 +259,7 @@ local config = firmo.config.load_from_file("path/to/config.lua")
 -- Apply the configuration
 firmo.config.apply_to_firmo(firmo)
 
-```text
+```
 
 ## CLI Options
 The configuration system adds the following CLI options:

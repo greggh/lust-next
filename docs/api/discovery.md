@@ -25,7 +25,7 @@ local test_files = firmo.discover("./src/tests")
 -- Find files with a specific pattern
 local test_files = firmo.discover("./tests", "*_spec.lua")
 
-```text
+```
 
 ### firmo.run_discovered(root_dir, pattern, options)
 Discovers and runs test files matching the specified pattern in the given directory.
@@ -62,7 +62,7 @@ local results = firmo.run_discovered("./tests", "*_test.lua", {
 -- Check results
 print("Passed: " .. results.passed_tests .. "/" .. results.total_tests)
 
-```text
+```
 
 ### firmo.run_file(file_path)
 Runs a single test file.
@@ -89,7 +89,7 @@ else
   print("Failed to load file: " .. result.error)
 end
 
-```text
+```
 
 ### firmo.cli_run(dir, options)
 Command-line runner that finds and runs tests. This is primarily used internally when Firmo is invoked from the command line.
@@ -115,7 +115,7 @@ local success = firmo.cli_run("./tests", {
 -- Use exit code for CI systems
 os.exit(success and 0 or 1)
 
-```text
+```
 
 ## Command Line Usage
 Firmo can be run directly from the command line to discover and run tests.
@@ -146,7 +146,7 @@ lua firmo.lua --tags unit --filter validation
 # Show help
 lua firmo.lua --help
 
-```text
+```
 
 ## Test File Naming Conventions
 By default, Firmo looks for files matching the pattern `*_test.lua`. This is a common convention in many testing frameworks.
@@ -169,7 +169,7 @@ local results = firmo.run_discovered()
 print("Files: " .. results.passed_files .. "/" .. results.total_files .. " passed")
 print("Tests: " .. results.passed_tests .. "/" .. results.total_tests .. " passed")
 
-```text
+```
 
 ### Custom Discovery Pattern
 
@@ -181,7 +181,7 @@ local results = firmo.run_discovered("./specs", "*_spec.lua")
 print("Found " .. results.total_files .. " spec files")
 print("Ran " .. results.total_tests .. " specs")
 
-```text
+```
 
 ### Dynamic Test Directory
 
@@ -198,7 +198,7 @@ end
 -- Run tests in the appropriate directory
 local results = firmo.run_discovered(test_dir)
 
-```text
+```
 
 ### Conditional CLI Execution
 
@@ -231,7 +231,7 @@ if is_main then
   os.exit(success and 0 or 1)
 end
 
-```text
+```
 
 ## Best Practices
 

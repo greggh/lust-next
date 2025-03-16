@@ -14,7 +14,7 @@ The simplest way to use Firmo is to copy the `firmo.lua` file directly into your
 ```bash
 luarocks install firmo
 
-```text
+```
 
 ## Basic Usage
 
@@ -44,7 +44,7 @@ describe("Math operations", function()
   end)
 end)
 
-```text
+```
 
 ### 2. Run the Test
 Run the test using the firmo runner script:
@@ -52,16 +52,16 @@ Run the test using the firmo runner script:
 ```bash
 lua scripts/runner.lua example_test.lua
 
-```text
+```
 You should see output similar to:
 
-```text
+```
 Math operations
  PASS adds two numbers correctly
  PASS subtracts two numbers correctly
  PASS raises an error when dividing by zero
 
-```text
+```
 Note: Tests are run by `scripts/runner.lua` or `run_all_tests.lua`, not by directly executing the test file.
 
 ## Writing Tests
@@ -95,7 +95,7 @@ expect(num).to.be_approximately(0.3, 0.0001)
 expect(function() error("oops") end).to.fail()
 expect(function() error("invalid") end).to.throw.error_matching("invalid")
 
-```text
+```
 
 ### Before and After Hooks
 First import the hooks, then use them for setup and teardown:
@@ -128,7 +128,7 @@ describe("Database tests", function()
   end)
 end)
 
-```text
+```
 
 ## Organizing Tests
 
@@ -152,7 +152,7 @@ describe("User module", function()
   end)
 end)
 
-```text
+```
 
 ### Tagging Tests
 You can add tags to your tests for filtering:
@@ -169,7 +169,7 @@ describe("User module", function()
   end)
 end)
 
-```text
+```
 
 ## Running Tests
 
@@ -178,7 +178,7 @@ end)
 ```bash
 lua scripts/runner.lua tests/example_test.lua
 
-```text
+```
 
 ### Running Multiple Test Files
 Create a directory for your tests (e.g., `tests`) and use Firmo's test discovery:
@@ -186,7 +186,7 @@ Create a directory for your tests (e.g., `tests`) and use Firmo's test discovery
 ```bash
 lua run_all_tests.lua --dir ./tests
 
-```text
+```
 
 ### Filtering Tests
 Run only tests with specific tags:
@@ -194,13 +194,13 @@ Run only tests with specific tags:
 ```bash
 lua scripts/runner.lua --tags unit tests/example_test.lua
 
-```text
+```
 Run only tests matching a pattern:
 
 ```bash
 lua scripts/runner.lua --filter authentication tests/example_test.lua
 
-```text
+```
 
 ### Running Tests with Watch Mode
 For continuous testing that automatically reruns tests when files change:
@@ -208,7 +208,7 @@ For continuous testing that automatically reruns tests when files change:
 ```bash
 lua scripts/runner.lua --watch tests/example_test.lua
 
-```text
+```
 
 ## Asynchronous Testing
 For testing asynchronous code, use the async testing support:
@@ -227,7 +227,7 @@ firmo.it_async("fetches data asynchronously", function()
   expect(result.status).to.equal("success")
 end)
 
-```text
+```
 
 ## Mocking
 For isolating your tests, use the mocking system:
@@ -248,7 +248,7 @@ expect(db_mock._stubs.query.called).to.be.truthy()
 -- Restore original methods
 db_mock:restore()
 
-```text
+```
 
 ## Next Steps
 Now that you understand the basics of Firmo, you can:

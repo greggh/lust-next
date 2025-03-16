@@ -52,7 +52,7 @@ jobs:
           name: test-results
           path: test-results.xml
 
-```text
+```
 
 ### GitLab CI
 GitLab CI/CD is GitLab's built-in tool for software development using continuous integration and delivery.
@@ -82,7 +82,7 @@ run_tests:
     reports:
       junit: test-results.xml
 
-```text
+```
 
 ### CircleCI
 CircleCI is a CI/CD platform that automates the build, test, and deployment process.
@@ -120,7 +120,7 @@ workflows:
 
       - test
 
-```text
+```
 
 ### Jenkins
 Jenkins is an open-source automation server that enables developers to build, test, and deploy their software.
@@ -150,7 +150,7 @@ pipeline {
     }
 }
 
-```text
+```
 
 ## Best Practices for CI Testing
 
@@ -171,14 +171,14 @@ describe("Database module", function()
   end)
 end)
 
-```text
+```
 In your CI configuration, you can run specific test groups:
 
 ```bash
 lua firmo.lua --tags unit  # Run only unit tests
 lua firmo.lua --tags integration  # Run only integration tests
 
-```text
+```
 
 ### 3. Manage Test Environments
 For tests that require specific environment setup:
@@ -198,7 +198,7 @@ steps:
     run: |
       lua firmo.lua --tags integration
 
-```text
+```
 
 ### 4. Configure Test Timeouts
 For long-running tests, set appropriate timeouts:
@@ -213,7 +213,7 @@ steps:
     run: |
       lua firmo.lua --dir ./tests
 
-```text
+```
 
 ### 5. Parallel Test Execution
 For large test suites, consider running tests in parallel:
@@ -232,7 +232,7 @@ jobs:
         run: |
           lua firmo.lua --tags ${{ matrix.test-group }}
 
-```text
+```
 
 ## Interpreting Test Results
 Firmo provides different output formats to help you interpret test results in CI environments.
@@ -240,14 +240,14 @@ Firmo provides different output formats to help you interpret test results in CI
 ### Standard Output
 By default, Firmo outputs test results to the console:
 
-```text
+```
 Math operations
   PASS adds two numbers correctly
   PASS subtracts two numbers correctly
   FAIL raises an error when dividing by zero
     Expected function to fail but it did not
 
-```text
+```
 
 ### JUnit XML Format (For CI Systems)
 For better CI integration, use the JUnit XML reporter:
@@ -255,7 +255,7 @@ For better CI integration, use the JUnit XML reporter:
 ```bash
 lua firmo.lua --dir ./tests --reporter junit > test-results.xml
 
-```text
+```
 This generates an XML file that most CI systems can parse and display as test reports.
 
 ### JSON Format (For Custom Processing)
@@ -264,7 +264,7 @@ For custom processing of test results:
 ```bash
 lua firmo.lua --dir ./tests --reporter json > test-results.json
 
-```text
+```
 
 ## Tips for Effective CI Configuration
 
@@ -325,7 +325,7 @@ jobs:
           path: |
             *-test-results.xml
 
-```text
+```
 
 ## Further Resources
 

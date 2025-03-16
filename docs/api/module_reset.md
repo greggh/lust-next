@@ -38,7 +38,7 @@ describe("Database tests", function()
   end)
 end)
 
-```text
+```
 
 ### firmo.with_fresh_module(module_name, test_fn)
 Runs a function with a freshly loaded module, simplifying single-use cases.
@@ -64,7 +64,7 @@ it("executes a test with a fresh module", function()
   -- Any changes to the module are isolated to the with_fresh_module call
 end)
 
-```text
+```
 
 ## Automatic Test Suite Isolation
 Firmo provides an enhanced module reset system that automatically resets all modules between test files, ensuring complete isolation. This system is built into the run_all_tests.lua runner.
@@ -83,7 +83,7 @@ module_reset.configure({
   verbose = false        -- Show detailed output about reset modules
 })
 
-```text
+```
 
 ### Module Reset API
 
@@ -102,7 +102,7 @@ module_reset.configure({
   verbose = false        -- Show detailed output about reset modules
 })
 
-```text
+```
 
 #### `module_reset.reset_all(options)`
 Resets all non-protected modules:
@@ -112,7 +112,7 @@ local reset_count = module_reset.reset_all({
   verbose = false  -- Show detailed output about reset modules
 })
 
-```text
+```
 
 #### `module_reset.reset_pattern(pattern, options)`
 Resets modules matching the given pattern:
@@ -122,7 +122,7 @@ local reset_count = module_reset.reset_pattern("my_module.*", {
   verbose = false
 })
 
-```text
+```
 
 #### `module_reset.protect(modules)`
 Protects specified modules from being reset:
@@ -133,7 +133,7 @@ module_reset.protect("important_module")
 -- Protect multiple modules
 module_reset.protect({"module1", "module2", "module3"})
 
-```text
+```
 
 #### `module_reset.get_loaded_modules()`
 Returns a list of currently loaded modules that are not protected.
@@ -150,7 +150,7 @@ The built-in test runner automatically uses module reset if available:
 ```bash
 lua run_all_tests.lua
 
-```text
+```
 You can add flags to customize the runner:
 
 ```bash
@@ -167,7 +167,7 @@ lua run_all_tests.lua --performance
 # Filter tests by pattern
 lua run_all_tests.lua --filter "database_*"
 
-```text
+```
 
 ## Best Practices
 
@@ -217,7 +217,7 @@ describe("User database operations", function()
   end)
 end)
 
-```text
+```
 
 ### Handling Complex Dependencies
 For modules with complex dependency graphs, use reset_module on the highest-level module that needs to be reset:
@@ -235,7 +235,7 @@ describe("Authentication service", function()
   end)
 end)
 
-```text
+```
 
 ### Using Both Approaches Together
 For maximum isolation, you can use both approaches:
@@ -259,7 +259,7 @@ describe("User service tests", function()
   -- Tests...
 end)
 
-```text
+```
 
 ## Implementation Notes
 The basic module reset utilities work by:
