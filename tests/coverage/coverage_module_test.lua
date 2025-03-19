@@ -11,6 +11,7 @@ local error_handler = require("lib.tools.error_handler")
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
 local central_config = require("lib.core.central_config")
+local temp_file = require("lib.tools.temp_file")
 
 -- Try to load the logging module with standardized error handling
 local logging, logger
@@ -57,10 +58,8 @@ local function time(name, fn)
   return result
 end
 
--- Create a simple test module with error handling
-local test_module_path = os.tmpname() .. ".lua"
-local write_success, write_err = test_helper.with_error_capture(function()
-  return fs.write_file(test_module_path, [[
+-- Create a simple test module with error handling using temp_file
+local test_module_content = [[
 local M = {}
 
 function M.add(a, b)
@@ -111,29 +110,19 @@ function M.complex_function(a, b, c)
 end
 
 return M
-]])
-end)()
+]]
 
-if not write_success then
+-- Create temporary file with the test module content
+local test_module_path, create_err = temp_file.create_with_content(test_module_content, "lua")
+
+if create_err then
   error(error_handler.io_error(
     "Failed to create test module",
-    {file_path = test_module_path, error = write_err}
+    {error = create_err}
   ))
 end
 
--- Clean up function to run after tests with error handling
-local function cleanup()
-  local success, err = test_helper.with_error_capture(function()
-    return os.remove(test_module_path)
-  end)()
-  
-  if not success and log then
-    log.warn("Failed to remove test module file", {
-      file_path = test_module_path,
-      error = err
-    })
-  end
-end
+-- No need for explicit cleanup function as temp_file handles cleanup automatically
 
 describe("Coverage Module", function()
   if log then
@@ -471,15 +460,13 @@ describe("Coverage Module", function()
     coverage.init({ enabled = true })
   end)
   
-  -- Run cleanup for all tests
+  -- No need for explicit cleanup for test files - temp_file handles it automatically
   after(function()
     if log then
-      log.debug("Running test cleanup", {
+      log.debug("Test completed, automatic cleanup will occur", {
         file = test_module_path
       })
     end
-    
-    cleanup()
   end)
 end)
 

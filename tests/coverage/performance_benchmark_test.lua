@@ -13,6 +13,8 @@ local coverage = require("lib.coverage")
 local debug_hook = require("lib.coverage.debug_hook")
 local fs = require("lib.tools.filesystem")
 local benchmark = require("lib.tools.benchmark")
+local temp_file = require("lib.tools.temp_file")
+local test_helper = require("lib.tools.test_helper")
 
 -- Helper function to generate a lua file with specified complexity
 local function generate_test_file(options)
@@ -103,32 +105,19 @@ local function generate_test_file(options)
   -- Add return statement at the end
   table.insert(lines, "return M")
   
-  -- Create a temporary directory if needed
-  local temp_dir = "./temp_test_files"
-  os.execute("mkdir -p " .. temp_dir)
+  -- Generate file content
+  local content = table.concat(lines, "\n")
   
-  -- Generate a unique filename in our own temp directory (not using os.tmpname())
-  local timestamp = os.time()
-  local random_suffix = math.random(1000, 9999)
-  local filename = string.format("test_file_%d_%d.lua", timestamp, random_suffix)
-  local file_path = temp_dir .. "/" .. filename
-  
-  -- Write to file
-  local file = io.open(file_path, "w")
-  file:write(table.concat(lines, "\n"))
-  file:close()
+  -- Create a temporary file with the content using temp_file module
+  local file_path, err = temp_file.create_with_content(content, "lua")
+  if err then
+    error("Failed to create benchmark test file: " .. tostring(err))
+  end
   
   return file_path
 end
 
 describe("Coverage Performance Benchmarks", function()
-  -- Create temporary directory for test files
-  local temp_dir = "./temp_test_files"
-  os.execute("mkdir -p " .. temp_dir)
-  
-  -- Store test files to clean up later
-  local test_files = {}
-  
   -- Custom measure function to work around benchmark.measure issues
   local function measure_execution(func)
     local start_time = os.clock()
@@ -137,16 +126,7 @@ describe("Coverage Performance Benchmarks", function()
     return end_time - start_time
   end
   
-  after(function()
-    -- Clean up all test files
-    for _, file_path in ipairs(test_files) do
-      os.remove(file_path)
-    end
-    
-    -- Try to remove the temp directory (only if empty)
-    -- This is best-effort cleanup - we don't fail the test if this doesn't work
-    os.execute("rmdir " .. temp_dir .. " 2>/dev/null || true")
-  end)
+  -- No need for explicit cleanup, temp_file handles it automatically
   
   it("should have reasonable overhead for small files", function()
     -- Generate a small test file
@@ -155,7 +135,7 @@ describe("Coverage Performance Benchmarks", function()
       branch_count = 5,
       function_count = 2
     })
-    table.insert(test_files, small_file)
+    -- No need to track for cleanup - temp_file handles it automatically
     
     -- Use dofile instead of require to load the module directly
     -- First run without coverage to establish baseline
@@ -205,7 +185,7 @@ describe("Coverage Performance Benchmarks", function()
       function_count = 5,
       complex_conditions = true
     })
-    table.insert(test_files, medium_file)
+    -- No need to track for cleanup - temp_file handles it automatically
     
     -- First run without coverage to establish baseline
     coverage.stop() -- Ensure coverage is off
@@ -254,10 +234,7 @@ describe("Coverage Performance Benchmarks", function()
       generate_test_file({ line_count = 300, branch_count = 8, function_count = 4, complex_conditions = true })
     }
     
-    -- Add files to cleanup list
-    for _, file_path in ipairs(files) do
-      table.insert(test_files, file_path)
-    end
+    -- No need to track for cleanup - temp_file handles it automatically
     
     -- First run without coverage to establish baseline
     coverage.stop() -- Ensure coverage is off
@@ -315,7 +292,7 @@ describe("Coverage Performance Benchmarks", function()
       function_count = 5,
       complex_conditions = true
     })
-    table.insert(test_files, test_file)
+    -- No need to track for cleanup - temp_file handles it automatically
     
     -- Force garbage collection to get a clean baseline
     collectgarbage("collect")
@@ -369,7 +346,7 @@ describe("Coverage Performance Benchmarks", function()
       function_count = 20,
       complex_conditions = true
     })
-    table.insert(test_files, large_file)
+    -- No need to track for cleanup - temp_file handles it automatically
     
     -- Rather than comparing execution time, we'll focus on ensuring coverage
     -- operations complete within reasonable timeframes
@@ -424,7 +401,7 @@ describe("Coverage Performance Benchmarks", function()
       branch_count = 10,
       function_count = 3
     })
-    table.insert(test_files, test_file)
+    -- No need to track for cleanup - temp_file handles it automatically
     
     -- Initialize and start coverage
     coverage.init({

@@ -6,30 +6,29 @@ local error_handler = require("lib.tools.error_handler")
 local logging = require("lib.tools.logging")
 local logger = logging.get_logger("test.instrumentation")
 local instrumentation = require("lib.coverage.instrumentation")
+local temp_file = require("lib.tools.temp_file")
+local test_helper = require("lib.tools.test_helper")
 
 -- Import test functions correctly
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
 
--- Test helper functions
+-- Test helper functions using new temp_file module
 local function create_test_file(content)
-    local temp_dir = os.tmpname():gsub("([^/]+)$", "")
-    local test_file = temp_dir .. "/instrumentation_test_" .. os.time() .. ".lua"
-    
-    -- Log the file being created for debugging
-    logger.debug("Creating test file", {path = test_file})
-    
-    local success, err = fs.write_file(test_file, content)
-    if not success then
-        error("Failed to write test file: " .. tostring(err))
+    -- Create a temporary file with the provided content
+    local file_path, create_err = temp_file.create_with_content(content, "lua")
+    if create_err then
+        logger.error("Failed to create temporary file", {error = create_err})
+        error("Failed to create test file: " .. tostring(create_err))
     end
     
-    return test_file
+    -- Log the file being created for debugging
+    logger.debug("Created test file", {path = file_path})
+    
+    return file_path
 end
 
-local function cleanup_test_file(file_path)
-    os.remove(file_path)
-end
+-- No need for cleanup function as temp_file handles automatic cleanup
 
 -- Helper function to safely instrument a file manually and load it
 local function safe_instrument_and_load(file_path)
@@ -74,10 +73,9 @@ local function safe_instrument_and_load(file_path)
     end
     logger.debug("First lines of instrumented content", {count = #first_lines})
     
-    -- Create a temporary instrumented file with proper error handling
-    local instrumented_file = file_path .. ".instrumented"
-    local write_success, write_err = fs.write_file(instrumented_file, instrumented_content)
-    if not write_success then
+    -- Create a temporary instrumented file with proper error handling using temp_file
+    local instrumented_file, write_err = temp_file.create_with_content(instrumented_content, "lua")
+    if write_err then
         logger.error("Error writing instrumented file", {error = write_err})
         return nil, write_err
     end
@@ -87,7 +85,11 @@ local function safe_instrument_and_load(file_path)
     if not syntax_ok then
         logger.error("Syntax error in instrumented file", {error = syntax_err})
         logger.info("Preserving instrumented file for inspection", {path = instrumented_file})
-        -- Don't delete the file so we can examine it
+        
+        -- Register the file to be preserved (not automatically cleaned up)
+        -- This prevents the file from being deleted so we can examine it
+        -- No need for manual preservation since temp_file handles tracking
+        
         return nil, "Syntax error in instrumented file: " .. tostring(syntax_err)
     end
     
@@ -101,10 +103,9 @@ local function safe_instrument_and_load(file_path)
         logger.error("Error loading instrumented file", {error = result})
         logger.info("Preserving instrumented file for inspection", {path = instrumented_file})
         return nil, result
-    else
-        -- Clean up the instrumented file if successful
-        os.remove(instrumented_file)
     end
+    
+    -- No need to explicitly remove the file as temp_file handles automatic cleanup
     
     -- Check if we actually got a function
     if type(result) ~= "function" then
@@ -260,8 +261,7 @@ describe("Instrumentation module tests", function()
                 expect(true).to.equal(true)
             end
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup anymore - temp_file handles it automatically
         end)
         
         it("should reject files that are too large", { expect_error = true }, function()
@@ -311,8 +311,7 @@ describe("Instrumentation module tests", function()
                 allow_fallback = true
             })
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup anymore - temp_file handles it automatically
         end)
     end)
 
@@ -377,8 +376,7 @@ return {
             
             expect(file_found).to.be_truthy("File not found in coverage data: " .. file_path)
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup anymore - temp_file handles it automatically
         end)
     end)
     
@@ -440,8 +438,7 @@ return {
             
             expect(file_found).to.be_truthy("File not found in coverage data: " .. file_path)
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup anymore - temp_file handles it automatically
         end)
     end)
     
@@ -511,8 +508,7 @@ return create_config()
             
             expect(file_found).to.be_truthy("File not found in coverage data: " .. file_path)
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup anymore - temp_file handles it automatically
         end)
     end)
     

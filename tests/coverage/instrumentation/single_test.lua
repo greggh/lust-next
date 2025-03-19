@@ -6,37 +6,36 @@ local error_handler = require("lib.tools.error_handler")
 local logging = require("lib.tools.logging")
 local logger = logging.get_logger("test.instrumentation")
 local instrumentation = require("lib.coverage.instrumentation")
+local temp_file = require("lib.tools.temp_file")
+local test_helper = require("lib.tools.test_helper")
 
 -- Import test functions correctly
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
 
--- Test helper functions
+-- Test helper functions using temp_file module
 local function create_test_file(content)
-    local temp_dir = os.tmpname():gsub("([^/]+)$", "")
-    local test_file = temp_dir .. "/instrumentation_test_" .. os.time() .. ".lua"
-    
-    -- Log the file being created for debugging
-    logger.debug("Creating test file", {path = test_file})
-    logger.debug("Content", {content = content})
-    
     -- Ensure the content is valid Lua
     local load_success, load_err = load(content, "test content")
     if not load_success then
         logger.warn("Test content has syntax errors", {error = load_err})
     end
     
-    local success, err = fs.write_file(test_file, content)
-    if not success then
-        error("Failed to write test file: " .. tostring(err))
+    -- Create a temporary file with the provided content
+    local file_path, create_err = temp_file.create_with_content(content, "lua")
+    if create_err then
+        logger.error("Failed to create temporary file", {error = create_err})
+        error("Failed to create test file: " .. tostring(create_err))
     end
     
-    return test_file
+    -- Log the file being created for debugging
+    logger.debug("Created test file", {path = file_path})
+    logger.debug("Content", {content = content})
+    
+    return file_path
 end
 
-local function cleanup_test_file(file_path)
-    os.remove(file_path)
-end
+-- No need for cleanup function as temp_file handles automatic cleanup
 
 -- Helper function to safely instrument a file manually and load it
 local function safe_instrument_and_load(file_path)
@@ -85,10 +84,9 @@ local function safe_instrument_and_load(file_path)
     end
     logger.debug("First lines of instrumented content", {count = #first_lines})
     
-    -- Create a temporary instrumented file with proper error handling
-    local instrumented_file = file_path .. ".instrumented"
-    local write_success, write_err = fs.write_file(instrumented_file, instrumented_content)
-    if not write_success then
+    -- Create a temporary instrumented file with proper error handling using temp_file
+    local instrumented_file, write_err = temp_file.create_with_content(instrumented_content, "lua")
+    if write_err then
         logger.error("Error writing instrumented file", {error = write_err})
         return nil, write_err
     end
@@ -107,8 +105,7 @@ local function safe_instrument_and_load(file_path)
         return nil, result
     end
     
-    -- Clean up only if successful
-    os.remove(instrumented_file)
+    -- No need to explicitly remove instrumented_file - temp_file handles cleanup automatically
     
     -- Check if we actually got a function
     if type(result) ~= "function" then
@@ -243,8 +240,7 @@ return simple_function()
             expect(file_stats).to.exist("No file stats found for " .. normalized_path)
             expect(file_stats.covered_lines).to.exist("No covered lines found for file")
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup - temp_file handles it automatically
         end)
     end)
     
@@ -324,8 +320,7 @@ return {
             local line_coverage = file_stats.line_coverage_percent or 0
             expect(line_coverage).to.be.at_least(50, "Line coverage is below 50%: " .. line_coverage .. "%")
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup - temp_file handles it automatically
         end)
     end)
     
@@ -406,8 +401,7 @@ return create_nested_tables()
             expect(file_stats).to.exist("No file stats found")
             expect(file_stats.covered_lines).to.exist("No covered lines found")
             
-            -- Cleanup
-            cleanup_test_file(file_path)
+            -- No need for explicit cleanup - temp_file handles it automatically
         end)
     end)
     
@@ -431,25 +425,28 @@ local module_loaded = true
 return M
 ]]
             
-            local temp_dir = os.tmpname():gsub("([^/]+)$", "")
+            -- Create the module file using temp_file
             local timestamp = os.time()
-            local module_path = temp_dir .. "/test_module_" .. timestamp .. ".lua"
-            logger.info("Creating module", {path = module_path})
-            local success, err = fs.write_file(module_path, module_code)
-            expect(success).to.be_truthy("Could not write module file: " .. tostring(err))
+            local module_path, create_err = temp_file.create_with_content(module_code, "lua")
+            expect(create_err).to_not.exist("Could not create module file: " .. tostring(create_err))
+            logger.info("Created module", {path = module_path})
+            
+            -- Extract module name from the path
+            local module_name = module_path:match("([^/]+)%.lua$"):gsub("%.lua$", "")
             
             -- Create a test file that requires the module
             local test_code = string.format([[
 local module_path = %q
 package.path = package.path .. ";?;" .. module_path:match("(.+)/") .. "/?.lua"
 
-local test_module = require("test_module_%s")
+-- Use the extracted module name instead of hardcoded name
+local test_module = require(%q)
 
 return {
     add_result = test_module.add(5, 3),
     subtract_result = test_module.subtract(10, 4)
 }
-]], module_path, timestamp)
+]], module_path, module_name)
             
             local file_path = create_test_file(test_code)
             
@@ -516,9 +513,7 @@ return {
             expect(main_file_found).to.be_truthy("Main file not found in coverage data: " .. file_path)
             expect(module_file_found).to.be_truthy("Module file not found in coverage data: " .. module_path)
             
-            -- Cleanup
-            cleanup_test_file(file_path)
-            os.remove(module_path)
+            -- No need for explicit cleanup - temp_file handles both files automatically
         end)
     end)
 end)

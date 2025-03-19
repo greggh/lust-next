@@ -7,6 +7,8 @@ local before, after = firmo.before, firmo.after
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
 local central_config = require("lib.core.central_config")
+local temp_file = require("lib.tools.temp_file")
+local test_helper = require("lib.tools.test_helper")
 
 -- Try to load the logging module
 local logging, logger
@@ -32,9 +34,8 @@ end
 -- Initialize logger
 local log = try_load_logger()
 
--- Create an extremely simple test module
-local test_module_path = os.tmpname() .. ".lua"
-fs.write_file(test_module_path, [[
+-- Create an extremely simple test module using temp_file
+local test_module_content = [[
 local function add(a, b)
   return a + b
 end
@@ -45,12 +46,16 @@ end
 
 print(add(5, 3))
 print(subtract(10, 4))
-]])
+]]
 
--- Clean up function to run after tests
-local function cleanup()
-  os.remove(test_module_path)
+-- Create temporary file with the test module content
+local test_module_path, create_err = temp_file.create_with_content(test_module_content, "lua")
+
+if create_err then
+  error("Failed to create test module: " .. tostring(create_err))
 end
+
+-- No need for explicit cleanup function as temp_file handles cleanup automatically
 
 describe("Coverage Module Minimal Test", function()
   if log then
@@ -60,15 +65,13 @@ describe("Coverage Module Minimal Test", function()
     })
   end
   
-  -- Run cleanup after each test
+  -- No need for explicit cleanup for test files - temp_file handles it automatically
   after(function()
     if log then
-      log.debug("Running test cleanup", {
+      log.debug("Test completed, automatic cleanup will occur", {
         file = test_module_path
       })
     end
-    
-    cleanup()
   end)
   
   it("should track basic code execution", function()
