@@ -7,29 +7,85 @@ local before, after = firmo.before, firmo.after
 local static_analyzer = require("lib.coverage.static_analyzer")
 local error_handler = require("lib.tools.error_handler")
 local fs = require("lib.tools.filesystem")
+local test_helper = require("lib.tools.test_helper")
+local logging = require("lib.tools.logging")
+
+-- Initialize logger with error handling
+local logger
+local logger_init_success, logger_init_error = pcall(function()
+    logger = logging.get_logger("line_classification_test")
+    return true
+end)
+
+if not logger_init_success then
+    print("Warning: Failed to initialize logger: " .. tostring(logger_init_error))
+    -- Create a minimal logger as fallback
+    logger = {
+        debug = function() end,
+        info = function() end,
+        warn = function(msg) print("WARN: " .. msg) end,
+        error = function(msg) print("ERROR: " .. msg) end
+    }
+end
 
 describe("static_analyzer line classification", function()
   -- Setup and teardown
   before(function()
     -- Initialize the static analyzer with default settings
-    static_analyzer.init()
-    static_analyzer.clear_cache()
+    local init_success, init_error = test_helper.with_error_capture(function()
+      static_analyzer.init()
+      return true
+    end)()
+    
+    expect(init_error).to_not.exist("Failed to initialize static analyzer: " .. tostring(init_error))
+    
+    local clear_success, clear_error = test_helper.with_error_capture(function()
+      static_analyzer.clear_cache()
+      return true
+    end)()
+    
+    expect(clear_error).to_not.exist("Failed to clear cache: " .. tostring(clear_error))
   end)
   
   after(function()
-    -- Reset the static analyzer
-    static_analyzer.clear_cache()
+    -- Reset the static analyzer with error handling
+    local success, err = pcall(function()
+      static_analyzer.clear_cache()
+      return true
+    end)
+    
+    if not success then
+      logger.warn("Failed to clear static analyzer cache: " .. tostring(err))
+    end
   end)
   
-  -- Helper function to test line classification
+  -- Helper function to test line classification with error handling
   local function test_line_classification(code, expected_results)
-    local ast, code_map = static_analyzer.parse_content(code, "inline")
+    local ast, code_map, parse_error
+    
+    -- Parse content with error handling
+    local parse_success, parse_result = test_helper.with_error_capture(function()
+      return static_analyzer.parse_content(code, "inline")
+    end)()
+    
+    -- Check for parsing errors
+    if parse_success then
+      ast, code_map = parse_success[1], parse_success[2]
+    else
+      parse_error = parse_result
+    end
+    
+    expect(parse_error).to_not.exist("Failed to parse code: " .. tostring(parse_error))
     expect(ast).to.exist()
     expect(code_map).to.exist()
     
-    -- Check each line's classification
+    -- Check each line's classification with error handling
     for line_num, expected_executable in pairs(expected_results) do
-      local result = static_analyzer.is_line_executable(code_map, line_num)
+      local result, is_line_error = test_helper.with_error_capture(function()
+        return static_analyzer.is_line_executable(code_map, line_num)
+      end)()
+      
+      expect(is_line_error).to_not.exist("Failed to check line " .. line_num .. ": " .. tostring(is_line_error))
       expect(result).to.equal(expected_executable, "Line " .. line_num .. " classification incorrect")
     end
   end
@@ -384,8 +440,12 @@ describe("static_analyzer line classification", function()
   -- Test control_flow_keywords_executable configuration
   describe("configuration", function()
     it("should classify end keywords based on configuration", function()
-      -- Set control_flow_keywords_executable to false
-      static_analyzer.init({ control_flow_keywords_executable = false })
+      -- Set control_flow_keywords_executable to false with error handling
+      local init_success, init_error = test_helper.with_error_capture(function()
+        return static_analyzer.init({ control_flow_keywords_executable = false })
+      end)()
+      
+      expect(init_error).to_not.exist("Failed to initialize static analyzer with custom config: " .. tostring(init_error))
       
       local code = [=[
         if true then
@@ -402,8 +462,12 @@ describe("static_analyzer line classification", function()
       
       test_line_classification(code, expected_with_false)
       
-      -- Reset to default (control_flow_keywords_executable = true)
-      static_analyzer.init()
+      -- Reset to default (control_flow_keywords_executable = true) with error handling
+      local reset_success, reset_error = test_helper.with_error_capture(function()
+        return static_analyzer.init()
+      end)()
+      
+      expect(reset_error).to_not.exist("Failed to reset static analyzer to default config: " .. tostring(reset_error))
       
       -- With control_flow_keywords_executable = true, 'end' should be executable
       local expected_with_true = {
@@ -413,6 +477,63 @@ describe("static_analyzer line classification", function()
       }
       
       test_line_classification(code, expected_with_true)
+    end)
+  end)
+  
+  -- Test error handling
+  describe("error handling", function()
+    it("should handle invalid code gracefully", { expect_error = true }, function()
+      local invalid_code = [=[
+        -- This is invalid Lua code
+        function missing_end(
+        local x = "unclosed string
+        if true then
+      ]=]
+      
+      -- Attempt to parse invalid code with error handling
+      local parse_result, parse_error = test_helper.with_error_capture(function()
+        return static_analyzer.parse_content(invalid_code, "invalid_code")
+      end)()
+      
+      -- Verify proper error handling
+      expect(parse_result).to_not.exist()
+      expect(parse_error).to.exist()
+      expect(parse_error.message).to.match("parse")  -- Should mention parsing in error
+    end)
+    
+    it("should handle missing code_map gracefully", { expect_error = true }, function()
+      -- Attempt to check line executability without a valid code map
+      local result, err = test_helper.with_error_capture(function()
+        return static_analyzer.is_line_executable(nil, 1)
+      end)()
+      
+      -- Verify proper error handling
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.message).to.match("code_map")  -- Should mention code_map in error
+    end)
+    
+    it("should handle out-of-bounds line numbers gracefully", { expect_error = true }, function()
+      local code = "local x = 1"
+      
+      -- Parse the code
+      local ast, code_map = static_analyzer.parse_content(code, "inline")
+      expect(ast).to.exist()
+      expect(code_map).to.exist()
+      
+      -- Attempt to check execution status for a line that doesn't exist
+      local result, err = test_helper.with_error_capture(function()
+        return static_analyzer.is_line_executable(code_map, 999)
+      end)()
+      
+      -- The implementation may either return false or an error
+      if result ~= nil then
+        -- Some implementations might just return false for nonexistent lines
+        expect(result).to.equal(false)
+      else
+        -- Or it might return an error
+        expect(err).to.exist()
+      end
     end)
   end)
 end)

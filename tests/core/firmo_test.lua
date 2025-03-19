@@ -16,16 +16,32 @@ local function try_load_logger()
       return require("lib.tools.logging")
     end)()
     
+    if err then
+      return nil
+    end
+    
     if log_module then
       logging = log_module
-      logger = logging.get_logger("test.firmo")
+      
+      local get_logger_result, get_logger_err = test_helper.with_error_capture(function()
+        return logging.get_logger("test.firmo")
+      end)()
+      
+      if get_logger_err then
+        return nil
+      end
+      
+      logger = get_logger_result
 
       if logger and logger.debug then
-        logger.debug("Firmo core test initialized", {
-          module = "test.firmo",
-          test_type = "unit",
-          test_focus = "core API",
-        })
+        local debug_result = test_helper.with_error_capture(function()
+          logger.debug("Firmo core test initialized", {
+            module = "test.firmo",
+            test_type = "unit",
+            test_focus = "core API",
+          })
+          return true
+        end)()
       end
     end
   end

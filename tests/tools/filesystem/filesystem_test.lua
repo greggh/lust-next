@@ -195,16 +195,46 @@ describe("Filesystem Module", function()
             expect(fs.matches_pattern("test/file.lua", "test/*.txt")).to_not.be_truthy()
         end)
         
-        it("should discover files", function()
+        it("should discover files", { expect_error = true }, function()
             -- Create test directory structure
-            fs.ensure_directory_exists("/tmp/firmo-fs-test/discover/a")
-            fs.ensure_directory_exists("/tmp/firmo-fs-test/discover/b")
-            fs.write_file("/tmp/firmo-fs-test/discover/file1.lua", "test")
-            fs.write_file("/tmp/firmo-fs-test/discover/file2.txt", "test")
-            fs.write_file("/tmp/firmo-fs-test/discover/a/file3.lua", "test")
-            fs.write_file("/tmp/firmo-fs-test/discover/b/file4.lua", "test")
+            local result = test_helper.with_error_capture(function()
+                return fs.ensure_directory_exists("/tmp/firmo-fs-test/discover/a")
+            end)()
+            expect(result).to.be_truthy()
             
-            local files = fs.discover_files({"/tmp/firmo-fs-test/discover"}, {"*.lua"})
+            result = test_helper.with_error_capture(function()
+                return fs.ensure_directory_exists("/tmp/firmo-fs-test/discover/b")
+            end)()
+            expect(result).to.be_truthy()
+            
+            result = test_helper.with_error_capture(function()
+                return fs.write_file("/tmp/firmo-fs-test/discover/file1.lua", "test")
+            end)()
+            expect(result).to.be_truthy()
+            
+            result = test_helper.with_error_capture(function()
+                return fs.write_file("/tmp/firmo-fs-test/discover/file2.txt", "test")
+            end)()
+            expect(result).to.be_truthy()
+            
+            result = test_helper.with_error_capture(function()
+                return fs.write_file("/tmp/firmo-fs-test/discover/a/file3.lua", "test")
+            end)()
+            expect(result).to.be_truthy()
+            
+            result = test_helper.with_error_capture(function()
+                return fs.write_file("/tmp/firmo-fs-test/discover/b/file4.lua", "test")
+            end)()
+            expect(result).to.be_truthy()
+            
+            -- Discover files with error handling
+            local files, err = test_helper.with_error_capture(function()
+                return fs.discover_files({"/tmp/firmo-fs-test/discover"}, {"*.lua"})
+            end)()
+            
+            -- If there was an error, handle it
+            expect(err).to_not.exist()
+            expect(files).to.exist()
             
             -- No longer using firmo.log, which doesn't exist
             -- Use a logger we know exists
@@ -217,24 +247,46 @@ describe("Filesystem Module", function()
             expect(#files).to.equal(3) -- Should find all 3 .lua files
             
             -- Test with exclude patterns
-            local filtered_files = fs.discover_files(
-                {"/tmp/firmo-fs-test/discover"}, 
-                {"*.lua"}, 
-                {"a/*"}
-            )
+            local filtered_files, filter_err = test_helper.with_error_capture(function()
+                return fs.discover_files(
+                    {"/tmp/firmo-fs-test/discover"}, 
+                    {"*.lua"}, 
+                    {"a/*"}
+                )
+            end)()
+            
+            -- If there was an error, handle it
+            expect(filter_err).to_not.exist()
+            expect(filtered_files).to.exist()
+            
             expect(#filtered_files).to.equal(2) -- Should exclude file3.lua in directory a
         end)
         
-        it("should scan directory", function()
-            local files = fs.scan_directory("/tmp/firmo-fs-test/discover", false)
+        it("should scan directory", { expect_error = true }, function()
+            local files, err = test_helper.with_error_capture(function()
+                return fs.scan_directory("/tmp/firmo-fs-test/discover", false)
+            end)()
+            
+            expect(err).to_not.exist()
+            expect(files).to.exist()
             expect(#files).to.equal(2) -- Should only get files in the root, not subdirectories
             
-            local all_files = fs.scan_directory("/tmp/firmo-fs-test/discover", true)
+            local all_files, all_err = test_helper.with_error_capture(function()
+                return fs.scan_directory("/tmp/firmo-fs-test/discover", true)
+            end)()
+            
+            expect(all_err).to_not.exist()
+            expect(all_files).to.exist()
             expect(#all_files).to.equal(4) -- Should get all files recursively
         end)
         
-        it("should find matches", function()
-            local all_files = fs.scan_directory("/tmp/firmo-fs-test/discover", true)
+        it("should find matches", { expect_error = true }, function()
+            local all_files, scan_err = test_helper.with_error_capture(function()
+                return fs.scan_directory("/tmp/firmo-fs-test/discover", true)
+            end)()
+            
+            expect(scan_err).to_not.exist()
+            expect(all_files).to.exist()
             
             -- No longer using firmo.log, which doesn't exist
             -- Use a logger we know exists
@@ -244,7 +296,12 @@ describe("Filesystem Module", function()
                 logger.trace("scanned file", { path = file })
             end
             
-            local lua_files = fs.find_matches(all_files, "*.lua")
+            local lua_files, match_err = test_helper.with_error_capture(function()
+                return fs.find_matches(all_files, "*.lua")
+            end)()
+            
+            expect(match_err).to_not.exist()
+            expect(lua_files).to.exist()
             
             -- Log lua matches
             logger.debug("find_matches result", { count = #lua_files, pattern = "*.lua" })
@@ -292,10 +349,19 @@ describe("Filesystem Module", function()
         end)
         
         -- Final cleanup after all tests have run
-        it("should clean up test directory", function()
-            local success = fs.delete_directory(test_dir, true)
+        it("should clean up test directory", { expect_error = true }, function()
+            local success, err = test_helper.with_error_capture(function()
+                return fs.delete_directory(test_dir, true)
+            end)()
+            
+            expect(err).to_not.exist()
             expect(success).to.be_truthy()
-            expect(fs.directory_exists(test_dir)).to_not.be_truthy()
+            
+            local exists = test_helper.with_error_capture(function()
+                return fs.directory_exists(test_dir)
+            end)()
+            
+            expect(exists).to_not.be_truthy()
         end)
     end)
 end)

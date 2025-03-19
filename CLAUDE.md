@@ -223,12 +223,24 @@ end)
 
 7. **Clean up resources properly**: If your test creates files or resources, ensure they're cleaned up:
    ```lua
-   local file_path = create_test_file("content")
+   -- Track resources for cleanup
+   local test_files = {}
    
-   -- Test code here
+   -- Create with error handling
+   local file_path, create_err = temp_file.create_with_content(content, "lua")
+   expect(create_err).to_not.exist("Failed to create test file: " .. tostring(create_err))
+   table.insert(test_files, file_path)
    
-   -- Always clean up, even if test fails
-   cleanup_test_file(file_path)
+   -- Cleanup in after() hook with error handling
+   after(function()
+     for _, path in ipairs(test_files) do
+       local success, err = pcall(function() temp_file.remove(path) end)
+       if not success and logger then
+         logger.warn("Failed to remove test file: " .. tostring(err))
+       end
+     end
+     test_files = {}
+   end)
    ```
 
 8. **Document expected error behavior**: Add comments that explain what errors are expected:
@@ -244,6 +256,12 @@ end)
      expect(err.message).to.match("string expected")
    end)
    ```
+
+For comprehensive guidance on standardized error handling patterns, see the following resources:
+
+- [Standardized Error Handling Patterns](docs/coverage_repair/error_handling_patterns.md): Complete guide to all error handling patterns
+- [Coverage Error Testing Guide](docs/coverage_repair/coverage_error_testing_guide.md): Specialized patterns for coverage module testing
+- [Test Timeout Optimization Guide](docs/coverage_repair/test_timeout_optimization_guide.md): Solutions for tests with timeout issues
 
 Note that the parameter order for equality assertions is the opposite of busted:
 
@@ -313,6 +331,69 @@ If you're coming from a busted-style background, use this mapping to convert ass
 
 For more comprehensive assertions and detailed examples, see `docs/coverage_repair/assertion_pattern_mapping.md`.
 
+### Temporary File Management
+
+Firmo tests should use the provided temporary file management system that automatically tracks and cleans up files:
+
+#### Creating Temporary Files
+
+```lua
+-- Create a temporary file
+local file_path, err = temp_file.create_with_content("file content", "lua")
+expect(err).to_not.exist("Failed to create temporary file")
+
+-- Create a temporary directory
+local dir_path = temp_file.create_temp_directory()
+
+-- No manual cleanup needed - the system will automatically clean up
+-- when the test completes
+```
+
+#### Working with Temporary Test Directories
+
+For tests that need to work with multiple files, use the test directory helpers:
+
+```lua
+-- Create a test directory context
+local test_dir = test_helper.create_temp_test_directory()
+
+-- Create files in the directory
+test_dir.create_file("config.json", '{"setting": "value"}')
+test_dir.create_file("subdir/data.txt", "nested file content")
+
+-- Use the directory in tests
+local config_path = test_dir.path .. "/config.json"
+expect(fs.file_exists(config_path)).to.be_truthy()
+```
+
+#### Creating Test Directories with Predefined Content
+
+For tests that need a directory with a predefined structure:
+
+```lua
+test_helper.with_temp_test_directory({
+  ["config.json"] = '{"setting": "value"}',
+  ["data.txt"] = "test data",
+  ["scripts/helper.lua"] = "return function() return true end"
+}, function(dir_path, files, test_dir)
+  -- Test code here...
+  expect(fs.file_exists(dir_path .. "/config.json")).to.be_truthy()
+end)
+```
+
+#### Registering Existing Files
+
+If you create files through other means, register them for cleanup:
+
+```lua
+-- For files created outside the temp_file system
+local file_path = "/tmp/my_test_file.txt"
+fs.write_file(file_path, "content")
+
+-- Register for automatic cleanup
+test_helper.register_temp_file(file_path)
+```
+
 ### Test Directory Structure
 
 Tests are organized in a logical directory structure by component:
@@ -352,6 +433,8 @@ tests/
 - Fix Specific Markdown Files: `env -C /home/gregg/Projects/lua-library/firmo lua scripts/fix_markdown.lua README.md CHANGELOG.md`
 - Debug Report Generation: `env -C /home/gregg/Projects/lua-library/firmo lua test.lua --coverage --format=html tests/reporting_test.lua`
 - Test Quality Validation: `env -C /home/gregg/Projects/lua-library/firmo lua test.lua --quality --quality-level=2 tests/quality_test.lua`
+- Clean Orphaned Temp Files: `env -C /home/gregg/Projects/lua-library/firmo lua scripts/cleanup_temp_files.lua`
+- Clean Orphaned Temp Files (Dry Run): `env -C /home/gregg/Projects/lua-library/firmo lua scripts/cleanup_temp_files.lua --dry-run`
 
 ## Project Structure
 

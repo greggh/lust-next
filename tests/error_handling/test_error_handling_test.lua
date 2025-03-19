@@ -135,7 +135,7 @@ describe("Test Error Handling", function()
       hook_error_thrown = false
     end)
     
-    it("should handle errors that occur within expect_error tests", function()
+    it("should handle errors that occur within expect_error tests", { expect_error = true }, function()
         -- Use our helper for safe error testing
         local result, err = helper.with_error_capture(function()
           -- Manually throw an error

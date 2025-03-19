@@ -112,9 +112,14 @@ describe("Configuration Module", function()
     end
   end)
 
-  it("should apply configurations from a config file", function()
+  it("should apply configurations from a config file", { expect_error = true }, function()
+    local test_helper = require("lib.tools.test_helper")
+    
     -- Reset central_config before test
-    central_config.reset()
+    test_helper.with_error_capture(function()
+      central_config.reset()
+      return true
+    end)()
 
     -- Create a temporary config file
     local config_content = [[
@@ -127,21 +132,37 @@ describe("Configuration Module", function()
     ]]
 
     -- Write the config file
-    fs.write_file(temp_config_path, config_content)
+    local write_result, write_err = test_helper.with_error_capture(function()
+      return fs.write_file(temp_config_path, config_content)
+    end)()
+    
+    expect(write_err).to_not.exist()
+    expect(write_result).to.be_truthy()
 
     -- Load the config file
-    local user_config = central_config.load_from_file(temp_config_path)
-
+    local user_config, load_err = test_helper.with_error_capture(function()
+      return central_config.load_from_file(temp_config_path)
+    end)()
+    
+    expect(load_err).to_not.exist()
+    
     -- Check that the config was loaded correctly
     expect(user_config).to.exist()
     expect(central_config.get("coverage")).to.exist()
     expect(central_config.get("coverage.threshold")).to.equal(95)
 
     -- Set a value and verify it sticks
-    central_config.set("coverage.threshold", 85)
+    test_helper.with_error_capture(function()
+      central_config.set("coverage.threshold", 85)
+      return true
+    end)()
 
     -- Wait a moment for the change to propagate
-    local value = central_config.get("coverage.threshold")
+    local value, get_err = test_helper.with_error_capture(function()
+      return central_config.get("coverage.threshold")
+    end)()
+    
+    expect(get_err).to_not.exist()
     expect(value).to.equal(85)
   end)
 

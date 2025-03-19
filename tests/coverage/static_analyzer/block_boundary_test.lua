@@ -1,23 +1,89 @@
 -- Block boundary detection test for static analyzer
 local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
 local static_analyzer = require("lib.coverage.static_analyzer")
 local filesystem = require("lib.tools.filesystem")
 local temp_file = require("lib.tools.temp_file")
-local logging = require("lib.tools.logging")
 
--- We'll use print statements for debugging
+-- Set up logger with error handling
+local logging, logger
+local function try_load_logger()
+  if not logger then
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
+      logging = log_module
+      logger = logging.get_logger("test.static_analyzer.block_boundary")
+    end
+  end
+  return logger
+end
 
--- Helper function to create a test file and parse it
+local log = try_load_logger()
+
+-- Helper function to create a test file and parse it with error handling
 local function create_and_parse_file(content)
-    local temp_path = temp_file.create_with_content(content, "lua")
-    local ast, err = static_analyzer.parse_file(temp_path)
-    if not ast then
-        filesystem.delete_file(temp_path)
-        return nil, err
+    -- Create a temp file with error handling
+    local temp_path, create_err = test_helper.with_error_capture(function()
+        return temp_file.create_with_content(content, "lua")
+    end)()
+    
+    if not temp_path then
+        if log then
+            log.error("Failed to create temp file", { error = create_err })
+        end
+        return nil, create_err
     end
     
-    local code_map = static_analyzer.get_code_map_for_ast(ast, temp_path)
+    -- Parse the file with error handling
+    local ast, parse_err = test_helper.with_error_capture(function()
+        return static_analyzer.parse_file(temp_path)
+    end)()
+    
+    if not ast then
+        -- Clean up the temp file before returning error
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(temp_path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete temp file during cleanup", {
+                file_path = temp_path,
+                error = delete_err
+            })
+        end
+        
+        return nil, parse_err
+    end
+    
+    -- Get code map with error handling
+    local code_map, map_err = test_helper.with_error_capture(function()
+        return static_analyzer.get_code_map_for_ast(ast, temp_path)
+    end)()
+    
+    if not code_map then
+        -- Clean up the temp file before returning error
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(temp_path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete temp file during cleanup", {
+                file_path = temp_path,
+                error = delete_err
+            })
+        end
+        
+        return nil, map_err
+    end
+    
     return { 
         ast = ast,
         code_map = code_map,
@@ -71,7 +137,13 @@ local function test_if()
     end
 end
 ]]
-        local result = create_and_parse_file(code)
+        -- Create and parse the file with error handling
+        local result, err = test_helper.with_error_capture(function()
+            return create_and_parse_file(code)
+        end)()
+        
+        expect(err).to_not.exist()
+        expect(result).to.exist()
         expect(result.ast).to.be.a("table")
         expect(result.code_map).to.be.a("table")
         expect(result.code_map.blocks).to.be.a("table")
@@ -85,8 +157,17 @@ end
         expect(if_blocks).to.be_greater_than(0)
         expect(function_blocks).to.be_greater_than(0)
         
-        -- Cleanup
-        filesystem.delete_file(result.path)
+        -- Cleanup with error handling
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(result.path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete test file", {
+                file_path = result.path,
+                error = delete_err
+            })
+        end
     end)
     
     it("should detect nested blocks", function()
@@ -101,7 +182,13 @@ local function nested_blocks()
     end
 end
 ]]
-        local result = create_and_parse_file(code)
+        -- Create and parse the file with error handling
+        local result, err = test_helper.with_error_capture(function()
+            return create_and_parse_file(code)
+        end)()
+        
+        expect(err).to_not.exist()
+        expect(result).to.exist()
         expect(result.code_map.blocks).to.be.a("table")
         
         -- Count different block types
@@ -113,8 +200,17 @@ end
         expect(while_blocks).to.be_greater_than(0) -- Should have at least 1 while block
         expect(function_blocks).to.be_greater_than(0) -- Should have at least 1 function
         
-        -- Cleanup
-        filesystem.delete_file(result.path)
+        -- Cleanup with error handling
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(result.path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete test file", {
+                file_path = result.path,
+                error = delete_err
+            })
+        end
     end)
     
     it("should establish parent-child relationships between blocks", function()
@@ -127,7 +223,13 @@ local function parent_child()
     end
 end
 ]]
-        local result = create_and_parse_file(code)
+        -- Create and parse the file with error handling
+        local result, err = test_helper.with_error_capture(function()
+            return create_and_parse_file(code)
+        end)()
+        
+        expect(err).to_not.exist()
+        expect(result).to.exist()
         expect(result.code_map.blocks).to.be.a("table")
         
         -- Find the function block (root)
@@ -164,8 +266,17 @@ end
         -- Should have at least the for block and condition
         expect(#if_children).to.be_greater_than(0)
         
-        -- Cleanup
-        filesystem.delete_file(result.path)
+        -- Cleanup with error handling
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(result.path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete test file", {
+                file_path = result.path,
+                error = delete_err
+            })
+        end
     end)
     
     it("should detect all Lua block types", function()
@@ -211,7 +322,13 @@ local function all_block_types()
     end
 end
 ]]
-        local result = create_and_parse_file(code)
+        -- Create and parse the file with error handling
+        local result, err = test_helper.with_error_capture(function()
+            return create_and_parse_file(code)
+        end)()
+        
+        expect(err).to_not.exist()
+        expect(result).to.exist()
         expect(result.code_map.blocks).to.be.a("table")
         
         -- Count different block types
@@ -231,8 +348,17 @@ end
         expect(function_blocks).to.be_greater_than(1) -- Outer and inner function
         expect(block_blocks).to.be_greater_than(0) -- Do block
         
-        -- Cleanup
-        filesystem.delete_file(result.path)
+        -- Cleanup with error handling
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(result.path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete test file", {
+                file_path = result.path,
+                error = delete_err
+            })
+        end
     end)
     
     it("should handle edge cases and complex nesting", function()
@@ -258,7 +384,13 @@ local function complex_nesting()
     end
 end
 ]]
-        local result = create_and_parse_file(code)
+        -- Create and parse the file with error handling
+        local result, err = test_helper.with_error_capture(function()
+            return create_and_parse_file(code)
+        end)()
+        
+        expect(err).to_not.exist()
+        expect(result).to.exist()
         expect(result.code_map.blocks).to.be.a("table")
         
         -- Should have lots of nested blocks
@@ -267,8 +399,17 @@ end
         -- Validate that nesting is tracked properly
         -- (This needs enhancement in the static analyzer)
         
-        -- Cleanup
-        filesystem.delete_file(result.path)
+        -- Cleanup with error handling
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(result.path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete test file", {
+                file_path = result.path,
+                error = delete_err
+            })
+        end
     end)
     
     it("should accurately identify block boundaries", function()
@@ -285,9 +426,15 @@ local function check_boundaries()
     end -- line 10
 end
 ]]
-        local result = create_and_parse_file(code)
+        -- Create and parse the file with error handling
+        local result, err = test_helper.with_error_capture(function()
+            return create_and_parse_file(code)
+        end)()
         
-        -- Find the if block
+        expect(err).to_not.exist()
+        expect(result).to.exist()
+        
+        -- Find the if block with error checking
         local if_block = nil
         for _, block in ipairs(result.code_map.blocks) do
             if block.type == "If" then
@@ -296,7 +443,7 @@ end
             end
         end
         
-        -- Find the while block
+        -- Find the while block with error checking
         local while_block = nil
         for _, block in ipairs(result.code_map.blocks) do
             if block.type == "While" then
@@ -318,7 +465,62 @@ end
         expect(while_block.start_line <= 8).to.be_truthy()
         expect(while_block.end_line >= 10).to.be_truthy()
         
-        -- Cleanup
-        filesystem.delete_file(result.path)
+        -- Cleanup with error handling
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return filesystem.delete_file(result.path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete test file", {
+                file_path = result.path,
+                error = delete_err
+            })
+        end
+    end)
+    
+    -- Test for error handling
+    it("should handle malformed code gracefully", { expect_error = true }, function()
+        local code = [[
+local function malformed_code
+    if no_end_keyword then
+        while condition do
+            -- No end for while loop
+        
+        -- No end for if block
+    -- No end for function
+]]
+        -- First create a temp file with the malformed code
+        local temp_path, create_err = test_helper.with_error_capture(function()
+            return temp_file.create_with_content(code, "lua")
+        end)()
+        
+        -- Temp file creation should succeed
+        expect(temp_path).to.exist()
+        
+        -- Now try to parse it - this should fail with a syntax error
+        local ast, parse_err = test_helper.with_error_capture(function()
+            return static_analyzer.parse_file(temp_path)
+        end)()
+        
+        -- We expect a syntax error
+        expect(ast).to_not.exist()
+        expect(parse_err).to.exist()
+        
+        -- We don't need to check the specific error message, just that an error occurred
+        -- The implementation details of the error may vary
+
+        -- Clean up the temp file
+        if temp_path then
+            local delete_success, delete_err = test_helper.with_error_capture(function()
+                return filesystem.delete_file(temp_path)
+            end)()
+            
+            if not delete_success and log then
+                log.warn("Failed to delete temp file during cleanup", {
+                    file_path = temp_path,
+                    error = delete_err
+                })
+            end
+        end
     end)
 end)

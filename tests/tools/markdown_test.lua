@@ -11,16 +11,31 @@ _G.expect = firmo.expect
 _G.before = firmo.before
 _G.after = firmo.after
 
--- Create test files and directories using the filesystem module
+-- Import required modules
 local fs = require("lib.tools.filesystem")
 local test_helper = require("lib.tools.test_helper")
-local test_dir = os.tmpname() .. "_markdown_test_dir"
-fs.create_directory(test_dir)
+local temp_file = require("lib.tools.temp_file")
+
+-- Create a test directory using temp_file
+local test_dir
+
+-- Setup function to create test directory - will run before tests
+before(function()
+  -- Create a temporary directory
+  local dir_path, err = temp_file.create_temp_directory()
+  expect(err).to_not.exist("Failed to create test directory")
+  test_dir = dir_path
+end)
 
 -- Function to create a test file with specific content
 local function create_test_file(filename, content)
   local file_path = fs.join_paths(test_dir, filename)
-  return fs.write_file(file_path, content)
+  local success, err = fs.write_file(file_path, content)
+  if success then
+    -- Register the file with temp_file system
+    temp_file.register_file(file_path)
+  end
+  return success, err
 end
 
 -- Function to read a file's content
@@ -28,16 +43,10 @@ local function read_file(filepath)
   return fs.read_file(filepath)
 end
 
--- Clean up after tests
-local function cleanup()
-  fs.delete_directory(test_dir, true)
-end
-
--- Register the cleanup function to run after all tests
-after(cleanup)
+-- No explicit cleanup needed - will be handled automatically
 
 describe("Markdown Module", function()
-  it("should be available", { expect_error = true }, function()
+  it("should be available", function()
     expect(markdown).to.exist()
     expect(markdown.fix_comprehensive).to.exist()
     expect(markdown.fix_heading_levels).to.exist()
@@ -140,25 +149,19 @@ More content]]
       expect(fixed:match("## Heading 2\n\nMore content")).to.exist()
     end)
 
-    it("should add blank lines around lists", function()
+    it("should add blank lines around lists", { expect_error = true }, function()
       local test_content = [[
 Some text
 * List item 1
 * List item 2
 More text]]
 
-      -- Create a special test file that works with our test cases
-      local test_dir = os.tmpname() .. "_blank_lines_test"
-      fs.create_directory(test_dir)
-      local test_file = fs.join_paths(test_dir, "test.md")
-
-      fs.write_file(test_file, test_content)
+      -- Create a temporary file for this test
+      local test_file_path, create_err = temp_file.create_with_content(test_content, "md")
+      expect(create_err).to_not.exist("Failed to create test file")
 
       -- Apply the fix and read it back
       local fixed = markdown.fix_comprehensive(test_content)
-
-      -- Cleanup
-      fs.delete_directory(test_dir, true)
 
       -- Check for blank lines around list
       ---@diagnostic disable-next-line: need-check-nil, param-type-mismatch
@@ -335,12 +338,20 @@ But outside of code blocks, the list should be fixed:
   end)
 
   describe("Integration with codefix", function()
-    it("should register with codefix module", { expect_error = true }, function()
+    it("should register with codefix module", function()
       -- Reset codefix module
-      codefix.init({ enabled = true, verbose = false })
+      local init_success = test_helper.with_error_capture(function()
+        return codefix.init({ enabled = true, verbose = false })
+      end)()
+      
+      expect(init_success).to.exist()
 
       -- Register markdown module
-      markdown.register_with_codefix(codefix)
+      local register_success = test_helper.with_error_capture(function()
+        return markdown.register_with_codefix(codefix)
+      end)()
+      
+      expect(register_success).to.exist()
 
       -- Check if the markdown fixer is registered
       local has_markdown_fixer = false
@@ -355,19 +366,27 @@ But outside of code blocks, the list should be fixed:
     end)
 
     it("should properly fix markdown files through codefix", { expect_error = true }, function()
-      -- Create a special test file that works with our test cases
+      -- Define test content
       local test_content = [[
 Some text
 * List item 1
 * List item 2
 More text]]
 
+      -- Create a temporary test file in our test directory
       local test_file = fs.join_paths(test_dir, "test_markdown.md")
-      fs.write_file(test_file, test_content)
+      local write_success, write_err = fs.write_file(test_file, test_content)
+      expect(write_err).to_not.exist("Failed to write test file")
+      expect(write_success).to.be_truthy()
+      
+      -- Register the file for automatic cleanup
+      temp_file.register_file(test_file)
 
       -- Directly apply the fix rather than using codefix which has external dependencies
       local fixed_content = markdown.fix_comprehensive(test_content)
-      fs.write_file(test_file, fixed_content)
+      local update_success, update_err = fs.write_file(test_file, fixed_content)
+      expect(update_err).to_not.exist("Failed to update test file")
+      expect(update_success).to.be_truthy()
 
       -- Read the fixed file
       local result = fs.read_file(test_file)
@@ -381,9 +400,14 @@ More text]]
 
     it("should fix all markdown files in a directory", { expect_error = true }, function()
       -- Create multiple test files
-      create_test_file("test1.md", "# Test 1\nContent\n## Subheading")
-      create_test_file("test2.md", "*Last updated: 2023-01-01*\n# Test 2")
-      create_test_file("test3.md", "Text\n```\ncode\n```\nMore text")
+      local success1, err1 = create_test_file("test1.md", "# Test 1\nContent\n## Subheading")
+      local success2, err2 = create_test_file("test2.md", "*Last updated: 2023-01-01*\n# Test 2")
+      local success3, err3 = create_test_file("test3.md", "Text\n```\ncode\n```\nMore text")
+      
+      expect(err1).to_not.exist("Failed to create test file 1")
+      expect(err2).to_not.exist("Failed to create test file 2")
+      expect(err3).to_not.exist("Failed to create test file 3")
+      expect(success1 and success2 and success3).to.be_truthy("Test files should be created successfully")
 
       -- Fix all files in directory
       local fixed_count = markdown.fix_all_in_directory(test_dir)

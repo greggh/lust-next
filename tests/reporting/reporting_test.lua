@@ -253,39 +253,65 @@ describe("Reporting Module", function()
       fs.delete_file(temp_file)
     end)
     
-    it("should write content to a file", function()
-      local success, err = reporting_module.write_file(temp_file, test_content)
+    it("should write content to a file", { expect_error = true }, function()
+      local test_helper = require("lib.tools.test_helper")
+      
+      -- Test writing to file with error handling
+      local success, write_err = test_helper.with_error_capture(function()
+        return reporting_module.write_file(temp_file, test_content)
+      end)()
+      
+      expect(write_err).to_not.exist()
       expect(success).to.be_truthy()
       
       -- Verify content was written
-      local content = fs.read_file(temp_file)
+      local content, read_err = test_helper.with_error_capture(function()
+        return fs.read_file(temp_file)
+      end)()
+      
+      expect(read_err).to_not.exist()
       expect(content).to.exist()
       expect(content).to.equal(test_content)
     end)
     
-    it("should create directories if needed", function()
+    it("should create directories if needed", { expect_error = true }, function()
+      local test_helper = require("lib.tools.test_helper")
       local nested_dir = "/tmp/firmo-test-nested/subdir"
       local nested_file = nested_dir .. "/test-file.txt"
       local test_content = "Test content for nested directory test"
       
       -- Clean up first in case the directory already exists
-      fs.delete_file(nested_file)
-      fs.delete_directory(nested_dir, true)
-      fs.delete_directory("/tmp/firmo-test-nested", true)
+      test_helper.with_error_capture(function()
+        fs.delete_file(nested_file)
+        fs.delete_directory(nested_dir, true)
+        fs.delete_directory("/tmp/firmo-test-nested", true)
+        return true
+      end)()
       
       -- Try to write to nested file (should create directories)
-      local success, err = reporting_module.write_file(nested_file, test_content)
+      local success, write_err = test_helper.with_error_capture(function()
+        return reporting_module.write_file(nested_file, test_content)
+      end)()
+      
+      expect(write_err).to_not.exist()
       expect(success).to.be_truthy()
       
       -- Verify content was written
-      local content = fs.read_file(nested_file)
+      local content, read_err = test_helper.with_error_capture(function()
+        return fs.read_file(nested_file)
+      end)()
+      
+      expect(read_err).to_not.exist()
       expect(content).to.exist()
       expect(content).to.equal(test_content)
       
       -- Clean up
-      fs.delete_file(nested_file)
-      fs.delete_directory(nested_dir, true)
-      fs.delete_directory("/tmp/firmo-test-nested", true)
+      test_helper.with_error_capture(function()
+        fs.delete_file(nested_file)
+        fs.delete_directory(nested_dir, true)
+        fs.delete_directory("/tmp/firmo-test-nested", true)
+        return true
+      end)()
     end)
   end)
   
@@ -304,44 +330,104 @@ describe("Reporting Module", function()
       fs.delete_directory(temp_dir, true)
     end)
     
-    it("should save coverage reports to file", function()
+    it("should save coverage reports to file", { expect_error = true }, function()
+      local test_helper = require("lib.tools.test_helper")
+      
+      -- Ensure the directory exists
+      test_helper.with_error_capture(function()
+        fs.ensure_directory_exists(temp_dir)
+        return true
+      end)()
+      
       for _, format in ipairs(formats) do
         local file_path = temp_dir .. "/coverage-report." .. format
-        local success, err = reporting_module.save_coverage_report(
-          file_path,
-          mock_coverage_data,
-          format
-        )
         
+        -- Delete the file if it exists
+        test_helper.with_error_capture(function()
+          fs.delete_file(file_path)
+          return true
+        end)()
+        
+        -- Save the report
+        local success, err = test_helper.with_error_capture(function()
+          return reporting_module.save_coverage_report(
+            file_path,
+            mock_coverage_data,
+            format
+          )
+        end)()
+        
+        expect(err).to_not.exist()
         expect(success).to.be_truthy()
         
         -- Verify file exists
-        expect(fs.file_exists(file_path)).to.be_truthy()
+        local exists = test_helper.with_error_capture(function()
+          return fs.file_exists(file_path)
+        end)()
+        
+        expect(exists).to.be_truthy()
       end
     end)
     
-    it("should save quality reports to file", function()
+    it("should save quality reports to file", { expect_error = true }, function()
+      local test_helper = require("lib.tools.test_helper")
+      
+      -- Ensure the directory exists
+      test_helper.with_error_capture(function()
+        fs.ensure_directory_exists(temp_dir)
+        return true
+      end)()
+      
       for _, format in ipairs({"html", "json"}) do
         local file_path = temp_dir .. "/quality-report." .. format
-        local success, err = reporting_module.save_quality_report(
-          file_path,
-          mock_quality_data,
-          format
-        )
         
+        -- Delete the file if it exists
+        test_helper.with_error_capture(function()
+          fs.delete_file(file_path)
+          return true
+        end)()
+        
+        -- Save the report
+        local success, err = test_helper.with_error_capture(function()
+          return reporting_module.save_quality_report(
+            file_path,
+            mock_quality_data,
+            format
+          )
+        end)()
+        
+        expect(err).to_not.exist()
         expect(success).to.be_truthy()
         
         -- Verify file exists
-        expect(fs.file_exists(file_path)).to.be_truthy()
+        local exists = test_helper.with_error_capture(function()
+          return fs.file_exists(file_path)
+        end)()
+        
+        expect(exists).to.be_truthy()
       end
     end)
     
-    it("should auto-save multiple report formats", function()
-      local results = reporting_module.auto_save_reports(
-        mock_coverage_data,
-        mock_quality_data,
-        temp_dir
-      )
+    it("should auto-save multiple report formats", { expect_error = true }, function()
+      local test_helper = require("lib.tools.test_helper")
+      
+      -- Ensure the directory exists
+      test_helper.with_error_capture(function()
+        fs.ensure_directory_exists(temp_dir)
+        return true
+      end)()
+      
+      -- Auto-save reports
+      local results, err = test_helper.with_error_capture(function()
+        return reporting_module.auto_save_reports(
+          mock_coverage_data,
+          mock_quality_data,
+          temp_dir
+        )
+      end)()
+      
+      expect(err).to_not.exist()
+      expect(results).to.exist()
       
       -- Check we have the expected results
       expect(results.html).to.exist()
@@ -360,7 +446,11 @@ describe("Reporting Module", function()
       -- Verify files exist
       for _, result in pairs(results) do
         if result.success then
-          expect(fs.file_exists(result.path)).to.be_truthy()
+          local exists = test_helper.with_error_capture(function()
+            return fs.file_exists(result.path)
+          end)()
+          
+          expect(exists).to.be_truthy()
         end
       end
     end)
@@ -584,27 +674,42 @@ describe("Reporting Module", function()
       expect(result:find('<testcase') ~= nil).to.be_truthy("Missing testcase tag")
     end)
     
-    it("should save test results report to file", function()
+    it("should save test results report to file", { expect_error = true }, function()
       local fs = require("lib.tools.filesystem")
+      local test_helper = require("lib.tools.test_helper")
       local temp_file = "/tmp/firmo-test-junit.xml"
       
       -- Clean up first in case the file exists
-      fs.delete_file(temp_file)
+      test_helper.with_error_capture(function()
+        fs.delete_file(temp_file)
+        return true
+      end)()
       
       -- Save report
-      local success, err = reporting_module.save_results_report(
-        temp_file,
-        mock_test_results,
-        "junit"
-      )
+      local success, err = test_helper.with_error_capture(function()
+        return reporting_module.save_results_report(
+          temp_file,
+          mock_test_results,
+          "junit"
+        )
+      end)()
       
+      expect(err).to_not.exist()
       expect(success).to.be_truthy()
       
       -- Verify file exists
-      expect(fs.file_exists(temp_file)).to.be_truthy()
+      local exists = test_helper.with_error_capture(function()
+        return fs.file_exists(temp_file)
+      end)()
+      
+      expect(exists).to.be_truthy()
       
       -- Read content
-      local content = fs.read_file(temp_file)
+      local content, read_err = test_helper.with_error_capture(function()
+        return fs.read_file(temp_file)
+      end)()
+      
+      expect(read_err).to_not.exist()
       expect(content).to.exist()
       
       -- Verify content
@@ -613,7 +718,10 @@ describe("Reporting Module", function()
       expect(content:find('test') ~= nil).to.be_truthy("Missing test content")
       
       -- Clean up
-      fs.delete_file(temp_file)
+      test_helper.with_error_capture(function()
+        fs.delete_file(temp_file)
+        return true
+      end)()
     end)
     
     it("should include JUnit XML in auto-save reports", function()

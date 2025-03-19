@@ -88,7 +88,7 @@ describe("Asynchronous Testing", function()
       expect(value).to.equal(42)
     end)
 
-    it_async("times out if condition never becomes true", function()
+    it_async("times out if condition never becomes true", { expect_error = true }, function()
       local result, err = test_helper.with_error_capture(function()
         ---@diagnostic disable-next-line: redundant-parameter
         wait_until(function()
@@ -159,7 +159,7 @@ describe("Asynchronous Testing", function()
       expect(elapsed).to.be_less_than(250) -- Allow overhead but should be less than sum of all operations
     end)
 
-    it_async("handles errors in parallel operations", function()
+    it_async("handles errors in parallel operations", { expect_error = true }, function()
       local op1 = function()
         ---@diagnostic disable-next-line: redundant-parameter
         await(20)

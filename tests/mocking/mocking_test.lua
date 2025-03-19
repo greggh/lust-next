@@ -149,7 +149,7 @@ describe("Mocking System", function()
       expect(spy2.called_after(spy1)).to.be_truthy()
     end)
 
-    it("restores original functionality", function()
+    it("restores original functionality", { expect_error = true }, function()
       local obj = {
         method = function()
           return "original"
@@ -159,8 +159,15 @@ describe("Mocking System", function()
       local spy = spy_on(obj, "method")
       expect(obj.method()).to.equal("original")
 
-      ---@diagnostic disable-next-line: need-check-nil
-      spy:restore()
+      -- Restore the spy with error handling
+      local restore_result, restore_err = test_helper.with_error_capture(function()
+        ---@diagnostic disable-next-line: need-check-nil
+        spy:restore()
+        return true
+      end)()
+      
+      expect(restore_err).to_not.exist()
+      expect(restore_result).to.be_truthy()
 
       -- After restoration, the spy isn't capturing calls anymore
       obj.method()
@@ -191,8 +198,14 @@ describe("Mocking System", function()
       expect(result[1]).to.equal("mock")
       expect(result[2]).to.equal("data")
 
-      -- Clean up
-      mock_obj:restore()
+      -- Clean up with error handling
+      local restore_result, restore_err = test_helper.with_error_capture(function()
+        mock_obj:restore()
+        return true
+      end)()
+      
+      expect(restore_err).to_not.exist()
+      expect(restore_result).to.be_truthy()
     end)
 
     it("can stub with simple return values", function()

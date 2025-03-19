@@ -2,22 +2,100 @@ local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
 
-local static_analyzer = require("lib.coverage.static_analyzer")
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
 local error_handler = require("lib.tools.error_handler")
+
+local static_analyzer = require("lib.coverage.static_analyzer")
 local fs = require("lib.tools.filesystem")
 local temp_file = require("lib.tools.temp_file")
 
--- Helper function to create code map for test code
+-- Set up logger with error handling
+local logging, logger
+local function try_load_logger()
+  if not logger then
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
+      logging = log_module
+      logger = logging.get_logger("test.static_analyzer.function_detection")
+    end
+  end
+  return logger
+end
+
+local log = try_load_logger()
+
+-- Helper function to create code map for test code with error handling
 local function create_code_map_for_string(code_string)
-    local temp_path = temp_file.create_with_content(code_string)
-    local ast, err = static_analyzer.parse_file(temp_path)
-    if not ast then
-        fs.delete_file(temp_path)
-        return nil, err
+    -- Create a temp file with error handling
+    local temp_path, create_err = test_helper.with_error_capture(function()
+        return temp_file.create_with_content(code_string, "lua")
+    end)()
+    
+    if not temp_path then
+        if log then
+            log.error("Failed to create temporary file", { error = create_err })
+        end
+        return nil, create_err
     end
     
-    local code_map = static_analyzer.get_code_map_for_ast(ast, temp_path)
-    fs.delete_file(temp_path)
+    -- Parse the file with error handling
+    local ast, parse_err = test_helper.with_error_capture(function()
+        return static_analyzer.parse_file(temp_path)
+    end)()
+    
+    if not ast then
+        -- Clean up temp file if parse fails
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return fs.delete_file(temp_path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete temp file during error cleanup", {
+                file_path = temp_path,
+                error = delete_err
+            })
+        end
+        
+        return nil, parse_err
+    end
+    
+    -- Get code map with error handling
+    local code_map, map_err = test_helper.with_error_capture(function()
+        return static_analyzer.get_code_map_for_ast(ast, temp_path)
+    end)()
+    
+    if not code_map then
+        -- Clean up temp file if getting code map fails
+        local delete_success, delete_err = test_helper.with_error_capture(function()
+            return fs.delete_file(temp_path)
+        end)()
+        
+        if not delete_success and log then
+            log.warn("Failed to delete temp file during error cleanup", {
+                file_path = temp_path,
+                error = delete_err
+            })
+        end
+        
+        return nil, map_err
+    end
+    
+    -- Clean up temp file with error handling
+    local delete_success, delete_err = test_helper.with_error_capture(function()
+        return fs.delete_file(temp_path)
+    end)()
+    
+    if not delete_success and log then
+        log.warn("Failed to delete temp file during cleanup", {
+            file_path = temp_path,
+            error = delete_err
+        })
+    end
+    
     return code_map, nil
 end
 

@@ -43,9 +43,11 @@ local err = test_helper.expect_error(
 ```
 
 For comprehensive guidance on testing error conditions, see:
-- [Error Testing Best Practices](error_testing_best_practices.md) - Complete guide to error testing
-- [Test Error Handling Example](../examples/test_error_handling_example.lua) - Basic examples
-- [Enhanced Error Testing Example](../examples/enhanced_error_testing_example.lua) - Advanced patterns
+- [Standardized Error Handling Patterns](error_handling_patterns.md) - Complete guide to all error handling patterns
+- [Coverage Error Testing Guide](coverage_error_testing_guide.md) - Specialized patterns for coverage module testing
+- [Test Timeout Optimization Guide](test_timeout_optimization_guide.md) - Solutions for tests with timeout issues
+- [Test Error Handling Example](../../examples/test_error_handling_example.lua) - Basic examples
+- [Enhanced Error Testing Example](../../examples/enhanced_error_testing_example.lua) - Advanced patterns
 
 ## Standard Error Handling Patterns
 

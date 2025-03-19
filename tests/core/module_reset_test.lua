@@ -32,12 +32,15 @@ local function create_test_module(name, content)
   local unique_name = name .. "_" .. test_suffix
   local file_path = "/tmp/test_module_" .. unique_name .. ".lua"
 
-  local success, err = fs.write_file(file_path, content)
+  local success, err = test_helper.with_error_capture(function()
+    return fs.write_file(file_path, content)
+  end)()
+  
   if not success then
-    error(error_handler.io_error(
+    return nil, error_handler.io_error(
       "Failed to create test module",
       {file_path = file_path, error = err or "unknown error"}
-    ))
+    )
   end
 
   -- Store the module name for reference
@@ -47,13 +50,22 @@ end
 -- Clean up test modules
 local function cleanup_test_modules()
   -- Get all files in /tmp directory
-  local files = fs.get_directory_contents("/tmp") or {}
+  local files = test_helper.with_error_capture(function()
+    return fs.get_directory_contents("/tmp") or {}
+  end)()
+  
+  if not files then
+    files = {}
+  end
 
   -- Delete files matching our specific pattern
   for _, filename in ipairs(files) do
     if filename:match("^test_module_.*" .. test_suffix .. ".*%.lua$") then
       local file_path = fs.join_paths("/tmp", filename)
-      fs.delete_file(file_path)
+      test_helper.with_error_capture(function()
+        fs.delete_file(file_path)
+        return true
+      end)()
     end
   end
 
