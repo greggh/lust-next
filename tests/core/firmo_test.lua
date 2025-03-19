@@ -4,12 +4,19 @@ local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 ---@diagnostic disable-next-line: unused-local
 local before, after = firmo.before, firmo.after
 
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
 -- Try to load the logging module
 local logging, logger
 local function try_load_logger()
   if not logger then
-    local ok, log_module = pcall(require, "lib.tools.logging")
-    if ok and log_module then
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
       logging = log_module
       logger = logging.get_logger("test.firmo")
 

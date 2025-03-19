@@ -19,6 +19,9 @@ local mock = firmo.mock
 local stub = firmo.stub
 local with_mocks = firmo.with_mocks
 
+-- Import test helper for error testing
+local test_helper = require("lib.tools.test_helper")
+
 describe("Mocking System", function()
   describe("Enhanced Spy", function()
     it("tracks function calls", function()
@@ -350,7 +353,7 @@ describe("Mocking System", function()
       expect(test_obj.getAddress()).to.equal("123 Real St")
     end)
 
-    it("can verify all methods were called", function()
+    it("can verify all methods were called", { expect_error = true }, function()
       -- Create a test object with multiple methods
       local test_obj = {
         getName = function()
@@ -375,10 +378,8 @@ describe("Mocking System", function()
       test_obj.getAge()
 
       -- Verification should pass when all methods are called
-      local success = pcall(function()
-        mock_obj:verify()
-      end)
-      expect(success).to.be_truthy()
+      -- No need for pcall, just call it directly
+      mock_obj:verify()
 
       -- Create another mock with methods that won't all be called
       local test_obj2 = {
@@ -394,10 +395,14 @@ describe("Mocking System", function()
       test_obj2.method1()
 
       -- Verification should fail because method2 was never called
-      local failed = not pcall(function()
+      -- Use our test helper to capture and validate the error
+      local _, err = test_helper.with_error_capture(function()
         mock_obj2:verify()
-      end)
-      expect(failed).to.be_truthy()
+      end)()
+      
+      -- Verify we got an error
+      expect(err).to.exist()
+      expect(err.message).to.match("verification failed")  -- Check that it's a verification error
 
       -- Clean up
       mock_obj:restore()
@@ -446,7 +451,7 @@ describe("Mocking System", function()
       expect(stub_fn()).to.equal("initial")
     end)
 
-    it("can be configured to throw errors", function()
+    it("can be configured to throw errors", { expect_error = true }, function()
       -- Create a stub that throws an error
       local stub_fn = stub("value"):throws("test error")
 
@@ -455,10 +460,10 @@ describe("Mocking System", function()
         stub_fn()
       end).to.throw()
 
-      -- Verify the error message
-      local success, error_message = pcall(stub_fn)
-      expect(success).to.equal(false)
-      expect(error_message).to.match("test error")
+      -- Verify the error message using test_helper
+      local err = test_helper.expect_error(stub_fn, "test error")
+      expect(err).to.exist()
+      expect(err.message).to.match("test error")
     end)
   end)
 
@@ -495,7 +500,7 @@ describe("Mocking System", function()
       expect(obj.method2()).to.equal("original2")
     end)
 
-    it("restores mocks even if an error occurs", function()
+    it("restores mocks even if an error occurs", { expect_error = true }, function()
       local obj = {
         method = function()
           return "original"
@@ -503,7 +508,7 @@ describe("Mocking System", function()
       }
 
       -- Use with_mocks with a function that throws an error
-      local success, error_message = pcall(function()
+      local _, err = test_helper.with_error_capture(function()
         ---@diagnostic disable-next-line: unused-local
         with_mocks(function(mock, spy, stub)
           -- Stub the method
@@ -515,11 +520,11 @@ describe("Mocking System", function()
           -- Throw an error
           error("Test error")
         end)
-      end)
+      end)()
 
       -- Expect the error to be propagated
-      expect(success).to.equal(false)
-      expect(error_message).to.match("Test error")
+      expect(err).to.exist()
+      expect(err.message).to.match("Test error")
 
       -- The mock should still be restored despite the error
       expect(obj.method()).to.equal("original")

@@ -6,6 +6,9 @@ local logging = require("lib.tools.logging")
 local error_handler = require("lib.tools.error_handler")
 local fs = require("lib.tools.filesystem")
 
+-- Compatibility function for table unpacking (works with both Lua 5.1 and 5.2+)
+local unpack_table = table.unpack or unpack
+
 -- Initialize module logger
 local logger = logging.get_logger("benchmark")
 logging.configure_from_config("benchmark")
@@ -284,7 +287,7 @@ function benchmark.measure(func, args, options)
     ---@diagnostic disable-next-line: unused-local
     local success, result, exec_err = error_handler.try(function()
       ---@diagnostic disable-next-line: param-type-mismatch
-      return func(table.unpack(args_clone))
+      return func(unpack_table(args_clone))
     end)
 
     if not success then
@@ -326,7 +329,7 @@ function benchmark.measure(func, args, options)
     ---@diagnostic disable-next-line: unused-local
     local success, result, exec_err = error_handler.try(function()
       ---@diagnostic disable-next-line: param-type-mismatch
-      return func(table.unpack(args_clone))
+      return func(unpack_table(args_clone))
     end)
 
     if not success then

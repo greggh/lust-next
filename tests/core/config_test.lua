@@ -4,12 +4,18 @@ local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
 
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+
 -- Try to load the logging module
 local logging, logger
 local function try_load_logger()
   if not logger then
-    local ok, log_module = pcall(require, "lib.tools.logging")
-    if ok and log_module then
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
       logging = log_module
       logger = logging.get_logger("test.config")
 
@@ -139,7 +145,7 @@ describe("Configuration Module", function()
     expect(value).to.equal(85)
   end)
 
-  it("should handle non-existent config files gracefully", function()
+  it("should handle non-existent config files gracefully", { expect_error = true }, function()
     -- Reset central_config before test
     central_config.reset()
 
@@ -149,12 +155,12 @@ describe("Configuration Module", function()
 
     -- Check that it returns nil and an appropriate error message
     expect(user_config).to.equal(nil)
-    expect(err).to_not.equal(nil)
-    ---@diagnostic disable-next-line: need-check-nil
+    expect(err).to.exist()
     expect(err.message).to.match("Config file not found")
+    expect(err.category).to.exist() -- Verify it has a proper error category
   end)
 
-  it("should handle invalid config files gracefully", function()
+  it("should handle invalid config files gracefully", { expect_error = true }, function()
     -- Reset central_config before test
     central_config.reset()
 
@@ -175,9 +181,9 @@ describe("Configuration Module", function()
 
     -- Check that it returns nil and an appropriate error message
     expect(user_config).to.equal(nil)
-    expect(err).to_not.equal(nil)
-    ---@diagnostic disable-next-line: need-check-nil
+    expect(err).to.exist()
     expect(err.message).to.match("Error loading config file")
+    expect(err.category).to.exist() -- Verify it has a proper error category
   end)
 
   it("should support schema validation for configuration values", function()

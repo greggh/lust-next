@@ -1272,7 +1272,7 @@ function M.analyze_file(file_path)
   
   -- Check if file exists
   local exists, err = error_handler.safe_io_operation(
-    function() return filesystem.exists(file_path) end,
+    function() return filesystem.file_exists(file_path) end,
     file_path,
     {operation = "analyze_file.exists"}
   )

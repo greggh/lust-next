@@ -440,7 +440,9 @@ end)
 
 ### Testing Error Handling
 
-Test both success and error paths:
+#### Basic Error Testing
+
+For simple error tests where functions return nil + error:
 
 ```lua
 describe("Error handling", function()
@@ -462,16 +464,98 @@ describe("Error handling", function()
     expect(err).to_not.exist()
   end)
   
-  it("should handle invalid types", function()
+  it("should handle invalid types", { expect_error = true }, function()
     local result, err = divide("10", 2)
     expect(result).to_not.exist()
     expect(err).to.equal("Both arguments must be numbers")
   end)
   
-  it("should handle division by zero", function()
+  it("should handle division by zero", { expect_error = true }, function()
     local result, err = divide(10, 0)
     expect(result).to_not.exist()
     expect(err).to.equal("Division by zero")
+  end)
+end)
+```
+
+#### Testing Functions That Throw Errors
+
+For functions that throw errors rather than return them, use the `expect_error` flag and the test helper:
+
+```lua
+local test_helper = require("lib.tools.test_helper")
+
+describe("Function that throws errors", function()
+  local function parse_json(json_string)
+    if type(json_string) ~= "string" then
+      error("Input must be a string")
+    end
+    
+    -- Parsing logic...
+    if json_string:match("^%s*$") then
+      error("Cannot parse empty JSON")
+    end
+    
+    return {parsed = true}
+  end
+  
+  it("should parse valid JSON", function()
+    local result = parse_json('{"key":"value"}')
+    expect(result).to.exist()
+    expect(result.parsed).to.equal(true)
+  end)
+  
+  it("should throw on non-string input", { expect_error = true }, function()
+    -- Using the expect_error flag allows this test to pass
+    -- even though parse_json(nil) will throw an error
+    local err = test_helper.expect_error(function()
+      parse_json(nil)
+    end, "Input must be a string")
+    
+    -- You can make additional assertions about the error
+    expect(err).to.exist()
+  end)
+  
+  it("should throw on empty input", { expect_error = true }, function()
+    -- Another approach using with_error_capture
+    local result, err = test_helper.with_error_capture(function()
+      parse_json("   ")
+    end)()
+    
+    expect(result).to_not.exist()
+    expect(err).to.exist()
+    expect(err.message).to.match("Cannot parse empty JSON")
+  end)
+end)
+```
+
+#### Testing Error Conditions in Modules
+
+When testing modules that manage errors internally:
+
+```lua
+describe("Module with error handling", function()
+  local error_handler = require("lib.tools.error_handler")
+  
+  it("should handle validation errors", { expect_error = true }, function()
+    -- The expect_error flag tells the test system that errors
+    -- are expected in this test and shouldn't cause test failure
+    
+    local result, err = module.function_that_returns_validation_error()
+    
+    expect(result).to_not.exist()
+    expect(err).to.exist()
+    expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    expect(err.message).to.match("Expected error message")
+  end)
+  
+  it("should validate error properties", { expect_error = true }, function()
+    local result, err = module.function_with_structured_error()
+    
+    -- Make assertions about structured error objects
+    expect(err.context).to.exist()
+    expect(err.context.parameter_name).to.equal("expected_param")
+    expect(err.severity).to.equal(error_handler.SEVERITY.ERROR)
   end)
 end)
 ```
@@ -498,9 +582,14 @@ end)
 
 ### Error Testing
 
-1. **Be Specific**: Test for specific error messages when possible
-2. **Test Edge Cases**: Include tests for boundary conditions
-3. **Test Error Recovery**: Verify the system recovers properly after errors
+1. **Use expect_error Flag**: Mark tests that deliberately test error conditions with `{ expect_error = true }`
+2. **Use the Test Helper**: Use `test_helper.with_error_capture()` for complex error testing scenarios or `test_helper.expect_error()` for functions that throw
+3. **Be Specific**: Test for specific error messages and properties when possible
+4. **Test Edge Cases**: Include tests for boundary conditions
+5. **Test Error Recovery**: Verify the system recovers properly after errors
+6. **Verify Error Properties**: For structured errors, verify category, severity, and context
+
+For comprehensive guidance on testing error conditions, see the [Error Testing Best Practices](error_testing_best_practices.md) document.
 
 ### Test Coverage
 
@@ -594,4 +683,4 @@ For more detailed information on assertions, see the [Assertion Pattern Mapping]
 
 ## Last Updated
 
-2025-03-13
+2025-03-18

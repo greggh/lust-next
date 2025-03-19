@@ -1,6 +1,6 @@
 # Coverage Repair Session Start Prompt
 
-Claude, I'm continuing work on the firmo coverage module repair project. Please read CLAUDE.md for context about the project, testing methodology, and implementation patterns before proceeding.
+I'm continuing work on the firmo coverage module repair project. Please read CLAUDE.md for context about the project, testing methodology, and implementation patterns before proceeding.
 
 ## PRE-AUTHORIZATION FOR AUTONOMOUS OPERATION
 
@@ -22,11 +22,13 @@ This authorization remains valid throughout our entire conversation, even after 
 Based on our consolidated plan, we are currently focusing on these tasks in order:
 
 1. **Assertion Module Extraction**
+
    - Extract assertion functions into a standalone module
    - Implement consistent error handling for assertions
    - Resolve circular dependencies
 
 2. **Coverage/init.lua Error Handling Rewrite**
+
    - Implement comprehensive error handling throughout
    - Ensure proper data validation
    - Fix report generation issues
@@ -42,10 +44,12 @@ Based on our consolidated plan, we are currently focusing on these tasks in orde
 As we work on the coverage module repair, you MUST:
 
 1. **Create session summaries in the `/docs/coverage_repair/session_summaries/` directory**
+
    - Name session summaries as `session_summary_YYYY-MM-DD_topic.md` (use current date)
    - Document key changes, decisions, and findings
 
 2. **Update consolidated_plan.md with progress**
+
    - Mark completed tasks with ✓
    - Add implementation notes for completed work
 

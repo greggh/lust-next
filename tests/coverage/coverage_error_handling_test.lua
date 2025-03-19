@@ -7,6 +7,7 @@ local fs = require("lib.tools.filesystem")
 local coverage = require("lib.coverage")
 local error_handler = require("lib.tools.error_handler")
 local logging = require("lib.tools.logging")
+local test_helper = require("lib.tools.test_helper")
 
 -- Configure logging for testing - use FATAL level to reduce output
 logging.configure({
@@ -44,37 +45,37 @@ describe("Coverage Error Handling", function()
   end)
 
   describe("process_module_structure", function()
-    it("should handle missing file path", function()
+    it("should handle missing file path", { expect_error = true }, function()
       local process_module_structure = coverage.process_module_structure
       local success, err = process_module_structure(nil)
       
-      expect(success).to.equal(nil)
-      expect(err).to.be.a("table")
+      expect(success).to_not.exist()
+      expect(err).to.exist()
       expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
       expect(err.message).to.match("must be provided")
     end)
 
-    it("should handle non-existent file", function()
+    it("should handle non-existent file", { expect_error = true }, function()
       local process_module_structure = coverage.process_module_structure
       local success, err = process_module_structure("/path/to/nonexistent/file.lua")
       
       -- Process should fail but gracefully
-      expect(success).to.equal(nil)
-      expect(err).to.be.a("table")
+      expect(success).to_not.exist()
+      expect(err).to.exist()
       expect(err.category).to.equal(error_handler.CATEGORY.IO)
     end)
   end)
 
   describe("init method", function()
-    it("should validate options parameter", function()
+    it("should validate options parameter", { expect_error = true }, function()
       -- Reset coverage first
       coverage.reset()
       
       -- Test with invalid options type
       local success, err = coverage.init("not a table")
       
-      expect(success).to.equal(nil)
-      expect(err).to.be.a("table")
+      expect(success).to_not.exist()
+      expect(err).to.exist()
       expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
       expect(err.message).to.match("Options must be a table or nil")
       
@@ -83,7 +84,7 @@ describe("Coverage Error Handling", function()
       expect(success).to.equal(coverage) -- Returns self on success
     end)
     
-    it("should handle configuration errors gracefully", function()
+    it("should handle configuration errors gracefully", { expect_error = true }, function()
       -- Create a test case with invalid configuration
       local mock = require("lib.mocking.mock")
       
@@ -109,7 +110,7 @@ describe("Coverage Error Handling", function()
   end)
 
   describe("start method", function()
-    it("should handle instrumentation failures gracefully", function()
+    it("should handle instrumentation failures gracefully", { expect_error = true }, function()
       local mock = require("lib.mocking.mock")
       
       mock.with_mocks(function()
@@ -130,7 +131,7 @@ describe("Coverage Error Handling", function()
       end)
     end)
     
-    it("should handle hook errors gracefully", function()
+    it("should handle hook errors gracefully", { expect_error = true }, function()
       local mock = require("lib.mocking.mock")
       
       mock.with_mocks(function()
@@ -144,8 +145,8 @@ describe("Coverage Error Handling", function()
         coverage.init({enabled = true, use_instrumentation = false})
         
         local success, err = coverage.start()
-        expect(success).to.equal(nil)
-        expect(err).to.be.a("table")
+        expect(success).to_not.exist()
+        expect(err).to.exist()
         expect(err.category).to.equal(error_handler.CATEGORY.RUNTIME)
         expect(err.message).to.match("Failed to start coverage")
       end)
@@ -156,7 +157,7 @@ describe("Coverage Error Handling", function()
   end)
 
   describe("stop method", function()
-    it("should handle hook restoration errors gracefully", function()
+    it("should handle hook restoration errors gracefully", { expect_error = true }, function()
       local mock = require("lib.mocking.mock")
       
       mock.with_mocks(function()
@@ -174,7 +175,7 @@ describe("Coverage Error Handling", function()
       end)
     end)
     
-    it("should handle data processing errors gracefully", function()
+    it("should handle data processing errors gracefully", { expect_error = true }, function()
       local mock = require("lib.mocking.mock")
       
       mock.with_mocks(function()
@@ -197,7 +198,7 @@ describe("Coverage Error Handling", function()
   end)
   
   describe("get_report_data method", function()
-    it("should handle file processing errors gracefully", function()
+    it("should handle file processing errors gracefully", { expect_error = true }, function()
       local mock = require("lib.mocking.mock")
       
       mock.with_mocks(function()

@@ -4,6 +4,57 @@
 
 firmo is an enhanced Lua testing framework that provides comprehensive testing capabilities for Lua projects. It features BDD-style nested test blocks, assertions with detailed error messages, setup/teardown hooks, advanced mocking, tagging, asynchronous testing, code coverage analysis with multiline comment support, and test quality validation.
 
+## Important Code Guidelines
+
+### Diagnostic Comments
+
+**NEVER remove diagnostic disable comments** from the codebase. These comments are intentionally placed to suppress specific warnings while we work on fixing the underlying issues. Examples include:
+
+```lua
+---@diagnostic disable-next-line: need-check-nil
+---@diagnostic disable-next-line: redundant-parameter
+---@diagnostic disable-next-line: unused-local
+```
+
+Only remove these comments when you are specifically fixing the issue they're suppressing.
+
+### Markdown Formatting
+
+When working with Markdown files:
+
+1. **Code Block Format**: Use simple triple backticks without language specifiers when the language is obvious:
+   
+   ```
+   -- Lua code goes here
+   ```
+   
+   NOT:
+   
+   ```text
+   -- Lua code goes here
+   ```
+
+2. **Consistency**: Never use ````text` in our markdown files. These have been removed from all documentation.
+
+3. **Balanced Backticks**: Always ensure that backticks are balanced (equal number of opening and closing backticks).
+
+### Lua Compatibility
+
+For cross-version Lua compatibility:
+
+1. **Table Unpacking**: Always use the compatibility function for unpacking:
+   
+   ```lua
+   local unpack_table = table.unpack or unpack
+   ```
+
+2. **Table Length**: Use the `#` operator instead of `table.getn`:
+   
+   ```lua
+   local length = #my_table  -- Correct
+   local length = table.getn(my_table)  -- Incorrect, deprecated
+   ```
+
 ## Essential Commands
 
 ### Testing Commands
@@ -70,6 +121,129 @@ assert.equals(expected, actual)  -- wrong
 assert.type_of(value, "string")  -- wrong
 assert.is_true(value)            -- wrong
 ```
+
+### Testing Error Conditions
+
+When writing tests that verify error behavior, use the standardized error testing pattern with `expect_error` flag and `test_helper.with_error_capture()`:
+
+```lua
+-- Import the test helper module
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
+-- CORRECT: standardized pattern for testing error conditions
+it("should handle invalid input", { expect_error = true }, function()
+  -- Use with_error_capture to safely call functions that may throw errors
+  local result, err = test_helper.with_error_capture(function()
+    return function_that_should_error()
+  end)()
+  
+  -- Make assertions about the error
+  expect(result).to_not.exist()
+  expect(err).to.exist()
+  expect(err.category).to.exist() -- Avoid overly specific category expectations
+  expect(err.message).to.match("expected pattern") -- Check message pattern
+end)
+
+-- For functions that might return false instead of nil+error:
+it("tests both error patterns", { expect_error = true }, function()
+  local result, err = test_helper.with_error_capture(function()
+    return function_that_might_return_false_or_nil_error()
+  end)()
+  
+  if result == nil then
+    expect(err).to.exist()
+    expect(err.message).to.match("expected pattern")
+  else
+    expect(result).to.equal(false)
+  end
+end)
+
+-- For simple error message verification:
+it("should verify error messages", function()
+  -- Automatically verifies the function throws an error
+  -- with the expected message pattern
+  local err = test_helper.expect_error(fails_with_message, "expected error")
+  
+  -- Additional assertions on the error object
+  expect(err.category).to.exist()
+end)
+```
+
+### Error Testing Best Practices
+
+1. **Always use the `expect_error` flag**: This marks the test as one that expects errors:
+   ```lua
+   it("test description", { expect_error = true }, function()
+     -- Test code that should produce errors
+   end)
+   ```
+
+2. **Always use `test_helper.with_error_capture()`**: This safely captures errors without crashing tests:
+   ```lua
+   local result, err = test_helper.with_error_capture(function()
+     return function_that_throws()
+   end)()
+   ```
+
+3. **Be flexible with error categories**: Avoid hard-coding specific categories to make tests more resilient:
+   ```lua
+   -- Recommended:
+   expect(err.category).to.exist()
+   
+   -- More specific but still flexible:
+   expect(err.category).to.match("^[A-Z_]+$")
+   
+   -- Avoid unless necessary:
+   expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
+   ```
+
+4. **Use pattern matching for error messages**: Use `match()` instead of `equal()` for error messages:
+   ```lua
+   expect(err.message).to.match("invalid file")  -- Good
+   expect(err.message).to.equal("Invalid file format")  -- Too specific
+   ```
+
+5. **Test for existence first**: Always check that the value exists before making assertions about it:
+   ```lua
+   expect(err).to.exist()
+   if err then
+     expect(err.message).to.match("pattern")
+   end
+   ```
+
+6. **Handle both error patterns**: Some functions return `nil, error` while others return `false`:
+   ```lua
+   if result == nil then
+     expect(err).to.exist()
+   else
+     expect(result).to.equal(false)
+   end
+   ```
+
+7. **Clean up resources properly**: If your test creates files or resources, ensure they're cleaned up:
+   ```lua
+   local file_path = create_test_file("content")
+   
+   -- Test code here
+   
+   -- Always clean up, even if test fails
+   cleanup_test_file(file_path)
+   ```
+
+8. **Document expected error behavior**: Add comments that explain what errors are expected:
+   ```lua
+   it("should reject invalid input", { expect_error = true }, function()
+     -- Passing a number should cause a validation error
+     local result, err = test_helper.with_error_capture(function()
+       return module.process_string(123)
+     end)()
+     
+     expect(result).to_not.exist()
+     expect(err).to.exist()
+     expect(err.message).to.match("string expected")
+   end)
+   ```
 
 Note that the parameter order for equality assertions is the opposite of busted:
 

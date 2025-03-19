@@ -1,5 +1,6 @@
 local firmo = require("firmo")
 local fs = require("lib.tools.filesystem")
+local test_helper = require("lib.tools.test_helper")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Filesystem Module", function()
@@ -103,13 +104,15 @@ describe("Filesystem Module", function()
             expect(has_nested).to.be_truthy()
         end)
         
-        it("should delete directories", function()
+        it("should handle non-empty directory deletion gracefully", { expect_error = true }, function()
             local nested_dir = "/tmp/firmo-fs-test/nested"
             
             -- Try non-recursive delete on non-empty directory (should fail)
             local success, err = fs.delete_directory(nested_dir, false)
+            
             expect(success).to_not.exist()
-            expect(err).to.contain("Directory not empty")
+            expect(err).to.exist()
+            expect(err).to.match("Directory not empty")
             expect(fs.directory_exists(nested_dir)).to.be_truthy()
             
             -- Try recursive delete (should succeed)

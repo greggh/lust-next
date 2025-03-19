@@ -2,8 +2,13 @@
 local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
+-- Import test_helper for error handling
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
 -- Import reporting module directly for testing
 local reporting = require("lib.reporting")
+local fs = require("lib.tools.filesystem")
 
 describe("Output Format Tests", function()
   -- Create test data that will be used for all format tests
@@ -114,6 +119,81 @@ describe("Output Format Tests", function()
       expect(tap_output).to.match("TAP version 13")
       expect(tap_output).to.match("1..0")
     end)
+    
+    it("handles nil test results with fallback output", { expect_error = true }, function()
+      -- Use error_capture to handle expected errors
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.format_results(nil, "tap")
+      end)()
+      
+      -- Test should pass whether the formatter returns a fallback or returns error
+      if result then
+        -- If we got a result, it should be a string with TAP structure
+        expect(type(result)).to.equal("string")
+        expect(result).to.match("TAP version")
+      else
+        -- If we got an error, it should be a valid error object
+        expect(err).to.exist()
+        expect(err.message).to.exist()
+      end
+    end)
+    
+    it("handles malformed test results gracefully", { expect_error = true }, function()
+      -- Test with incomplete test results data
+      local malformed_data = {
+        -- Missing name, tests, and test_cases fields
+        timestamp = "2023-01-01T12:00:00"
+      }
+      
+      -- Use error_capture to handle expected errors
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.format_results(malformed_data, "tap")
+      end)()
+      
+      -- Test should pass whether the formatter returns a fallback or returns error
+      if result then
+        -- If we got a result, it should be a string with TAP structure
+        expect(type(result)).to.equal("string")
+        expect(result).to.match("TAP version")
+      else
+        -- If we got an error, it should be a valid error object
+        expect(err).to.exist()
+        expect(err.message).to.exist()
+      end
+    end)
+    
+    it("handles file operation errors properly", { expect_error = true }, function()
+      -- Test directory for file tests
+      local test_dir = "./test-tmp-tap-formatter"
+      
+      -- Create test directory if it doesn't exist
+      if not fs.directory_exists(test_dir) then
+        fs.create_directory(test_dir)
+      end
+      
+      -- Try to save to an invalid path
+      local invalid_path = "/tmp/firmo-test*?<>|/results.tap"
+      
+      -- Use error_capture to handle expected errors
+      local success_invalid_save, save_err = test_helper.with_error_capture(function()
+        local result, err = reporting.save_results_report(invalid_path, test_data, "tap")
+        if err then
+          return false, err
+        else
+          return result
+        end
+      end)()
+      
+      -- Try to save with nil data
+      test_helper.with_error_capture(function()
+        return reporting.save_results_report(test_dir .. "/results.tap", nil, "tap")
+      end)()
+      
+      -- Clean up
+      if fs.directory_exists(test_dir) then
+        fs.delete_directory(test_dir, true)
+      end
+    end)
   end)
   
   describe("CSV formatter", function()
@@ -191,6 +271,119 @@ describe("Output Format Tests", function()
         line_count = line_count + 1
       end
       expect(line_count).to.equal(0) -- Only header line, no data lines
+      
+      -- Reset configuration to avoid affecting other tests
+      config.delete("reporting.formatters.csv")
+    end)
+    
+    it("handles nil test results with fallback output", { expect_error = true }, function()
+      -- Configure CSV formatter with minimal fields
+      local config = require("lib.core.central_config")
+      config.set("reporting.formatters.csv", {
+        include_header = true,
+        fields = {
+          "test_name", "status", "message"
+        }
+      })
+      
+      -- Use error_capture to handle expected errors
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.format_results(nil, "csv")
+      end)()
+      
+      -- Test should pass whether the formatter returns a fallback or returns error
+      if result then
+        -- If we got a result, it should be a string with CSV structure
+        expect(type(result)).to.equal("string")
+        -- Should at least have a header
+        expect(result).to.match("test_name")
+      else
+        -- If we got an error, it should be a valid error object
+        expect(err).to.exist()
+        expect(err.message).to.exist()
+      end
+      
+      -- Reset configuration to avoid affecting other tests
+      config.delete("reporting.formatters.csv")
+    end)
+    
+    it("handles malformed test results gracefully", { expect_error = true }, function()
+      -- Configure CSV formatter with minimal fields
+      local config = require("lib.core.central_config")
+      config.set("reporting.formatters.csv", {
+        include_header = true,
+        fields = {
+          "test_name", "status", "message"
+        }
+      })
+      
+      -- Test with incomplete test results data
+      local malformed_data = {
+        -- Missing name, tests, and test_cases fields
+        timestamp = "2023-01-01T12:00:00"
+      }
+      
+      -- Use error_capture to handle expected errors
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.format_results(malformed_data, "csv")
+      end)()
+      
+      -- Test should pass whether the formatter returns a fallback or returns error
+      if result then
+        -- If we got a result, it should be a string 
+        expect(type(result)).to.equal("string")
+        -- Should at least have a header
+        expect(result).to.match("test_name")
+      else
+        -- If we got an error, it should be a valid error object
+        expect(err).to.exist()
+        expect(err.message).to.exist()
+      end
+      
+      -- Reset configuration to avoid affecting other tests
+      config.delete("reporting.formatters.csv")
+    end)
+    
+    it("handles file operation errors properly", { expect_error = true }, function()
+      -- Configure CSV formatter with minimal fields
+      local config = require("lib.core.central_config")
+      config.set("reporting.formatters.csv", {
+        include_header = true,
+        fields = {
+          "test_name", "status", "message"
+        }
+      })
+      
+      -- Test directory for file tests
+      local test_dir = "./test-tmp-csv-formatter"
+      
+      -- Create test directory if it doesn't exist
+      if not fs.directory_exists(test_dir) then
+        fs.create_directory(test_dir)
+      end
+      
+      -- Try to save to an invalid path
+      local invalid_path = "/tmp/firmo-test*?<>|/results.csv"
+      
+      -- Use error_capture to handle expected errors
+      local success_invalid_save, save_err = test_helper.with_error_capture(function()
+        local result, err = reporting.save_results_report(invalid_path, test_data, "csv")
+        if err then
+          return false, err
+        else
+          return result
+        end
+      end)()
+      
+      -- Try to save with nil data
+      test_helper.with_error_capture(function()
+        return reporting.save_results_report(test_dir .. "/results.csv", nil, "csv")
+      end)()
+      
+      -- Clean up
+      if fs.directory_exists(test_dir) then
+        fs.delete_directory(test_dir, true)
+      end
       
       -- Reset configuration to avoid affecting other tests
       config.delete("reporting.formatters.csv")

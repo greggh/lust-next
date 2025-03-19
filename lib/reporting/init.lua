@@ -1876,6 +1876,28 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
     directory = base_dir,
   })
 
+  -- Validate directory path
+  if not base_dir or base_dir == "" then
+    logger.error("Failed to create report directory", {
+      directory = base_dir,
+      error = "Invalid directory path: path cannot be empty",
+    })
+    
+    -- Return empty results but don't fail
+    return {}
+  end
+  
+  -- Check for invalid characters in directory path
+  if base_dir:match("[*?<>|]") then
+    logger.error("Failed to create report directory", {
+      directory = base_dir,
+      error = "Invalid directory path: contains invalid characters",
+    })
+    
+    -- Return empty results but don't fail
+    return {}
+  end
+  
   -- Create the directory if it doesn't exist
   local dir_ok, dir_err = fs.ensure_directory_exists(base_dir)
 
@@ -1884,6 +1906,9 @@ function M.auto_save_reports(coverage_data, quality_data, results_data, options)
       directory = base_dir,
       error = tostring(dir_err),
     })
+    
+    -- Return empty results table
+    return {}
   else
     logger.debug("Report directory ready", {
       directory = base_dir,

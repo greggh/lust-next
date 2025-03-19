@@ -311,8 +311,21 @@ function stub.on(obj, method_name, return_value_or_implementation)
   end
   
   function stub_obj:throws(error_message)
-    -- Create a new stub
-    local new_stub = stub.on(obj, method_name, function() error(error_message, 2) end)
+    -- Create a new stub using structured error objects with TEST_EXPECTED category
+    local new_stub = stub.on(obj, method_name, function() 
+      local err
+      if error_handler and type(error_handler.test_expected_error) == "function" then
+        -- Create a structured test error if error_handler is available
+        err = error_handler.test_expected_error(error_message, {
+          stub_name = method_name,
+          stub_type = "throws",
+        })
+        error(err, 2)
+      else
+        -- Fallback to simple error for backward compatibility
+        error(error_message, 2) 
+      end
+    end)
     return new_stub
   end
   

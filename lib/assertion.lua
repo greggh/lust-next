@@ -66,8 +66,10 @@ local function has(t, x)
 end
 
 -- Enhanced stringify function with better formatting for different types
-local function stringify(t, depth)
+-- and protection against cyclic references
+local function stringify(t, depth, visited)
   depth = depth or 0
+  visited = visited or {}
   local indent_str = string.rep("  ", depth)
 
   -- Handle basic types directly
@@ -78,6 +80,14 @@ local function stringify(t, depth)
   elseif type(t) ~= "table" or (getmetatable(t) and getmetatable(t).__tostring) then
     return tostring(t)
   end
+  
+  -- Handle cyclic references
+  if visited[t] then
+    return "[Circular Reference]"
+  end
+  
+  -- Mark this table as visited
+  visited[t] = true
 
   -- Handle empty tables
   if next(t) == nil then
@@ -93,9 +103,9 @@ local function stringify(t, depth)
   for i, v in ipairs(t) do
     if type(v) == "table" and next(v) ~= nil and depth < 2 then
       multiline = true
-      strings[#strings + 1] = indent_str .. "  " .. stringify(v, depth + 1)
+      strings[#strings + 1] = indent_str .. "  " .. stringify(v, depth + 1, visited)
     else
-      strings[#strings + 1] = stringify(v, depth + 1)
+      strings[#strings + 1] = stringify(v, depth + 1, visited)
     end
   end
 
@@ -103,13 +113,13 @@ local function stringify(t, depth)
   local hash_entries = {}
   for k, v in pairs(t) do
     if type(k) ~= "number" or k > #t or k < 1 then
-      local key_str = type(k) == "string" and k or "[" .. stringify(k, depth + 1) .. "]"
+      local key_str = type(k) == "string" and k or "[" .. stringify(k, depth + 1, visited) .. "]"
 
       if type(v) == "table" and next(v) ~= nil and depth < 2 then
         multiline = true
-        hash_entries[#hash_entries + 1] = indent_str .. "  " .. key_str .. " = " .. stringify(v, depth + 1)
+        hash_entries[#hash_entries + 1] = indent_str .. "  " .. key_str .. " = " .. stringify(v, depth + 1, visited)
       else
-        hash_entries[#hash_entries + 1] = key_str .. " = " .. stringify(v, depth + 1)
+        hash_entries[#hash_entries + 1] = key_str .. " = " .. stringify(v, depth + 1, visited)
       end
     end
   end
@@ -131,8 +141,11 @@ end
 
 -- Generate a simple diff between two values
 local function diff_values(v1, v2)
+  -- Create a shared visited table for cyclic reference detection
+  local visited = {}
+  
   if type(v1) ~= "table" or type(v2) ~= "table" then
-    return "Expected: " .. stringify(v2) .. "\nGot:      " .. stringify(v1)
+    return "Expected: " .. stringify(v2, 0, visited) .. "\nGot:      " .. stringify(v1, 0, visited)
   end
 
   local differences = {}
@@ -140,16 +153,16 @@ local function diff_values(v1, v2)
   -- Check for missing keys in v1
   for k, v in pairs(v2) do
     if v1[k] == nil then
-      table.insert(differences, "Missing key: " .. stringify(k) .. " (expected " .. stringify(v) .. ")")
+      table.insert(differences, "Missing key: " .. stringify(k, 0, visited) .. " (expected " .. stringify(v, 0, visited) .. ")")
     elseif not M.eq(v1[k], v, 0) then
       table.insert(
         differences,
         "Different value for key "
-          .. stringify(k)
+          .. stringify(k, 0, visited)
           .. ":\n  Expected: "
-          .. stringify(v)
+          .. stringify(v, 0, visited)
           .. "\n  Got:      "
-          .. stringify(v1[k])
+          .. stringify(v1[k], 0, visited)
       )
     end
   end
@@ -157,7 +170,7 @@ local function diff_values(v1, v2)
   -- Check for extra keys in v1
   for k, v in pairs(v1) do
     if v2[k] == nil then
-      table.insert(differences, "Extra key: " .. stringify(k) .. " = " .. stringify(v))
+      table.insert(differences, "Extra key: " .. stringify(k, 0, visited) .. " = " .. stringify(v, 0, visited))
     end
   end
 
@@ -168,8 +181,31 @@ local function diff_values(v1, v2)
   return "Differences:\n  " .. table.concat(differences, "\n  ")
 end
 
--- Deep equality check function
-function M.eq(t1, t2, eps)
+-- Deep equality check function with cycle detection
+function M.eq(t1, t2, eps, visited)
+  -- Initialize visited tables on first call
+  visited = visited or {}
+  
+  -- Direct reference equality check for identical tables
+  if t1 == t2 then
+    return true
+  end
+  
+  -- Create a unique key for this comparison pair to detect cycles
+  local pair_key
+  if type(t1) == "table" and type(t2) == "table" then
+    -- Create a string that uniquely identifies this pair
+    pair_key = tostring(t1) .. ":" .. tostring(t2)
+    
+    -- If we've seen this pair before, we're in a cycle
+    if visited[pair_key] then
+      return true -- Assume equality for cyclic structures
+    end
+    
+    -- Mark this pair as visited
+    visited[pair_key] = true
+  end
+  
   -- Special case for strings and numbers
   if (type(t1) == "string" and type(t2) == "number") or (type(t1) == "number" and type(t2) == "string") then
     -- Try string comparison
@@ -219,7 +255,7 @@ function M.eq(t1, t2, eps)
 
   -- For tables, recursive equality check
   for k, v in pairs(t1) do
-    if not M.eq(v, t2[k], eps) then
+    if not M.eq(v, t2[k], eps, visited) then
       return false
     end
   end

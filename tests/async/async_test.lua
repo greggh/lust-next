@@ -7,6 +7,8 @@ local async = firmo.async
 local await = firmo.await
 local wait_until = firmo.wait_until
 local parallel_async = firmo.parallel_async
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
 
 describe("Asynchronous Testing", function()
   -- Verify basic async functionality
@@ -52,14 +54,16 @@ describe("Asynchronous Testing", function()
       await(50) -- Wait 50ms
 
       local elapsed = (os.clock() - start) * 1000
-      expect(elapsed >= 40).to.be.truthy() -- Allow for small timing differences
+      expect(elapsed >= 40).to.be_truthy() -- Allow for small timing differences
     end)
 
-    it("fails when used outside async context", function()
-      expect(function()
+    it("fails when used outside async context", { expect_error = true }, function()
+      local err = test_helper.expect_error(function()
         ---@diagnostic disable-next-line: redundant-parameter
         await(10)
-      end).to.fail.with("can only be called within an async test")
+      end, "can only be called within an async test")
+      
+      expect(err).to.exist()
     end)
   end)
 
@@ -85,24 +89,28 @@ describe("Asynchronous Testing", function()
     end)
 
     it_async("times out if condition never becomes true", function()
-      local success = pcall(function()
+      local result, err = test_helper.with_error_capture(function()
         ---@diagnostic disable-next-line: redundant-parameter
         wait_until(function()
           return false
           ---@diagnostic disable-next-line: redundant-parameter
         end, 50, 5)
-      end)
-
-      expect(success).to.equal(false)
+      end)()
+      
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.message).to.match("timed out")
     end)
 
-    it("fails when used outside async context", function()
-      expect(function()
+    it("fails when used outside async context", { expect_error = true }, function()
+      local err = test_helper.expect_error(function()
         ---@diagnostic disable-next-line: redundant-parameter
         wait_until(function()
           return true
         end)
-      end).to.fail.with("can only be called within an async test")
+      end, "can only be called within an async test")
+      
+      expect(err).to.exist()
     end)
   end)
 
@@ -171,24 +179,27 @@ describe("Asynchronous Testing", function()
       end
 
       -- Run operations and expect an error
-      local success, err = pcall(function()
+      local result, err = test_helper.with_error_capture(function()
         ---@diagnostic disable-next-line: redundant-parameter
         parallel_async({ op1, op2, op3 })
-      end)
-
-      expect(success).to.equal(false)
-      expect(err).to.match("One or more parallel operations failed")
+      end)()
+      
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.message).to.match("One or more parallel operations failed")
       -- Only check for partial match because line numbers may vary
-      expect(err).to.match("Simulated failure")
+      expect(err.message).to.match("op2 failed")
     end)
 
     -- Timeout test has been moved to async_timeout_test.lua
 
-    it("fails when used outside async context", function()
-      expect(function()
+    it("fails when used outside async context", { expect_error = true }, function()
+      local err = test_helper.expect_error(function()
         ---@diagnostic disable-next-line: redundant-parameter
         parallel_async({ function() end })
-      end).to.fail.with("can only be called within an async test")
+      end, "can only be called within an async test")
+      
+      expect(err).to.exist()
     end)
   end)
 

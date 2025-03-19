@@ -599,7 +599,18 @@ return loadfile(%q)()
     else
       -- Parse the file to get AST and code map
       local success, result, err = error_handler.try(function()
-        local ast, code_map = static_analyzer.parse_content(source, file_path)
+        -- Use generate_code_map which takes source content directly
+        local code_map = static_analyzer.generate_code_map(file_path, nil, source)
+        
+        -- Ensure code_map is populated and extract AST if available
+        local ast = code_map and code_map.ast
+        
+        logger.debug("Generated code map for instrumentation", {
+          file_path = file_path,
+          has_code_map = code_map ~= nil,
+          has_ast = ast ~= nil
+        })
+        
         return {ast = ast, code_map = code_map}
       end)
 
@@ -1885,7 +1896,10 @@ function M.hook_loaders()
   })
 
   local success, err = error_handler.try(function()
-    -- Save original loader
+    -- Save original loaders in global variables to allow unhooking
+    _G._ORIGINAL_LOADFILE = loadfile
+    
+    -- For backwards compatibility with existing code
     local original_loadfile = loadfile
 
     -- Replace with instrumented version
@@ -1932,6 +1946,7 @@ function M.hook_loaders()
     end
 
     -- Similarly hook dofile if needed
+    _G._ORIGINAL_DOFILE = dofile
     local original_dofile = dofile
     _G.dofile = function(filename)
       if not filename then
@@ -1977,6 +1992,7 @@ function M.hook_loaders()
 
     -- Hook load/loadstring functions if available
     if _G.load then
+      _G._ORIGINAL_LOAD = _G.load
       local original_load = _G.load
       _G.load = function(chunk, chunk_name, mode, env)
         logger.trace("Load called", {
@@ -2241,6 +2257,48 @@ function M.get_stats()
   end
 
   return result
+end
+
+-- Unhook Lua's built-in loaders to restore original behavior
+function M.unhook_loaders()
+  logger.debug("Unhooking Lua loaders", {
+    operation = "unhook_loaders"
+  })
+
+  local success, err = error_handler.try(function()
+    -- Restore original loaders if they were saved
+    if _G._ORIGINAL_LOADFILE then
+      _G.loadfile = _G._ORIGINAL_LOADFILE
+      _G._ORIGINAL_LOADFILE = nil
+    end
+    
+    if _G._ORIGINAL_DOFILE then
+      _G.dofile = _G._ORIGINAL_DOFILE
+      _G._ORIGINAL_DOFILE = nil
+    end
+    
+    if _G._ORIGINAL_LOAD then
+      _G.load = _G._ORIGINAL_LOAD
+      _G._ORIGINAL_LOAD = nil
+    end
+    
+    logger.info("Lua loaders successfully unhooked", {
+      operation = "unhook_loaders",
+      unhooked_functions = "loadfile, dofile, load"
+    })
+    
+    return true
+  end)
+  
+  if not success then
+    logger.error("Failed to unhook Lua loaders", {
+      error = err.message,
+      category = err.category
+    })
+    return nil, err
+  end
+  
+  return true
 end
 
 return M

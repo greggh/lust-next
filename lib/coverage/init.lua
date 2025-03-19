@@ -1134,6 +1134,19 @@ function M.process_module_structure(file_path)
     return nil, err
   end
   
+  -- Check if file exists
+  if not fs.file_exists(file_path) then
+    local err = error_handler.io_error(
+      "File does not exist",
+      {
+        file_path = file_path,
+        operation = "process_module_structure"
+      }
+    )
+    logger.warn(err.message, err.context)
+    return nil, err
+  end
+  
   -- Normalize file path
   local normalized_path = file_path:gsub("//", "/"):gsub("\\", "/")
   

@@ -14,6 +14,8 @@ local describe, it, expect, before, after =
 -- Load modules needed for testing
 local reporting = require("lib.reporting")
 local fs = require("lib.tools.filesystem")
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
 
 -- Test data
 local test_dir = "./test-reports-tmp"
@@ -51,6 +53,15 @@ describe("Reporting Module with Filesystem Integration", function()
       -- Verify content
       local content = fs.read_file(nested_file)
       expect(content).to.equal(test_content)
+    end)
+    
+    it("handles invalid file paths", { expect_error = true }, function()
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.write_file("", test_content)
+      end)()
+      
+      -- The implementation returns nil, but we might get an error
+      expect(result).to_not.exist()
     end)
     
     it("handles string content correctly", function()
@@ -115,12 +126,118 @@ describe("Reporting Module with Filesystem Integration", function()
       expect(fs.file_exists(junit_path)).to.equal(true)
     end)
     
-    -- Note: This test is skipped due to HTML formatter issues in the test environment
-    -- it("saves multiple report formats", function()
-    --   -- Test code removed
-    -- end)
+    it("handles invalid report directory", { expect_error = true }, function()
+      -- Set options with an invalid directory
+      local invalid_path = "/tmp/firmo-test-invalid-dir-with-chars*?<>|"
+      local options = { report_dir = invalid_path }
+      
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.auto_save_reports(nil, nil, nil, options)
+      end)()
+      
+      -- The implementation should return a result table but no successful operations
+      expect(result).to.exist()
+      expect(type(result)).to.equal("table")
+      
+      -- Should have no successful operations due to invalid directory
+      local has_success = false
+      for _, format_result in pairs(result) do
+        if format_result.success then
+          has_success = true
+          break
+        end
+      end
+      
+      expect(has_success).to.equal(false)
+    end)
     
-    it("handles template paths correctly", function()
+    it("saves multiple report formats", { expect_error = true }, function()
+      local coverage_data = {
+        files = {
+          ["/path/to/example.lua"] = {
+            total_lines = 100,
+            covered_lines = 80,
+            total_functions = 10,
+            covered_functions = 8,
+            line_coverage_percent = 80,
+            function_coverage_percent = 80,
+            lines = { [5] = true, [10] = true, [15] = true },
+            functions = { ["test_func"] = true }
+          }
+        },
+        summary = {
+          total_files = 1,
+          covered_files = 1,
+          total_lines = 100,
+          covered_lines = 80,
+          total_functions = 10,
+          covered_functions = 8,
+          line_coverage_percent = 80,
+          function_coverage_percent = 80,
+          overall_percent = 80
+        }
+      }
+      
+      local quality_data = {
+        level = 3,
+        level_name = "comprehensive",
+        tests = {
+          ["test1"] = {
+            assertion_count = 5,
+            quality_level = 3,
+            assertion_types = { equality = 2, truth = 1, error_handling = 1, type_checking = 1 }
+          }
+        },
+        summary = {
+          tests_analyzed = 1,
+          tests_passing_quality = 1,
+          quality_percent = 100,
+          assertions_total = 5
+        }
+      }
+      
+      -- Save reports
+      local multiple_formats_dir = test_dir .. "/multiple-formats"
+      local results = reporting.auto_save_reports(
+        coverage_data, 
+        quality_data,
+        nil, -- No test results
+        { report_dir = multiple_formats_dir }
+      )
+      
+      -- Verify directory was created
+      expect(fs.directory_exists(multiple_formats_dir)).to.equal(true)
+      
+      -- Check that multiple formats were generated
+      local has_html = results.html and results.html.success
+      local has_json = results.json and results.json.success
+      local has_lcov = results.lcov and results.lcov.success
+      
+      -- At least one report format should have succeeded
+      expect(has_html or has_json or has_lcov).to.equal(true)
+      
+      -- Verify that files exist for successful formats
+      if has_html then
+        expect(fs.file_exists(results.html.path)).to.equal(true)
+      end
+      
+      if has_json then
+        expect(fs.file_exists(results.json.path)).to.equal(true)
+      end
+      
+      if has_lcov then
+        expect(fs.file_exists(results.lcov.path)).to.equal(true)
+      end
+      
+      -- Quality reports should also have been generated
+      local has_quality_html = results.quality_html and results.quality_html.success
+      local has_quality_json = results.quality_json and results.quality_json.success
+      
+      -- At least one quality report format should have succeeded
+      expect(has_quality_html or has_quality_json).to.equal(true)
+    end)
+    
+    it("handles template paths correctly", { expect_error = true }, function()
       local test_results = {
         name = "TestSuite",
         tests = 1,

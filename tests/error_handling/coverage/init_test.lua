@@ -8,6 +8,7 @@ local fs = require("lib.tools.filesystem")
 local coverage = require("lib.coverage")
 local error_handler = require("lib.tools.error_handler")
 local logging = require("lib.tools.logging")
+local test_helper = require("lib.tools.test_helper")
 
 -- Configure logging for tests
 logging.configure({
@@ -39,10 +40,11 @@ describe("Coverage Init Module Error Handling", function()
   end)
 
   describe("init", function()
-    it("should validate options parameter type", function()
+    it("should validate options parameter type", { expect_error = true }, function()
       -- Test with invalid options type (string)
       local result, err = coverage.init("not a table")
       
+      -- With expect_error flag, we can safely test these error conditions
       expect(result).to_not.exist()
       expect(err).to.exist()
       expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)

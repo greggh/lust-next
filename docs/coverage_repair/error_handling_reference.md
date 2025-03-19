@@ -2,6 +2,51 @@
 
 This document consolidates key information about error handling implementation across the firmo framework. It serves as a reference for implementing consistent error handling patterns.
 
+## Test Error Handling
+
+When testing error conditions, we have specific patterns to ensure expected errors don't cause test failures.
+
+### 1. Using the expect_error Flag
+
+When a test is specifically validating error behavior, add the `expect_error` flag:
+
+```lua
+it("should handle invalid input", { expect_error = true }, function()
+  -- This error won't cause the test to fail
+  local result, err = function_that_returns_error()
+  
+  -- Make assertions about the error
+  expect(result).to_not.exist()
+  expect(err).to.exist()
+  expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
+end)
+```
+
+### 2. Using the test_helper Module
+
+For more complex error testing scenarios, use the test_helper module:
+
+```lua
+local test_helper = require("lib.tools.test_helper")
+
+-- Capturing errors safely
+local result, err = test_helper.with_error_capture(function()
+  -- Any error thrown here will be captured, not cause test failure
+  error("Expected error")
+end)()
+
+-- Verifying functions throw specific errors
+local err = test_helper.expect_error(
+  function_that_should_throw, 
+  "expected error message pattern"
+)
+```
+
+For comprehensive guidance on testing error conditions, see:
+- [Error Testing Best Practices](error_testing_best_practices.md) - Complete guide to error testing
+- [Test Error Handling Example](../examples/test_error_handling_example.lua) - Basic examples
+- [Enhanced Error Testing Example](../examples/enhanced_error_testing_example.lua) - Advanced patterns
+
 ## Standard Error Handling Patterns
 
 ### 1. Input Validation

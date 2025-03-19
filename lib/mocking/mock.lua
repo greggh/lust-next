@@ -832,9 +832,21 @@ function mock.create(target, options)
           })
 
           if not stub or not stub.called then
-            logger.warn("Expected method was not called", {
-              method_name = name,
-            })
+            -- Check if we're in test mode and should suppress logging
+            if not (error_handler and 
+                  type(error_handler.is_suppressing_test_logs) == "function" and 
+                  error_handler.is_suppressing_test_logs()) then
+              -- For verification failures, use warning level since this is potentially
+              -- useful information in tests that are checking verification behavior
+              logger.warn("Expected method was not called", {
+                method_name = name,
+              })
+            else
+              -- In test mode, only log at debug level
+              logger.debug("Expected method was not called (test mode)", {
+                method_name = name,
+              })
+            end
             table.insert(failures, "Expected '" .. name .. "' to be called, but it was not")
           end
         end
@@ -861,10 +873,22 @@ function mock.create(target, options)
     if #failures > 0 then
       local error_message = "Mock verification failed:\n  " .. table.concat(failures, "\n  ")
 
-      logger.error("Mock verification failed", {
-        failure_count = #failures,
-        failures = table.concat(failures, "; "),
-      })
+      -- Check if we're in test mode and should suppress logging
+      if not (error_handler and 
+             type(error_handler.is_suppressing_test_logs) == "function" and 
+             error_handler.is_suppressing_test_logs()) then
+        -- For mock verification failures, use error level only if not in test mode
+        logger.error("Mock verification failed", {
+          failure_count = #failures,
+          failures = table.concat(failures, "; "),
+        })
+      else
+        -- In test mode, only log at debug level
+        logger.debug("Mock verification failed (test mode)", {
+          failure_count = #failures,
+          failures = table.concat(failures, "; "),
+        })
+      end
 
       local error_obj = error_handler.validation_error(error_message, {
         function_name = "mock_obj:verify",
@@ -1219,7 +1243,7 @@ function mock.with_mocks(fn)
         mock_obj:restore()
         return true
       else
-        logger.warn("Cannot restore object (not a valid mock)", {
+        logger.debug("Cannot restore object (not a valid mock)", {
           index = i,
           obj_type = type(mock_obj),
         })
@@ -1243,11 +1267,12 @@ function mock.with_mocks(fn)
         },
         restore_result -- On failure, restore_result contains the error
       )
-      logger.error(error_obj.message, error_obj.context)
+      -- Use debug level instead of error to avoid confusing test output
+      logger.debug("Failed to restore mock during test", error_obj.context)
       table.insert(errors_during_restore, error_obj)
     elseif restore_result == false then
       -- The try function succeeded but the validation failed
-      logger.warn("Skipped restoration of invalid mock object", {
+      logger.debug("Skipped restoration of invalid mock object", {
         index = i,
         error = "Not a valid mock with restore method",
       })
@@ -1261,10 +1286,49 @@ function mock.with_mocks(fn)
 
   -- If there was an error during the function execution
   if not ok then
-    local error_obj = error_handler.runtime_error("Error during mock context execution", {
+    local error_message = "Error during mock context execution"
+    
+    -- Extract more information from the error if possible
+    if error_during_execution then
+      if type(error_during_execution) == "table" and error_during_execution.message then
+        error_message = error_message .. ": " .. error_during_execution.message
+      elseif type(error_during_execution) == "string" then
+        error_message = error_message .. ": " .. error_during_execution
+      end
+    end
+    
+    local error_obj = error_handler.runtime_error(error_message, {
       function_name = "mock.with_mocks",
     }, error_during_execution)
-    logger.error(error_obj.message, error_obj.context)
+    
+    -- Properly detect test mode through the error handler
+    local is_test_mode = error_handler and 
+                         type(error_handler) == "table" and 
+                         type(error_handler.is_test_mode) == "function" and
+                         error_handler.is_test_mode()
+    
+    -- Check if this appears to be a test-related error based on structured error properties
+    local is_expected_in_test = is_test_mode and 
+                               error_during_execution and 
+                               type(error_during_execution) == "table" and 
+                               (error_during_execution.category == "VALIDATION" or
+                                error_during_execution.category == "TEST_EXPECTED")
+    
+    if is_expected_in_test then
+      -- If it's a validation error from an assertion, it's likely part of the test
+      logger.debug("Test assertion failure in mock context", {
+        error = error_message,
+      })
+    else
+      -- For actual unexpected errors, check if we should log
+      if not (error_handler and 
+              type(error_handler.is_suppressing_test_logs) == "function" and 
+              error_handler.is_suppressing_test_logs()) then
+        logger.error("Error during mock context execution", {
+          error = error_message,
+        })
+      end
+    end
 
     -- If there were also errors during restoration, log them but prioritize the execution error
     if #errors_during_restore > 0 then
@@ -1288,7 +1352,10 @@ function mock.with_mocks(fn)
       error_count = #errors_during_restore,
       errors = error_messages,
     })
-    logger.error(error_obj.message, error_obj.context)
+    -- Use debug level to avoid confusing test output
+    logger.debug("Mock restoration issues during test", {
+      error_count = #errors_during_restore
+    })
 
     -- Since the main function executed successfully, we return both the result and the error
     return result, error_obj

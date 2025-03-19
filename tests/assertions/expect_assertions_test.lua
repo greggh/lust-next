@@ -4,12 +4,18 @@ local firmo = require('firmo')
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
 
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+
 -- Try to load the logging module
 local logging, logger
 local function try_load_logger()
   if not logger then
-    local ok, log_module = pcall(require, "lib.tools.logging")
-    if ok and log_module then
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
       logging = log_module
       logger = logging.get_logger("test.expect_assertions")
       
@@ -110,7 +116,7 @@ describe('Expect Assertion System', function()
   describe('Function Testing', function()
     if log then log.debug("Testing function assertions") end
     
-    it('checks for function failure', function()
+    it('checks for function failure', { expect_error = true }, function()
       local function fails() error("This function fails") end
       expect(fails).to.fail()
     end)
@@ -120,9 +126,22 @@ describe('Expect Assertion System', function()
       expect(succeeds).to_not.fail()
     end)
     
-    it('checks for error message', function()
+    it('checks for error message', { expect_error = true }, function()
       local function fails_with_message() error("Expected message") end
       expect(fails_with_message).to.fail.with("Expected message")
+    end)
+    
+    it('can use test_helper for error checking', { expect_error = true }, function()
+      local function fails_with_custom_message() error("Custom error message") end
+      
+      -- Verify the function throws with a specific message
+      local err = test_helper.expect_error(
+        fails_with_custom_message,
+        "Custom error message"
+      )
+      
+      expect(err).to.exist()
+      expect(err.message).to.match("Custom error message")
     end)
   end)
   

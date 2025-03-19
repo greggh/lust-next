@@ -1,5 +1,6 @@
 -- Tests for the core assertions in firmo
 local firmo = require("firmo")
+local test_helper = require("lib.tools.test_helper")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 describe("Core Assertions", function()
@@ -52,7 +53,7 @@ describe("Core Assertions", function()
   end)
 
   describe("Function Assertions", function()
-    it("checks if a function fails", function()
+    it("checks if a function fails", { expect_error = true }, function()
       local function fails()
         error("error message")
       end
@@ -60,8 +61,28 @@ describe("Core Assertions", function()
         return true
       end
 
-      expect(fails).to.fail()
+      -- Use expect_error flag and our helper for more control
+      local _, err = test_helper.with_error_capture(function()
+        fails()
+      end)()
+      
+      -- Verify we got the expected error
+      expect(err).to.exist()
+      expect(err.message).to.match("error message")
+      
+      -- Also verify that a succeeding function doesn't throw
       expect(succeeds).to_not.fail()
+    end)
+    
+    -- Add a test to show that our helper.expect_error works too
+    it("can use the test helper to check errors", { expect_error = true }, function()
+      local function fails_with_message()
+        error("specific error message")
+      end
+      
+      -- Helper automatically captures and validates the error
+      local err = test_helper.expect_error(fails_with_message, "specific error")
+      expect(err).to.exist()
     end)
   end)
 

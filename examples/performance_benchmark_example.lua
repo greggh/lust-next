@@ -445,10 +445,12 @@ print(
 )
 
 -- Define benchmark functions
+-- Track if module_reset is loaded
+local module_reset_loaded = firmo.module_reset ~= nil
+
 local function run_tests_with_isolation(suite_dir, iterations)
   collectgarbage("collect")
 
-  ---@diagnostic disable-next-line: undefined-global
   if module_reset_loaded then
     firmo.module_reset.configure({
       reset_modules = true,
@@ -485,7 +487,6 @@ end
 local function run_tests_without_isolation(suite_dir, iterations)
   collectgarbage("collect")
 
-  ---@diagnostic disable-next-line: undefined-global
   if module_reset_loaded then
     firmo.module_reset.configure({
       reset_modules = false,

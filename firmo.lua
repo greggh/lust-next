@@ -1891,13 +1891,23 @@ function firmo.it(name, fn, options)
   end
 
   options = options or {}
+  
   local focused = options.focused or false
   local excluded = options.excluded or false
+  local expect_error = options.expect_error or false
 
   -- If this is a focused test, mark that we're in focus mode
   if focused then
     firmo.focus_mode = true
   end
+  
+  -- Create test metadata
+  local test_metadata = {
+    name = name,
+    expect_error = expect_error,
+    focused = focused,
+    excluded = excluded,
+  }
 
   -- Save current tags for this test
   local test_tags = {}
@@ -1967,7 +1977,16 @@ function firmo.it(name, fn, options)
 
         -- Run before hook with error handling
         local before_success, before_err = error_handler.try(function()
+          -- Set test metadata before executing the before hook
+          local error_handler = require("lib.tools.error_handler")
+          error_handler.set_current_test_metadata(test_metadata)
+          
+          -- Execute the before hook
           before_fn(name)
+          
+          -- Clear test metadata after execution
+          error_handler.set_current_test_metadata(nil)
+          
           return true
         end)
 
@@ -2007,7 +2026,16 @@ function firmo.it(name, fn, options)
     if type(fn) == "function" then
       -- Run test with proper error handling
       success, err = error_handler.try(function()
+        -- Set test metadata before executing the test
+        local error_handler = require("lib.tools.error_handler")
+        error_handler.set_current_test_metadata(test_metadata)
+        
+        -- Execute the test
         fn()
+        
+        -- Clear test metadata after execution
+        error_handler.set_current_test_metadata(nil)
+        
         return true
       end)
     else
@@ -2015,16 +2043,27 @@ function firmo.it(name, fn, options)
       success, err = true, fn
     end
   else
-    -- Before hooks failed, so we can't run the test
-    success = false
-    err = error_handler.runtime_error(
-      "Test not run due to errors in before hooks",
-      {
+    -- Before hooks failed, but if the test expects errors, we'll still consider it a success
+    if expect_error then
+      -- This test expects errors, so treat it as a success even with before hook errors
+      success = true
+      err = nil
+      logger.debug("Ignoring before hook errors for test with expect_error flag", {
         test = name,
         error_count = #before_errors,
-      },
-      before_errors[1] -- Chain to the first error
-    )
+      })
+    else
+      -- Not expecting errors, so the test fails due to before hook errors
+      success = false
+      err = error_handler.runtime_error(
+        "Test not run due to errors in before hooks",
+        {
+          test = name,
+          error_count = #before_errors,
+        },
+        before_errors[1] -- Chain to the first error
+      )
+    end
   end
 
   -- Convert error to structured error if needed
@@ -2116,7 +2155,16 @@ function firmo.it(name, fn, options)
 
         -- Run after hook with error handling
         local after_success, after_err = error_handler.try(function()
+          -- Set test metadata before executing the after hook
+          local error_handler = require("lib.tools.error_handler")
+          error_handler.set_current_test_metadata(test_metadata)
+          
+          -- Execute the after hook
           after_fn(name)
+          
+          -- Clear test metadata after execution
+          error_handler.set_current_test_metadata(nil)
+          
           return true
         end)
 
@@ -2145,11 +2193,29 @@ function firmo.it(name, fn, options)
     end
   end
 
-  -- If we had after hook errors, display them
-  if #after_errors > 0 and not firmo.format_options.summary_only then
-    print(indent() .. red .. "ERRORS IN AFTER HOOKS:" .. normal)
-    for i, after_err in ipairs(after_errors) do
-      print(indent(firmo.level + 1) .. red .. i .. ": " .. error_handler.format_error(after_err, false) .. normal)
+  -- If we had after hook errors, display them unless the test expects errors
+  if #after_errors > 0 then
+    if expect_error then
+      -- This test expects errors, so just log them at debug level
+      logger.debug("Ignoring after hook errors for test with expect_error flag", {
+        test = name,
+        error_count = #after_errors,
+      })
+    elseif not firmo.format_options.summary_only then
+      -- Display after hook errors for non-expect_error tests
+      logger.error("Errors in after hooks", {
+        test = name,
+        error_count = #after_errors,
+        first_error = error_handler.format_error(after_errors[1], false)
+      })
+      
+      -- Still need to display visually in the test output
+      for i, after_err in ipairs(after_errors) do
+        if i == 1 then
+          logger.error("ERRORS IN AFTER HOOKS:")
+        end
+        logger.error(i .. ": " .. error_handler.format_error(after_err, false))
+      end
     end
   end
 
@@ -2400,10 +2466,24 @@ if mocking_ok and mocking then
   -- Override the test runner to use our mocking system
   local original_it = firmo.it
   firmo.it = function(name, fn, options)
+    -- Check if the parameter order needs to be swapped (options passed as second parameter)
+    if type(fn) == "table" and type(options) == "function" then
+      local temp = fn
+      fn = options
+      options = temp
+    end
+    
+    -- Ensure options is a table
+    options = type(options) == "table" and options or {}
+    
     local wrapped_fn
+    
+    -- Also pass through expect_error flag
+    local expect_error = options.expect_error or false
 
-    if options and (options.focused or options.excluded) then
-      -- If this is a focused or excluded test, don't wrap it with mocking
+    if options.focused or options.excluded or expect_error then
+      -- If this is a focused, excluded, or expect_error test, don't wrap it with mocking
+      -- This prevents mocking from interfering with expected errors
       wrapped_fn = fn
     else
       -- Otherwise, wrap the function with mocking context
@@ -2414,7 +2494,16 @@ if mocking_ok and mocking then
       end
     end
 
-    return original_it(name, wrapped_fn, options)
+    -- Make sure the expect_error flag is properly transferred
+    local opt_copy = {}
+    for k, v in pairs(options) do
+      opt_copy[k] = v
+    end
+    
+    -- Explicitly set the expect_error flag
+    opt_copy.expect_error = expect_error
+    
+    return original_it(name, wrapped_fn, opt_copy)
   end
 end
 

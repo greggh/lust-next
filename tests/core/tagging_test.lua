@@ -3,6 +3,10 @@ package.path = "../?.lua;" .. package.path
 local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
 describe("Tagging and Filtering", function()
   it("basic test with no tags", function()
     expect(true).to.be.truthy()
@@ -30,6 +34,45 @@ describe("Tagging and Filtering", function()
 
   it("test with different numeric value 67890", function()
     expect(67890).to.be.a("number")
+  end)
+  
+  it("should validate tag types", { expect_error = true }, function()
+    -- Test with non-string tag
+    local result, err = test_helper.with_error_capture(function()
+      firmo.tags(123)
+    end)()
+    
+    expect(result).to_not.exist()
+    expect(err).to.exist()
+    expect(err.message).to.match("Tag must be a string")
+  end)
+  
+  it("should validate filter pattern types", { expect_error = true }, function()
+    -- We need to create a temporary testing function since the actual filtering
+    -- happens in the runner, not directly callable here
+    local function apply_filter(pattern, test_name)
+      if type(pattern) ~= "string" then
+        error(error_handler.validation_error(
+          "Filter pattern must be a string",
+          {provided_type = type(pattern)}
+        ))
+      end
+      
+      return string.find(test_name, pattern) ~= nil
+    end
+    
+    -- Test with valid pattern
+    expect(apply_filter("numeric", "test with numeric value")).to.be_truthy()
+    
+    -- Test with invalid pattern type
+    local result, err = test_helper.with_error_capture(function()
+      apply_filter(123, "test with numeric value")
+    end)()
+    
+    expect(result).to_not.exist()
+    expect(err).to.exist()
+    expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    expect(err.message).to.match("Filter pattern must be a string")
   end)
 end)
 

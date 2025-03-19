@@ -8,6 +8,7 @@ local static_analyzer -- Lazily loaded when used
 local config = {}
 local tracked_files = {}
 local active_files = {} -- Keep track of files that should be included in reporting
+
 local processing_hook = false -- Flag to prevent recursive hook calls
 -- Enhanced data structure with clear separation between execution and coverage
 local coverage_data = {
@@ -101,6 +102,23 @@ function M.should_track_file(file_path)
     ::continue_exclude::
   end
   
+  -- Check for invalid patterns in include patterns
+  for _, pattern in ipairs(config.include or {}) do
+    -- Test if the pattern is valid by trying to match anything with it
+    local success, _, err = error_handler.try(function()
+      return fs.matches_pattern("test", pattern)
+    end)
+    
+    if not success then
+      logger.debug("Invalid pattern detected: " .. error_handler.format_error(err), {
+        pattern = pattern,
+        operation = "should_track_file.include"
+      })
+      tracked_files[normalized_path] = false
+      return false
+    end
+  end
+  
   -- Apply include patterns with error handling
   for _, pattern in ipairs(config.include or {}) do
     local success, matches, err = error_handler.try(function()
@@ -133,6 +151,7 @@ function M.should_track_file(file_path)
     end
   end
   
+  
   -- Default decision based on file extension
   local is_lua = normalized_path:match("%.lua$") ~= nil
   tracked_files[normalized_path] = is_lua
@@ -141,6 +160,28 @@ end
 
 -- Initialize tracking for a file - exposed as public API for other components to use
 function M.initialize_file(file_path, options)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "initialize_file", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "initialize_file", provided_type = type(file_path)}
+    )
+  end
+  
+  if file_path == "" then
+    return nil, error_handler.validation_error(
+      "file_path cannot be empty",
+      {operation = "initialize_file"}
+    )
+  end
+  
   local normalized_path = fs.normalize_path(file_path)
   options = options or {}
   
@@ -636,13 +677,29 @@ end
 
 -- Set configuration
 function M.set_config(new_config)
+  -- Validate config parameter
+  if new_config == nil then
+    return nil, error_handler.validation_error(
+      "Config must be a table",
+      {operation = "set_config", provided_type = "nil"}
+    )
+  end
+  
+  if type(new_config) ~= "table" then
+    return nil, error_handler.validation_error(
+      "Config must be a table",
+      {operation = "set_config", provided_type = type(new_config)}
+    )
+  end
+  
+  -- Set configuration
   config = new_config
   tracked_files = {}  -- Reset cached decisions
   
   -- Configure module logging level
   logging.configure_from_config("CoverageHook")
   
-  return M
+  return true
 end
 
 -- Coverage Data Accessor Functions --
@@ -684,8 +741,19 @@ end
 
 -- Mark a file as active for reporting
 function M.activate_file(file_path)
-  if not file_path then
-    return false
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "activate_file", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string", 
+      {operation = "activate_file", provided_type = type(file_path)}
+    )
   end
   
   -- Normalize the file path for consistency
@@ -819,6 +887,42 @@ end
 
 -- Set or update a covered line in a file
 function M.set_line_covered(file_path, line_num, covered)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "set_line_covered", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "set_line_covered", provided_type = type(file_path)}
+    )
+  end
+  
+  if line_num == nil then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "set_line_covered", provided_type = "nil"}
+    )
+  end
+  
+  if type(line_num) ~= "number" then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "set_line_covered", provided_type = type(line_num)}
+    )
+  end
+  
+  if covered ~= nil and type(covered) ~= "boolean" then
+    return nil, error_handler.validation_error(
+      "covered must be a boolean",
+      {operation = "set_line_covered", provided_type = type(covered)}
+    )
+  end
+  
   local normalized_path = fs.normalize_path(file_path)
   
   -- Initialize file data if needed
@@ -874,6 +978,42 @@ end
 
 -- Set executable status for a line
 function M.set_line_executable(file_path, line_num, executable)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "set_line_executable", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "set_line_executable", provided_type = type(file_path)}
+    )
+  end
+  
+  if line_num == nil then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "set_line_executable", provided_type = "nil"}
+    )
+  end
+  
+  if type(line_num) ~= "number" then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "set_line_executable", provided_type = type(line_num)}
+    )
+  end
+  
+  if type(executable) ~= "boolean" then
+    return nil, error_handler.validation_error(
+      "executable must be a boolean",
+      {operation = "set_line_executable", provided_type = type(executable)}
+    )
+  end
+  
   local normalized_path = fs.normalize_path(file_path)
   
   -- Initialize file data if needed
@@ -1038,6 +1178,49 @@ end
 
 -- Track function execution for instrumentation
 function M.track_function(file_path, line_num, func_name)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "track_function", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "track_function", provided_type = type(file_path)}
+    )
+  end
+  
+  if line_num == nil then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "track_function", provided_type = "nil"}
+    )
+  end
+  
+  if type(line_num) ~= "number" then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "track_function", provided_type = type(line_num)}
+    )
+  end
+  
+  if func_name == nil then
+    return nil, error_handler.validation_error(
+      "func_name must be a string",
+      {operation = "track_function", provided_type = "nil"}
+    )
+  end
+  
+  if type(func_name) ~= "string" then
+    return nil, error_handler.validation_error(
+      "func_name must be a string",
+      {operation = "track_function", provided_type = type(func_name)}
+    )
+  end
+  
   local normalized_path = fs.normalize_path(file_path)
   
   -- Initialize file if needed
@@ -1096,13 +1279,73 @@ function M.track_function(file_path, line_num, func_name)
       file_path = normalized_path,
       line_num = line_num,
       func_name = func_name or "anonymous",
-      error = err.message
+      error = err and err.message or "unknown error"
     })
+    return nil, err
   end
+  
+  return true
 end
 
 -- Track block execution for instrumentation
 function M.track_block(file_path, line_num, block_id, block_type)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "track_block", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "track_block", provided_type = type(file_path)}
+    )
+  end
+  
+  if line_num == nil then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "track_block", provided_type = "nil"}
+    )
+  end
+  
+  if type(line_num) ~= "number" then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "track_block", provided_type = type(line_num)}
+    )
+  end
+  
+  if block_id == nil then
+    return nil, error_handler.validation_error(
+      "block_id must be a string",
+      {operation = "track_block", provided_type = "nil"}
+    )
+  end
+  
+  if type(block_id) ~= "string" then
+    return nil, error_handler.validation_error(
+      "block_id must be a string",
+      {operation = "track_block", provided_type = type(block_id)}
+    )
+  end
+  
+  if block_type == nil then
+    return nil, error_handler.validation_error(
+      "block_type must be a string",
+      {operation = "track_block", provided_type = "nil"}
+    )
+  end
+  
+  if type(block_type) ~= "string" then
+    return nil, error_handler.validation_error(
+      "block_type must be a string",
+      {operation = "track_block", provided_type = type(block_type)}
+    )
+  end
+  
   local normalized_path = fs.normalize_path(file_path)
   
   -- Initialize file if needed
@@ -1168,7 +1411,10 @@ function M.track_block(file_path, line_num, block_id, block_type)
       block_type = block_type or "Block",
       error = err and err.message or "unknown error"
     })
+    return nil, err
   end
+  
+  return true
 end
 
 -- Check if a specific line was covered (validated by assertions)
@@ -1233,15 +1479,81 @@ end
 -- This function is a critical part of the robust tracking approach
 -- It provides a reliable way to track line execution that doesn't depend on debug.sethook()
 function M.track_line(file_path, line_num, options)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "track_line", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "track_line", provided_type = type(file_path)}
+    )
+  end
+  
+  if line_num == nil then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "track_line", provided_type = "nil"}
+    )
+  end
+  
+  if type(line_num) ~= "number" then
+    return nil, error_handler.validation_error(
+      "line_num must be a number",
+      {operation = "track_line", provided_type = type(line_num)}
+    )
+  end
+  
+  if line_num <= 0 then
+    return nil, error_handler.validation_error(
+      "line_num must be a positive number",
+      {operation = "track_line", provided_value = line_num}
+    )
+  end
+  
+  -- Ensure file is initialized
+  local file_data = M.get_file_data(file_path)
+  if not file_data then
+    return nil, error_handler.validation_error(
+      "File not initialized",
+      {operation = "track_line", file_path = file_path}
+    )
+  end
+  
+  -- Check if the file data is valid (a table, not a string or other type)
+  if type(file_data) ~= "table" then
+    return nil, error_handler.runtime_error(
+      "Invalid file data structure", 
+      {operation = "track_line", file_path = file_path}
+    )
+  end
+  
   -- Handle with proper error handling
-  local success, err = error_handler.try(function()
+  local success, result = error_handler.try(function()
     local normalized_path, err = fs.normalize_path(file_path)
     if not normalized_path then
-      logger.warn("Failed to normalize path", {
-        file_path = file_path,
-        error = err and err.message or "unknown error",
-        operation = "track_line"
-      })
+      -- Only show as warning if this isn't a test file path
+      local is_test_file = file_path and file_path:match("/tests/") ~= nil
+      
+      if is_test_file then
+        -- For test files, use debug level to reduce noise
+        logger.debug("Failed to normalize test file path", {
+          file_path = file_path,
+          error = err and err.message or "unknown error",
+          operation = "track_line"
+        })
+      else
+        -- For non-test files, this could be a real issue
+        logger.warn("Failed to normalize path", {
+          file_path = file_path,
+          error = err and err.message or "unknown error",
+          operation = "track_line"
+        })
+      end
       normalized_path = file_path -- Fallback to original path
     end
     
@@ -1345,9 +1657,12 @@ function M.track_line(file_path, line_num, options)
     logger.debug("Error tracking line execution", {
       file_path = file_path,
       line_num = line_num,
-      error = err and err.message or "unknown error"
+      error = result and result.message or "unknown error"
     })
+    return nil, result
   end
+  
+  return true
 end
 
 -- Enhanced block tracking with better parent-child relationship handling

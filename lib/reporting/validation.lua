@@ -706,7 +706,7 @@ function M.cross_check_with_static_analysis(coverage_data)
     ::continue::
   end
   
-  -- Count discrepancies in a safer way than using deprecated table.getn
+  -- Count discrepancies
   local discrepancy_count = 0
   if results.discrepancies then
     for _ in pairs(results.discrepancies) do

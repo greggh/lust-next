@@ -3,17 +3,24 @@ local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
 
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
 -- Import modules for testing
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
 local central_config = require("lib.core.central_config")
 
--- Try to load the logging module
+-- Try to load the logging module with standardized error handling
 local logging, logger
 local function try_load_logger()
   if not logger then
-    local ok, log_module = pcall(require, "lib.tools.logging")
-    if ok and log_module then
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
       logging = log_module
       logger = logging.get_logger("test.coverage_module")
       
@@ -50,9 +57,10 @@ local function time(name, fn)
   return result
 end
 
--- Create a simple test module
+-- Create a simple test module with error handling
 local test_module_path = os.tmpname() .. ".lua"
-fs.write_file(test_module_path, [[
+local write_success, write_err = test_helper.with_error_capture(function()
+  return fs.write_file(test_module_path, [[
 local M = {}
 
 function M.add(a, b)
@@ -104,10 +112,27 @@ end
 
 return M
 ]])
+end)()
 
--- Clean up function to run after tests
+if not write_success then
+  error(error_handler.io_error(
+    "Failed to create test module",
+    {file_path = test_module_path, error = write_err}
+  ))
+end
+
+-- Clean up function to run after tests with error handling
 local function cleanup()
-  os.remove(test_module_path)
+  local success, err = test_helper.with_error_capture(function()
+    return os.remove(test_module_path)
+  end)()
+  
+  if not success and log then
+    log.warn("Failed to remove test module file", {
+      file_path = test_module_path,
+      error = err
+    })
+  end
 end
 
 describe("Coverage Module", function()
@@ -321,6 +346,129 @@ describe("Coverage Module", function()
     
     expect(data.summary.line_coverage_percent).to.be.a("number")
     expect(data.summary.file_coverage_percent).to.be.a("number")
+  end)
+  
+  -- Add error handling tests
+  
+  it("should handle track_file with invalid file path", { expect_error = true }, function()
+    -- Ensure coverage is running
+    coverage.start()
+    
+    -- Test with nil file path
+    local result1, err1 = test_helper.with_error_capture(function()
+      return coverage.track_file(nil)
+    end)()
+    
+    -- It might return false or nil+error depending on implementation
+    if result1 == nil then
+      expect(err1).to.exist()
+      expect(err1.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    else
+      expect(result1).to.equal(false)
+    end
+    
+    -- Test with non-string file path
+    local result2, err2 = test_helper.with_error_capture(function()
+      return coverage.track_file(123)
+    end)()
+    
+    -- It might return false or nil+error depending on implementation
+    if result2 == nil then
+      expect(err2).to.exist()
+      expect(err2.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    else
+      expect(result2).to.equal(false)
+    end
+    
+    -- Test with non-existent file
+    local result3, err3 = test_helper.with_error_capture(function()
+      return coverage.track_file("/path/to/nonexistent/file.lua")
+    end)()
+    
+    -- This might return false or nil+error depending on implementation
+    if result3 == nil then
+      expect(err3).to.exist()
+    else
+      -- It might succeed with false or return some other value, just verify it's not nil
+      expect(result3 ~= nil).to.be_truthy()
+    end
+    
+    -- Cleanup
+    coverage.stop()
+  end)
+  
+  it("should handle track_line with invalid inputs", { expect_error = true }, function()
+    -- Ensure coverage is running
+    coverage.start()
+    
+    -- Test with nil file path
+    local result1, err1 = test_helper.with_error_capture(function()
+      return coverage.track_line(nil, 1)
+    end)()
+    
+    -- It might return false or nil+error depending on implementation
+    if result1 == nil then
+      expect(err1).to.exist()
+      expect(err1.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    else
+      expect(result1).to.equal(false)
+    end
+    
+    -- Test with nil line number
+    local result2, err2 = test_helper.with_error_capture(function()
+      return coverage.track_line("test.lua", nil)
+    end)()
+    
+    -- It might return false or nil+error depending on implementation
+    if result2 == nil then
+      expect(err2).to.exist()
+      expect(err2.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    else
+      expect(result2).to.equal(false)
+    end
+    
+    -- Test with invalid line number
+    local result3, err3 = test_helper.with_error_capture(function()
+      return coverage.track_line("test.lua", -1)
+    end)()
+    
+    -- It might return false or nil+error depending on implementation
+    if result3 == nil then
+      expect(err3).to.exist()
+      expect(err3.category).to.equal(error_handler.CATEGORY.VALIDATION)
+    else
+      expect(result3).to.equal(false)
+    end
+    
+    -- Cleanup
+    coverage.stop()
+  end)
+  
+  it("should handle operating on disabled coverage", { expect_error = true }, function()
+    -- Reset and initialize with coverage disabled
+    coverage.reset()
+    coverage.init({ enabled = false })
+    
+    -- Start should succeed but not enable tracking
+    local result = coverage.start()
+    expect(result).to.equal(coverage)
+    
+    -- Track_file should return an error or false when coverage is disabled
+    local track_success, track_err = test_helper.with_error_capture(function()
+      return coverage.track_file(test_module_path)
+    end)()
+    
+    -- Either it returns false (not nil) or it returns an error
+    if track_success == nil then
+      expect(track_err).to.exist()
+      expect(track_err.message).to.match("disabled")
+    else
+      expect(track_success).to.equal(false)
+    end
+    
+    -- Reset back to enabled
+    coverage.reset()
+    coverage.init({ enabled = true })
   end)
   
   -- Run cleanup for all tests

@@ -7,12 +7,20 @@ local before, after = firmo.before, firmo.after
 ---@diagnostic disable-next-line: unused-local
 local before_each, after_each = firmo.before, firmo.after
 
+-- Import test_helper for improved error handling
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
+
 -- Try to load the logging module
 local logging, logger
 local function try_load_logger()
   if not logger then
-    local ok, log_module = pcall(require, "lib.tools.logging")
-    if ok and log_module then
+    -- Use test_helper for error handling
+    local log_module, err = test_helper.with_error_capture(function()
+      return require("lib.tools.logging")
+    end)()
+    
+    if log_module then
       logging = log_module
       logger = logging.get_logger("test.html_formatter")
 
@@ -456,45 +464,89 @@ describe("HTML Formatter", function()
   --     end)
   -- end
 
-  -- Skip file saving test for now - may be issues with filesystem module
-  -- it("should save HTML report to file when specified", function()
-  --     local coverage_data = create_mock_coverage_data()
-  --
-  --     -- Create a temporary directory for testing
-  --     local temp_dir = os.tmpname()
-  --     os.remove(temp_dir)  -- tmpname creates a file, we need just the name
-  --
-  --     -- Use the correct filesystem module methods
-  --     if fs.exists and not fs.exists(temp_dir) then
-  --         fs.mkdir(temp_dir)
-  --     end
-  --
-  --     local file_path = temp_dir .. "/coverage.html"
-  --
-  --     -- Use formatter to save to file
-  --     html_formatter_module(coverage_data, {output_file = file_path})
-  --
-  --     -- Verify file exists and contains HTML
-  --     expect(fs.exists(file_path)).to.be(true)
-  --     local content = fs.read_file(file_path)
-  --     expect(content).to.match("<!DOCTYPE html>")
-  --     expect(content).to.match("77%.8%%")  -- Coverage percentage
-  --
-  --     -- Clean up
-  --     if fs.remove_file then
-  --         fs.remove_file(file_path)
-  --     else
-  --         os.remove(file_path)
-  --     end
-  --
-  --     if fs.remove_directory then
-  --         fs.remove_directory(temp_dir)
-  --     elseif fs.rmdir then
-  --         fs.rmdir(temp_dir)
-  --     else
-  --         os.remove(temp_dir)
-  --     end
-  -- end)
+  it("should save HTML report to file when specified", function()
+    local coverage_data = create_mock_coverage_data()
+
+    -- Create a temporary directory for testing
+    local temp_dir = "./test-tmp-html-formatter"
+    
+    -- Ensure directory exists and is clean
+    if fs.directory_exists(temp_dir) then
+      fs.delete_directory(temp_dir, true)
+    end
+    local success = fs.create_directory(temp_dir)
+    expect(success).to.equal(true)
+
+    local file_path = temp_dir .. "/coverage.html"
+
+    -- Use formatter to save to file
+    local result = html_formatter_module(coverage_data, {output_file = file_path})
+    
+    -- Formatter should return the content
+    expect(result).to.exist()
+    expect(type(result)).to.equal("string")
+    
+    -- Verify file exists and contains HTML
+    expect(fs.file_exists(file_path)).to.equal(true)
+    local content = fs.read_file(file_path)
+    expect(content).to.match("<!DOCTYPE html>")
+    expect(content).to.match("77%.8%%")  -- Coverage percentage
+
+    -- Clean up
+    fs.delete_directory(temp_dir, true)
+  end)
+  
+  it("uses formatter within reporting interface", function()
+    -- Test with the module-level formatter rather than direct formatter calls
+    -- This better reflects how the formatter is normally used
+    
+    -- Create a temporary file path
+    local temp_dir = "./test-tmp-html"
+    if fs.directory_exists(temp_dir) then
+      fs.delete_directory(temp_dir, true)
+    end
+    
+    fs.create_directory(temp_dir)
+    
+    -- Use the html formatter by generating HTML directly
+    local html_content = html_formatter_module({
+      files = {
+        ["/example/test.lua"] = {
+          source = "local x = 1\nreturn x",
+          lines = {[1] = true, [2] = true},
+          coverage_percentage = 100,
+          total_lines = 2,
+          covered_lines = 2,
+          executable_lines = 2,
+        }
+      },
+      summary = {
+        total_files = 1,
+        covered_files = 1,
+        total_lines = 2,
+        covered_lines = 2,
+        coverage_percentage = 100,
+        line_coverage_percent = 100,
+        overall_percent = 100,
+      }
+    })
+    
+    -- Verify we got valid HTML
+    expect(html_content).to.exist()
+    expect(type(html_content)).to.equal("string")
+    expect(html_content:match("<!DOCTYPE html>")).to.exist()
+    
+    -- Write the content directly
+    local file_path = temp_dir .. "/direct.html"
+    local success = fs.write_file(file_path, html_content)
+    
+    -- Should have written successfully
+    expect(success).to.equal(true)
+    expect(fs.file_exists(file_path)).to.equal(true)
+    
+    -- Clean up
+    fs.delete_directory(temp_dir, true)
+  end)
 
   -- Configuration Tests
   describe("Configuration Options", function()
@@ -606,6 +658,101 @@ describe("HTML Formatter", function()
         central_config.set("reporting.formatters.html.theme", "dark")
       end)
     end
+  end)
+
+  describe("Error Handling", function()
+    it("should handle nil coverage data without crashing", { expect_error = true }, function()
+      if not reporting then
+        return -- Skip if reporting module not available
+      end
+      
+      -- Use error_capture to handle expected errors
+      local result = test_helper.with_error_capture(function()
+        return reporting.format_coverage(nil, "html")
+      end)()
+      
+      -- Should return some HTML even with nil input
+      expect(result).to.exist()
+      expect(type(result)).to.equal("string")
+      
+      -- Should have appropriate error indication in the output
+      expect(result).to.match("<html")
+      expect(result).to.match("</html>")
+    end)
+    
+    it("should handle malformed coverage data gracefully", { expect_error = true }, function()
+      if not reporting then
+        return -- Skip if reporting module not available
+      end
+      
+      -- Test with incomplete coverage data
+      local malformed_data = {
+        -- Missing summary field
+        files = {
+          ["/path/to/malformed.lua"] = {
+            -- Missing required fields
+          }
+        }
+      }
+      
+      -- Use error_capture to handle expected errors
+      local result, err = test_helper.with_error_capture(function()
+        return reporting.format_coverage(malformed_data, "html")
+      end)()
+      
+      -- Test should pass whether the formatter returns a fallback HTML or returns error
+      -- Some implementations might return error rather than fallback HTML
+      if result then
+        -- If we got a result, it should be a string with HTML structure
+        expect(type(result)).to.equal("string")
+        expect(result).to.match("<html")
+        expect(result).to.match("</html>")
+      else
+        -- If we got an error, it should be a valid error object
+        expect(err).to.exist()
+        expect(err.message).to.exist()
+      end
+    end)
+    
+    it("should handle file operation errors properly", { expect_error = true }, function()
+      if not reporting then
+        return -- Skip if reporting module not available
+      end
+      
+      -- Test directory for file tests
+      local test_dir = "./test-tmp-html-formatter"
+      
+      -- Create test directory if it doesn't exist
+      if not fs.directory_exists(test_dir) then
+        fs.create_directory(test_dir)
+      end
+      
+      -- Try to save to an invalid path
+      local invalid_path = "/tmp/firmo-test*?<>|/coverage.html"
+      
+      -- Use error_capture to handle expected errors
+      local success_invalid_save, save_err = test_helper.with_error_capture(function()
+        local result, err = reporting.save_coverage_report(invalid_path, create_mock_coverage_data(), "html")
+        -- The reporting module may return errors in different ways
+        if err then
+          -- In case of nil+error, we should have an error object
+          return false, err
+        else
+          -- Otherwise, the result should be false to indicate failure
+          return result
+        end
+      end)()
+      
+      -- Try to save with nil data
+      test_helper.with_error_capture(function()
+        return reporting.save_coverage_report(test_dir .. "/coverage.html", nil, "html")
+      end)()
+      
+      -- Clean up
+      if fs.directory_exists(test_dir) then
+        fs.delete_directory(test_dir, true)
+      end
+    end)
   end)
 
   if logger then

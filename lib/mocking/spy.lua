@@ -3,6 +3,9 @@
 local logging = require("lib.tools.logging")
 local error_handler = require("lib.tools.error_handler")
 
+-- Compatibility function for table unpacking (works with both Lua 5.1 and 5.2+)
+local unpack_table = table.unpack or unpack
+
 -- Initialize module logger
 local logger = logging.get_logger("spy")
 logging.configure_from_config("spy")
@@ -239,21 +242,47 @@ function spy.new(fn)
     local args = { ... }
     local fn_success, fn_result, fn_err = error_handler.try(function()
       -- We need to return multiple values, so we use a wrapper table
-      local results = { fn(table.unpack(args)) }
+      local results = { fn(unpack_table(args)) }
       return results
     end)
 
     if not fn_success then
-      logger.warn("Original function threw an error", {
-        function_name = "spy.capture",
-        error = error_handler.format_error(fn_result),
-      })
+      -- See if we have access to error_handler's test mode
+      local is_test_mode = error_handler and 
+                          type(error_handler) == "table" and
+                          type(error_handler.is_test_mode) == "function" and
+                          error_handler.is_test_mode()
+      
+      -- Check if this is a test-related error, based on structured properties
+      local is_expected_in_test = is_test_mode and 
+                                 (type(fn_result) == "table" and 
+                                  (fn_result.category == "VALIDATION" or 
+                                   fn_result.category == "TEST_EXPECTED"))
+      
+      if is_expected_in_test then
+        -- This is likely an intentional error for testing purposes
+        logger.debug("Function error captured by spy (expected in test)", {
+          function_name = "spy.capture",
+          error = error_handler.format_error(fn_result),
+        })
+      else
+        -- Check if we're suppressing logs in tests
+        if not (error_handler and 
+               type(error_handler.is_suppressing_test_logs) == "function" and 
+               error_handler.is_suppressing_test_logs()) then
+          -- This is an unexpected error, log at warning level
+          logger.warn("Original function threw an error", {
+            function_name = "spy.capture",
+            error = error_handler.format_error(fn_result),
+          })
+        end
+      end
       -- Re-throw the error for consistent behavior
       error(fn_result)
     end
 
     -- Unpack the results
-    return table.unpack(fn_result)
+    return unpack_table(fn_result)
   end
 
   -- Set up the spy's call method with error handling
@@ -978,7 +1007,7 @@ function spy.on(obj, method_name)
           return result
         end
 
-        return call_spy(table.unpack(args))
+        return call_spy(unpack_table(args))
       end)
 
       if not call_success then
@@ -1083,7 +1112,7 @@ local module_success, module_err = error_handler.try(function()
         local function safe_call(...)
           return original_fn(...)
         end
-        return safe_call(table.unpack(args))
+        return safe_call(unpack_table(args))
       end)
 
       -- Handle errors consistently

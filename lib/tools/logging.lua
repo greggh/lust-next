@@ -508,10 +508,91 @@ local function flush_buffer()
   buffer.last_flush_time = os.time()
 end
 
+-- Lazy load error_handler module
+local _error_handler
+local function get_error_handler()
+  if not _error_handler then
+    local success, module = pcall(require, "lib.tools.error_handler")
+    if success then
+      _error_handler = module
+    end
+  end
+  return _error_handler
+end
+
+-- Check with error_handler if the current test expects errors
+local function current_test_expects_errors()
+  local error_handler = get_error_handler()
+  
+  -- If error_handler is loaded and has the function, call it
+  if error_handler and error_handler.current_test_expects_errors then
+    return error_handler.current_test_expects_errors()
+  end
+  
+  -- Default to false if we couldn't determine
+  return false
+end
+
+-- Set a global debug flag if the --debug argument is present
+-- This is only done once when the module loads
+if not _G._firmo_debug_mode then
+  _G._firmo_debug_mode = false
+  
+  -- Detect debug mode from command line arguments
+  if arg then
+    for _, v in ipairs(arg) do
+      if v == "--debug" then
+        _G._firmo_debug_mode = true
+        break
+      end
+    end
+  end
+end
+
 -- The core logging function
 local function log(level, module_name, message, params)
-  if not is_enabled(level, module_name) then
+  -- For expected errors in tests, either filter or log expected errors
+  if level <= M.LEVELS.WARN then
+    if current_test_expects_errors() then
+      -- Prefix message to indicate this is an expected error
+      message = "[EXPECTED] " .. message
+      
+      -- Store the error in the global error repository for potential debugging
+      local error_handler = get_error_handler()
+      if error_handler then
+        _G._firmo_test_expected_errors = _G._firmo_test_expected_errors or {}
+        table.insert(_G._firmo_test_expected_errors, {
+          level = level,
+          module = module_name,
+          message = message,
+          params = params,
+          timestamp = os.time()
+        })
+      end
+      
+      -- In debug mode (--debug flag), make all expected errors visible regardless of module
+      if _G._firmo_debug_mode then
+        -- Override the level check below for expected errors
+        -- Force immediate logging - we do this by keeping the original level (ERROR or WARN)
+        -- but setting a special flag that skips the is_enabled() check
+        params = params or {}
+        params._expected_debug_override = true
+      else
+        -- Downgrade to DEBUG level - which may or may not be visible depending on module config
+        level = M.LEVELS.DEBUG
+      end
+    end
+  end
+  
+  -- Check if this log should be shown (unless it's an expected error with debug override)
+  local has_debug_override = params and params._expected_debug_override
+  if not has_debug_override and not is_enabled(level, module_name) then
     return
+  end
+  
+  -- Remove internal flag from params if it exists
+  if params and params._expected_debug_override then
+    params._expected_debug_override = nil
   end
   
   -- In silent mode, don't output anything

@@ -74,6 +74,16 @@ end
 -- @return error (string) Error message if writing failed
 function fs.write_file(path, content)
     return safe_io_action(function(file_path, data)
+        -- Validate file path
+        if not file_path or file_path == "" then
+            return nil, "Invalid file path: path cannot be empty"
+        end
+        
+        -- Check for invalid characters in path that might cause issues
+        if file_path:match("[*?<>|]") then
+            return nil, "Invalid directory path: contains invalid characters"
+        end
+        
         -- Ensure parent directory exists
         local dir = fs.get_directory_name(file_path)
         if dir and dir ~= "" then
@@ -205,6 +215,16 @@ end
 -- @return error (string) Error message if creation failed
 function fs.create_directory(path)
     return safe_io_action(function(dir_path)
+        -- Validate path
+        if not dir_path or dir_path == "" then
+            return nil, "Invalid directory path: path cannot be empty"
+        end
+        
+        -- Check for invalid characters in path that might cause issues
+        if dir_path:match("[*?<>|]") then
+            return nil, "Invalid directory path: contains invalid characters"
+        end
+        
         if fs.directory_exists(dir_path) then
             return true -- Already exists
         end
@@ -250,6 +270,11 @@ end
 -- @return success (boolean) True if directory exists or was created
 -- @return error (string) Error message if creation failed
 function fs.ensure_directory_exists(path)
+    -- Validate path
+    if not path or path == "" then
+        return nil, "Invalid directory path: path cannot be empty"
+    end
+    
     if fs.directory_exists(path) then
         return true
     end
@@ -869,13 +894,18 @@ end
 -- @param path (string) Path to check
 -- @return exists (boolean) True if directory exists
 function fs.directory_exists(path)
-    if not path then return false end
+    if not path or path == "" then return false end
+    
+    -- Check for invalid characters in path that might cause issues
+    if path:match("[*?<>|]") then
+        return false
+    end
     
     -- Normalize path to handle trailing slashes
     local normalized_path = fs.normalize_path(path)
     
     -- Handle root directory special case
-    if normalized_path == "" or normalized_path == "/" then
+    if normalized_path == "/" then
         return true
     end
     

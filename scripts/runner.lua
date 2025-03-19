@@ -11,6 +11,9 @@ local fs = require("lib.tools.filesystem")
 local error_handler = require("lib.tools.error_handler")
 local logging = require("lib.tools.logging")
 
+-- Set error handler to test mode since we're running tests
+error_handler.set_test_mode(true)
+
 -- Try to load watcher module if available
 local watcher
 local has_watcher = pcall(function()
@@ -147,10 +150,13 @@ function runner.run_file(file_path, firmo, options)
     })
   else
     -- Always show the completion status with test counts
+    -- Use consistent terminology
     logger.info("Test completed", {
       passes = results.passes,
       failures = results.errors,
       skipped = results.skipped,
+      tests_passed = results.passes, -- Add for consistency with run_all
+      tests_failed = results.errors, -- Add for consistency with run_all
     })
   end
 
@@ -399,12 +405,17 @@ function runner.run_all(files_or_dir, firmo, options)
 
   local elapsed_time = os.clock() - start_time
 
+  -- In the summary, use consistent terminology:
+  -- - passes/failures => individual test cases passed/failed
+  -- - files_passed/files_failed => test files that passed/failed
   logger.info("Test run summary", {
     files_passed = passed_files,
     files_failed = failed_files,
-    tests_passed = total_passes,
-    tests_failed = total_failures,
+    tests_passed = total_passes, -- Same as 'passes' 
+    tests_failed = total_failures, -- Same as 'failures'
     tests_skipped = total_skipped,
+    passes = total_passes, -- Add these for consistency
+    failures = total_failures, -- Add these for consistency 
     elapsed_time_seconds = string.format("%.2f", elapsed_time),
   })
 
