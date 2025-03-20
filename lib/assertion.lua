@@ -683,19 +683,21 @@ local paths = {
       local value_mismatches = {}
       
       for prop_name, prop_def in pairs(schema) do
-        -- Handle simple type check schema (e.g., {name = "string"})
-        if type(prop_def) == "string" then
-          if v[prop_name] == nil then
-            table.insert(missing_props, prop_name)
-          elseif type(v[prop_name]) ~= prop_def then
+        -- Handle missing properties first
+        if v[prop_name] == nil then
+          table.insert(missing_props, prop_name)
+        -- Handle type check schema (e.g., {name = "string"})
+        elseif type(prop_def) == "string" and prop_def:match("^[a-z]+$") and 
+               (prop_def == "string" or prop_def == "number" or prop_def == "boolean" or 
+                prop_def == "table" or prop_def == "function" or prop_def == "thread" or 
+                prop_def == "userdata" or prop_def == "nil") then
+          if type(v[prop_name]) ~= prop_def then
             table.insert(type_mismatches, prop_name .. " (expected " .. prop_def .. 
                          ", got " .. type(v[prop_name]) .. ")")
           end
         -- Handle exact value schema (e.g., {status = "active"})
         elseif prop_def ~= nil then
-          if v[prop_name] == nil then
-            table.insert(missing_props, prop_name)
-          elseif not M.eq(v[prop_name], prop_def) then
+          if not M.eq(v[prop_name], prop_def) then
             table.insert(value_mismatches, prop_name .. " (expected " .. 
                          stringify(prop_def) .. ", got " .. stringify(v[prop_name]) .. ")")
           end

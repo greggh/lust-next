@@ -111,17 +111,17 @@ describe("Extended Assertions Demo", function()
         tags = "table"
       })
       
-      -- Value checking schema (subset of properties)
+      -- Value checking schema (subset of properties) - values must match exactly
       expect(product).to.match_schema({
-        id = "prod-123",
+        name = "Laptop",
         in_stock = true
       })
       
       -- Combined type and value schema
       expect(product).to.match_schema({
         id = "string",
-        name = "Laptop",
-        price = "number"
+        name = "Laptop", -- exact value check
+        price = "number" -- type check
       })
       
       -- Should fail (missing required property)
