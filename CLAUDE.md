@@ -329,7 +329,67 @@ If you're coming from a busted-style background, use this mapping to convert ass
 | `assert.matches(pattern, value)`  | `expect(value).to.match(pattern)`   | String pattern matching            |
 | `assert.has_error(fn)`            | `expect(fn).to.fail()`              | Checks if a function throws error  |
 
-For more comprehensive assertions and detailed examples, see `docs/coverage_repair/assertion_pattern_mapping.md`.
+### Extended Assertions
+
+Firmo includes a comprehensive set of advanced assertions for more precise and convenient testing:
+
+#### Collection Assertions
+```lua
+-- Check length of strings or tables
+expect("hello").to.have_length(5)
+expect({1, 2, 3}).to.have_length(3)
+expect("hello").to.have_size(5)  -- alias for have_length
+
+-- Check if collection is empty
+expect("").to.be.empty()
+expect({}).to.be.empty()
+```
+
+#### Numeric Assertions
+```lua
+-- Numeric assertions
+expect(5).to.be.positive()
+expect(-5).to.be.negative()
+expect(10).to.be.integer()
+expect(5.5).to_not.be.integer()
+```
+
+#### String Assertions
+```lua
+-- String assertions
+expect("HELLO").to.be.uppercase()
+expect("hello").to.be.lowercase()
+```
+
+#### Object Structure Assertions
+```lua
+-- Object property assertions
+expect({name = "John"}).to.have_property("name")
+expect({name = "John"}).to.have_property("name", "John")
+
+-- Schema validation
+expect({name = "John", age = 30}).to.match_schema({
+  name = "string",
+  age = "number"
+})
+```
+
+#### Function Behavior Assertions
+```lua
+-- Function behavior assertions
+local obj = {count = 0}
+expect(function() obj.count = obj.count + 1 end).to.change(function() return obj.count end)
+expect(function() obj.count = obj.count + 1 end).to.increase(function() return obj.count end)
+expect(function() obj.count = obj.count - 1 end).to.decrease(function() return obj.count end)
+```
+
+#### Deep Equality
+```lua
+-- Deep equality (alias)
+expect({a = 1, b = {c = 2}}).to.deep_equal({a = 1, b = {c = 2}})
+```
+
+For more comprehensive assertions and detailed examples, see `docs/coverage_repair/assertion_pattern_mapping.md` and `tests/assertions/extended_assertions_test.lua`.
 
 ### Temporary File Management
 

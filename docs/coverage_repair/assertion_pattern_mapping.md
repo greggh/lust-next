@@ -111,6 +111,88 @@ expect(value).to_not.be_truthy()
    expect(value).to.be_truthy()  -- direct boolean check
    ```
 
+## Extended Assertions
+
+firmo includes a comprehensive set of extended assertions for more advanced testing needs:
+
+### Collection Assertions
+
+```lua
+-- Length/size assertions for strings and tables
+expect("hello").to.have_length(5)     -- check string length
+expect({1, 2, 3}).to.have_length(3)   -- check array length
+expect("world").to.have_size(5)       -- alias for have_length
+
+-- Empty checks
+expect("").to.be.empty()              -- check if string is empty
+expect({}).to.be.empty()              -- check if table is empty
+expect({1, 2}).to_not.be.empty()      -- check table has elements
+```
+
+### Numeric Assertions
+
+```lua
+-- Numeric property assertions
+expect(5).to.be.positive()            -- check if number is positive
+expect(-5).to.be.negative()           -- check if number is negative
+expect(10).to.be.integer()            -- check if number is an integer
+expect(3.14).to_not.be.integer()      -- check number is not an integer
+```
+
+### String Assertions
+
+```lua
+-- String property checks
+expect("HELLO").to.be.uppercase()     -- check if string is all uppercase
+expect("hello").to.be.lowercase()     -- check if string is all lowercase
+expect("Mixed").to_not.be.uppercase() -- check string is not all uppercase
+```
+
+### Object Structure Assertions
+
+```lua
+-- Property checking
+expect({name = "John"}).to.have_property("name")             -- check property exists
+expect({name = "John"}).to.have_property("name", "John")     -- check property value
+expect({user = {id = 1}}).to.have_property("user")           -- check nested property
+
+-- Schema validation
+expect({name = "John", age = 30}).to.match_schema({
+  name = "string",                    -- type checking
+  age = "number"                      -- type checking
+})
+
+expect({status = "active", count = 5}).to.match_schema({
+  status = "active",                  -- exact value matching
+  count = "number"                    -- type checking
+})
+```
+
+### Function Behavior Assertions
+
+```lua
+-- Function behavior testing
+local obj = {count = 0}
+
+-- Check if function changes a value
+expect(function() obj.count = obj.count + 1 end).to.change(function() return obj.count end)
+
+-- Check if function increases a value
+expect(function() obj.count = obj.count + 1 end).to.increase(function() return obj.count end)
+
+-- Check if function decreases a value
+expect(function() obj.count = obj.count - 1 end).to.decrease(function() return obj.count end)
+```
+
+### Deep Equality Assertions
+
+```lua
+-- Deep equality checking (alias for equal with clearer intent)
+local obj1 = {a = 1, b = {c = 2}}
+local obj2 = {a = 1, b = {c = 2}}
+expect(obj1).to.deep_equal(obj2)      -- explicit deep comparison
+```
+
 ## Detailed Assertion Examples
 
 ### Basic Assertions
@@ -420,4 +502,4 @@ For more examples, refer to the test files in the `tests/` directory, especially
 
 ## Last Updated
 
-2025-03-13
+2025-03-20
