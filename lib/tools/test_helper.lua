@@ -265,7 +265,8 @@ function helper.with_temp_test_directory(files_map, callback)
     error(results[1])  -- Re-throw the error
   end
   
-  return unpack(results)
+  local unpack_table = table.unpack or unpack
+  return unpack_table(results)
 end
 
 -- Helper to manually register existing files for cleanup

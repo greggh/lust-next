@@ -319,7 +319,9 @@ local function run_test_file(file, options)
   
   -- Execute command and capture output
   local start_time = os.clock()
-  local result_file = os.tmpname()
+  local temp_file = require("lib.tools.temp_file")
+  local result_file = temp_file.generate_temp_path("out")
+  temp_file.register_file(result_file)
   
   -- Redirect output to temporary file to capture it
   cmd = cmd .. " > " .. result_file .. " 2>&1"
@@ -341,14 +343,8 @@ local function run_test_file(file, options)
   local content, err = fs.read_file(result_file)
   if content then
     output = content
-    -- Use filesystem module to delete the file instead of os.remove
-    local delete_success, delete_err = fs.delete_file(result_file)
-    if not delete_success then
-      logger.warn("Failed to delete temporary result file", {
-        file = result_file,
-        error = delete_err
-      })
-    end
+    -- No need to delete the file manually - it will be automatically cleaned up 
+    -- by the temp_file management system
   else
     logger.warn("Failed to read result file", {file = result_file, error = err})
   end

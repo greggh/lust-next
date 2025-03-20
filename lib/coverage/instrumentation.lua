@@ -1783,22 +1783,17 @@ function M.instrument_require()
         instrumented_modules[module_path] = true
 
         -- Create a temporary file with instrumented code
-        local temp_file = os.tmpname() .. ".lua"
-        local file = io.open(temp_file, "w")
-        if not file then
-          instr_err = "Failed to create temporary file"
+        local temp_file_manager = require("lib.tools.temp_file")
+        local temp_file, create_err = temp_file_manager.create_with_content(instrumented, "lua")
+        if not temp_file then
+          instr_err = "Failed to create temporary file: " .. tostring(create_err)
           return
         end
-
-        -- Write the instrumented code
----@diagnostic disable-next-line: param-type-mismatch
-        file:write(instrumented)
-        file:close()
 
         -- First check syntax
         local syntax_check, syntax_err = loadfile(temp_file)
         if not syntax_check then
-          os.remove(temp_file)
+          -- No need to explicitly remove the temp file, it will be automatically cleaned up
           instr_err = "Syntax error in instrumented module: " .. tostring(syntax_err)
           return
         end
@@ -1806,8 +1801,7 @@ function M.instrument_require()
         -- Load and execute the module
         local loaded_module = loadfile(temp_file)
 
-        -- Remove the temp file regardless of success
-        os.remove(temp_file)
+        -- No need to explicitly remove the temp file, it will be automatically cleaned up
 
         if not loaded_module then
           instr_err = "Failed to load instrumented module"
@@ -2012,33 +2006,15 @@ function M.hook_loaders()
           })
 
           -- Create a temporary file to use our existing instrumentation logic
-          local temp_file, temp_err = error_handler.safe_io_operation(
-            function()
-              local tmp = os.tmpname() .. ".lua"
-              return fs.write_file(tmp, chunk) and tmp or nil
-            end,
-            "temp_file",
-            {operation = "create_temp_file"}
-          )
+          local temp_file_manager = require("lib.tools.temp_file")
+          local temp_file, temp_err = temp_file_manager.create_with_content(chunk, "lua")
 
           if temp_file then
             -- Instrument the temporary file
             local instrumented, instr_err = M.instrument_file(temp_file)
 
-            -- Clean up temporary file
-            local _, remove_err = error_handler.safe_io_operation(
-              function() return os.remove(temp_file) end,
-              temp_file,
-              {operation = "remove_temp_file"}
-            )
-
-            if remove_err then
-              logger.warn("Failed to remove temporary file", {
-                filename = temp_file,
-                error = remove_err.message
-              })
-              -- Continue anyway
-            end
+            -- No need to clean up the temporary file - it will be automatically cleaned up
+            -- by the temp_file management system
 
             if instrumented then
               logger.debug("Successfully instrumented string chunk", {
