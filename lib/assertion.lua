@@ -332,6 +332,14 @@ local paths = {
     "is_exact_type",
     "is_instance_of",
     "implements",
+    "have_length",
+    "have_size",
+    "have_property",
+    "match_schema",
+    "change",
+    "increase",
+    "decrease",
+    "deep_equal",
   },
   to_not = {
     "have",
@@ -357,6 +365,14 @@ local paths = {
     "is_exact_type",
     "is_instance_of",
     "implements",
+    "have_length",
+    "have_size",
+    "have_property",
+    "match_schema",
+    "change",
+    "increase",
+    "decrease",
+    "deep_equal",
     chain = function(a)
       a.negate = not a.negate
     end,
@@ -379,6 +395,12 @@ local paths = {
     "at_least",
     "greater_than",
     "less_than",
+    "empty",
+    "positive",
+    "negative",
+    "integer",
+    "uppercase",
+    "lowercase",
     test = function(v, x)
       return v == x,
         "expected " .. tostring(v) .. " and " .. tostring(x) .. " to be the same",
@@ -580,6 +602,252 @@ local paths = {
       end
     end,
   },
+  
+  -- Length assertion for strings and tables
+  have_length = {
+    test = function(v, expected_length)
+      local length
+      if type(v) == "string" then
+        length = string.len(v)
+      elseif type(v) == "table" then
+        length = #v
+      else
+        error("expected a string or table for length check, got " .. type(v))
+      end
+      
+      return length == expected_length,
+        "expected " .. stringify(v) .. " to have length " .. tostring(expected_length) .. ", got " .. tostring(length),
+        "expected " .. stringify(v) .. " to not have length " .. tostring(expected_length)
+    end,
+  },
+  
+  -- Alias for have_length
+  have_size = {
+    test = function(v, expected_size)
+      local length
+      if type(v) == "string" then
+        length = string.len(v)
+      elseif type(v) == "table" then
+        length = #v
+      else
+        error("expected a string or table for size check, got " .. type(v))
+      end
+      
+      return length == expected_size,
+        "expected " .. stringify(v) .. " to have size " .. tostring(expected_size) .. ", got " .. tostring(length),
+        "expected " .. stringify(v) .. " to not have size " .. tostring(expected_size)
+    end,
+  },
+  
+  -- Property existence and value checking
+  have_property = {
+    test = function(v, property_name, expected_value)
+      if type(v) ~= "table" then
+        error("expected a table for property check, got " .. type(v))
+      end
+      
+      local has_property = v[property_name] ~= nil
+      
+      -- If we're just checking for property existence
+      if expected_value == nil then
+        return has_property,
+          "expected " .. stringify(v) .. " to have property " .. tostring(property_name),
+          "expected " .. stringify(v) .. " to not have property " .. tostring(property_name)
+      end
+      
+      -- If we're checking for property value
+      local property_matches = has_property and M.eq(v[property_name], expected_value)
+      
+      return property_matches,
+        "expected " .. stringify(v) .. " to have property " .. tostring(property_name) .. 
+        " with value " .. stringify(expected_value) .. ", got " .. 
+        (has_property and stringify(v[property_name]) or "undefined"),
+        "expected " .. stringify(v) .. " to not have property " .. tostring(property_name) .. 
+        " with value " .. stringify(expected_value)
+    end,
+  },
+  
+  -- Schema validation
+  match_schema = {
+    test = function(v, schema)
+      if type(v) ~= "table" then
+        error("expected a table for schema validation, got " .. type(v))
+      end
+      
+      if type(schema) ~= "table" then
+        error("expected a table schema, got " .. type(schema))
+      end
+      
+      local missing_props = {}
+      local type_mismatches = {}
+      local value_mismatches = {}
+      
+      for prop_name, prop_def in pairs(schema) do
+        -- Handle simple type check schema (e.g., {name = "string"})
+        if type(prop_def) == "string" then
+          if v[prop_name] == nil then
+            table.insert(missing_props, prop_name)
+          elseif type(v[prop_name]) ~= prop_def then
+            table.insert(type_mismatches, prop_name .. " (expected " .. prop_def .. 
+                         ", got " .. type(v[prop_name]) .. ")")
+          end
+        -- Handle exact value schema (e.g., {status = "active"})
+        elseif prop_def ~= nil then
+          if v[prop_name] == nil then
+            table.insert(missing_props, prop_name)
+          elseif not M.eq(v[prop_name], prop_def) then
+            table.insert(value_mismatches, prop_name .. " (expected " .. 
+                         stringify(prop_def) .. ", got " .. stringify(v[prop_name]) .. ")")
+          end
+        end
+      end
+      
+      local valid = #missing_props == 0 and #type_mismatches == 0 and #value_mismatches == 0
+      
+      local error_msg = "expected object to match schema, but:\n"
+      if #missing_props > 0 then
+        error_msg = error_msg .. "  Missing properties: " .. table.concat(missing_props, ", ") .. "\n"
+      end
+      if #type_mismatches > 0 then
+        error_msg = error_msg .. "  Type mismatches: " .. table.concat(type_mismatches, ", ") .. "\n"
+      end
+      if #value_mismatches > 0 then
+        error_msg = error_msg .. "  Value mismatches: " .. table.concat(value_mismatches, ", ") .. "\n"
+      end
+      
+      return valid, error_msg, "expected object to not match schema"
+    end,
+  },
+  
+  -- Function behavior assertions
+  change = {
+    test = function(fn, value_fn, change_fn)
+      if type(fn) ~= "function" then
+        error("expected a function to execute, got " .. type(fn))
+      end
+      
+      if type(value_fn) ~= "function" then
+        error("expected a function that returns value to check, got " .. type(value_fn))
+      end
+      
+      local before_value = value_fn()
+      local success, result = pcall(fn)
+      
+      if not success then
+        error("function being tested threw an error: " .. tostring(result))
+      end
+      
+      local after_value = value_fn()
+      
+      -- If a specific change function was provided, use it
+      if change_fn and type(change_fn) == "function" then
+        local changed = change_fn(before_value, after_value)
+        return changed,
+          "expected function to change value according to criteria, but it didn't",
+          "expected function to not change value according to criteria, but it did"
+      end
+      
+      -- Otherwise just check for any change
+      local changed = not M.eq(before_value, after_value)
+      
+      return changed,
+        "expected function to change value (before: " .. stringify(before_value) .. 
+        ", after: " .. stringify(after_value) .. ")",
+        "expected function to not change value, but it did change from " .. 
+        stringify(before_value) .. " to " .. stringify(after_value)
+    end,
+  },
+  
+  -- Check if a function increases a value
+  increase = {
+    test = function(fn, value_fn)
+      if type(fn) ~= "function" then
+        error("expected a function to execute, got " .. type(fn))
+      end
+      
+      if type(value_fn) ~= "function" then
+        error("expected a function that returns value to check, got " .. type(value_fn))
+      end
+      
+      local before_value = value_fn()
+      
+      -- Validate that the before value is numeric
+      if type(before_value) ~= "number" then
+        error("expected value_fn to return a number, got " .. type(before_value))
+      end
+      
+      local success, result = pcall(fn)
+      
+      if not success then
+        error("function being tested threw an error: " .. tostring(result))
+      end
+      
+      local after_value = value_fn()
+      
+      -- Validate that the after value is numeric
+      if type(after_value) ~= "number" then
+        error("expected value_fn to return a number after function call, got " .. type(after_value))
+      end
+      
+      local increased = after_value > before_value
+      
+      return increased,
+        "expected function to increase value from " .. tostring(before_value) .. 
+        " but got " .. tostring(after_value),
+        "expected function to not increase value from " .. tostring(before_value) .. 
+        " but it did increase to " .. tostring(after_value)
+    end,
+  },
+  
+  -- Check if a function decreases a value
+  decrease = {
+    test = function(fn, value_fn)
+      if type(fn) ~= "function" then
+        error("expected a function to execute, got " .. type(fn))
+      end
+      
+      if type(value_fn) ~= "function" then
+        error("expected a function that returns value to check, got " .. type(value_fn))
+      end
+      
+      local before_value = value_fn()
+      
+      -- Validate that the before value is numeric
+      if type(before_value) ~= "number" then
+        error("expected value_fn to return a number, got " .. type(before_value))
+      end
+      
+      local success, result = pcall(fn)
+      
+      if not success then
+        error("function being tested threw an error: " .. tostring(result))
+      end
+      
+      local after_value = value_fn()
+      
+      -- Validate that the after value is numeric
+      if type(after_value) ~= "number" then
+        error("expected value_fn to return a number after function call, got " .. type(after_value))
+      end
+      
+      local decreased = after_value < before_value
+      
+      return decreased,
+        "expected function to decrease value from " .. tostring(before_value) .. 
+        " but got " .. tostring(after_value),
+        "expected function to not decrease value from " .. tostring(before_value) .. 
+        " but it did decrease to " .. tostring(after_value)
+    end,
+  },
+  
+  -- Alias for equal with clearer name for deep comparison
+  deep_equal = {
+    test = function(v, x, eps)
+      return M.eq(v, x, eps),
+        "expected " .. stringify(v) .. " to deeply equal " .. stringify(x),
+        "expected " .. stringify(v) .. " to not deeply equal " .. stringify(x)
+    end,
+  },
 
   -- Check if a table contains all specified keys
   keys = {
@@ -648,6 +916,93 @@ local paths = {
       return v < x,
         "expected " .. tostring(v) .. " to be less than " .. tostring(x),
         "expected " .. tostring(v) .. " to not be less than " .. tostring(x)
+    end,
+  },
+  
+  -- Check if a value is empty (string, table)
+  empty = {
+    test = function(v)
+      if type(v) == "string" then
+        return v == "",
+          'expected string "' .. v .. '" to be empty',
+          'expected string to not be empty'
+      elseif type(v) == "table" then
+        return next(v) == nil,
+          "expected table to be empty, but it has " .. 
+          (function() 
+            local count = 0
+            for _ in pairs(v) do count = count + 1 end
+            return count
+          end)() .. " elements",
+          "expected table to not be empty"
+      else
+        error("cannot check emptiness of a " .. type(v))
+      end
+    end,
+  },
+  
+  -- Check if a number is positive
+  positive = {
+    test = function(v)
+      if type(v) ~= "number" then
+        error("expected " .. tostring(v) .. " to be a number")
+      end
+      
+      return v > 0,
+        "expected " .. tostring(v) .. " to be positive",
+        "expected " .. tostring(v) .. " to not be positive"
+    end,
+  },
+  
+  -- Check if a number is negative
+  negative = {
+    test = function(v)
+      if type(v) ~= "number" then
+        error("expected " .. tostring(v) .. " to be a number")
+      end
+      
+      return v < 0,
+        "expected " .. tostring(v) .. " to be negative",
+        "expected " .. tostring(v) .. " to not be negative"
+    end,
+  },
+  
+  -- Check if a number is an integer
+  integer = {
+    test = function(v)
+      if type(v) ~= "number" then
+        error("expected " .. tostring(v) .. " to be a number")
+      end
+      
+      return v == math.floor(v),
+        "expected " .. tostring(v) .. " to be an integer",
+        "expected " .. tostring(v) .. " to not be an integer"
+    end,
+  },
+  
+  -- Check if a string is all uppercase
+  uppercase = {
+    test = function(v)
+      if type(v) ~= "string" then
+        error("expected " .. tostring(v) .. " to be a string")
+      end
+      
+      return v == string.upper(v),
+        'expected string "' .. v .. '" to be uppercase',
+        'expected string "' .. v .. '" to not be uppercase'
+    end,
+  },
+  
+  -- Check if a string is all lowercase
+  lowercase = {
+    test = function(v)
+      if type(v) ~= "string" then
+        error("expected " .. tostring(v) .. " to be a string")
+      end
+      
+      return v == string.lower(v),
+        'expected string "' .. v .. '" to be lowercase',
+        'expected string "' .. v .. '" to not be lowercase'
     end,
   },
 
