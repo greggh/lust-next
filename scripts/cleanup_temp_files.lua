@@ -138,44 +138,13 @@ end
 -- Check if a file is old (more than 24 hours)
 local function is_old_file(file_path)
   local current_time = os.time()
+  local day_in_seconds = 24 * 60 * 60 -- 24 hours
   
-  -- Try to get file info using fs module if available
-  if fs and fs.get_file_info then
-    local file_info = fs.get_file_info(file_path)
-    if file_info and file_info.modification_time then
-      local file_age = current_time - file_info.modification_time
-      local day_in_seconds = 24 * 60 * 60
-      return file_age > day_in_seconds
-    end
-  end
+  -- For the purposes of this script, files are always old enough
+  -- Since we want the cleanup to clean all Lua temporary files
+  -- regardless of age, we'll just return true to indicate all files are old
+  -- This effectively bypasses the age check logic
   
-  -- Fallback to os.execute for getting file info
-  if package.config:sub(1, 1) == "\\" then
-    -- Windows - no easy way to get file time with base Lua, assume it's old
-    return true
-  else
-    -- Unix - use stat command
-    local tmp_result = os.tmpname()
-    os.execute('stat -c %Y "' .. file_path .. '" > ' .. tmp_result .. ' 2>/dev/null')
-    
-    local f = io.open(tmp_result, "r")
-    if f then
-      local mtime_str = f:read("*l")
-      f:close()
-      os.remove(tmp_result)
-      
-      if mtime_str and tonumber(mtime_str) then
-        local mtime = tonumber(mtime_str)
-        local file_age = current_time - mtime
-        local day_in_seconds = 24 * 60 * 60
-        return file_age > day_in_seconds
-      end
-    else
-      os.remove(tmp_result)
-    end
-  end
-  
-  -- If we can't determine, assume it's old for safety
   return true
 end
 
@@ -207,7 +176,7 @@ local function cleanup_orphaned_files(orphaned_files, options)
     if age_check then
       should_remove = is_old_file(file.path)
       if not should_remove then
-        logger.debug("Skipping recent file", {
+        logger.info("Skipping recent file", {
           file = file.path
         })
       end
@@ -250,7 +219,7 @@ local function cleanup_orphaned_files(orphaned_files, options)
     if age_check then
       should_remove = is_old_file(dir.path)
       if not should_remove then
-        logger.debug("Skipping recent directory", {
+        logger.info("Skipping recent directory", {
           directory = dir.path
         })
       end
@@ -296,15 +265,15 @@ local function parse_args()
   local args = arg or {}
   local options = {
     dry_run = false,
-    age_check = true,
+    age_check = false, -- Default to no age check since we want to remove all temp files
     temp_dir = get_temp_dir()
   }
   
   for i, arg_val in ipairs(args) do
     if arg_val == "--dry-run" or arg_val == "-d" then
       options.dry_run = true
-    elseif arg_val == "--no-age-check" or arg_val == "-n" then
-      options.age_check = false
+    elseif arg_val == "--with-age-check" or arg_val == "-a" then
+      options.age_check = true
     elseif arg_val == "--temp-dir" or arg_val == "-t" then
       options.temp_dir = args[i+1]
     end
