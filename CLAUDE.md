@@ -333,7 +333,7 @@ For more comprehensive assertions and detailed examples, see `docs/coverage_repa
 
 ### Temporary File Management
 
-Firmo tests should use the provided temporary file management system that automatically tracks and cleans up files:
+Firmo tests should use the provided temporary file management system that automatically tracks and cleans up files. The system has been fully integrated into the test framework to ensure all temporary resources are properly cleaned up.
 
 #### Creating Temporary Files
 
@@ -343,7 +343,8 @@ local file_path, err = temp_file.create_with_content("file content", "lua")
 expect(err).to_not.exist("Failed to create temporary file")
 
 -- Create a temporary directory
-local dir_path = temp_file.create_temp_directory()
+local dir_path, err = temp_file.create_temp_directory()
+expect(err).to_not.exist("Failed to create temporary directory")
 
 -- No manual cleanup needed - the system will automatically clean up
 -- when the test completes
@@ -387,11 +388,33 @@ If you create files through other means, register them for cleanup:
 
 ```lua
 -- For files created outside the temp_file system
-local file_path = "/tmp/my_test_file.txt"
-fs.write_file(file_path, "content")
+local file_path = os.tmpname()
+local f = io.open(file_path, "w")
+f:write("content")
+f:close()
 
 -- Register for automatic cleanup
 test_helper.register_temp_file(file_path)
+```
+
+#### Best Practices for Temporary Files
+
+1. **ALWAYS** use `temp_file.create_with_content()` instead of `os.tmpname()`
+2. **ALWAYS** check error returns with `expect(err).to_not.exist()`
+3. **NEVER** manually remove temporary files (no need for `os.remove()` or `temp_file.remove()`)
+4. **ALWAYS** use `test_helper.create_temp_test_directory()` for complex tests
+5. For more advanced usage, see the full documentation in `docs/coverage_repair/temp_file_integration_summary.md`
+
+#### Troubleshooting Orphaned Files
+
+If temporary files are not being cleaned up:
+
+```lua
+-- Clean up orphaned temporary files (dry run mode)
+lua scripts/cleanup_temp_files.lua --dry-run
+
+-- Clean up orphaned temporary files (actual cleanup)
+lua scripts/cleanup_temp_files.lua
 ```
 
 ### Test Directory Structure

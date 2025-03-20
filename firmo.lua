@@ -146,6 +146,9 @@ firmo.async_options = {
 firmo.focus_mode = false -- Tracks if any focused tests are present
 firmo.skipped = 0 -- Track skipped tests
 
+-- Variable used for test context tracking (for temp file management)
+firmo._current_test_context = nil
+
 -- Export async functions if the module is available
 if async_module then
   -- Import core async functions
@@ -3130,6 +3133,33 @@ local module = setmetatable({
 -- This must be done after all methods (including reset) are defined
 if module_reset_module then
   module_reset_module.register_with_firmo(firmo)
+end
+
+-- Try to load temp_file_integration if available
+local temp_file_integration_loaded, temp_file_integration = pcall(require, "lib.tools.temp_file_integration")
+if temp_file_integration_loaded and temp_file_integration then
+  -- Initialize the temp file integration system
+  logger.info("Initializing temp file integration system")
+  
+  -- Initialize integration
+  temp_file_integration.initialize()
+  
+  -- Patch firmo
+  temp_file_integration.patch_firmo(firmo)
+  
+  -- Add getter/setter for current test context
+  firmo.get_current_test_context = function()
+    return firmo._current_test_context
+  end
+  
+  firmo.set_current_test_context = function(context)
+    firmo._current_test_context = context
+  end
+else
+  logger.debug("Temp file integration not available", {
+    reason = "Module not loaded or not found",
+    status = "using fallback cleanup"
+  })
 end
 
 return module

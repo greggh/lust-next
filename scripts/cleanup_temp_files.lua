@@ -42,20 +42,63 @@ local function find_orphaned_files(temp_dir)
   
   -- List files in the temp directory
   local ok, err = pcall(function()
-    local entries = fs.list_directory(temp_dir)
-    for _, entry in ipairs(entries) do
-      local path = temp_dir .. "/" .. entry
-      if fs.directory_exists(path) then
-        dir_count = dir_count + 1
-      else
-        file_count = file_count + 1
-      end
-      table.insert(all_files, {
-        path = path,
-        name = entry,
-        is_dir = fs.directory_exists(path)
-      })
+    -- Use os.execute to list directories since fs.list_directory might not be available
+    local temp_file_list = os.tmpname()
+    
+    -- Use different commands based on platform
+    local command
+    if package.config:sub(1, 1) == "\\" then
+      -- Windows
+      command = 'dir /b "' .. temp_dir .. '" > ' .. temp_file_list
+    else
+      -- Unix
+      command = 'ls -1 "' .. temp_dir .. '" > ' .. temp_file_list
     end
+    
+    -- Execute the command
+    os.execute(command)
+    
+    -- Read the file list
+    local f = io.open(temp_file_list, "r")
+    if f then
+      for line in f:lines() do
+        local entry = line:match("^%s*(.-)%s*$") -- Trim whitespace
+        if entry and entry ~= "" then
+          local path = temp_dir .. "/" .. entry
+          local is_dir = false
+          
+          -- Check if it's a directory
+          local stat_cmd
+          if package.config:sub(1, 1) == "\\" then
+            -- Windows
+            is_dir = fs.directory_exists and fs.directory_exists(path)
+          else
+            -- Unix
+            -- Use test command to check if it's a directory
+            local handle = io.popen('test -d "' .. path .. '" && echo "dir" || echo "file"')
+            local result = handle:read("*a")
+            handle:close()
+            is_dir = result:match("dir") ~= nil
+          end
+          
+          if is_dir then
+            dir_count = dir_count + 1
+          else
+            file_count = file_count + 1
+          end
+          
+          table.insert(all_files, {
+            path = path,
+            name = entry,
+            is_dir = is_dir
+          })
+        end
+      end
+      f:close()
+    end
+    
+    -- Clean up temp file
+    os.remove(temp_file_list)
   end)
   
   if not ok then
@@ -93,16 +136,45 @@ end
 -- Check if a file is old (more than 24 hours)
 local function is_old_file(file_path)
   local current_time = os.time()
-  local file_info = fs.get_file_info(file_path)
   
-  if not file_info or not file_info.modification_time then
-    return true -- If we can't determine, assume it's old
+  -- Try to get file info using fs module if available
+  if fs and fs.get_file_info then
+    local file_info = fs.get_file_info(file_path)
+    if file_info and file_info.modification_time then
+      local file_age = current_time - file_info.modification_time
+      local day_in_seconds = 24 * 60 * 60
+      return file_age > day_in_seconds
+    end
   end
   
-  local file_age = current_time - file_info.modification_time
-  local day_in_seconds = 24 * 60 * 60
+  -- Fallback to os.execute for getting file info
+  if package.config:sub(1, 1) == "\\" then
+    -- Windows - no easy way to get file time with base Lua, assume it's old
+    return true
+  else
+    -- Unix - use stat command
+    local tmp_result = os.tmpname()
+    os.execute('stat -c %Y "' .. file_path .. '" > ' .. tmp_result .. ' 2>/dev/null')
+    
+    local f = io.open(tmp_result, "r")
+    if f then
+      local mtime_str = f:read("*l")
+      f:close()
+      os.remove(tmp_result)
+      
+      if mtime_str and tonumber(mtime_str) then
+        local mtime = tonumber(mtime_str)
+        local file_age = current_time - mtime
+        local day_in_seconds = 24 * 60 * 60
+        return file_age > day_in_seconds
+      end
+    else
+      os.remove(tmp_result)
+    end
+  end
   
-  return file_age > day_in_seconds
+  -- If we can't determine, assume it's old for safety
+  return true
 end
 
 -- Clean up orphaned files
@@ -219,19 +291,19 @@ end
 
 -- Parse command line arguments
 local function parse_args()
-  local args = {...}
+  local args = arg or {}
   local options = {
     dry_run = false,
     age_check = true,
     temp_dir = get_temp_dir()
   }
   
-  for i, arg in ipairs(args) do
-    if arg == "--dry-run" or arg == "-d" then
+  for i, arg_val in ipairs(args) do
+    if arg_val == "--dry-run" or arg_val == "-d" then
       options.dry_run = true
-    elseif arg == "--no-age-check" or arg == "-n" then
+    elseif arg_val == "--no-age-check" or arg_val == "-n" then
       options.age_check = false
-    elseif arg == "--temp-dir" or arg == "-t" then
+    elseif arg_val == "--temp-dir" or arg_val == "-t" then
       options.temp_dir = args[i+1]
     end
   end

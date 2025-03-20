@@ -84,6 +84,37 @@ function runner.run_file(file_path, firmo, options)
     -- Still show output
     original_print(...)
   end
+  
+  -- Try to load temp_file integration for test file context
+  local temp_file_integration
+  local temp_file
+  
+  -- Try to load temp_file_integration if available
+  local temp_file_integration_loaded, temp_file_integration_module = pcall(require, "lib.tools.temp_file_integration")
+  if temp_file_integration_loaded then
+    temp_file_integration = temp_file_integration_module
+    
+    -- Also load the temp_file module
+    local temp_file_loaded, temp_file_module = pcall(require, "lib.tools.temp_file")
+    if temp_file_loaded then
+      temp_file = temp_file_module
+      
+      -- Create a test context for this file
+      local file_context = {
+        type = "file",
+        name = file_path,
+        file_path = file_path
+      }
+      
+      -- Set the current test context
+      if firmo.set_current_test_context then
+        firmo.set_current_test_context(file_context)
+      end
+      
+      -- Also set global context
+      _G._current_temp_file_context = file_context
+    end
+  end
 
   -- Execute the test file
   local start_time = os.clock()
@@ -108,6 +139,25 @@ function runner.run_file(file_path, firmo, options)
 
   -- Restore original print function
   _G.print = original_print
+  
+  -- Clean up temporary files
+  if temp_file_integration and temp_file then
+    -- Clean up any temporary files created during test execution
+    logger.debug("Cleaning up temporary files after test execution", { file_path = file_path })
+    
+    -- Try to clean up, but don't let cleanup failures affect test results
+    pcall(function()
+      temp_file.cleanup_all()
+    end)
+    
+    -- Clear test context
+    if firmo.set_current_test_context then
+      firmo.set_current_test_context(nil)
+    end
+    
+    -- Also clear global context
+    _G._current_temp_file_context = nil
+  end
 
   -- Use counted results if available, otherwise use firmo counters
   local results = {

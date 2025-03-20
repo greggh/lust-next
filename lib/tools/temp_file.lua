@@ -36,11 +36,21 @@ local function get_current_test_context()
     local logger = get_logger()
     
     -- If running inside firmo, try to get the current test context
-    if _G.firmo and _G.firmo._current_test_context then
-        if logger then
-            logger.debug("Using firmo test context")
+    if _G.firmo then
+        if _G.firmo._current_test_context then
+            if logger then
+                logger.debug("Using firmo test context")
+            end
+            return _G.firmo._current_test_context
         end
-        return _G.firmo._current_test_context
+        
+        -- Try using global context provided by firmo (fallback)
+        if _G._current_temp_file_context then
+            if logger then
+                logger.debug("Using global test context via firmo")
+            end
+            return _G._current_temp_file_context
+        end
     end
     
     -- Otherwise use a global context
@@ -184,7 +194,19 @@ function M.remove_directory(dir_path)
         )
     end
     
-    return fs.delete_directory(dir_path, true) -- Use recursive deletion
+    -- Check if the function exists with the expected name
+    if fs.delete_directory then
+        return fs.delete_directory(dir_path, true) -- Use recursive deletion
+    elseif fs.remove_directory then
+        -- Fallback to alternate name
+        return fs.remove_directory(dir_path, true) -- Use recursive deletion
+    else
+        -- Last resort fallback
+        return false, error_handler.runtime_error(
+            "Directory deletion function not found in filesystem module",
+            {operation = "remove_temp_directory", dir_path = dir_path}
+        )
+    end
 end
 
 -- Create a temporary file, use it with a callback, and then remove it
@@ -266,7 +288,15 @@ function M.cleanup_test_context(context)
             local ok, err = os.remove(resource.path)
             success = ok ~= nil
         else
-            local ok, err = fs.delete_directory(resource.path, true) -- Use recursive deletion
+            local ok, err
+            -- Check which function name is available
+            if fs.delete_directory then
+                ok, err = fs.delete_directory(resource.path, true) -- Use recursive deletion
+            elseif fs.remove_directory then
+                ok, err = fs.remove_directory(resource.path, true) -- Use recursive deletion
+            else
+                ok, err = false, "Directory removal function not found"
+            end
             success = ok
         end
         

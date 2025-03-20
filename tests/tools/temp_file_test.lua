@@ -1,12 +1,20 @@
 -- Tests for the temp_file module
 
-local firmo = require("firmo")
+-- Load dependencies first
+local firmo_import = require("firmo") -- use a different name to avoid conflicts
+local temp_file_import = require("lib.tools.temp_file")
+local fs_import = require("lib.tools.filesystem")
+local test_helper_import = require("lib.tools.test_helper")
+
+-- Make local copies to avoid upvalue issues
+local firmo = firmo_import
+local temp_file = temp_file_import
+local fs = fs_import
+local test_helper = test_helper_import
+
+-- Unpack test functions
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 local before, after = firmo.before, firmo.after
-
-local temp_file = require("lib.tools.temp_file")
-local fs = require("lib.tools.filesystem")
-local test_helper = require("lib.tools.test_helper")
 
 describe("temp_file", function()
   -- No need to track files for manual cleanup - the temp_file system handles this automatically
