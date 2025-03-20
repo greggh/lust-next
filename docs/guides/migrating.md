@@ -80,17 +80,45 @@ expect(table).to.contain.key("id")
 expect(table).to.contain.keys({"id", "name", "email"})
 expect(table).to.contain.value("example")
 expect(small_table).to.contain.subset(big_table)
+
 -- Enhanced string assertions
 expect(str).to.start_with("hello")
 expect(str).to.end_with("world")
+expect(str).to.be.uppercase()
+expect(str).to.be.lowercase()
+
 -- Enhanced numeric assertions
 expect(value).to.be_greater_than(minimum)
 expect(value).to.be_between(min, max)
 expect(value).to.be_approximately(target, delta)
+expect(value).to.be.positive()
+expect(value).to.be.negative()
+expect(value).to.be.integer()
+
+-- Enhanced collection assertions
+expect(string_or_table).to.have_length(5)
+expect(string_or_table).to.have_size(10)
+expect(string_or_table).to.be.empty()
+
+-- Object structure assertions
+expect(object).to.have_property("name")
+expect(object).to.have_property("age", 30)
+expect(object).to.match_schema({name = "string", age = "number"})
+
+-- Function behavior assertions
+expect(function() counter.value = counter.value + 1 end)
+  .to.change(function() return counter.value end)
+expect(function() counter.value = counter.value + 1 end)
+  .to.increase(function() return counter.value end)
+expect(function() counter.value = counter.value - 1 end)
+  .to.decrease(function() return counter.value end)
+
 -- Enhanced error assertions
 expect(function_that_throws).to.throw.error_matching("pattern")
 expect(function_that_throws).to.throw.error_type("string")
 
+-- Deep equality (clearer intent)
+expect(complex_object).to.deep_equal(expected_object)
 ```
 
 ### 4. Upgrade Your Mocking Strategy
@@ -397,8 +425,15 @@ lua firmo.lua --format dot
 | Basic assertions (.exist, .equal, etc.)        | ✅             | ✅            |
 | Table assertions (.contains.key, etc.)         | ❌             | ✅            |
 | String assertions (.start_with, etc.)          | ❌             | ✅            |
+| String case assertions (.be.uppercase, etc.)   | ❌             | ✅            |
 | Numeric assertions (.be_greater_than, etc.)    | ❌             | ✅            |
+| Numeric properties (.be.positive, etc.)        | ❌             | ✅            |
+| Collection assertions (.have_length, etc.)     | ❌             | ✅            |
+| Object structure (.have_property, etc.)        | ❌             | ✅            |
+| Schema validation (.match_schema)              | ❌             | ✅            |
+| Function behavior (.change, .increase, etc.)   | ❌             | ✅            |
 | Error assertions (.throw.error_matching, etc.) | ❌             | ✅            |
+| Deep equality (.deep_equal)                    | ❌             | ✅            |
 | Custom assertions                              | ❌             | ✅            |
 | **Mocking**                                    |                |               |
 | Function spies                                 | ✅ (basic)     | ✅ (enhanced) |

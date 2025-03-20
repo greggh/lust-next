@@ -82,19 +82,48 @@ expect(value).to.exist()
 expect(value).to.equal(expected)
 expect(value).to.be.truthy()
 expect(value).to.be.a("string")
+
 -- Table assertions
 expect(table).to.contain.key("id")
 expect(table).to.contain.value("example")
+
 -- String assertions
 expect(str).to.start_with("hello")
 expect(str).to.end_with("world")
+expect(str).to.be.uppercase()
+expect(str).to.be.lowercase()
+
 -- Numeric assertions
 expect(num).to.be_greater_than(5)
 expect(num).to.be_approximately(0.3, 0.0001)
+expect(num).to.be.positive()
+expect(num).to.be.negative()
+expect(num).to.be.integer()
+
+-- Collection assertions
+expect(str).to.have_length(5)
+expect(array).to.have_size(10)
+expect(empty_table).to.be.empty()
+
+-- Object assertions
+expect(object).to.have_property("name")
+expect(object).to.have_property("age", 30)
+expect(object).to.match_schema({name = "string", age = "number"})
+
+-- Function behavior assertions
+expect(function() counter.value = counter.value + 1 end)
+  .to.change(function() return counter.value end)
+expect(function() counter.value = counter.value + 1 end)
+  .to.increase(function() return counter.value end)
+expect(function() counter.value = counter.value - 1 end)
+  .to.decrease(function() return counter.value end)
+
 -- Error assertions
 expect(function() error("oops") end).to.fail()
 expect(function() error("invalid") end).to.throw.error_matching("invalid")
 
+-- Deep equality
+expect(complex_object).to.deep_equal(expected_object)
 ```
 
 ### Before and After Hooks

@@ -134,7 +134,7 @@ expect("test123").to.match("%a+%d+")
 
 ```
 
-## Table Assertions
+## Table and Collection Assertions
 
 ### expect(table).to.contain.key(key)
 Asserts that a table contains the specified key.
@@ -211,6 +211,99 @@ expect({a = 1, b = 2}).to.contain.exactly({"a", "b"})
 
 ```
 
+### expect(value).to.have_length(length)
+Asserts that a string or table has a specific length.
+**Parameters:**
+
+- `length` (number): The expected length
+**Example:**
+
+```lua
+expect("hello").to.have_length(5) -- String length
+expect({1, 2, 3}).to.have_length(3) -- Array length
+expect({}).to.have_length(0) -- Empty collection
+
+```
+
+### expect(value).to.have_size(size)
+Alias for have_length. Asserts that a string or table has a specific size.
+**Parameters:**
+
+- `size` (number): The expected size
+**Example:**
+
+```lua
+expect("world").to.have_size(5) -- String size
+expect({1, 2, 3, 4}).to.have_size(4) -- Array size
+
+```
+
+### expect(value).to.be.empty()
+Asserts that a string or table is empty.
+**Example:**
+
+```lua
+expect("").to.be.empty() -- Empty string
+expect({}).to.be.empty() -- Empty table
+expect({1, 2, 3}).to_not.be.empty() -- Non-empty array
+expect({a = 1}).to_not.be.empty() -- Non-empty object
+
+```
+
+### expect(table).to.have_property(property_name[, expected_value])
+Asserts that an object has a specific property, optionally with a specific value.
+**Parameters:**
+
+- `property_name` (string): The name of the property to check for
+- `expected_value` (any, optional): The expected value of the property
+**Example:**
+
+```lua
+local obj = {name = "John", age = 30}
+expect(obj).to.have_property("name") -- Just check property exists
+expect(obj).to.have_property("age", 30) -- Check property has specific value
+expect(obj).to_not.have_property("address") -- Check property doesn't exist
+
+```
+
+### expect(table).to.match_schema(schema)
+Asserts that an object matches a specified schema of property types or values.
+**Parameters:**
+
+- `schema` (table): A table specifying property types or exact values
+**Example:**
+
+```lua
+local user = {
+  name = "John",
+  age = 30,
+  is_active = true,
+  roles = {"admin", "user"}
+}
+
+-- Type checking schema
+expect(user).to.match_schema({
+  name = "string",
+  age = "number",
+  is_active = "boolean",
+  roles = "table"
+})
+
+-- Value checking schema
+expect(user).to.match_schema({
+  name = "John",
+  is_active = true
+})
+
+-- Mixed schema (type and value checks)
+expect(user).to.match_schema({
+  name = "string", -- Type check
+  age = 30,        -- Exact value check
+  is_active = true -- Exact value check
+})
+
+```
+
 ## String Assertions
 
 ### expect(string).to.start_with(prefix)
@@ -234,6 +327,28 @@ Asserts that a string ends with the given suffix.
 
 ```lua
 expect("hello world").to.end_with("world")
+
+```
+
+### expect(string).to.be.uppercase()
+Asserts that a string contains only uppercase characters.
+**Example:**
+
+```lua
+expect("HELLO").to.be.uppercase()
+expect("Hello").to_not.be.uppercase()
+expect("").to.be.uppercase() -- Empty string is considered uppercase
+
+```
+
+### expect(string).to.be.lowercase()
+Asserts that a string contains only lowercase characters.
+**Example:**
+
+```lua
+expect("hello").to.be.lowercase()
+expect("Hello").to_not.be.lowercase()
+expect("").to.be.lowercase() -- Empty string is considered lowercase
 
 ```
 
@@ -309,6 +424,43 @@ expect(0.1 + 0.2).to.be_approximately(0.3, 0.0001)
 
 ```
 
+### expect(number).to.be.positive()
+Asserts that a number is greater than zero.
+**Example:**
+
+```lua
+expect(5).to.be.positive()
+expect(0.1).to.be.positive()
+expect(0).to_not.be.positive() -- Zero is not positive
+expect(-5).to_not.be.positive()
+
+```
+
+### expect(number).to.be.negative()
+Asserts that a number is less than zero.
+**Example:**
+
+```lua
+expect(-5).to.be.negative()
+expect(-0.1).to.be.negative()
+expect(0).to_not.be.negative() -- Zero is not negative
+expect(5).to_not.be.negative()
+
+```
+
+### expect(number).to.be.integer()
+Asserts that a number is an integer (whole number with no decimal part).
+**Example:**
+
+```lua
+expect(5).to.be.integer()
+expect(-10).to.be.integer()
+expect(0).to.be.integer()
+expect(5.5).to_not.be.integer()
+expect(-0.1).to_not.be.integer()
+
+```
+
 ## Error Assertions
 
 ### expect(fn).to.throw.error()
@@ -345,6 +497,86 @@ Asserts that a function throws an error of the specified type.
 ```lua
 expect(function() error("string error") end).to.throw.error_type("string")
 expect(function() error({code = 404}) end).to.throw.error_type("table")
+
+```
+
+## Function Behavior Assertions
+
+### expect(fn).to.change(value_fn[, change_fn])
+Asserts that executing a function changes the value returned by the value function.
+**Parameters:**
+
+- `fn` (function): The function to execute
+- `value_fn` (function): A function that returns the value to check
+- `change_fn` (function, optional): A function to validate the nature of the change
+**Example:**
+
+```lua
+local obj = {count = 0}
+
+-- Check if a function changes a value
+expect(function() obj.count = obj.count + 1 end).to.change(function() return obj.count end)
+
+-- With custom change validator
+expect(function() obj.count = obj.count + 5 end).to.change(
+  function() return obj.count end,
+  function(before, after) return after - before == 5 end
+)
+
+```
+
+### expect(fn).to.increase(value_fn)
+Asserts that executing a function increases the numeric value returned by the value function.
+**Parameters:**
+
+- `fn` (function): The function to execute
+- `value_fn` (function): A function that returns the numeric value to check
+**Example:**
+
+```lua
+local counter = {value = 10}
+
+-- Check if a function increases a value
+expect(function() counter.value = counter.value + 1 end).to.increase(function() return counter.value end)
+
+-- Checks for any increase, not a specific amount
+expect(function() counter.value = counter.value * 2 end).to.increase(function() return counter.value end)
+
+```
+
+### expect(fn).to.decrease(value_fn)
+Asserts that executing a function decreases the numeric value returned by the value function.
+**Parameters:**
+
+- `fn` (function): The function to execute
+- `value_fn` (function): A function that returns the numeric value to check
+**Example:**
+
+```lua
+local counter = {value = 10}
+
+-- Check if a function decreases a value
+expect(function() counter.value = counter.value - 1 end).to.decrease(function() return counter.value end)
+
+-- Checks for any decrease, not a specific amount
+expect(function() counter.value = counter.value / 2 end).to.decrease(function() return counter.value end)
+
+```
+
+### expect(value).to.deep_equal(expected)
+Alias for equal that explicitly indicates deep equality comparison.
+**Parameters:**
+
+- `expected` (any): The expected value to compare against
+**Example:**
+
+```lua
+local obj1 = {a = 1, b = {c = 2}}
+local obj2 = {a = 1, b = {c = 2}}
+local obj3 = {a = 1, b = {c = 3}}
+
+expect(obj1).to.deep_equal(obj2) -- Objects with identical deep structure
+expect(obj1).to_not.deep_equal(obj3) -- Objects with different nested values
 
 ```
 
