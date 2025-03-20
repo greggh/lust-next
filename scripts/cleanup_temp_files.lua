@@ -221,14 +221,7 @@ local function cleanup_orphaned_files(orphaned_files, options)
         files_removed = files_removed + 1
       else
         local success, err = pcall(function()
-          -- Try to use fs.delete_file if available, otherwise fall back to os.remove
-          if fs and fs.delete_file then
-            return fs.delete_file(file.path)
-          else
-            -- Use standard Lua os.remove
-            local result = os.remove(file.path)
-            return result ~= nil
-          end
+          return fs.delete_file(file.path)
         end)
         
         if success then
@@ -271,24 +264,7 @@ local function cleanup_orphaned_files(orphaned_files, options)
         dirs_removed = dirs_removed + 1
       else
         local success, err = pcall(function()
-          -- Try to use fs.delete_directory or fs.remove_directory if available
-          if fs and fs.delete_directory then
-            return fs.delete_directory(dir.path, true)
-          elseif fs and fs.remove_directory then
-            return fs.remove_directory(dir.path, true)
-          else
-            -- Fallback to using os.execute for directories
-            -- This is platform-specific and could fail
-            if package.config:sub(1, 1) == "\\" then
-              -- Windows
-              local result = os.execute('rmdir /s /q "' .. dir.path .. '"')
-              return result == 0 -- Windows returns 0 for success
-            else
-              -- Unix
-              local result = os.execute('rm -rf "' .. dir.path .. '"')
-              return result == 0 -- Unix returns 0 for success
-            end
-          end
+          return fs.delete_directory(dir.path, true)
         end)
         
         if success then
