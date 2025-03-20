@@ -29,10 +29,12 @@ local function find_orphaned_files(temp_dir)
   
   -- Define patterns for Firmo temporary files
   local patterns = {
-    "^lua_", -- Standard Lua temporary files
+    "^lua_", -- Standard Lua temporary files created by os.tmpname()
     "^lua_.*_dir$", -- Directories created by temp_file module
     "^.*%.tmp$", -- Files with .tmp extension
-    "^.*%.lua$", -- Lua files in temp directory
+    "^.*%.lua$", -- Lua files in temp directory 
+    "^luac_", -- Lua compiled files
+    ".*%.luac$", -- Lua compiled files with extension
   }
   
   -- Get all files in temp directory
@@ -219,7 +221,14 @@ local function cleanup_orphaned_files(orphaned_files, options)
         files_removed = files_removed + 1
       else
         local success, err = pcall(function()
-          return fs.delete_file(file.path)
+          -- Try to use fs.delete_file if available, otherwise fall back to os.remove
+          if fs and fs.delete_file then
+            return fs.delete_file(file.path)
+          else
+            -- Use standard Lua os.remove
+            local result = os.remove(file.path)
+            return result ~= nil
+          end
         end)
         
         if success then
@@ -262,7 +271,24 @@ local function cleanup_orphaned_files(orphaned_files, options)
         dirs_removed = dirs_removed + 1
       else
         local success, err = pcall(function()
-          return fs.remove_directory(dir.path)
+          -- Try to use fs.delete_directory or fs.remove_directory if available
+          if fs and fs.delete_directory then
+            return fs.delete_directory(dir.path, true)
+          elseif fs and fs.remove_directory then
+            return fs.remove_directory(dir.path, true)
+          else
+            -- Fallback to using os.execute for directories
+            -- This is platform-specific and could fail
+            if package.config:sub(1, 1) == "\\" then
+              -- Windows
+              local result = os.execute('rmdir /s /q "' .. dir.path .. '"')
+              return result == 0 -- Windows returns 0 for success
+            else
+              -- Unix
+              local result = os.execute('rm -rf "' .. dir.path .. '"')
+              return result == 0 -- Unix returns 0 for success
+            end
+          end
         end)
         
         if success then
