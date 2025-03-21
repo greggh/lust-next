@@ -37,24 +37,45 @@ local yellow = string.char(27) .. "[33m"
 local cyan = string.char(27) .. "[36m"
 local normal = string.char(27) .. "[0m"
 
--- Run a specific test file
+--- Run a specific test file and return structured results
+---@param file_path string The path to the test file to run
+---@param firmo table The firmo module instance
+---@param options table Options for running the test
+---@return table Table containing test results including:
+---   - success: boolean Whether the file executed without errors
+---   - error: any Any execution error that occurred
+---   - passes: number Number of passing tests
+---   - errors: number Number of failing tests
+---   - skipped: number Number of skipped tests
+---   - total: number Total number of tests
+---   - elapsed: number Execution time in seconds
+---   - file: string Path to the test file
+---   - test_results: TestResult[] Array of structured test results
+---   - test_errors: table[] Array of test errors
 function runner.run_file(file_path, firmo, options)
   options = options or {}
 
-  -- Initialize counter properties if they don't exist
-  if firmo.passes == nil then
-    firmo.passes = 0
-  end
-  if firmo.errors == nil then
-    firmo.errors = 0
-  end
-  if firmo.skipped == nil then
-    firmo.skipped = 0
-  end
+  -- Always initialize counter properties for this test file
+  -- We want to capture just this file's results, so reset them each time
+  firmo.passes = 0
+  firmo.errors = 0
+  firmo.skipped = 0
 
-  local prev_passes = firmo.passes
-  local prev_errors = firmo.errors
-  local prev_skipped = firmo.skipped
+  -- Since we're resetting each time, these are always zero
+  local prev_passes = 0
+  local prev_errors = 0
+  local prev_skipped = 0
+  
+  -- Reset test_definition module state if available
+  local test_definition = require("lib.core.test_definition")
+  if test_definition and test_definition.reset then
+    test_definition.reset()
+    
+    -- Enable debug mode for test_definition if verbose is enabled
+    if options.verbose and test_definition.set_debug_mode then
+      test_definition.set_debug_mode(true)
+    end
+  end
 
   logger.info("Running file", { file_path = file_path })
 
@@ -67,22 +88,75 @@ function runner.run_file(file_path, firmo, options)
   local original_print = print
   local output_buffer = {}
 
-  -- Override print to count test results
+  -- Override print to capture output for diagnostics
   _G.print = function(...)
     local output = table.concat({ ... }, " ")
     table.insert(output_buffer, output)
-
-    -- Count PASS/FAIL/SKIP instances in the output
-    if output:match("PASS") and not output:match("SKIP") then
-      pass_count = pass_count + 1
-    elseif output:match("FAIL") then
-      fail_count = fail_count + 1
-    elseif output:match("SKIP") or output:match("PENDING") then
-      skip_count = skip_count + 1
-    end
-
+    
     -- Still show output
     original_print(...)
+  end
+  
+  -- Create a collection of structured test results for this file
+  -- This will be populated from test_definition's test_results
+  ---@type TestResult[]
+  local file_test_results = {}
+  
+  -- Intercept logger calls to capture structured test results
+  local original_logger_info = logger.info
+  local original_logger_error = logger.error
+  
+  logger.info = function(message, context)
+    -- Look for structured test result objects
+    if context and context.test_result and type(context.test_result) == "table" then
+      local result = context.test_result
+      
+      -- Store the result for reporting
+      table.insert(file_test_results, result)
+      
+      -- Count based on status
+      if result.status == "pass" then
+        pass_count = pass_count + 1
+        
+        -- Display the test result
+        if result.expect_error then
+          -- Expected error test pass
+          original_print(green .. "PASS " .. result.name .. " (expected error)" .. normal)
+        else
+          -- Normal test pass
+          original_print(green .. "PASS " .. result.name .. normal)
+        end
+      elseif result.status == "skip" or result.status == "pending" then
+        skip_count = skip_count + 1
+        
+        -- Display skip reason
+        local reason = result.reason and (" - " .. result.reason) or ""
+        original_print(yellow .. "SKIP " .. result.name .. reason .. normal)
+      end
+    end
+    
+    return original_logger_info(message, context)
+  end
+  
+  logger.error = function(message, context)
+    -- Look for structured test result objects
+    if context and context.test_result and type(context.test_result) == "table" then
+      local result = context.test_result
+      
+      -- Store the result for reporting
+      table.insert(file_test_results, result)
+      
+      -- Count based on status
+      if result.status == "fail" then
+        fail_count = fail_count + 1
+        
+        -- Display the failure
+        local error_message = result.error_message or message
+        original_print(red .. "FAIL " .. result.name .. " - " .. error_message .. normal)
+      end
+    end
+    
+    return original_logger_error(message, context)
   end
   
   -- Try to load temp_file integration for test file context
@@ -140,6 +214,10 @@ function runner.run_file(file_path, firmo, options)
   -- Restore original print function
   _G.print = original_print
   
+  -- Restore original logger functions
+  logger.info = original_logger_info
+  logger.error = original_logger_error
+  
   -- Clean up temporary files
   if temp_file_integration and temp_file then
     -- Clean up any temporary files created during test execution
@@ -159,34 +237,98 @@ function runner.run_file(file_path, firmo, options)
     _G._current_temp_file_context = nil
   end
 
-  -- Use counted results if available, otherwise use firmo counters
+  -- Always copy test results from test_definition
+  local test_definition = require("lib.core.test_definition")
+  if test_definition and test_definition.get_state then
+    local state = test_definition.get_state()
+    if state and state.test_results then
+      -- Copy test_definition results into file_test_results for more reliable collection
+      for _, result in ipairs(state.test_results) do
+        table.insert(file_test_results, result)
+      end
+      
+      -- Debug output only in verbose mode
+      if options.verbose then
+        print(string.format("\n%sStructured Test Result Collection:%s", cyan, normal))
+        print(string.format("  File test results count: %d", #file_test_results))
+        print(string.format("  Counts: pass=%d, fail=%d, skip=%d", pass_count, fail_count, skip_count))
+        print(string.format("  Test definition results count: %d", #state.test_results))
+        print(string.format("  Test definition counters: passes=%d, errors=%d, skipped=%d", 
+          state.passes or 0, state.errors or 0, state.skipped or 0))
+        print(string.format("  Copied %d results from test_definition to file_test_results", 
+          #state.test_results))
+      end
+    end
+  end
+
+  -- Use structured test results collected via intercepted logger calls
   local results = {
     success = success,
     error = err,
-    passes = pass_count > 0 and pass_count or (firmo.passes - prev_passes),
-    errors = fail_count > 0 and fail_count or (firmo.errors - prev_errors),
-    skipped = skip_count > 0 and skip_count or (firmo.skipped - prev_skipped),
+    passes = pass_count,
+    errors = fail_count,
+    skipped = skip_count,
     total = 0,
     elapsed = elapsed_time,
     output = table.concat(output_buffer, "\n"),
+    test_results = file_test_results, -- Include the full structured test results
+    file = file_path
   }
+
+  -- Get test results directly from test_definition, which is more reliable
+  local test_definition = require("lib.core.test_definition")
+  if test_definition and test_definition.get_state then
+    local state = test_definition.get_state()
+    if state and state.test_results and #state.test_results > 0 then
+      -- Use file_test_results which now has the test_definition results
+      results.test_results = file_test_results
+      results.passes = state.passes or 0
+      results.errors = state.errors or 0
+      results.skipped = state.skipped or 0
+      
+      logger.debug("Using test_definition state for test results", {
+        file = file_path,
+        result_count = #state.test_results,
+        passes = state.passes,
+        errors = state.errors,
+        skipped = state.skipped
+      })
+    end
+  else
+    -- Fall back to traditional counters if we couldn't get structured results
+    results.passes = pass_count > 0 and pass_count or (firmo.passes - prev_passes)
+    results.errors = fail_count > 0 and fail_count or (firmo.errors - prev_errors)
+    results.skipped = skip_count > 0 and skip_count or (firmo.skipped - prev_skipped)
+  end
 
   -- Calculate total tests
   results.total = results.passes + results.errors + results.skipped
 
-  -- Add test file path
-  results.file = file_path
-
-  -- Add any test errors from the output
+  -- Add test errors from structured results
   results.test_errors = {}
-  for line in results.output:gmatch("[^\r\n]+") do
-    if line:match("FAIL") then
-      local name = line:match("FAIL%s+(.+)")
-      if name then
-        table.insert(results.test_errors, {
-          message = "Test failed: " .. name,
-          file = file_path,
-        })
+  for _, result in ipairs(results.test_results or {}) do
+    if result.status == "fail" then
+      table.insert(results.test_errors, {
+        message = result.error_message or "Test failed: " .. result.name,
+        file = file_path,
+        test_name = result.name,
+        test_path = result.path_string,
+        error = result.error
+      })
+    end
+  end
+  
+  -- If we don't have structured test errors, try to parse from output (legacy)
+  if #results.test_errors == 0 then
+    for line in results.output:gmatch("[^\r\n]+") do
+      if line:match("FAIL") then
+        local name = line:match("FAIL%s+(.+)")
+        if name then
+          table.insert(results.test_errors, {
+            message = "Test failed: " .. name,
+            file = file_path,
+          })
+        end
       end
     end
   end
@@ -355,7 +497,11 @@ function runner.find_test_files(dir_path, options)
   return files
 end
 
--- Run tests in a directory or file list
+--- Run tests in a directory or file list and aggregate results
+---@param files_or_dir string|string[] Either a directory path or array of file paths
+---@param firmo table The firmo module instance
+---@param options table Options for running the tests
+---@return boolean Whether all tests passed
 function runner.run_all(files_or_dir, firmo, options)
   options = options or {}
   local files
@@ -366,6 +512,12 @@ function runner.run_all(files_or_dir, firmo, options)
   else
     files = files_or_dir
   end
+  
+  -- Print debugging info if verbose
+  if options.verbose then
+    print(string.format("\n%sRunning %d test files with structured result tracking%s\n", 
+      cyan, #files, normal))
+  end
 
   logger.info("Running test files", { count = #files })
 
@@ -375,6 +527,9 @@ function runner.run_all(files_or_dir, firmo, options)
   local total_failures = 0
   local total_skipped = 0
   local start_time = os.clock()
+  -- Collection to aggregate test results from all files
+  ---@type TestResult[]
+  local all_test_results = {}
 
   -- Initialize module reset if available
   if module_reset_loaded and module_reset then
@@ -438,6 +593,7 @@ function runner.run_all(files_or_dir, firmo, options)
   end
 
   for _, file in ipairs(files) do
+    -- IMPORTANT: Reset the test counts for each file to correctly capture them
     local results = runner.run_file(file, firmo, options)
 
     -- Count passed/failed files
@@ -446,14 +602,143 @@ function runner.run_all(files_or_dir, firmo, options)
     else
       failed_files = failed_files + 1
     end
+    
+    -- Get the actual test counts from the results
+    local file_passes = results.passes
+    local file_errors = results.errors
+    local file_skipped = results.skipped or 0
+    
+    -- If we're getting zero counts back but the test ran successfully, 
+    -- try to extract counts from the firmo state
+    if file_passes == 0 and file_errors == 0 and results.success then
+      -- Try to get test definition state if available
+      local test_definition = require("lib.core.test_definition")
+      if test_definition and test_definition.get_state then
+        local state = test_definition.get_state()
+        file_passes = state.passes or 0
+        file_errors = state.errors or 0
+        file_skipped = state.skipped or 0
+        
+        -- Log that we're using state directly for debugging
+        logger.debug("Using test_definition state for counts", {
+          file = file,
+          state_passes = file_passes,
+          state_errors = file_errors,
+          state_skipped = file_skipped
+        })
+      end
+    end
+
+    -- Collect all structured test results from this file
+    if results.test_results and #results.test_results > 0 then
+      if options.verbose then
+        print(string.format("\n%sCollecting %d structured test results from %s%s", 
+          cyan, #results.test_results, file, normal))
+      end
+      
+      for _, result in ipairs(results.test_results) do
+        -- Add the file path to each result for easier tracking
+        result.file_path = file
+        table.insert(all_test_results, result)
+        
+        if options.verbose then
+          print(string.format("  - Added result: %s [%s]", 
+            result.name, result.status:upper()))
+        end
+      end
+      
+      logger.debug("Collected structured test results", {
+        file = file,
+        result_count = #results.test_results,
+        total_collected = #all_test_results
+      })
+    else
+      if options.verbose then
+        print(string.format("\n%sNo structured test results found in %s%s", 
+          red, file, normal))
+      end
+    end
 
     -- Count total tests
-    total_passes = total_passes + results.passes
-    total_failures = total_failures + results.errors
-    total_skipped = total_skipped + (results.skipped or 0)
+    total_passes = total_passes + file_passes
+    total_failures = total_failures + file_errors
+    total_skipped = total_skipped + file_skipped
+    
+    -- Log collected counts after each file
+    logger.debug("Accumulated test counts", {
+      current_file = file,
+      file_passes = file_passes,
+      file_failures = file_errors,
+      file_skipped = file_skipped,
+      running_total_passes = total_passes,
+      running_total_failures = total_failures,
+      running_total_skipped = total_skipped
+    })
+    
+    -- Print out the structured test results from this file for debugging
+    if options.verbose and results.test_results and #results.test_results > 0 then
+      print("\nStructured test results from " .. file .. ":")
+      for i, result in ipairs(results.test_results) do
+        local status_color = ""
+        if result.status == "pass" then 
+          status_color = green
+        elseif result.status == "fail" then
+          status_color = red
+        else
+          status_color = yellow
+        end
+        
+        print(string.format("  %d. %s[%s]%s %s (%s)", 
+          i,
+          status_color,
+          result.status:upper(),
+          normal,
+          result.name,
+          result.path_string or ""))
+        
+        if result.expect_error then
+          print(string.format("     Expected error: %s", tostring(result.error or "")))
+        end
+        
+        if result.execution_time then
+          print(string.format("     Time: %.4f seconds", result.execution_time))
+        end
+      end
+      print("")
+    end
   end
 
   local elapsed_time = os.clock() - start_time
+
+  -- Show collected test results in verbose mode
+  if options.verbose and #all_test_results > 0 then
+    print(string.format("\n%sAll collected test results: %d%s", cyan, #all_test_results, normal))
+    for i, result in ipairs(all_test_results) do
+      if i <= 10 then -- Only show first 10 to avoid flooding the output
+        local status_color = ""
+        if result.status == "pass" then 
+          status_color = green
+        elseif result.status == "fail" then
+          status_color = red
+        else
+          status_color = yellow
+        end
+        
+        print(string.format("  %d. %s[%s]%s %s (%s)", 
+          i,
+          status_color,
+          result.status:upper(),
+          normal,
+          result.name,
+          result.file_path or ""))
+      end
+    end
+    
+    if #all_test_results > 10 then
+      print(string.format("  ... and %d more", #all_test_results - 10))
+    end
+    print("")
+  end
 
   -- In the summary, use consistent terminology:
   -- - passes/failures => individual test cases passed/failed
@@ -467,13 +752,93 @@ function runner.run_all(files_or_dir, firmo, options)
     passes = total_passes, -- Add these for consistency
     failures = total_failures, -- Add these for consistency 
     elapsed_time_seconds = string.format("%.2f", elapsed_time),
+    structured_results_count = #all_test_results
   })
+
+  -- Calculate statistics on test execution time if available
+  local timing_stats = {}
+  if #all_test_results > 0 then
+    local slowest_tests = {}
+    local total_execution_time = 0
+    local count_with_execution_time = 0
+    
+    for _, result in ipairs(all_test_results) do
+      if result.execution_time then
+        total_execution_time = total_execution_time + result.execution_time
+        count_with_execution_time = count_with_execution_time + 1
+        
+        -- Track slowest tests
+        if #slowest_tests < 5 then
+          table.insert(slowest_tests, result)
+          -- Sort by execution time (descending)
+          table.sort(slowest_tests, function(a, b) 
+            return (a.execution_time or 0) > (b.execution_time or 0) 
+          end)
+        elseif result.execution_time > (slowest_tests[5].execution_time or 0) then
+          -- Replace the fastest of our 5 slowest
+          slowest_tests[5] = result
+          -- Resort
+          table.sort(slowest_tests, function(a, b) 
+            return (a.execution_time or 0) > (b.execution_time or 0) 
+          end)
+        end
+      end
+    end
+    
+    -- Calculate average execution time
+    if count_with_execution_time > 0 then
+      timing_stats = {
+        total_test_execution_time = total_execution_time,
+        average_test_execution_time = total_execution_time / count_with_execution_time,
+        tests_with_timing = count_with_execution_time,
+        slowest_tests = {}
+      }
+      
+      -- Add info about slowest tests
+      for i, slow_test in ipairs(slowest_tests) do
+        table.insert(timing_stats.slowest_tests, {
+          name = slow_test.name,
+          path = slow_test.path_string,
+          execution_time = slow_test.execution_time,
+          file = slow_test.file_path
+        })
+      end
+      
+      -- Log timing stats at debug level
+      logger.debug("Test timing statistics", timing_stats)
+    end
+  end
 
   local all_passed = failed_files == 0
   if not all_passed then
-    logger.error("Test run failed", { failed_files = failed_files })
+    logger.error("Test run failed", { 
+      failed_files = failed_files,
+      failed_tests = total_failures
+    })
+    
+    -- Show detailed failure information
+    if #all_test_results > 0 then
+      local failed_tests = {}
+      for _, result in ipairs(all_test_results) do
+        if result.status == "fail" then
+          table.insert(failed_tests, {
+            name = result.name,
+            path = result.path_string,
+            file = result.file_path,
+            error_message = result.error_message
+          })
+        end
+      end
+      
+      if #failed_tests > 0 then
+        logger.debug("Failed tests", { failed_tests = failed_tests })
+      end
+    end
   else
-    logger.info("Test run successful", { all_passed = true })
+    logger.info("Test run successful", { 
+      all_passed = true,
+      test_count = total_passes + total_skipped
+    })
   end
 
   -- Generate coverage reports if enabled
@@ -583,7 +948,40 @@ function runner.run_all(files_or_dir, firmo, options)
         files_passed = passed_files,
         files_failed = failed_files,
         success = all_passed,
+        test_cases = {}
       }
+      
+      -- Add individual test cases from structured results if available
+      if #all_test_results > 0 then
+        for _, result in ipairs(all_test_results) do
+          local test_case = {
+            name = result.name,
+            path = result.path_string,
+            status = result.status,
+            file = result.file_path,
+            time = result.execution_time or 0
+          }
+          
+          -- Add error details for failed tests
+          if result.status == "fail" and result.error_message then
+            test_case.failure = {
+              message = result.error_message,
+              type = "Assertion"
+            }
+          end
+          
+          -- Add metadata
+          if result.options then
+            test_case.metadata = result.options
+          end
+          
+          table.insert(test_results.test_cases, test_case)
+        end
+        
+        logger.debug("Added structured test cases to JSON output", {
+          test_case_count = #test_results.test_cases
+        })
+      end
 
       -- Format as JSON with markers for parallel execution
       local json_results = json_module.encode(test_results)
