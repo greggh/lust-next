@@ -260,6 +260,60 @@ function M.with_temp_directory(callback)
     return result
 end
 
+---@private
+---@param path string Path to file or directory to remove
+---@param resource_type string "file" or "directory"
+---@param max_retries number Maximum number of retries
+---@return boolean success Whether the resource was successfully removed
+---@return string? err Error message if removal failed
+-- Helper function to remove a resource with retry logic
+local function remove_with_retry(path, resource_type, max_retries)
+    max_retries = max_retries or 3
+    local success = false
+    local err
+    
+    for retry = 1, max_retries do
+        if resource_type == "file" then
+            -- For files, try with both os.remove and fs.delete_file
+            -- os.remove is often more reliable for temp files
+            local ok1 = os.remove(path)
+            if ok1 then
+                success = true
+                break
+            end
+            
+            -- If os.remove failed, try fs.delete_file
+            local ok2, delete_err = fs.delete_file(path)
+            if ok2 then
+                success = true
+                break
+            end
+            err = delete_err or "Failed to remove file"
+        else
+            -- For directories, always use recursive deletion
+            local ok, delete_err = fs.delete_directory(path, true)
+            if ok then
+                success = true
+                break
+            end
+            err = delete_err or "Failed to remove directory"
+        end
+        
+        if not success and retry < max_retries then
+            -- Wait briefly before retrying (increasing delay)
+            local delay = 0.1 * retry
+            logger.debug("Retry " .. retry .. " failed for " .. resource_type .. ", waiting " .. delay .. "s", {path = path})
+            
+            -- Sleep using os.execute("sleep") for cross-platform compatibility
+            if delay > 0 then
+                os.execute("sleep " .. tostring(delay))
+            end
+        end
+    end
+    
+    return success, err
+end
+
 ---@param context? string Test context identifier (optional)
 ---@return boolean success Whether all files were cleaned up successfully
 ---@return table[] errors Array of resources that could not be cleaned up
@@ -276,19 +330,42 @@ function M.cleanup_test_context(context)
     
     local errors = {}
     
-    -- Try to remove all resources (skipping sorting for simplicity)
+    -- Sort resources to ensure directories are deleted after their contained files
+    -- This helps with nested directory structure cleanup
+    table.sort(resources, function(a, b)
+        -- If one is a file and one is a directory, process files first
+        if a.type ~= b.type then
+            return a.type == "file"
+        end
+        
+        -- For directories, sort by path depth (delete deeper paths first)
+        if a.type == "directory" and b.type == "directory" then
+            local depth_a = select(2, string.gsub(a.path, "/", ""))
+            local depth_b = select(2, string.gsub(b.path, "/", ""))
+            return depth_a > depth_b
+        end
+        
+        -- Otherwise, keep original order
+        return false
+    end)
+    
+    -- Try to remove all resources with retry logic
     for i = #resources, 1, -1 do
         local resource = resources[i]
         
-        local success = false
-        
+        -- Check if the resource still exists before attempting removal
+        local exists = false
         if resource.type == "file" then
-            local ok, err = os.remove(resource.path)
-            success = ok ~= nil
+            exists = fs.file_exists(resource.path)
         else
-            -- Use the standard function name
-            local ok, err = fs.delete_directory(resource.path, true) -- Use recursive deletion
-            success = ok
+            exists = fs.directory_exists(resource.path)
+        end
+        
+        local success = not exists -- Consider it successful if the resource doesn't exist
+        
+        if exists then
+            -- Try to remove with retry
+            success, _ = remove_with_retry(resource.path, resource.type, 3)
         end
         
         if not success then

@@ -85,16 +85,52 @@ end
 
 -- Cleanup all temporary files (run after all tests)
 --- Clean up all managed temporary files
+---@param max_attempts? number Number of cleanup attempts to make (default: 2)
 ---@return boolean success Whether the cleanup was successful
-function M.cleanup_all()
+function M.cleanup_all(max_attempts)
   logger.info("Performing final cleanup of all temporary files")
   
-  local success, errors, stats = temp_file.cleanup_all()
+  max_attempts = max_attempts or 2
+  local success, errors, stats
   
+  -- Make multiple cleanup attempts to handle files that might be temporarily locked
+  for attempt = 1, max_attempts do
+    success, errors, stats = temp_file.cleanup_all()
+    
+    -- If completely successful or no errors left, we're done
+    if success or (errors and #errors == 0) then
+      logger.info("Temporary file cleanup successful", {
+        attempt = attempt,
+        max_attempts = max_attempts
+      })
+      break
+    end
+    
+    -- If we still have errors but have more attempts left
+    if errors and #errors > 0 and attempt < max_attempts then
+      logger.debug("Cleanup attempt " .. attempt .. " had issues, trying again", {
+        error_count = #errors
+      })
+      
+      -- Wait a short time before trying again (increasing delay for each attempt)
+      os.execute("sleep " .. tostring(0.5 * attempt))
+    end
+  end
+  
+  -- Log final status after all attempts
   if not success and errors and #errors > 0 then
     logger.warn("Failed to clean up some temporary files during final cleanup", {
-      error_count = #errors
+      error_count = #errors,
+      attempts = max_attempts
     })
+    
+    -- Log detailed info about each failed resource at debug level
+    for i, resource in ipairs(errors) do
+      logger.debug("Failed to clean up resource " .. i, {
+        path = resource.path,
+        type = resource.type
+      })
+    end
   end
   
   if stats then
@@ -130,8 +166,19 @@ function M.add_final_cleanup(runner)
           directories = stats.directories
         })
         
-        -- Force cleanup of all remaining files
-        M.cleanup_all()
+        -- Force cleanup of all remaining files with multiple attempts
+        -- Use 3 attempts for final cleanup to be more thorough
+        M.cleanup_all(3)
+      end
+      
+      -- Double-check if there are still resources after cleanup
+      stats = temp_file.get_stats()
+      if stats.total_resources > 0 then
+        logger.warn("Still have uncleaned resources after final cleanup", {
+          total_resources = stats.total_resources
+        })
+      else
+        logger.info("All temporary resources successfully cleaned up")
       end
       
       return success, result
