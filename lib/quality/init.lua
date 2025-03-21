@@ -1574,6 +1574,11 @@ function M.check_file(file_path, level)
   -- Test files already have their level in their name
   local file_level = tonumber(file_path:match("quality_level_(%d)_test.lua"))
   
+  -- Also check for level_X_test.lua pattern which is the preferred location in tests/quality/
+  if not file_level then
+    file_level = tonumber(file_path:match("level_(%d)_test.lua"))
+  end
+  
   if file_level then
     -- For any check_level <= file_level, pass
     -- For any check_level > file_level, fail
