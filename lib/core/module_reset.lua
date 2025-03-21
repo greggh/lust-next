@@ -84,46 +84,31 @@ local function validate_type_or_nil(value, expected_type, name)
   return true
 end
 
--- Import logging with enhanced error handling
-local logging, logger
----@private
----@return table|nil logger The logger instance if available, nil otherwise
-local function get_logger()
-  if not logger then
-    ---@diagnostic disable-next-line: unused-local
-    local success, log_module, err = error_handler.try(function()
-      return require("lib.tools.logging")
-    end)
+-- Import logging directly
+local logging = require("lib.tools.logging")
+local logger = logging.get_logger("core.module_reset")
 
-    if success and log_module then
-      logging = log_module
-      logger = logging.get_logger("core.module_reset")
+-- Initialize logger with configuration
+local function init_logger()
+  -- Configure the logger
+  local config_success, config_err = error_handler.try(function()
+    logging.configure_from_config("core.module_reset")
+    return true
+  end)
 
-      local config_success, config_err = error_handler.try(function()
-        logging.configure_from_config("core.module_reset")
-        return true
-      end)
-
-      if not config_success then
-        -- Use fallback logging if configuration fails
-        print(
-          "[WARNING] Failed to configure module_reset logger: "
-            .. (config_err and error_handler.format_error(config_err) or "unknown error")
-        )
-      end
-
-      if logger then
-        logger.debug("Module reset system initialized", {
-          version = module_reset._VERSION,
-        })
-      end
-    end
+  if not config_success then
+    -- Log error but continue
+    print("[WARNING] Failed to configure module_reset logger: " 
+      .. error_handler.format_error(config_err))
   end
-  return logger
+
+  logger.debug("Module reset system initialized", {
+    version = module_reset._VERSION,
+  })
 end
 
--- Initialize logger
-get_logger()
+-- Initialize logger immediately
+init_logger()
 
 -- Store original package.loaded state
 module_reset.initial_state = nil
@@ -150,36 +135,27 @@ module_reset.protected_modules = {
 ---@param modules string|string[] Module name or array of module names to protect
 -- Configure additional modules that should be protected
 function module_reset.protect(modules)
-  local log = get_logger()
 
   if type(modules) == "string" then
-    if log then
-      log.debug("Protecting single module", {
-        module = modules,
-      })
-    end
+    logger.debug("Protecting single module", {
+      module = modules,
+    })
     module_reset.protected_modules[modules] = true
   elseif type(modules) == "table" then
-    if log then
-      log.debug("Protecting multiple modules", {
-        count = #modules,
-      })
-    end
+    logger.debug("Protecting multiple modules", {
+      count = #modules,
+    })
     for _, module_name in ipairs(modules) do
       module_reset.protected_modules[module_name] = true
-      if log and log.is_debug_enabled() then
-        log.debug("Added module to protected list", {
-          module = module_name,
-        })
-      end
+      logger.debug("Added module to protected list", {
+        module = module_name,
+      })
     end
   end
 
-  if log then
-    log.info("Module protection updated", {
-      protected_count = module_reset.count_protected_modules(),
-    })
-  end
+  logger.info("Module protection updated", {
+    protected_count = module_reset.count_protected_modules(),
+  })
 end
 
 ---@return number count Number of protected modules
@@ -195,8 +171,6 @@ end
 ---@return table snapshot Table mapping module names to boolean (true)
 -- Take a snapshot of the current module state
 function module_reset.snapshot()
-  local log = get_logger()
-
   local success, result = error_handler.try(function()
     local snapshot = {}
     local count = 0
@@ -206,30 +180,26 @@ function module_reset.snapshot()
       count = count + 1
     end
 
-    if log then
-      log.debug("Created module state snapshot", {
-        module_count = count,
-      })
-    end
+    logger.debug("Created module state snapshot", {
+      module_count = count,
+    })
 
     return snapshot, count
   end)
 
   if not success then
-    if log then
-      local loaded_modules_count = 0
-      if package and package.loaded and type(package.loaded) == "table" then
-        for _ in pairs(package.loaded) do
-          loaded_modules_count = loaded_modules_count + 1
-        end
+    local loaded_modules_count = 0
+    if package and package.loaded and type(package.loaded) == "table" then
+      for _ in pairs(package.loaded) do
+        loaded_modules_count = loaded_modules_count + 1
       end
-
-      log.error("Failed to create module state snapshot", {
-        error = error_handler.format_error(result),
-        loaded_modules_count = loaded_modules_count,
-        protected_modules_count = module_reset.count_protected_modules(),
-      })
     end
+
+    logger.error("Failed to create module state snapshot", {
+      error = error_handler.format_error(result),
+      loaded_modules_count = loaded_modules_count,
+      protected_modules_count = module_reset.count_protected_modules(),
+    })
 
     error_handler.rethrow(result, {
       operation = "module_reset.snapshot",
@@ -243,12 +213,8 @@ end
 ---@return module_reset The module instance for chaining
 -- Initialize the module system (capture initial state)
 function module_reset.init()
-  local log = get_logger()
-
   local success, err = error_handler.try(function()
-    if log then
-      log.debug("Initializing module reset system")
-    end
+    logger.debug("Initializing module reset system")
 
     module_reset.initial_state = module_reset.snapshot()
     local initial_count = 0
@@ -260,22 +226,18 @@ function module_reset.init()
       initial_count = initial_count + 1
     end
 
-    if log then
-      log.info("Module reset system initialized", {
-        initial_modules = initial_count,
-        protected_modules = module_reset.count_protected_modules(),
-      })
-    end
+    logger.info("Module reset system initialized", {
+      initial_modules = initial_count,
+      protected_modules = module_reset.count_protected_modules(),
+    })
   end)
 
   if not success then
-    if log then
-      log.error("Failed to initialize module reset system", {
-        error = error_handler.format_error(err),
-        protected_modules_count = module_reset.count_protected_modules(),
-        state = module_reset.initial_state ~= nil and "created" or "missing",
-      })
-    end
+    logger.error("Failed to initialize module reset system", {
+      error = error_handler.format_error(err),
+      protected_modules_count = module_reset.count_protected_modules(),
+      state = module_reset.initial_state ~= nil and "created" or "missing",
+    })
 
     error_handler.rethrow(err, {
       operation = "module_reset.init",
@@ -290,27 +252,21 @@ end
 ---@return number count Number of modules reset
 -- Reset modules to initial state, excluding protected modules
 function module_reset.reset_all(options)
-  local log = get_logger()
-
   -- Validate options
   options = options or {}
   validate_type_or_nil(options, "table", "options")
 
   local verbose = options.verbose
 
-  if log then
-    log.debug("Resetting all modules", {
-      verbose = verbose and true or false,
-    })
-  end
+  logger.debug("Resetting all modules", {
+    verbose = verbose and true or false,
+  })
 
   ---@diagnostic disable-next-line: unused-local
   local success, result, err = error_handler.try(function()
     -- If we haven't initialized, do so now
     if not module_reset.initial_state then
-      if log then
-        log.debug("Module reset system not initialized, initializing now")
-      end
+      logger.debug("Module reset system not initialized, initializing now")
       module_reset.init()
       return 0
     end
@@ -369,32 +325,28 @@ function module_reset.reset_all(options)
     local after_gc = collectgarbage("count")
     local memory_freed = before_gc - after_gc
 
-    if log then
-      log.info("Module reset completed", {
-        reset_count = reset_count,
-        memory_freed_kb = memory_freed > 0 and memory_freed or 0,
-      })
-    end
+    logger.info("Module reset completed", {
+      reset_count = reset_count,
+      memory_freed_kb = memory_freed > 0 and memory_freed or 0,
+    })
 
     return reset_count
   end)
 
   if not success then
-    if log then
-      local loaded_modules_count = 0
-      if package and package.loaded and type(package.loaded) == "table" then
-        for _ in pairs(package.loaded) do
-          loaded_modules_count = loaded_modules_count + 1
-        end
+    local loaded_modules_count = 0
+    if package and package.loaded and type(package.loaded) == "table" then
+      for _ in pairs(package.loaded) do
+        loaded_modules_count = loaded_modules_count + 1
       end
-
-      log.error("Failed to reset modules", {
-        error = error_handler.format_error(result),
-        loaded_modules_count = loaded_modules_count,
-        protected_modules_count = module_reset.count_protected_modules(),
-        options = options ~= nil and type(options) == "table" and "provided" or "default",
-      })
     end
+
+    logger.error("Failed to reset modules", {
+      error = error_handler.format_error(result),
+      loaded_modules_count = loaded_modules_count,
+      protected_modules_count = module_reset.count_protected_modules(),
+      options = options ~= nil and type(options) == "table" and "provided" or "default",
+    })
 
     ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(result, {
@@ -411,8 +363,6 @@ end
 ---@return number count Number of modules reset
 -- Reset specific modules by pattern
 function module_reset.reset_pattern(pattern, options)
-  local log = get_logger()
-
   -- Validate parameters
   validate_not_nil(pattern, "pattern")
   validate_type(pattern, "string", "pattern")
@@ -422,12 +372,10 @@ function module_reset.reset_pattern(pattern, options)
 
   local verbose = options.verbose
 
-  if log then
-    log.debug("Resetting modules by pattern", {
-      pattern = pattern,
-      verbose = verbose and true or false,
-    })
-  end
+  logger.debug("Resetting modules by pattern", {
+    pattern = pattern,
+    verbose = verbose and true or false,
+  })
 
   local success, result = error_handler.try(function()
     local reset_count = 0
@@ -458,24 +406,20 @@ function module_reset.reset_pattern(pattern, options)
         if not module_reset.protected_modules[module_name] then
           modules_to_reset[#modules_to_reset + 1] = module_name
         else
-          if log and log.is_debug_enabled() then
-            log.debug("Skipping protected module", {
-              module = module_name,
-              pattern = pattern,
-            })
-          end
+          logger.debug("Skipping protected module", {
+            module = module_name,
+            pattern = pattern,
+          })
         end
       end
     end
 
-    if log then
-      log.debug("Collected modules for pattern reset", {
-        pattern = pattern,
-        total_checked = total_checked,
-        matches = match_count,
-        to_reset = #modules_to_reset,
-      })
-    end
+    logger.debug("Collected modules for pattern reset", {
+      pattern = pattern,
+      total_checked = total_checked,
+      matches = match_count,
+      to_reset = #modules_to_reset,
+    })
 
     -- Actually reset the modules
     for _, module_name in ipairs(modules_to_reset) do
@@ -559,7 +503,6 @@ end
 ---@return string[] module_names List of loaded, non-protected module names
 -- Get list of currently loaded modules
 function module_reset.get_loaded_modules()
-  local log = get_logger()
 
   local success, result = error_handler.try(function()
     local modules = {}
@@ -606,16 +549,13 @@ end
 ---@return table info Memory usage information { current: number, count: number }
 -- Get memory usage information
 function module_reset.get_memory_usage()
-  local log = get_logger()
 
   local success, result = error_handler.try(function()
     local current_mem = collectgarbage("count")
 
-    if log then
-      log.debug("Retrieved memory usage", {
-        current_kb = current_mem,
-      })
-    end
+    logger.debug("Retrieved memory usage", {
+      current_kb = current_mem,
+    })
 
     return {
       current = current_mem, -- Current memory in KB
@@ -645,7 +585,6 @@ end
 ---@return table[] results Array of { name: string, memory: number } sorted by memory usage
 -- Calculate memory usage per module (approximately)
 function module_reset.analyze_memory_usage(options)
-  local log = get_logger()
 
   -- Validate options
   options = options or {}
@@ -795,7 +734,6 @@ end
 ---@return boolean added Whether the module was newly added (false if already protected)
 -- Add a module to the protected list
 function module_reset.add_protected_module(module_name)
-  local log = get_logger()
 
   -- Validate input
   validate_not_nil(module_name, "module_name")
@@ -842,16 +780,12 @@ end
 ---@return table firmo The firmo instance with module_reset registered
 -- Register the module with firmo
 function module_reset.register_with_firmo(firmo)
-  local log = get_logger()
-
   -- Validate input
   validate_not_nil(firmo, "firmo")
   validate_type(firmo, "table", "firmo")
 
   local success, err = error_handler.try(function()
-    if log then
-      log.debug("Registering module reset with firmo")
-    end
+    logger.debug("Registering module reset with firmo")
 
     -- Store reference to firmo
     module_reset.firmo = firmo
@@ -878,20 +812,16 @@ function module_reset.register_with_firmo(firmo)
 
     firmo.reset = function()
       local reset_success, reset_result = error_handler.try(function()
-        if log then
-          log.debug("Enhanced reset function called")
-        end
+        logger.debug("Enhanced reset function called")
 
         -- First call the original reset function
         original_reset()
 
         -- Then reset modules as needed
         if firmo.isolation_options and firmo.isolation_options.reset_modules then
-          if log then
-            log.debug("Automatic module reset triggered", {
-              verbose = firmo.isolation_options.verbose and true or false,
-            })
-          end
+          logger.debug("Automatic module reset triggered", {
+            verbose = firmo.isolation_options.verbose and true or false,
+          })
 
           module_reset.reset_all({
             verbose = firmo.isolation_options.verbose,
@@ -917,24 +847,20 @@ function module_reset.register_with_firmo(firmo)
     -- Initialize module tracking
     module_reset.init()
 
-    if log then
-      log.info("Module reset system registered with firmo", {
-        protected_modules = module_reset.count_protected_modules(),
-        initial_modules = module_reset.initial_state
-            and (type(module_reset.initial_state) == "table" and #module_reset.initial_state or 0)
-          or 0,
-      })
-    end
+    logger.info("Module reset system registered with firmo", {
+      protected_modules = module_reset.count_protected_modules(),
+      initial_modules = module_reset.initial_state
+          and (type(module_reset.initial_state) == "table" and #module_reset.initial_state or 0)
+        or 0,
+    })
   end)
 
   if not success then
-    if log then
-      log.error("Failed to register module reset with firmo", {
-        error = error_handler.format_error(err),
-        protected_modules_count = module_reset.count_protected_modules(),
-        initial_state = module_reset.initial_state ~= nil and "created" or "missing",
-      })
-    end
+    logger.error("Failed to register module reset with firmo", {
+      error = error_handler.format_error(err),
+      protected_modules_count = module_reset.count_protected_modules(),
+      initial_state = module_reset.initial_state ~= nil and "created" or "missing",
+    })
 
     error_handler.rethrow(err, {
       operation = "module_reset.register_with_firmo",
@@ -949,7 +875,6 @@ end
 ---@return table firmo The configured firmo instance
 -- Configure isolation options for firmo
 function module_reset.configure(options)
-  local log = get_logger()
 
   -- Validate options
   options = options or {}
@@ -966,36 +891,30 @@ function module_reset.configure(options)
       )
     end
 
-    if log then
-      log.debug("Configuring isolation options", {
-        reset_modules = options.reset_modules and true or false,
-        verbose = options.verbose and true or false,
-        track_memory = options.track_memory and true or false,
-      })
-    end
+    logger.debug("Configuring isolation options", {
+      reset_modules = options.reset_modules and true or false,
+      verbose = options.verbose and true or false,
+      track_memory = options.track_memory and true or false,
+    })
 
     firmo.isolation_options = options
 
-    if log then
-      log.info("Isolation options configured", {
-        reset_enabled = options.reset_modules and true or false,
-      })
-    end
+    logger.info("Isolation options configured", {
+      reset_enabled = options.reset_modules and true or false,
+    })
 
     return firmo
   end)
 
   if not success then
-    if log then
-      log.error("Failed to configure isolation options", {
-        error = error_handler.format_error(result),
-        options_type = type(options),
-        has_firmo = module_reset.firmo ~= nil,
-        reset_modules = options and options.reset_modules,
-        verbose = options and options.verbose,
-        track_memory = options and options.track_memory,
-      })
-    end
+    logger.error("Failed to configure isolation options", {
+      error = error_handler.format_error(result),
+      options_type = type(options),
+      has_firmo = module_reset.firmo ~= nil,
+      reset_modules = options and options.reset_modules,
+      verbose = options and options.verbose,
+      track_memory = options and options.track_memory,
+    })
 
     error_handler.rethrow(result, {
       operation = "module_reset.configure",

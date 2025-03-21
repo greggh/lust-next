@@ -116,6 +116,5 @@ Third line
   end)
 end)
 
--- Run the examples through the test.lua utility instead of using firmo.run()
--- The standard way to run this example is:
+-- NOTE: Run this example using the standard test runner:
 -- lua test.lua examples/specialized_assertions_example.lua

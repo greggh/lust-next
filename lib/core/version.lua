@@ -25,27 +25,11 @@
 ---@field LUA_VERSION {major: number, minor: number, is_luajit: boolean, is_51_compatible: boolean} Information about the Lua runtime version
 
 -- Require error handler for comprehensive error handling
-local error_handler
-local error_handler_loaded, error_handler_module = pcall(require, "lib.tools.error_handler")
-if error_handler_loaded then
-  error_handler = error_handler_module
-else
-  -- Simple fallback in case error_handler can't be loaded (should never happen in normal operation)
-  error_handler = {
-    validation_error = function(msg) error(msg) end,
-    format_error = function(err) return tostring(err) end
-  }
-end
+local error_handler = require("lib.tools.error_handler")
 
--- Initialize logging (optional, will be nil if not available)
-local logging
-local log
-pcall(function()
-  logging = require("lib.tools.logging")
-  if logging then
-    log = logging.get_logger("core.version")
-  end
-end)
+-- Initialize logging
+local logging = require("lib.tools.logging")
+local log = logging.get_logger("core.version")
 
 ---@type version
 local M = {}
@@ -69,11 +53,9 @@ function M.parse(version_string)
       "Version string cannot be nil",
       { function_name = "version.parse" }
     )
-    if log then
-      log.debug("version.parse validation failed", {
-        error = error_handler.format_error(err)
-      })
-    end
+    log.debug("version.parse validation failed", {
+      error = error_handler.format_error(err)
+    })
     return nil, err
   end
   
@@ -85,12 +67,10 @@ function M.parse(version_string)
         provided_type = type(version_string)
       }
     )
-    if log then
-      log.debug("version.parse validation failed", {
-        error = error_handler.format_error(err),
-        provided_type = type(version_string)
-      })
-    end
+    log.debug("version.parse validation failed", {
+      error = error_handler.format_error(err),
+      provided_type = type(version_string)
+    })
     return nil, err
   end
   
@@ -105,12 +85,10 @@ function M.parse(version_string)
         expected_format = "MAJOR.MINOR.PATCH"
       }
     )
-    if log then
-      log.debug("version.parse invalid format", {
-        error = error_handler.format_error(err),
-        version_string = version_string
-      })
-    end
+    log.debug("version.parse invalid format", {
+      error = error_handler.format_error(err),
+      version_string = version_string
+    })
     return nil, err
   end
   
@@ -122,14 +100,12 @@ function M.parse(version_string)
     string = version_string
   }
   
-  if log and log.is_debug_enabled() then
-    log.debug("Parsed version string", {
-      version_string = version_string,
-      major = result.major,
-      minor = result.minor,
-      patch = result.patch
-    })
-  end
+  log.debug("Parsed version string", {
+    version_string = version_string,
+    major = result.major,
+    minor = result.minor,
+    patch = result.patch
+  })
   
   return result
 end
@@ -146,11 +122,9 @@ function M.compare(version1, version2)
       "First version cannot be nil",
       { function_name = "version.compare" }
     )
-    if log then
-      log.debug("version.compare validation failed", {
-        error = error_handler.format_error(err)
-      })
-    end
+    log.debug("version.compare validation failed", {
+      error = error_handler.format_error(err)
+    })
     return nil, err
   end
   
@@ -159,11 +133,9 @@ function M.compare(version1, version2)
       "Second version cannot be nil",
       { function_name = "version.compare" }
     )
-    if log then
-      log.debug("version.compare validation failed", {
-        error = error_handler.format_error(err)
-      })
-    end
+    log.debug("version.compare validation failed", {
+      error = error_handler.format_error(err)
+    })
     return nil, err
   end
   
@@ -186,12 +158,10 @@ function M.compare(version1, version2)
         provided_type = type(version1)
       }
     )
-    if log then
-      log.debug("version.compare validation failed", {
-        error = error_handler.format_error(err),
-        version1 = version1
-      })
-    end
+    log.debug("version.compare validation failed", {
+      error = error_handler.format_error(err),
+      version1 = version1
+    })
     return nil, err
   end
   
@@ -210,12 +180,10 @@ function M.compare(version1, version2)
         provided_type = type(version2)
       }
     )
-    if log then
-      log.debug("version.compare validation failed", {
-        error = error_handler.format_error(err),
-        version2 = version2
-      })
-    end
+    log.debug("version.compare validation failed", {
+      error = error_handler.format_error(err),
+      version2 = version2
+    })
     return nil, err
   end
   
@@ -255,11 +223,9 @@ function M.satisfies_requirement(required_version)
       "Required version cannot be nil",
       { function_name = "version.satisfies_requirement" }
     )
-    if log then
-      log.debug("version.satisfies_requirement validation failed", {
-        error = error_handler.format_error(err)
-      })
-    end
+    log.debug("version.satisfies_requirement validation failed", {
+      error = error_handler.format_error(err)
+    })
     return nil, err
   end
   

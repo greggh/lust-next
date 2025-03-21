@@ -297,12 +297,20 @@ end
 
 -- Initialize the integration
 --- Initialize the temp file integration module
+--- This doesn't require a firmo instance - the actual patching happens in patch_firmo
+---@param firmo_instance? table Optional firmo instance to patch directly
 ---@return boolean success Whether the initialization was successful
-function M.initialize()
+function M.initialize(firmo_instance)
   logger.info("Initializing temp file integration")
   
-  -- Try to find and patch the firmo module
-  -- Check for the global firmo AND for key test methods that indicate we're already running in a test
+  -- First check if firmo instance was directly provided
+  if firmo_instance then
+    logger.debug("Using explicitly provided firmo instance")
+    M.patch_firmo(firmo_instance)
+    return true
+  end
+  
+  -- Check if we're already running within the test system via global firmo
   local should_initialize = true
   
   -- Check if we're already running within the test system
@@ -313,16 +321,13 @@ function M.initialize()
       -- We already have context tracking set up, no need to patch again
       logger.info("Firmo test context tracking already initialized")
       should_initialize = false
-    end
-  end
-  
-  -- Only patch if needed
-  if should_initialize then
-    if _G.firmo then
-      M.patch_firmo(_G.firmo)
     else
-      logger.warn("firmo module not found in global scope - some features may be limited")
+      -- We need to patch the global firmo
+      logger.debug("Patching global firmo instance")
+      M.patch_firmo(_G.firmo)
     end
+  else
+    logger.debug("No global firmo instance found - initialization deferred until patch_firmo is called directly")
   end
   
   return true

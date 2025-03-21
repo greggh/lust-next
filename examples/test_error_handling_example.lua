@@ -4,7 +4,6 @@
 -- using the expect_error flag and the test_helper module.
 
 -- Load firmo
-package.path = "../?.lua;../lib/?.lua;../lib/?/init.lua;" .. package.path
 local firmo = require("firmo")
 
 -- Import test functions
@@ -192,9 +191,7 @@ describe("Test Error Handling Example", function()
   end)
 end)
 
--- Run the test suite
-firmo.run()
-
 print("\nExample complete!")
 print("NOTE: The first section intentionally shows test failures to demonstrate the problem.")
 print("The second section with the expect_error flag shows the proper way to handle expected errors.")
+print("\nRun this example with: lua test.lua examples/test_error_handling_example.lua")

@@ -1,12 +1,15 @@
 -- junit_report_example.lua
 -- Example demonstrating JUnit XML reporting for CI integration
 
--- Make sure we're using firmo with globals
+-- Import the firmo framework
 local firmo = require('firmo')
-firmo.expose_globals()
+
+-- Extract testing functions (preferred way to import)
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local pending = firmo.pending
 
 -- Optional: Try to load reporting module directly
-local reporting_module = package.loaded["src.reporting"] or require("src.reporting")
+local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
 
 -- Some sample code to test 
 local function add(a, b)
@@ -21,9 +24,16 @@ local function multiply(a, b)
   return a * b
 end
 
+-- Import error handling module
+local error_handler = require("lib.tools.error_handler")
+local test_helper = require("lib.tools.test_helper")
+
 local function divide(a, b)
   if b == 0 then
-    error("Division by zero")
+    return nil, error_handler.validation_error(
+      "Division by zero",
+      { parameter = "b", provided_value = b }
+    )
   end
   return a / b
 end
@@ -32,36 +42,44 @@ end
 describe("JUnit XML Reporting Demo", function()
   describe("Math operations", function()
     it("should add numbers correctly", function()
-      assert.equal(5, add(2, 3))
-      assert.equal(0, add(-2, 2))
+      expect(add(2, 3)).to.equal(5)
+      expect(add(-2, 2)).to.equal(0)
     end)
     
     it("should subtract numbers correctly", function()
-      assert.equal(5, subtract(10, 5))
-      assert.equal(-5, subtract(5, 10))
+      expect(subtract(10, 5)).to.equal(5)
+      expect(subtract(5, 10)).to.equal(-5)
     end)
     
     it("should multiply numbers correctly", function()
-      assert.equal(6, multiply(2, 3))
-      assert.equal(-6, multiply(-2, 3))
+      expect(multiply(2, 3)).to.equal(6)
+      expect(multiply(-2, 3)).to.equal(-6)
     end)
     
     -- This test will pass
     it("should divide numbers correctly", function()
-      assert.equal(2, divide(10, 5))
-      assert.equal(-2, divide(-10, 5))
+      expect(divide(10, 5)).to.equal(2)
+      expect(divide(-10, 5)).to.equal(-2)
     end)
     
     -- This test will fail
     it("should handle floating point precision", function()
       -- This will fail due to floating point precision issues
-      assert.equal(0.3, add(0.1, 0.2))
+      expect(add(0.1, 0.2)).to.equal(0.3)
     end)
     
-    -- This test will raise an error
-    it("should throw error on division by zero", function()
-      -- Forgot to wrap in a function, will cause an error
-      assert.has_error(divide(5, 0))
+    -- This test will test error handling
+    it("should handle division by zero", { expect_error = true }, function()
+      -- Properly testing errors with test_helper.with_error_capture
+      local result, err = test_helper.with_error_capture(function()
+        return divide(5, 0)
+      end)()
+      
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
+      expect(err.message).to.match("Division by zero")
+      expect(err.context.parameter).to.equal("b")
     end)
     
     -- This test will be skipped/pending
@@ -188,3 +206,6 @@ do
 end
 
 print("\nRunning JUnit XML reporting example...\n")
+
+-- Note: Run this example using the standard test runner:
+-- lua test.lua examples/junit_report_example.lua

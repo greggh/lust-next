@@ -82,13 +82,13 @@ local yellow = string.char(27) .. "[33m"
 
 --- ANSI color code for blue text
 ---@type string
----@diagnostic disable-next-line: unused-local
-local blue = string.char(27) .. "[34m"
+-- Removed unused blue variable
+-- local blue = string.char(27) .. "[34m"
 
 --- ANSI color code for magenta text
 ---@type string
----@diagnostic disable-next-line: unused-local
-local magenta = string.char(27) .. "[35m"
+-- Removed unused magenta variable
+-- local magenta = string.char(27) .. "[35m"
 
 --- ANSI color code for cyan text
 ---@type string
@@ -245,16 +245,13 @@ function M.format(options)
     if not M.format_options.use_color then
       -- Call nocolor but catch errors explicitly here
       M.format_options.use_color = false
-      ---@diagnostic disable-next-line: unused-local
-      red, green, yellow, blue, magenta, cyan, normal = "", "", "", "", "", "", ""
+      -- Only reset colors that are actually used
+      red, green, yellow, cyan, normal = "", "", "", "", ""
     else
       red = string.char(27) .. "[31m"
       green = string.char(27) .. "[32m"
       yellow = string.char(27) .. "[33m"
-      ---@diagnostic disable-next-line: unused-local
-      blue = string.char(27) .. "[34m"
-      ---@diagnostic disable-next-line: unused-local
-      magenta = string.char(27) .. "[35m"
+      -- Removed unused color variables
       cyan = string.char(27) .. "[36m"
       normal = string.char(27) .. "[0m"
     end
@@ -387,8 +384,7 @@ function M.run_file(file)
   })
 
   -- Load the test file using error_handler.try
-  ---@diagnostic disable-next-line: unused-local
-  local success, result, load_err = error_handler.try(function()
+  local success, result = error_handler.try(function()
     -- First check if the file exists
     ---@diagnostic disable-next-line: need-check-nil
     local exists, exists_err = fs.file_exists(file)

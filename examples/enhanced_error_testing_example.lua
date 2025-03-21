@@ -3,7 +3,6 @@
 -- This example demonstrates the various approaches for testing error conditions
 -- using firmo's improved error handling system.
 
-package.path = "../?.lua;../lib/?.lua;../lib/?/init.lua;" .. package.path
 local firmo = require("firmo")
 
 -- Import test functions
@@ -207,8 +206,7 @@ describe("Enhanced Error Testing Examples", function()
   end)
 end)
 
--- Run the tests
-firmo.run()
-
 print("\nEnhanced error testing example complete!")
 print("This example shows various ways to test error conditions using the expect_error flag and test_helper module.")
+print("\nRun this example with:")
+print("lua test.lua examples/enhanced_error_testing_example.lua")

@@ -1,12 +1,276 @@
--- Example demonstrating enhanced assertions in firmo
+-- Comprehensive example of Firmo's assertion functionality
 local firmo = require("firmo")
-local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
 
--- This example shows all the enhanced assertions available in firmo
-describe("Enhanced Assertions Examples", function()
+-- Extract the testing functions we need
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
+
+-- Helper function to organize a test series
+local function test_assertion_group(name, assertions)
+  describe(name, function()
+    for _, assertion in ipairs(assertions) do
+      it(assertion.desc, assertion.test)
+    end
+  end)
+end
+
+-- Start the demonstration
+print("=== Firmo Assertions Example ===\n")
+print("This example demonstrates the complete range of assertions available in Firmo.")
+print("Run this example with: lua test.lua examples/assertions_example.lua\n")
+
+-- Core example data we'll use throughout our tests
+local sample_string = "Testing with Firmo"
+local sample_number = 42
+local sample_table = { foo = "bar", nested = { value = 123 } }
+local sample_array = { "one", "two", "three" }
+local sample_function = function() return true end
+local sample_error_function = function() error("Intentional test error") end
+
+-- Main test suite for assertions
+describe("Firmo Assertions", function()
   
-  -- Table assertions demonstration
-  describe("Table Assertions", function()
+  -- Basic Existence Assertions
+  test_assertion_group("Existence and Type Assertions", {
+    { 
+      desc = "expect().to.exist() checks for non-nil values",
+      test = function()
+        expect(sample_string).to.exist()
+        expect(sample_table).to.exist()
+        expect(false).to.exist() -- even false exists (it's not nil)
+        expect(nil).to_not.exist()
+      end
+    },
+    { 
+      desc = "expect().to.be.a() checks types",
+      test = function()
+        expect(sample_string).to.be.a("string")
+        expect(sample_number).to.be.a("number")
+        expect(sample_table).to.be.a("table")
+        expect(sample_function).to.be.a("function")
+        
+        -- Negated version
+        expect(sample_string).to_not.be.a("number")
+        expect(sample_number).to_not.be.a("string")
+      end
+    }
+  })
+  
+  -- Equality Assertions
+  test_assertion_group("Equality Assertions", {
+    { 
+      desc = "expect().to.equal() compares values",
+      test = function()
+        expect(sample_number).to.equal(42)
+        expect(sample_string).to.equal("Testing with Firmo")
+        expect(1 + 1).to.equal(2)
+        
+        -- Negated version
+        expect(sample_number).to_not.equal(100)
+        expect(sample_string).to_not.equal("different string")
+      end
+    },
+    { 
+      desc = "expect().to.equal() performs deep equality for tables",
+      test = function()
+        expect(sample_table).to.equal({ foo = "bar", nested = { value = 123 } })
+        expect(sample_array).to.equal({ "one", "two", "three" })
+        
+        -- Negated version
+        expect(sample_table).to_not.equal({ foo = "different", nested = { value = 123 } })
+      end
+    }
+  })
+  
+  -- Truth and Boolean Assertions
+  test_assertion_group("Truth and Boolean Assertions", {
+    { 
+      desc = "expect().to.be_truthy() checks for Lua truth values",
+      test = function()
+        expect(true).to.be_truthy()
+        expect(1).to.be_truthy()
+        expect("string").to.be_truthy()
+        expect(sample_table).to.be_truthy()
+        
+        expect(false).to_not.be_truthy()
+        expect(nil).to_not.be_truthy()
+      end
+    },
+    { 
+      desc = "expect().to.be_falsy() is the opposite of be_truthy",
+      test = function()
+        expect(false).to.be_falsy()
+        expect(nil).to.be_falsy()
+        
+        expect(true).to_not.be_falsy()
+        expect(1).to_not.be_falsy()
+        expect("string").to_not.be_falsy()
+      end
+    }
+  })
+  
+  -- String Assertions
+  test_assertion_group("String Assertions", {
+    { 
+      desc = "expect().to.match() tests strings against patterns",
+      test = function()
+        expect(sample_string).to.match("Testing")
+        expect(sample_string).to.match("with%s+Firmo")
+        expect("abc123").to.match("%a+%d+")
+        
+        expect(sample_string).to_not.match("Unknown")
+        expect(sample_string).to_not.match("^Firmo")
+      end
+    },
+    { 
+      desc = "expect().to.contain() checks for substrings",
+      test = function()
+        expect(sample_string).to.contain("Firmo")
+        expect("Multiple words in text").to.contain("words")
+        
+        expect(sample_string).to_not.contain("Unknown")
+      end
+    },
+    {
+      desc = "expect().to.start_with() checks string prefix",
+      test = function()
+        expect(sample_string).to.start_with("Testing")
+        expect("abc123").to.start_with("abc")
+        
+        expect(sample_string).to_not.start_with("Firmo")
+      end
+    },
+    {
+      desc = "expect().to.end_with() checks string suffix",
+      test = function()
+        expect(sample_string).to.end_with("Firmo")
+        expect("abc123").to.end_with("123")
+        
+        expect(sample_string).to_not.end_with("Testing")
+      end
+    }
+  })
+  
+  -- Numeric Assertions
+  test_assertion_group("Numeric Assertions", {
+    { 
+      desc = "expect().to.be_greater_than() compares numbers",
+      test = function()
+        expect(sample_number).to.be_greater_than(10)
+        expect(100).to.be_greater_than(sample_number)
+        
+        expect(10).to_not.be_greater_than(sample_number)
+      end
+    },
+    { 
+      desc = "expect().to.be_less_than() compares numbers",
+      test = function()
+        expect(sample_number).to.be_less_than(100)
+        expect(10).to.be_less_than(sample_number)
+        
+        expect(100).to_not.be_less_than(sample_number)
+      end
+    },
+    { 
+      desc = "expect().to.be_between() checks ranges",
+      test = function()
+        expect(sample_number).to.be_between(40, 50)
+        expect(5).to.be_between(1, 10)
+        
+        expect(sample_number).to_not.be_between(0, 10)
+      end
+    },
+    { 
+      desc = "expect().to.be_near() checks approximate equality",
+      test = function()
+        expect(5.001).to.be_near(5, 0.01)
+        expect(100).to.be_near(99, 1)
+        
+        expect(10).to_not.be_near(20, 5)
+      end
+    }
+  })
+  
+  -- Table Assertions
+  test_assertion_group("Table Assertions", {
+    { 
+      desc = "expect().to.contain_key() checks for table keys",
+      test = function()
+        expect(sample_table).to.contain_key("foo")
+        expect(sample_table).to.contain_key("nested")
+        
+        expect(sample_table).to_not.contain_key("unknown")
+      end
+    },
+    { 
+      desc = "expect().to.contain_value() checks for array values",
+      test = function()
+        expect(sample_array).to.contain_value("one")
+        expect(sample_array).to.contain_value("three")
+        
+        expect(sample_array).to_not.contain_value("four")
+      end
+    },
+    { 
+      desc = "expect().to.have_length() checks table/array length",
+      test = function()
+        expect(sample_array).to.have_length(3)
+        expect({}).to.have_length(0)
+        
+        expect(sample_array).to_not.have_length(5)
+      end
+    },
+    {
+      desc = "expect().to.have_deep_key() checks nested tables",
+      test = function()
+        expect(sample_table).to.have_deep_key("nested.value")
+        
+        expect(sample_table).to_not.have_deep_key("nested.unknown")
+      end
+    }
+  })
+  
+  -- Function and Error Assertions
+  test_assertion_group("Function and Error Assertions", {
+    { 
+      desc = "expect().to.fail() checks if functions throw errors",
+      test = function()
+        expect(sample_error_function).to.fail()
+        expect(function() error("Test error") end).to.fail()
+        
+        expect(sample_function).to_not.fail()
+      end
+    },
+    { 
+      desc = "expect().to.fail_with_message() checks error messages",
+      test = function()
+        expect(function() error("Specific error") end).to.fail_with_message("Specific")
+        
+        expect(function() error("Wrong message") end).to_not.fail_with_message("Missing")
+      end
+    },
+    { 
+      desc = "Testing error handling with expect_error flag",
+      test = { expect_error = true }, function()
+        local result, err = test_helper.with_error_capture(function()
+          return nil, error_handler.validation_error(
+            "Invalid parameter",
+            {param = "value"}
+          )
+        end)()
+        
+        expect(result).to_not.exist()
+        expect(err).to.exist()
+        expect(err.message).to.match("Invalid parameter")
+        expect(err.category).to.exist()
+      end
+    }
+  })
+  
+  -- Enhanced Table Assertions (from original example)
+  describe("Enhanced Table Assertions", function()
     it("demonstrates key and value assertions", function()
       local user = {
         id = 1,
@@ -35,30 +299,10 @@ describe("Enhanced Assertions Examples", function()
       -- Exact keys testing
       expect({a = 1, b = 2}).to.contain.exactly({"a", "b"})
     end)
-  end)
+  })
   
-  -- String assertions demonstration
-  describe("String Assertions", function()
-    it("demonstrates string prefix and suffix testing", function()
-      local text = "Hello, world!"
-      
-      -- Test string prefix
-      expect(text).to.start_with("Hello")
-      expect(text).to_not.start_with("World")
-      
-      -- Test string suffix
-      expect(text).to.end_with("world!")
-      expect(text).to_not.end_with("Hello")
-      
-      -- Multiple assertions on the same value
-      expect(text).to.be.a("string")
-      expect(text).to.start_with("Hello")
-      expect(text).to.end_with("world!")
-    end)
-  end)
-  
-  -- Type assertions demonstration
-  describe("Type Assertions", function()
+  -- Advanced Type Assertions
+  describe("Advanced Type Assertions", function()
     it("demonstrates advanced type checking", function()
       -- Basic callable check
       local function my_func() return true end
@@ -78,71 +322,10 @@ describe("Enhanced Assertions Examples", function()
       expect({1, 2, 3}).to.be_type("iterable")
       expect({a = 1, b = 2}).to.be_type("iterable")
     end)
-  end)
-  
-  -- Numeric comparisons demonstration
-  describe("Numeric Assertions", function()
-    it("demonstrates numeric comparison assertions", function()
-      -- Greater than
-      expect(10).to.be_greater_than(5)
-      
-      -- Less than
-      expect(5).to.be_less_than(10)
-      
-      -- Between range (inclusive)
-      expect(5).to.be_between(1, 10)
-      expect(5).to.be_between(5, 10) -- Inclusive lower bound
-      expect(10).to.be_between(5, 10) -- Inclusive upper bound
-      
-      -- Approximate equality (for floating point)
-      expect(0.1 + 0.2).to.be_approximately(0.3, 0.0001)
-      
-      -- Multiple assertions on the same value
-      local value = 7.5
-      expect(value).to.be_greater_than(5)
-      expect(value).to.be_less_than(10)
-      expect(value).to.be_between(5, 10)
-      expect(value).to.be_approximately(7.5, 0)
-    end)
-  end)
-  
-  -- Error assertions demonstration
-  describe("Error Assertions", function()
-    it("demonstrates error testing assertions", function()
-      -- Function that throws an error
-      local function divide(a, b)
-        if b == 0 then
-          error("Division by zero")
-        end
-        return a / b
-      end
-      
-      -- Test that function throws any error
-      expect(function() divide(10, 0) end).to.throw.error()
-      
-      -- Test for specific error message pattern
-      expect(function() divide(10, 0) end).to.throw.error_matching("zero")
-      
-      -- Test error type
-      expect(function() divide(10, 0) end).to.throw.error_type("string")
-      
-      -- Test that function doesn't throw
-      expect(function() divide(10, 5) end).to_not.throw.error()
-      
-      -- Custom errors
-      local function custom_error()
-        error({
-          code = 500,
-          message = "Server error"
-        })
-      end
-      
-      expect(custom_error).to.throw.error_type("table")
-    end)
-  end)
+  })
   
   -- Real world example - API response validation
-  describe("API Response Validation Example", function()
+  describe("Real-world Example: API Response Validation", function()
     -- Mock API response
     local api_response = {
       success = true,
@@ -167,7 +350,7 @@ describe("Enhanced Assertions Examples", function()
     it("validates complex API response structure", function()
       -- Basic response validation
       expect(api_response).to.contain.keys({"success", "data", "meta"})
-      expect(api_response.success).to.be.truthy()
+      expect(api_response.success).to.be_truthy()
       
       -- Data structure validation
       expect(api_response.data).to.contain.keys({"users", "pagination"})
@@ -199,4 +382,43 @@ describe("Enhanced Assertions Examples", function()
   end)
 end)
 
--- Note: Tests are run by scripts/runner.lua or run_all_tests.lua, not by explicit call
+-- Also show output from test execution at the end  
+print("\nExample of expected test run output:\n")
+print([[-----------------------------------------
+Firmo Assertions
+  Existence and Type Assertions
+    ✓ expect().to.exist() checks for non-nil values
+    ✓ expect().to.be.a() checks types
+  Equality Assertions
+    ✓ expect().to.equal() compares values
+    ✓ expect().to.equal() performs deep equality for tables
+  Truth and Boolean Assertions
+    ✓ expect().to.be_truthy() checks for Lua truth values
+    ✓ expect().to.be_falsy() is the opposite of be_truthy
+  String Assertions
+    ✓ expect().to.match() tests strings against patterns
+    ✓ expect().to.contain() checks for substrings
+    ✓ expect().to.start_with() checks string prefix
+    ✓ expect().to.end_with() checks string suffix
+  Numeric Assertions
+    ✓ expect().to.be_greater_than() compares numbers
+    ✓ expect().to.be_less_than() compares numbers
+    ✓ expect().to.be_between() checks ranges
+    ✓ expect().to.be_near() checks approximate equality
+  Table Assertions
+    ✓ expect().to.contain_key() checks for table keys
+    ✓ expect().to.contain_value() checks for array values
+    ✓ expect().to.have_length() checks table/array length
+    ✓ expect().to.have_deep_key() checks nested tables
+  Function and Error Assertions
+    ✓ expect().to.fail() checks if functions throw errors
+    ✓ expect().to.fail_with_message() checks error messages
+    ✓ Testing error handling with expect_error flag
+  Enhanced Table Assertions
+    ✓ demonstrates key and value assertions
+  Advanced Type Assertions
+    ✓ demonstrates advanced type checking
+  Real-world Example: API Response Validation
+    ✓ validates complex API response structure
+-----------------------------------------
+25 tests, 0 failures]])

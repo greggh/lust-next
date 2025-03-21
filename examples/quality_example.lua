@@ -1,5 +1,11 @@
 -- Example to demonstrate test quality validation
 local firmo = require("firmo")
+local error_handler = require("lib.tools.error_handler")
+local test_helper = require("lib.tools.test_helper")
+
+-- Extract test functions
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- A simple calculator module to test
 local calculator = {}
@@ -19,7 +25,10 @@ end
 
 calculator.divide = function(a, b)
   if b == 0 then
-    error("Division by zero")
+    return nil, error_handler.validation_error(
+      "Division by zero",
+      {operation = "divide", b = b}
+    )
   end
   return a / b
 end
@@ -43,21 +52,21 @@ end
 describe("Calculator - Level 1 (Basic)", function()
   -- This test has only one assertion
   it("adds two numbers", function()
-    assert.equal(calculator.add(2, 3), 5)
+    expect(calculator.add(2, 3)).to.equal(5)
   end)
 end)
 
 -- Level 2 tests - Standard tests with more assertions
 describe("Calculator - Level 2 (Standard)", function()
   it("should add two positive numbers correctly", function()
-    assert.equal(calculator.add(2, 3), 5)
-    assert.equal(calculator.add(0, 5), 5)
-    assert(calculator.add(10, 20) == 30, "10 + 20 should equal 30")
+    expect(calculator.add(2, 3)).to.equal(5)
+    expect(calculator.add(0, 5)).to.equal(5)
+    expect(calculator.add(10, 20)).to.equal(30, "10 + 20 should equal 30")
   end)
 
   it("should subtract properly", function()
-    assert.equal(calculator.subtract(5, 3), 2)
-    assert.equal(calculator.subtract(10, 5), 5)
+    expect(calculator.subtract(5, 3)).to.equal(2)
+    expect(calculator.subtract(10, 5)).to.equal(5)
   end)
 
   -- Setup and teardown functions
@@ -77,21 +86,25 @@ describe("Calculator - Level 3 (Comprehensive)", function()
   -- Using context nesting
   describe("when performing division", function()
     it("should divide two numbers", function()
-      assert.equal(calculator.divide(10, 2), 5)
-      assert.equal(calculator.divide(7, 2), 3.5)
-      assert.type(calculator.divide(10, 2), "number", "Result should be a number")
+      expect(calculator.divide(10, 2)).to.equal(5)
+      expect(calculator.divide(7, 2)).to.equal(3.5)
+      expect(calculator.divide(10, 2)).to.be.a("number", "Result should be a number")
     end)
 
     it("should handle division with edge cases", function()
-      assert.equal(calculator.divide(0, 5), 0)
-      assert.equal(calculator.divide(-10, 2), -5)
-      assert.almost_equal(calculator.divide(1, 3), 0.333333, 0.001)
+      expect(calculator.divide(0, 5)).to.equal(0)
+      expect(calculator.divide(-10, 2)).to.equal(-5)
+      expect(calculator.divide(1, 3)).to.be_near(0.333333, 0.001)
     end)
 
-    it("should throw error for division by zero", function()
-      assert.error(function()
-        calculator.divide(10, 0)
-      end)
+    it("should return error for division by zero", { expect_error = true }, function()
+      local result, err = test_helper.with_error_capture(function()
+        return calculator.divide(10, 0)
+      end)()
+      
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.message).to.match("Division by zero")
     end)
   end)
 
@@ -108,26 +121,26 @@ end)
 describe("Calculator - Level 4 (Advanced)", function()
   describe("when performing power operations", function()
     it("should calculate powers with various exponents", function()
-      assert.equal(calculator.power(2, 3), 8)
-      assert.equal(calculator.power(5, 2), 25)
-      assert.equal(calculator.power(10, 0), 1)
-      assert.equal(calculator.power(2, 1), 2)
+      expect(calculator.power(2, 3)).to.equal(8)
+      expect(calculator.power(5, 2)).to.equal(25)
+      expect(calculator.power(10, 0)).to.equal(1)
+      expect(calculator.power(2, 1)).to.equal(2)
     end)
 
     it("should handle boundary conditions", function()
       -- Testing upper bounds
       local result = calculator.power(2, 10)
-      assert.equal(result, 1024)
-      assert(result < 2 ^ 11, "Result should be less than 2^11")
+      expect(result).to.equal(1024)
+      expect(result).to.be_less_than(2 ^ 11, "Result should be less than 2^11")
 
       -- Testing lower bounds
       local small_result = calculator.power(2, -2)
-      assert.almost_equal(small_result, 0.25, 0.0001)
+      expect(small_result).to.be_near(0.25, 0.0001)
     end)
 
     it("should handle negative exponents correctly", function()
-      assert.almost_equal(calculator.power(2, -1), 0.5, 0.0001)
-      assert.almost_equal(calculator.power(4, -2), 0.0625, 0.0001)
+      expect(calculator.power(2, -1)).to.be_near(0.5, 0.0001)
+      expect(calculator.power(4, -2)).to.be_near(0.0625, 0.0001)
     end)
 
     -- Mock test with call verification
@@ -141,9 +154,9 @@ describe("Calculator - Level 4 (Advanced)", function()
       calculator.power(2, 8)
 
       -- Verify spy was called
-      assert(spy.call_count == 2, "Power function should be called twice")
-      assert(spy:called_with(3, 2), "Should be called with 3, 2")
-      assert(spy:called_with(2, 8), "Should be called with 2, 8")
+      expect(spy.call_count).to.equal(2, "Power function should be called twice")
+      expect(spy:called_with(3, 2)).to.be_truthy("Should be called with 3, 2")
+      expect(spy:called_with(2, 8)).to.be_truthy("Should be called with 2, 8")
 
       -- Restore original function
       calculator.power = original_power
@@ -160,11 +173,11 @@ describe("Calculator - Level 5 (Complete)", function()
     it("should validate inputs to prevent overflow", function()
       -- Security test: very large inputs
       local large_result = calculator.power(2, 20)
-      assert(large_result > 0, "Result should be positive")
-      assert(large_result < 2 ^ 30, "Result should be within safe range")
-      assert.type(large_result, "number", "Result should remain a number")
-      assert(not tostring(large_result):match("inf"), "Result should not be infinity")
-      assert(not tostring(large_result):match("nan"), "Result should not be NaN")
+      expect(large_result).to.be_greater_than(0, "Result should be positive")
+      expect(large_result).to.be_less_than(2 ^ 30, "Result should be within safe range")
+      expect(large_result).to.be.a("number", "Result should remain a number")
+      expect(tostring(large_result):match("inf")).to_not.exist("Result should not be infinity")
+      expect(tostring(large_result):match("nan")).to_not.exist("Result should not be NaN")
     end)
 
     it("should sanitize inputs from external sources", function()
@@ -177,12 +190,12 @@ describe("Calculator - Level 5 (Complete)", function()
       local b = tonumber(input_b)
 
       -- Verify sanitization worked
-      assert.type(a, "number", "Input a should be converted to number")
-      assert.type(b, "number", "Input b should be converted to number")
+      expect(a).to.be.a("number", "Input a should be converted to number")
+      expect(b).to.be.a("number", "Input b should be converted to number")
 
       -- Verify calculation works with sanitized inputs
-      assert.equal(calculator.add(a, b), 15)
-      assert.equal(calculator.divide(a, b), 2)
+      expect(calculator.add(a, b)).to.equal(15)
+      expect(calculator.divide(a, b)).to.equal(2)
     end)
   end)
 
@@ -195,11 +208,11 @@ describe("Calculator - Level 5 (Complete)", function()
       local execution_time = end_time - start_time
 
       -- Verify performance is within acceptable range
-      assert(execution_time < 0.01, "Power calculation should be fast")
-      assert(execution_time >= 0, "Execution time should be non-negative")
-      assert.type(execution_time, "number", "Execution time should be a number")
-      assert(not tostring(execution_time):match("nan"), "Execution time should not be NaN")
-      assert(not tostring(execution_time):match("inf"), "Execution time should not be infinity")
+      expect(execution_time).to.be_less_than(0.01, "Power calculation should be fast")
+      expect(execution_time).to.be_greater_than_or_equal_to(0, "Execution time should be non-negative")
+      expect(execution_time).to.be.a("number", "Execution time should be a number")
+      expect(tostring(execution_time):match("nan")).to_not.exist("Execution time should not be NaN")
+      expect(tostring(execution_time):match("inf")).to_not.exist("Execution time should not be infinity")
     end)
   end)
 
@@ -208,8 +221,8 @@ describe("Calculator - Level 5 (Complete)", function()
 end)
 
 -- Run this example with quality validation:
--- lua firmo.lua --quality --quality-level=3 examples/quality_example.lua
+-- lua test.lua --quality --quality-level=3 examples/quality_example.lua
 --
 -- Try different quality levels:
--- lua firmo.lua --quality --quality-level=1 examples/quality_example.lua
--- lua firmo.lua --quality --quality-level=5 examples/quality_example.lu
+-- lua test.lua --quality --quality-level=1 examples/quality_example.lua
+-- lua test.lua --quality --quality-level=5 examples/quality_example.lua

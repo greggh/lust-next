@@ -415,13 +415,12 @@ function M.patch_file(file_path, file_data)
       line_count = #lines,
     })
 
-    -- Make sure we have access to the static analyzer
-    ---@diagnostic disable-next-line: unused-local
-    local has_static_analyzer = false
+    -- Static analyzer access check removed - was unused
     if static_analyzer then
-      -- Check if the required functions are available
-      ---@diagnostic disable-next-line: unused-local
-      has_static_analyzer = type(static_analyzer.in_multiline_comment) == "function"
+      -- Just access to check if the function exists, but don't store the result
+      if type(static_analyzer.in_multiline_comment) == "function" then
+        -- Function exists but we don't need to store this information
+      end
     end
 
     local patched = 0

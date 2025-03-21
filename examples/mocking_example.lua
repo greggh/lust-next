@@ -1,12 +1,23 @@
--- Example demonstrating mocking functionality
-package.path = "../?.lua;" .. package.path
+-- Example demonstrating comprehensive mocking functionality
 local firmo = require("firmo")
+local error_handler = require("lib.tools.error_handler")
+local test_helper = require("lib.tools.test_helper")
+
+-- Extract testing functions
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 local mock, spy, stub, with_mocks = firmo.mock, firmo.spy, firmo.stub, firmo.with_mocks
 
 -- A sample "database" module we'll use to demonstrate mocking
 local database = {
   connect = function(db_name)
+    if type(db_name) ~= "string" or db_name == "" then
+      return nil, error_handler.validation_error(
+        "Database name must be a non-empty string",
+        {parameter = "db_name", provided_type = type(db_name)}
+      )
+    end
+    
     -- In a real implementation, this would actually connect to a database
     print("Actually connecting to real database: " .. db_name)
     return {
@@ -16,12 +27,29 @@ local database = {
   end,
   
   query = function(db, query_string)
+    if type(db) ~= "table" or not db.connected then
+      return nil, error_handler.validation_error(
+        "Database connection required",
+        {parameter = "db", provided_type = type(db)}
+      )
+    end
+    
+    if type(query_string) ~= "string" or query_string == "" then
+      return nil, error_handler.validation_error(
+        "Query must be a non-empty string",
+        {parameter = "query_string", provided_type = type(query_string)}
+      )
+    end
+    
     -- In a real implementation, this would execute the query
     print("Actually executing query on " .. db.name .. ": " .. query_string)
     
-    -- Simulate slow database access and potential errors
+    -- Simulate errors
     if query_string:match("ERROR") then
-      error("Database error: Invalid query")
+      return nil, error_handler.database_error(
+        "Database query failed",
+        {query = query_string, db_name = db.name}
+      )
     end
     
     return {
@@ -31,37 +59,95 @@ local database = {
   end,
   
   disconnect = function(db)
+    if type(db) ~= "table" then
+      return nil, error_handler.validation_error(
+        "Database connection required",
+        {parameter = "db", provided_type = type(db)}
+      )
+    end
+    
     -- In a real implementation, this would disconnect
     print("Actually disconnecting from " .. db.name)
     db.connected = false
+    return true
   end
 }
 
 -- A "user service" module that depends on the database
 local UserService = {
   get_users = function()
-    local db = database.connect("users")
-    local result = database.query(db, "SELECT * FROM users")
+    local db, connect_err = database.connect("users")
+    if not db then
+      return nil, error_handler.wrap_error(
+        connect_err,
+        "Failed to connect to users database",
+        {operation = "get_users"}
+      )
+    end
+    
+    local result, query_err = database.query(db, "SELECT * FROM users")
+    if not result then
+      database.disconnect(db)
+      return nil, error_handler.wrap_error(
+        query_err,
+        "Failed to fetch users",
+        {operation = "get_users"}
+      )
+    end
+    
     database.disconnect(db)
     return result.rows
   end,
   
   find_user = function(id)
-    local db = database.connect("users")
-    local result = database.query(db, "SELECT * FROM users WHERE id = " .. id)
+    if type(id) ~= "number" or id < 1 then
+      return nil, error_handler.validation_error(
+        "User ID must be a positive number",
+        {parameter = "id", provided_value = id}
+      )
+    end
+    
+    local db, connect_err = database.connect("users")
+    if not db then
+      return nil, error_handler.wrap_error(connect_err)
+    end
+    
+    local result, query_err = database.query(db, "SELECT * FROM users WHERE id = " .. id)
+    if not result then
+      database.disconnect(db)
+      return nil, error_handler.wrap_error(query_err)
+    end
+    
     database.disconnect(db)
     return result.rows[1]
   end,
   
   create_user = function(user)
-    local db = database.connect("users")
-    local result = database.query(db, "INSERT INTO users (name) VALUES ('" .. user.name .. "')")
+    if type(user) ~= "table" or not user.name then
+      return nil, error_handler.validation_error(
+        "User must be a table with a name field",
+        {parameter = "user", provided_type = type(user)}
+      )
+    end
+    
+    local db, connect_err = database.connect("users")
+    if not db then
+      return nil, error_handler.wrap_error(connect_err)
+    end
+    
+    local query = "INSERT INTO users (name) VALUES ('" .. user.name .. "')"
+    local result, query_err = database.query(db, query)
+    if not result then
+      database.disconnect(db)
+      return nil, error_handler.wrap_error(query_err)
+    end
+    
     database.disconnect(db)
     return {success = true, id = 3}  -- In a real implementation, this would be dynamic
   end
 }
 
--- Examples demonstrating various mocking techniques
+-- Tests demonstrating various mocking techniques
 describe("Mocking Examples", function()
   
   describe("Basic Spy Functionality", function()
@@ -96,8 +182,8 @@ describe("Mocking Examples", function()
       expect(result).to.equal(7)
       
       -- But calls are tracked
-      expect(add_spy.called).to.be.truthy()
-      expect(add_spy:called_with(3, 4)).to.be.truthy()
+      expect(add_spy.called).to.be_truthy()
+      expect(add_spy:called_with(3, 4)).to.be_truthy()
       
       -- Restore original method
       add_spy:restore()
@@ -121,7 +207,7 @@ describe("Mocking Examples", function()
         }
       end)
       
-      db_mock:stub("disconnect", function() end)
+      db_mock:stub("disconnect", function() return true end)
       
       -- Use the UserService which depends on the database
       local users = UserService.get_users()
@@ -130,12 +216,12 @@ describe("Mocking Examples", function()
       expect(users[1].name).to.equal("mocked_user")
       
       -- Verify our mocks were called
-      expect(db_mock._stubs.connect.called).to.be.truthy()
-      expect(db_mock._stubs.query.called).to.be.truthy()
-      expect(db_mock._stubs.disconnect.called).to.be.truthy()
+      expect(db_mock._stubs.connect.called).to.be_truthy()
+      expect(db_mock._stubs.query.called).to.be_truthy()
+      expect(db_mock._stubs.disconnect.called).to.be_truthy()
       
       -- Verify the entire mock (all methods were called)
-      expect(db_mock:verify()).to.be.truthy()
+      expect(db_mock:verify()).to.be_truthy()
       
       -- Restore original methods
       db_mock:restore()
@@ -182,102 +268,133 @@ describe("Mocking Examples", function()
       -- Outside the context, original function should be restored
       expect(database.connect).to.equal(original_connect)
     end)
-    
-    it("handles verification failures", function()
-      local succeeded = pcall(function()
-        with_mocks(function(mock_fn)
-          local db_mock = mock_fn(database)
-          db_mock:stub("connect", function() end)
-          
-          -- We don't call the stubbed method, which should fail verification
-          db_mock:verify()
-        end)
-      end)
-      
-      expect(succeeded).to.equal(false)
-    end)
   end)
   
-  describe("Standalone Stub Functions", function()
-    it("creates simple stubs", function()
-      -- Create a standalone stub that returns a value
-      local get_config = stub({debug = true, timeout = 1000})
-      
-      -- Use the stub
-      local config = get_config()
-      
-      -- Check return value
-      expect(config.debug).to.equal(true)
-      expect(config.timeout).to.equal(1000)
-      
-      -- Verify the stub was called
-      expect(get_config.called).to.be.truthy()
-    end)
-    
-    it("can create function stubs", function()
-      -- Create a stub with custom function behavior
-      local validator = stub(function(value)
-        return value > 0 and value < 100
-      end)
-      
-      -- Use the stub
-      local result1 = validator(50)
-      local result2 = validator(150)
-      
-      -- Verify behavior
-      expect(result1).to.equal(true)
-      expect(result2).to.equal(false)
-      
-      -- Verify call tracking
-      expect(validator.call_count).to.equal(2)
-      expect(validator.calls[1][1]).to.equal(50)
-      expect(validator.calls[2][1]).to.equal(150)
-    end)
-  end)
-  
-  describe("Real-world Example", function()
-    it("tests UserService with mocked database", function()
+  describe("Error Testing with Mocks", function()
+    it("can test error conditions with mocked functions", { expect_error = true }, function()
       with_mocks(function(mock_fn)
-        -- Create a mock for our database
         local db_mock = mock_fn(database)
         
-        -- Stub all the methods
+        -- Stub connect to return an error
+        db_mock:stub("connect", function()
+          return nil, error_handler.connection_error(
+            "Database connection refused",
+            {host = "localhost", port = 5432}
+          )
+        end)
+        
+        -- Attempt to get users, which should fail due to the mocked connection error
+        local result, err = test_helper.with_error_capture(function()
+          return UserService.get_users()
+        end)()
+        
+        -- Verify error handling
+        expect(result).to_not.exist()
+        expect(err).to.exist()
+        expect(err.message).to.match("Failed to connect")
+        expect(err.context).to.exist()
+        expect(err.context.operation).to.equal("get_users")
+      end)
+    end)
+    
+    it("tests validation error handling", { expect_error = true }, function()
+      -- Test with invalid user ID
+      local result, err = test_helper.with_error_capture(function()
+        return UserService.find_user("not_a_number")
+      end)()
+      
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.message).to.match("must be a positive number")
+    end)
+  end)
+  
+  describe("Real-world Testing Patterns", function()
+    it("tests successful user creation with mocks", function()
+      with_mocks(function(mock_fn)
+        -- Create mocks for the database
+        local db_mock = mock_fn(database)
+        
+        -- Track function calls
+        local connect_calls = {}
+        local query_calls = {}
+        
+        -- Stub connect
         db_mock:stub("connect", function(db_name)
-          expect(db_name).to.equal("users")
+          table.insert(connect_calls, {db_name = db_name})
           return {name = db_name, connected = true}
         end)
         
+        -- Stub query
         db_mock:stub("query", function(db, query)
-          expect(db.name).to.equal("users")
-          expect(query).to.match("SELECT")
-          
-          return {
-            rows = {{id = 999, name = "Test User"}},
-            count = 1
-          }
+          table.insert(query_calls, {db = db, query = query})
+          return {rows = {}, count = 1}
         end)
         
-        db_mock:stub("disconnect", function(db)
-          expect(db.name).to.equal("users")
-        end)
+        -- Stub disconnect
+        db_mock:stub("disconnect", function() return true end)
         
-        -- Now test our service
-        local user = UserService.find_user(999)
+        -- Execute the method we're testing
+        local result = UserService.create_user({name = "New User"})
         
         -- Verify the result
-        expect(user.id).to.equal(999)
-        expect(user.name).to.equal("Test User")
+        expect(result.success).to.be_truthy()
         
-        -- Verify all expected calls were made
-        expect(db_mock._stubs.connect:called_times(1)).to.be.truthy()
-        expect(db_mock._stubs.query:called_times(1)).to.be.truthy()
-        expect(db_mock._stubs.disconnect:called_times(1)).to.be.truthy()
+        -- Verify the right calls were made
+        expect(#connect_calls).to.equal(1)
+        expect(connect_calls[1].db_name).to.equal("users")
         
-        -- Verify mock as a whole
-        db_mock:verify()
+        expect(#query_calls).to.equal(1)
+        expect(query_calls[1].query).to.match("INSERT INTO users")
+        expect(query_calls[1].query).to.match("New User")
+      end)
+    end)
+    
+    it("tests database error handling in user service", { expect_error = true }, function()
+      with_mocks(function(mock_fn)
+        local db_mock = mock_fn(database)
+        
+        -- Stub connect - successful connection
+        db_mock:stub("connect", function(db_name)
+          return {name = db_name, connected = true}
+        end)
+        
+        -- Stub query - return error for query containing "ERROR"
+        db_mock:stub("query", function(db, query)
+          if query:match("ERROR") then
+            return nil, error_handler.database_error(
+              "Simulated database error",
+              {query = query}
+            )
+          end
+          return {rows = {}, count = 0}
+        end)
+        
+        -- Stub disconnect - always succeeds
+        db_mock:stub("disconnect", function() return true end)
+        
+        -- Test with a query that will trigger the error
+        local result, err = test_helper.with_error_capture(function()
+          -- Modify the query to include ERROR to trigger our mock error
+          database.query({name = "test", connected = true}, "SELECT ERROR")
+        end)()
+        
+        -- Verify error handling
+        expect(result).to_not.exist()
+        expect(err).to.exist()
+        expect(err.message).to.match("Simulated database error")
       end)
     end)
   end)
 end)
 
-print("\nMocking functionality examples completed!")
+print("\n=== Mocking Examples ===")
+print("This example demonstrates:")
+print("1. Creating spies to track function calls")
+print("2. Mocking objects to isolate components for testing")
+print("3. Verifying call patterns and arguments") 
+print("4. Testing error conditions with mocked functions")
+print("5. Using the with_mocks context manager for clean testing")
+print("6. Implementing robust error handling with mocks")
+print("\nRun this example with:")
+print("lua test.lua examples/mocking_example.lua")

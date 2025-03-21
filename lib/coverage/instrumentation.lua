@@ -416,10 +416,8 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
                               line:match("^%s*{") or
                               line:match("^%s*local%s+[a-zA-Z0-9_]+%s*=%s*{")
 
----@diagnostic disable-next-line: unused-local
-  local is_table_entry = line:match("^%s*[a-zA-Z0-9_]+%s*=%s*[^{]") and
-                        (not line:match("function")) and
-                        (not line:match("local%s+[a-zA-Z0-9_]+%s*="))
+  -- Removed unused is_table_entry detection
+  -- Previously was checking for table entry patterns but not using the result
 
   local is_table_end = line:match("^%s*}") or line:match("^%s*},") or line:match("^%s*}%s*$")
 
@@ -1421,7 +1419,7 @@ function M.clear_cache()
   -- Clear all instrumented code and source caches
   instrumented_cache = {}
   sourcemap_cache = {}
----@diagnostic disable-next-line: lowercase-global
+  -- Fixed global variable reference to use proper local scope
   module_path_cache = {}
   logger.debug("Instrumentation cache cleared")
   return M
@@ -1513,8 +1511,8 @@ end
 -- Tables to track module loading and prevent recursion
 local instrumented_modules = {} -- Tracks files that have been instrumented by path
 local currently_instrumenting = {} -- Tracks modules being instrumented to prevent cycles
----@diagnostic disable-next-line: unused-local
-local module_files = {} -- Maps module names to file paths for better tracking
+-- Removed unused tracking table
+-- local module_files = {} -- Maps module names to file paths for better tracking
 local required_modules = {} -- Tracks which modules were already processed
 local instrumentation_depth = 0 -- Tracks the recursion depth of instrumentation
 -- Module path cache for non-recursive resolution

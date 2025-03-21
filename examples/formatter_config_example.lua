@@ -2,6 +2,7 @@
 local firmo = require("firmo")
 local central_config = require("lib.core.central_config")
 local reporting = require("lib.reporting")
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 print("Formatter Configuration Example")
 print("===============================")
@@ -64,20 +65,20 @@ for formatter, config in pairs(formatter_config) do
   end
 end
 
-print("\n5. Running a simple test with configured formatters:")
+print("\n5. Simple test for demonstration:")
 -- Write a simple test
-firmo.describe("Basic test", function()
-  firmo.it("should pass", function()
-    firmo.expect(true).to.be.truthy()
+describe("Basic test", function()
+  it("should pass", function()
+    expect(true).to.be.truthy()
   end)
   
-  firmo.it("should have proper equality", function()
-    firmo.expect({1, 2, 3}).to.equal({1, 2, 3})
+  it("should have proper equality", function()
+    expect({1, 2, 3}).to.equal({1, 2, 3})
   end)
 end)
 
--- Run the test
-firmo.run()
-
 print("\nTo see HTML output with configured light theme, use:")
-print("lua run_tests.lua --coverage -cf html examples/formatter_config_example.lua")
+print("lua test.lua --format=html examples/formatter_config_example.lua")
+
+-- NOTE: Run this example using the standard test runner:
+-- lua test.lua examples/formatter_config_example.lua

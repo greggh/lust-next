@@ -2,8 +2,11 @@
 local coverage = require("lib.coverage")
 local fs = require("lib.tools.filesystem")
 local firmo = require("firmo")
+local error_handler = require("lib.tools.error_handler")
 
-local describe, it, expect, before_all, after_all = firmo.describe, firmo.it, firmo.expect, firmo.before_all, firmo.after_all
+-- Extract test functions
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
 -- Create a sample file to test coverage approaches
 local temp_dir = os.tmpname():gsub("([^/]+)$", "")
@@ -105,7 +108,17 @@ end
 return M
 ]]
 
-fs.write_file(sample_file, sample_code)
+-- Write the sample file with error handling
+local write_success, write_err = error_handler.safe_io_operation(
+    function() return fs.write_file(sample_file, sample_code) end,
+    sample_file,
+    {operation = "write_sample_file"}
+)
+
+if not write_success then
+    print("Error writing sample file: " .. tostring(write_err.message))
+    os.exit(1)
+end
 
 -- Run the tests with debug hook approach
 local function run_with_debug_hook()
@@ -151,6 +164,11 @@ local function run_with_debug_hook()
     
     -- Get coverage report
     local report_data = coverage.get_report_data()
+    if not report_data or not report_data.summary then
+        print("Error: Failed to get coverage report data")
+        return results
+    end
+    
     local summary = report_data.summary
     
     -- Copy results
@@ -217,6 +235,11 @@ local function run_with_instrumentation()
     
     -- Get coverage report
     local report_data = coverage.get_report_data()
+    if not report_data or not report_data.summary then
+        print("Error: Failed to get coverage report data")
+        return results
+    end
+    
     local summary = report_data.summary
     
     -- Copy results
@@ -317,7 +340,7 @@ describe("Coverage approach comparison", function()
     end)
     
     -- Cleanup after tests
-    after_all(function()
+    after(function()
         -- Make sure coverage is stopped
         coverage.stop()
         
@@ -326,5 +349,5 @@ describe("Coverage approach comparison", function()
     end)
 end)
 
--- Run the tests
-firmo()
+print("\nRun this example with:")
+print("lua test.lua examples/coverage_comparison_example.lua")

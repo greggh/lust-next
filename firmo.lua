@@ -148,6 +148,8 @@ local type_checking = try_require("lib.core.type_checking")
 local async_module = try_require("lib.async")
 local interactive = try_require("lib.tools.interactive")
 local parallel_module = try_require("lib.tools.parallel")
+-- Load mocking module for spy, stub and mock functionality
+local mocking_module = try_require("lib.mocking")
 -- Use central_config for configuration
 local central_config = try_require("lib.core.central_config")
 local module_reset_module = try_require("lib.core.module_reset")
@@ -190,6 +192,7 @@ logger.debug("Logging system initialized", {
     async = async_module ~= nil,
     interactive = interactive ~= nil,
     parallel = parallel_module ~= nil,
+    mocking = mocking_module ~= nil,
     central_config = central_config ~= nil,
     module_reset = module_reset_module ~= nil,
   },
@@ -338,6 +341,29 @@ if parallel_module then
   parallel_module.register_with_firmo(firmo)
 end
 
+-- Register mocking functionality if available
+if mocking_module then
+  logger.info("Integrating mocking module with firmo", {
+    module = "firmo-core",
+    mocking_version = mocking_module._VERSION,
+  })
+
+  -- Export mocking functions
+  firmo.spy = mocking_module.spy
+  firmo.stub = mocking_module.stub
+  firmo.mock = mocking_module.mock
+  firmo.with_mocks = mocking_module.with_mocks
+
+  -- Add required assertion functions (be_truthy, be_falsy)
+  local success, err = mocking_module.ensure_assertions(firmo)
+  if not success then
+    logger.warn("Failed to register mocking assertions", {
+      error = error_handler.format_error(err),
+      module = "firmo-core",
+    })
+  end
+end
+
 --- Create a module that can be required
 ---@type firmo
 local module = setmetatable({
@@ -460,11 +486,8 @@ if temp_file_integration_loaded and temp_file_integration then
   -- Initialize the temp file integration system
   logger.info("Initializing temp file integration system")
   
-  -- Initialize integration
-  temp_file_integration.initialize()
-  
-  -- Patch firmo
-  temp_file_integration.patch_firmo(firmo)
+  -- Initialize integration with explicit firmo instance
+  temp_file_integration.initialize(firmo)
   
   -- Add getter/setter for current test context
   --- Get the current test context for temp file tracking

@@ -24,8 +24,7 @@ benchmark.options = {
 
 -- Return high-resolution time (with nanosecond precision if available)
 local has_socket, socket = pcall(require, "socket")
----@diagnostic disable-next-line: unused-local
-local has_ffi, ffi = pcall(require, "ffi")
+local has_ffi = pcall(require, "ffi") -- FFI availability check, but we don't need the module itself
 
 local function high_res_time()
   if has_socket then
@@ -126,8 +125,7 @@ function benchmark.measure(func, args, options)
   }
 
   -- Warmup phase
-  ---@diagnostic disable-next-line: unused-local
-  for i = 1, warmup do
+  for _ = 1, warmup do
     if gc_before then
       collectgarbage("collect")
     end
@@ -150,8 +148,7 @@ function benchmark.measure(func, args, options)
   end
 
   -- Main benchmark phase
-  ---@diagnostic disable-next-line: unused-local
-  for i = 1, iterations do
+  for _ = 1, iterations do
     if gc_before then
       collectgarbage("collect")
     end
@@ -244,13 +241,12 @@ end
 -- Print benchmark results
 function benchmark.print_result(result, options)
   options = options or {}
-  ---@diagnostic disable-next-line: unused-local
-  local precision = options.precision or benchmark.options.precision
+  -- Extract configuration options with defaults
   local report_memory = (options.report_memory ~= nil) and options.report_memory or benchmark.options.report_memory
   local report_stats = (options.report_stats ~= nil) and options.report_stats or benchmark.options.report_stats
 
-  ---@diagnostic disable-next-line: unused-local
-  local label = result.label or "Benchmark"
+  -- Note: label is not currently used but might be in a future version
+  -- local label = result.label or "Benchmark"
 
   -- Basic execution time
   print(string.format("  Mean execution time: %s", format_time(result.time_stats.mean)))

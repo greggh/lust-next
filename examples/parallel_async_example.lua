@@ -282,7 +282,7 @@ if arg[0]:match("parallel_async_example%.lua$") then
   print("asynchronous tasks concurrently in firmo tests.")
   print("")
   print("To run this example, use:")
-  print("  env -C /home/gregg/Projects/lua-library/firmo lua examples/parallel_async_example.lua")
+  print("  lua test.lua examples/parallel_async_example.lua")
   print("")
   print("Key features demonstrated:")
   print("1. Running multiple async operations concurrently")

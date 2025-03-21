@@ -1,8 +1,10 @@
 -- Example demonstrating integration between logging and test formatters
 local firmo = require("firmo")
 local logging = require("lib.tools.logging")
-local test_suite = require("lib.core").describe
-local expect = require("lib.core").expect
+local error_handler = require("lib.tools.error_handler")
+
+-- Extract testing functions
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 
 -- Load the formatter integration module
 local formatter_integration = require("lib.tools.logging.formatter_integration")
@@ -66,14 +68,8 @@ local test_logger = formatter_integration.create_test_logger("Calculator Test", 
   category = "Unit"
 })
 
--- Run a simple test with the enhanced logging
-print("\nRunning test with enhanced logging:")
-
--- Reset the test state
-firmo.reset()
-
 -- Define a test suite with logging
-test_suite("Calculator with logging", function()
+describe("Calculator with logging", function()
   -- Log test initialization
   test_logger.info("Initializing calculator test")
   
@@ -81,14 +77,47 @@ test_suite("Calculator with logging", function()
   local step_logger = test_logger.step("Setup")
   step_logger.debug("Creating calculator instance")
   
-  -- Mock calculator for testing
+  -- Mock calculator for testing with error handling
   local calculator = {
-    add = function(a, b) return a + b end,
-    subtract = function(a, b) return a - b end,
-    multiply = function(a, b) return a * b end,
+    add = function(a, b) 
+      if type(a) ~= "number" or type(b) ~= "number" then
+        return nil, error_handler.validation_error(
+          "Both arguments must be numbers",
+          {a_type = type(a), b_type = type(b)}
+        )
+      end
+      return a + b 
+    end,
+    subtract = function(a, b) 
+      if type(a) ~= "number" or type(b) ~= "number" then
+        return nil, error_handler.validation_error(
+          "Both arguments must be numbers",
+          {a_type = type(a), b_type = type(b)}
+        )
+      end
+      return a - b 
+    end,
+    multiply = function(a, b) 
+      if type(a) ~= "number" or type(b) ~= "number" then
+        return nil, error_handler.validation_error(
+          "Both arguments must be numbers",
+          {a_type = type(a), b_type = type(b)}
+        )
+      end
+      return a * b 
+    end,
     divide = function(a, b) 
+      if type(a) ~= "number" or type(b) ~= "number" then
+        return nil, error_handler.validation_error(
+          "Both arguments must be numbers",
+          {a_type = type(a), b_type = type(b)}
+        )
+      end
       if b == 0 then
-        error("Division by zero")
+        return nil, error_handler.validation_error(
+          "Division by zero",
+          {operation = "divide", b = b}
+        )
       end
       return a / b 
     end
@@ -97,7 +126,7 @@ test_suite("Calculator with logging", function()
   step_logger.debug("Calculator created", {functions = {"add", "subtract", "multiply", "divide"}})
   
   -- Test addition
-  firmo.it("should add two numbers correctly", function()
+  it("should add two numbers correctly", function()
     -- Get a step-specific logger
     local add_logger = test_logger.step("Addition Test")
     
@@ -118,7 +147,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test subtraction
-  firmo.it("should subtract two numbers correctly", function()
+  it("should subtract two numbers correctly", function()
     -- Get a step-specific logger
     local sub_logger = test_logger.step("Subtraction Test")
     
@@ -139,7 +168,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test multiplication
-  firmo.it("should multiply two numbers correctly", function()
+  it("should multiply two numbers correctly", function()
     -- Get a step-specific logger
     local mul_logger = test_logger.step("Multiplication Test")
     
@@ -160,7 +189,7 @@ test_suite("Calculator with logging", function()
   end)
   
   -- Test division
-  firmo.it("should divide two numbers correctly", function()
+  it("should divide two numbers correctly", function()
     -- Get a step-specific logger
     local div_logger = test_logger.step("Division Test")
     
@@ -180,28 +209,25 @@ test_suite("Calculator with logging", function()
     div_logger.info("Division test passed")
   end)
   
-  -- Test division by zero
-  firmo.it("should throw error when dividing by zero", function()
+  -- Test division by zero with proper error handling
+  it("should handle division by zero", { expect_error = true }, function()
     -- Get a step-specific logger
     local error_logger = test_logger.step("Division by Zero Test")
     
     -- Log the test expectation
     error_logger.debug("Testing division by zero", {a = 10, b = 0, expected = "error"})
     
-    -- Verify that the function throws an error
-    local success, error_msg = pcall(function()
-      calculator.divide(10, 0)
-    end)
+    -- Call the function and expect an error
+    local result, err = calculator.divide(10, 0)
     
     -- Log the result
-    if not success then
-      error_logger.debug("Got expected error", {error = error_msg})
-    else
-      error_logger.error("No error thrown")
-    end
+    error_logger.debug("Got expected error", {error = err})
     
-    -- Verify the error was thrown
-    expect(success).to.equal(false)
+    -- Verify the error was returned
+    expect(result).to_not.exist()
+    expect(err).to.exist()
+    expect(err.message).to.match("Division by zero")
+    expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
     
     -- Log test completion
     error_logger.info("Division by zero test passed")
@@ -211,35 +237,13 @@ test_suite("Calculator with logging", function()
   test_logger.info("Calculator test completed")
 end)
 
--- Run the tests
-firmo.run()
-
--- Generate a report using the log formatter
-print("\nGenerating test report with log formatter:")
-local results = firmo.report()
-
--- Add the log formatter
-results.formatters = results.formatters or {}
-results.formatters.log = log_formatter:init({
-  output_file = "logs/test_results.log.json",
-  format = "json"
-})
-
--- Generate reports
-local reports = {}
-for name, formatter in pairs(results.formatters) do
-  local output_file = formatter.format(results)
-  if output_file then
-    reports[name] = output_file
-  end
-end
-
 -- Show the results
 print("\nTest execution complete.")
-print("The detailed logs have been written to:")
+print("To run this example with full logging:")
+print("lua test.lua examples/logging_formatter_integration_example.lua")
+print("\nThe detailed logs will be written to:")
 print("- logs/formatter_integration.log - Text format logs")
 print("- logs/formatter_integration.json - JSON format logs")
-print("- logs/test_results.log.json - Specialized test result log")
 
 -- Log example completion
 logger.info("Formatter integration example completed")
@@ -249,7 +253,7 @@ print("This example has demonstrated how to:")
 print("1. Enhance test formatters with structured logging")
 print("2. Create contextual loggers for specific tests")
 print("3. Log detailed test execution with step tracking")
-print("4. Generate specialized log-friendly test reports")
+print("4. Implement proper error handling with structured errors")
 print("")
 print("The enhanced logs provide:")
 print("- Better traceability between test execution and logs")

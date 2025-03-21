@@ -1,191 +1,196 @@
----@diagnostic disable: unused-local, unused-function
--- report_example.lua
+-- report_example.lua 
 -- Example demonstrating the reporting module in firmo
+-- Updated to follow current best practices
 
--- Make sure we're using firmo with globals
+-- Import the firmo framework with proper function extraction
 local firmo = require("firmo")
-firmo.expose_globals()
+local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+local before, after = firmo.before, firmo.after
 
--- Import the filesystem module
+-- Import helper modules
 local fs = require("lib.tools.filesystem")
+local test_helper = require("lib.tools.test_helper")
+local error_handler = require("lib.tools.error_handler")
 
 -- Load reporting module directly
-local reporting_module = package.loaded["lib.reporting"] or require("lib.reporting")
+local reporting_module = require("lib.reporting")
 
 -- Some sample code to test coverage
-local function calculator_add(a, b)
-  return a + b
-end
-
-local function calculator_subtract(a, b)
-  return a - b
-end
-
-local function calculator_multiply(a, b)
-  return a * b
-end
-
-local function calculator_divide(a, b)
-  if b == 0 then
-    error("Division by zero")
+local calculator = {
+  add = function(a, b)
+    return a + b
+  end,
+  
+  subtract = function(a, b)
+    return a - b
+  end,
+  
+  multiply = function(a, b)
+    return a * b
+  end,
+  
+  divide = function(a, b)
+    if b == 0 then
+      return nil, error_handler.validation_error(
+        "Cannot divide by zero", 
+        { parameter = "b", provided_value = b }
+      )
+    end
+    return a / b
+  end,
+  
+  power = function(a, b)
+    return a ^ b
   end
-  return a / b
-end
+}
 
-local function calculator_power(a, b)
-  return a ^ b
-end
-
--- Example tests with assertions for quality analysis
+-- Example tests using expect-style assertions (not assert style)
 describe("Report Example - Calculator", function()
+  -- Track any resources that need cleanup
+  local test_files = {}
+  
+  -- Cleanup any resources after tests
+  after(function()
+    for _, file_path in ipairs(test_files) do
+      local success, err = pcall(function() 
+        if fs.file_exists(file_path) then
+          fs.delete_file(file_path)
+        end
+      end)
+      
+      if not success and firmo.log then
+        firmo.log.warn("Failed to remove test file: " .. tostring(err), {
+          file_path = file_path
+        })
+      end
+    end
+    test_files = {}
+  end)
+  
   describe("Basic functions", function()
     it("should add two numbers correctly", function()
-      assert.equal(5, calculator_add(2, 3))
-      assert.equal(0, calculator_add(-2, 2))
-      assert.equal(-10, calculator_add(-5, -5))
+      expect(calculator.add(2, 3)).to.equal(5)
+      expect(calculator.add(-2, 2)).to.equal(0)
+      expect(calculator.add(-5, -5)).to.equal(-10)
     end)
 
     it("should subtract two numbers correctly", function()
-      assert.equal(5, calculator_subtract(10, 5))
-      assert.equal(-5, calculator_subtract(5, 10))
-      assert.equal(0, calculator_subtract(5, 5))
+      expect(calculator.subtract(10, 5)).to.equal(5)
+      expect(calculator.subtract(5, 10)).to.equal(-5)
+      expect(calculator.subtract(5, 5)).to.equal(0)
     end)
 
     it("should multiply two numbers correctly", function()
-      assert.equal(6, calculator_multiply(2, 3))
-      assert.equal(-6, calculator_multiply(-2, 3))
-      assert.equal(6, calculator_multiply(-2, -3))
+      expect(calculator.multiply(2, 3)).to.equal(6)
+      expect(calculator.multiply(-2, 3)).to.equal(-6)
+      expect(calculator.multiply(-2, -3)).to.equal(6)
     end)
   end)
 
   describe("Advanced functions", function()
     it("should divide two numbers correctly", function()
-      assert.equal(2, calculator_divide(10, 5))
-      assert.equal(-2, calculator_divide(-10, 5))
-      assert.is_true(math.abs(calculator_divide(1, 3) - 0.33333) < 0.001)
+      expect(calculator.divide(10, 5)).to.equal(2)
+      expect(calculator.divide(-10, 5)).to.equal(-2)
+      
+      -- Example of approximate comparison
+      local result = calculator.divide(1, 3)
+      expect(math.abs(result - 0.33333) < 0.001).to.be_truthy()
     end)
 
-    it("should throw error when dividing by zero", function()
-      assert.has_error(function()
-        calculator_divide(5, 0)
-      end)
+    -- Example of proper error testing using expect_error flag
+    it("should handle division by zero", { expect_error = true }, function()
+      -- Use with_error_capture to safely call functions that may return errors
+      local result, err = test_helper.with_error_capture(function()
+        return calculator.divide(5, 0)
+      end)()
+      
+      -- Make assertions about the error
+      expect(result).to_not.exist()
+      expect(err).to.exist()
+      expect(err.category).to.equal(error_handler.CATEGORY.VALIDATION)
+      expect(err.message).to.match("divide by zero")
     end)
   end)
 
   -- The power function isn't tested, so coverage won't be 100%
 end)
 
--- After running tests, we can manually generate reports with the reporting module
-after_each(function()
-  -- Note: In actual usage, the reporting would be handled by firmo.cli_run
-  -- This example shows the direct use of the reporting module
-end)
-
+-- Examples of how to work with the reporting module
 describe("Reporting Module Examples", function()
-  it("demonstrates how to manually use the reporting module", function()
+  it("demonstrates how to generate various report formats", function()
     -- Skip this test if the reporting module isn't available
     if not reporting_module then
-      print("Reporting module not available, skipping demonstration")
+      firmo.log.warn("Reporting module not available, skipping demonstration")
       return
     end
 
     -- Example of how to use reporting module with coverage data
-    -- In real usage, firmo.cli_run handles this automatically
+    -- In real usage, this would happen via command line: lua test.lua --coverage examples/report_example.lua
     local coverage = package.loaded["lib.coverage"] or require("lib.coverage")
     if coverage and coverage.get_report_data then
-      local coverage_data = coverage.get_report_data()
-
-      -- Example of formatting a coverage report
-      local html_report = reporting_module.format_coverage(coverage_data, "html")
-      local json_report = reporting_module.format_coverage(coverage_data, "json")
-      local lcov_report = reporting_module.format_coverage(coverage_data, "lcov")
-
-      -- Example of saving a coverage report using filesystem module
-      local report_dir = "./coverage-reports"
-      fs.ensure_directory_exists(report_dir)
-      local report_path = fs.join_paths(report_dir, "example-coverage.html")
-
-      -- Uncomment to actually save the report
-      -- reporting_module.save_coverage_report(report_path, coverage_data, "html")
-
-      -- Print some report info to demonstrate it works
-      print("Generated HTML report with length: " .. #html_report .. " bytes")
-      print("Generated JSON report with length: " .. #json_report .. " bytes")
-      print("Generated LCOV report with length: " .. #lcov_report .. " bytes")
+      local coverage_data = coverage.get_report_data() or {}
+      
+      -- Example of getting different report formats
+      local html_report = reporting_module.format_coverage(coverage_data, "html") or ""
+      local json_report = reporting_module.format_coverage(coverage_data, "json") or ""
+      local lcov_report = reporting_module.format_coverage(coverage_data, "lcov") or ""
+      
+      -- Create a temp directory for report output
+      local temp_dir = test_helper.create_temp_test_directory()
+      local report_path = temp_dir.path .. "/example-coverage.html"
+      
+      -- Save a report if we got any data
+      if html_report and #html_report > 100 then
+        local success, err = fs.write_file(report_path, html_report)
+        if success then
+          table.insert(test_files, report_path)
+          firmo.log.info("Created coverage report", {
+            path = report_path,
+            size = #html_report
+          })
+        else
+          firmo.log.warn("Failed to write report", {
+            error = tostring(err)
+          })
+        end
+      else
+        firmo.log.info("No meaningful coverage data available in this example run",
+          { note = "Run with --coverage flag to generate real data" })
+      end
     end
-
-    -- Example of how to use reporting module with quality data
-    local quality = package.loaded["lib.quality"] or require("lib.quality")
-    if quality and quality.get_report_data then
-      local quality_data = quality.get_report_data()
-
-      -- Example of formatting a quality report
-      local html_report = reporting_module.format_quality(quality_data, "html")
-      local json_report = reporting_module.format_quality(quality_data, "json")
-
-      -- Example of saving a quality report using filesystem module
-      local report_dir = "./coverage-reports"
-      fs.ensure_directory_exists(report_dir)
-      local report_path = fs.join_paths(report_dir, "example-quality.html")
-
-      -- Uncomment to actually save the report
-      -- reporting_module.save_quality_report(report_path, quality_data, "html")
-
-      -- Print some report info to demonstrate it works
-      print("Generated quality HTML report with length: " .. #html_report .. " bytes")
-      print("Generated quality JSON report with length: " .. #json_report .. " bytes")
-    end
-
-    -- Example of auto-saving both reports with advanced configuration
-    if coverage and coverage.get_report_data and quality and quality.get_report_data then
-      local coverage_data = coverage.get_report_data()
-      local quality_data = quality.get_report_data()
-
-      -- Create reports directory with filesystem module
-      local reports_dir = "./example-reports"
-      fs.ensure_directory_exists(reports_dir)
-
-      -- Example of advanced config with templates and timestamp
-      local config = {
-        report_dir = reports_dir,
-        report_suffix = "-example",
-        timestamp_format = "%Y-%m-%d",
-        coverage_path_template = "coverage/coverage-{format}{suffix}",
-        quality_path_template = "quality/quality-{format}{suffix}",
-        results_path_template = "results/results-{format}{suffix}",
-        verbose = true,
+  end)
+  
+  it("shows advanced report configuration options", function()
+    -- Create a temp directory
+    local temp_dir = test_helper.create_temp_test_directory()
+    
+    -- Example of structured configuration for reports
+    local config = {
+      report_dir = temp_dir.path,
+      formats = {"html", "json", "lcov"},
+      timestamp_format = "%Y-%m-%d",
+      coverage_path_template = "{format}/coverage-{timestamp}.{format}",
+      quality_path_template = "{format}/quality-{timestamp}.{format}",
+      results_path_template = "{format}/results-{timestamp}.{format}",
+    }
+    
+    -- In a real scenario, you would:
+    -- 1. Run tests with coverage enabled
+    -- 2. Get coverage data using coverage.get_report_data()
+    -- 3. Configure the reporting module
+    -- 4. Generate and save reports
+    
+    firmo.log.info("Advanced reporting configuration ready", {
+      directory = temp_dir.path,
+      formats = table.concat(config.formats, ", "),
+      templates = {
+        coverage = config.coverage_path_template,
+        quality = config.quality_path_template
       }
-
-      -- Uncomment to actually save the reports
-      -- local results = reporting_module.auto_save_reports(coverage_data, quality_data, nil, config)
-      -- print("Auto-save completed with path normalization and directory creation handled by filesystem module")
-    end
+    })
   end)
 end)
 
--- Run the example tests with coverage enabled
--- Note: This would typically be handled by the CLI with appropriate options
-print("\nRunning example tests with coverage and quality tracking")
-firmo.coverage_options.enabled = true
-firmo.quality_options.enabled = true
-
--- Note: In a normal CLI invocation, firmo.cli_run would handle
--- setup/teardown of coverage, running tests, and generating reports
-local coverage = package.loaded["lib.coverage"] or require("lib.coverage")
-if coverage then
-  coverage.init(firmo.coverage_options)
-  coverage.reset()
-  coverage.start()
-end
-
-local quality = package.loaded["lib.quality"] or require("lib.quality")
-if quality then
-  quality.init(firmo.quality_options)
-  quality.reset()
-end
-
-print("\nExample complete!")
-
--- Note: The purpose of this example is to show how the reporting module works.
--- In practice, you would run tests with firmo's CLI which handles coverage
--- and report generation automatically.
+-- NOTE: Do not include coverage.start() or quality.init() here
+-- In a real scenario, you would run this with: 
+-- env -C /path/to/firmo lua test.lua --coverage --quality examples/report_example.lua

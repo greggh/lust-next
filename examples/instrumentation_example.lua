@@ -225,5 +225,5 @@ return M
     end)
 end)
 
--- No additional test suite needed - tests are run by the runner
--- Do not include explicit firmo() or firmo.run() calls
+-- Note: Run this example using the standard test runner:
+-- lua test.lua examples/instrumentation_example.lua

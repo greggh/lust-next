@@ -4,7 +4,6 @@
 -- implemented across the Firmo codebase.
 
 -- Load firmo
-package.path = "../?.lua;../lib/?.lua;../lib/?/init.lua;" .. package.path
 local firmo = require("firmo")
 
 -- Import test functions
@@ -352,9 +351,8 @@ describe("Standardized Error Handling Example", function()
   end)
 end)
 
--- Run the test suite
-firmo.run()
-
 print("\nExample complete!")
 print("This example demonstrated standardized error handling patterns in Firmo.")
 print("For more details, see the documentation in docs/coverage_repair/error_handling_patterns.md")
+print("\nRun this example with:")
+print("lua test.lua examples/standardized_error_handling_example.lua")

@@ -1,5 +1,5 @@
 -- Example of using async testing with watch mode in firmo
--- Run with: env -C /home/gregg/Projects/lua-library/firmo lua scripts/run_tests.lua --watch examples/async_watch_example.lua
+-- Run with: lua test.lua --watch examples/async_watch_example.lua
 
 -- Add paths for proper module loading
 local script_path = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
@@ -96,9 +96,7 @@ if arg[0]:match("async_watch_example%.lua$") then
   print("This file demonstrates async testing with watch mode for continuous testing.")
   print("")
   print("To run with watch mode, use:")
-  print(
-    "  env -C /home/gregg/Projects/lua-library/firmo lua scripts/run_tests.lua --watch examples/async_watch_example.lua"
-  )
+  print("  lua test.lua --watch examples/async_watch_example.lua")
   print("")
   print("Watch mode with async will:")
   print("1. Run the async tests in this file")

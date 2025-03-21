@@ -34,64 +34,27 @@ local M = {}
 local fs = require("lib.tools.filesystem")
 local error_handler = require("lib.tools.error_handler")
 
--- Try to load logging module
-local logging
-local function get_logger()
-    if not logging then
-        local success, module = pcall(require, "lib.tools.logging")
-        if success then
-            logging = module
-        end
-    end
-    
-    if logging then
-        return logging.get_logger("temp_file")
-    end
-    
-    return nil
-end
+-- Load logging module directly - this is required
+local logging = require("lib.tools.logging")
+local logger = logging.get_logger("temp_file")
 
 -- Global registry of temporary files by test context
 -- Using weak keys so test contexts can be garbage collected
 local _temp_file_registry = setmetatable({}, {__mode = "k"})
 
--- Get current test context (from firmo or a global fallback)
+-- Get current test context - simplified to use hardcoded context
 local function get_current_test_context()
-    local logger = get_logger()
-    
-    -- If running inside firmo, try to get the current test context
-    if _G.firmo then
-        if _G.firmo._current_test_context then
-            if logger then
-                logger.debug("Using firmo test context")
-            end
-            return _G.firmo._current_test_context
-        end
-        
-        -- Try using global context provided by firmo (fallback)
-        if _G._current_temp_file_context then
-            if logger then
-                logger.debug("Using global test context via firmo")
-            end
-            return _G._current_temp_file_context
-        end
-    end
-    
-    -- Otherwise use a global context
-    if logger then
-        logger.debug("Using global context fallback")
-    end
-    return "_global_context_"
+    -- For simplicity, we've moved to using a single hardcoded context
+    -- This avoids complexity and potential issues with different context types
+    logger.debug("Using hardcoded test context")
+    return "_SIMPLE_STRING_CONTEXT_"
 end
 
 ---@param file_path string Path to the file to register for cleanup
 ---@return boolean success Whether the file was successfully registered
 -- Register a file with the current test context
 function M.register_file(file_path)
-    local logger = get_logger()
-    if logger then
-        logger.debug("Registering file", { path = file_path })
-    end
+    logger.debug("Registering file", { path = file_path })
     
     -- Create simple string context to avoid complex objects 
     -- Note: We're hardcoding this to avoid potential issues with table serialization
@@ -113,10 +76,7 @@ end
 ---@return boolean success Whether the directory was successfully registered
 -- Register a directory with the current test context
 function M.register_directory(dir_path)
-    local logger = get_logger()
-    if logger then
-        logger.debug("Registering directory", { path = dir_path })
-    end
+    logger.debug("Registering directory", { path = dir_path })
     
     -- Use same simplified context as register_file
     local context = "_SIMPLE_STRING_CONTEXT_"
@@ -237,19 +197,8 @@ function M.remove_directory(dir_path)
         )
     end
     
-    -- Check if the function exists with the expected name
-    if fs.delete_directory then
-        return fs.delete_directory(dir_path, true) -- Use recursive deletion
-    elseif fs.remove_directory then
-        -- Fallback to alternate name
-        return fs.remove_directory(dir_path, true) -- Use recursive deletion
-    else
-        -- Last resort fallback
-        return false, error_handler.runtime_error(
-            "Directory deletion function not found in filesystem module",
-            {operation = "remove_temp_directory", dir_path = dir_path}
-        )
-    end
+    -- Use the standard function name - this should always exist
+    return fs.delete_directory(dir_path, true) -- Use recursive deletion
 end
 
 ---@param content string Content to write to the file
@@ -316,19 +265,14 @@ end
 ---@return table[] errors Array of resources that could not be cleaned up
 -- Clean up all temporary files and directories for a specific test context
 function M.cleanup_test_context(context)
-    local logger = get_logger()
-    if logger then
-        logger.debug("Cleaning up test context")
-    end
+    logger.debug("Cleaning up test context")
     
     -- Use hardcoded context to match our simplified registration
     context = "_SIMPLE_STRING_CONTEXT_"
     
     local resources = _temp_file_registry[context] or {}
     
-    if logger then
-        logger.debug("Found resources to clean up", { count = #resources })
-    end
+    logger.debug("Found resources to clean up", { count = #resources })
     
     local errors = {}
     
@@ -342,15 +286,8 @@ function M.cleanup_test_context(context)
             local ok, err = os.remove(resource.path)
             success = ok ~= nil
         else
-            local ok, err
-            -- Check which function name is available
-            if fs.delete_directory then
-                ok, err = fs.delete_directory(resource.path, true) -- Use recursive deletion
-            elseif fs.remove_directory then
-                ok, err = fs.remove_directory(resource.path, true) -- Use recursive deletion
-            else
-                ok, err = false, "Directory removal function not found"
-            end
+            -- Use the standard function name
+            local ok, err = fs.delete_directory(resource.path, true) -- Use recursive deletion
             success = ok
         end
         
@@ -359,12 +296,10 @@ function M.cleanup_test_context(context)
                 path = resource.path, 
                 type = resource.type
             })
-            if logger then
-                logger.debug("Failed to clean up resource", { 
-                    path = resource.path, 
-                    type = resource.type 
-                })
-            end
+            logger.debug("Failed to clean up resource", { 
+                path = resource.path, 
+                type = resource.type 
+            })
         else
             -- Remove from the registry
             table.remove(resources, i)
@@ -374,9 +309,7 @@ function M.cleanup_test_context(context)
     -- Clear the registry for this context if all resources were removed
     if #resources == 0 then
         _temp_file_registry[context] = nil
-        if logger then
-            logger.debug("All resources cleaned up, removed context from registry")
-        end
+        logger.debug("All resources cleaned up, removed context from registry")
     end
     
     return #errors == 0, errors
@@ -425,10 +358,7 @@ end
 ---@return table stats Statistics about the cleanup operation
 -- Clean up all temporary files across all contexts
 function M.cleanup_all()
-    local logger = get_logger()
-    if logger then
-        logger.debug("Cleaning up all temporary files")
-    end
+    logger.debug("Cleaning up all temporary files")
     
     -- Simplified version that just calls cleanup_test_context with our hardcoded context
     local success, errors = M.cleanup_test_context("_SIMPLE_STRING_CONTEXT_")
