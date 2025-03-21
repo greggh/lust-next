@@ -1,8 +1,47 @@
+---@class QualityModule
+---@field _VERSION string Module version
+---@field LEVEL_BASIC number Quality level 1 - basic
+---@field LEVEL_STRUCTURED number Quality level 2 - structured
+---@field LEVEL_COMPREHENSIVE number Quality level 3 - comprehensive
+---@field LEVEL_ADVANCED number Quality level 4 - advanced
+---@field LEVEL_COMPLETE number Quality level 5 - complete
+---@field levels table<number, {name: string, description: string, requirements: table<string, number>}> Array of quality level definitions
+---@field stats {tests: number, assertions: number, assertion_types: table<string, number>, missing_assertions: table<string, boolean>, files_analyzed: number, tests_analyzed: number, test_duration?: number, quality_score?: number} Statistics about quality validation
+---@field config {current_level: number, required_assertion_types: table<string, boolean>, min_assertions_per_test: number, validate_missing_assertions: boolean, analyze_test_files: boolean, require_before_after: boolean, require_test_descriptions: boolean, required_assertion_count: number, allow_dynamic_calculation: boolean, skip_patterns: string[], extra_requirements: table} Configuration for quality validation
+---@field init fun(options?: {level?: number, required_assertion_types?: string[], min_assertions_per_test?: number, validate_missing_assertions?: boolean, analyze_test_files?: boolean, require_before_after?: boolean, required_assertion_count?: number, extra_requirements?: table}): QualityModule Initialize quality module
+---@field reset fun(): QualityModule Reset quality data
+---@field full_reset fun(): QualityModule Full reset (clears all data and resets configuration)
+---@field get_level_requirements fun(level?: number): table<string, number> Get requirements for a specific quality level
+---@field track_assertion fun(type_name: string, test_name?: string): QualityModule Track assertion usage in a test
+---@field start_test fun(test_name: string): QualityModule Start test analysis for a specific test
+---@field end_test fun(): QualityModule End test analysis and record results
+---@field analyze_file fun(file_path: string): {assertions: number, tests: number, assertion_types: table<string, number>, has_before_after: boolean, test_descriptions: boolean, assertion_per_test: number} Analyze test file statically
+---@field get_report_data fun(): {level: number, level_name: string, tests: {count: number, analyzed: number, files: number, missing_assertions: table, below_threshold: table}, assertions: {count: number, types: table, per_test: number}, requirements: table, score: number} Get structured data for quality report
+---@field report fun(format?: string): string|table Get quality report
+---@field summary_report fun(): {level: number, score: number, tests: number, assertions: number, assertion_types: number, files: number} Generate a summary report
+---@field level_name fun(level: number): string Get the name for a quality level
+---@field set_level fun(level: number): QualityModule Set the current quality level
+---@field get_level fun(): number Get the current quality level
+---@field analyze_directory fun(dir_path: string, recursive?: boolean): table Analyze all test files in a directory
+---@field register_assertion_type fun(type_name: string, description: string): QualityModule Register a custom assertion type
+---@field is_quality_passing fun(): boolean Check if tests meet quality requirements
+---@field get_score fun(): number Get the quality score (0-100)
+---@field add_custom_requirement fun(name: string, check_fn: function, min_value?: number): QualityModule Add a custom quality requirement
+---@field json_report fun(): string Generate a JSON report
+---@field html_report fun(): string Generate a HTML report
+---@field meets_level fun(level?: number): boolean Check if quality meets level requirement
+---@field save_report fun(file_path: string, format?: string): boolean, string? Save a quality report to a file
+---@field get_level_name fun(level: number): string Get level name from level number
+---@field check_file fun(file_path: string, level?: number): boolean, table Check if a test file meets quality requirements
+---@field validate_test_quality fun(test_name: string, options?: table): boolean, table[] Validate a test against quality standards
+---@field debug_config fun(): QualityModule Debug information about the quality module configuration
 -- firmo test quality validation module
 -- Implementation of test quality analysis with level-based validation
 
 -- Lazy loading of dependencies to avoid circular references
 local _central_config
+---@private
+---@return table|nil central_config The central configuration module or nil if not available
 local function get_central_config()
   if not _central_config then
     local success, central_config = pcall(require, "lib.core.central_config")
@@ -18,6 +57,7 @@ local logging = require("lib.tools.logging")
 local logger = logging.get_logger("Quality")
 
 -- Configure module logging
+---@private
 local function configure_logging()
   logging.configure_from_config("Quality")
 end
@@ -33,7 +73,8 @@ M.LEVEL_COMPREHENSIVE = 3
 M.LEVEL_ADVANCED = 4
 M.LEVEL_COMPLETE = 5
 
--- Register change listener for when configuration changes
+---@private
+---@return nil
 local function register_change_listener()
   local central_config = get_central_config()
   if central_config then
@@ -70,7 +111,10 @@ local function register_change_listener()
   end
 end
 
--- Helper function for testing if a value contains a pattern
+---@private
+---@param value any The value to check
+---@param pattern string The pattern to search for
+---@return boolean contains True if value contains pattern
 local function contains_pattern(value, pattern)
   if type(value) ~= "string" then
     return false
@@ -78,7 +122,10 @@ local function contains_pattern(value, pattern)
   return string.find(value, pattern) ~= nil
 end
 
--- Helper function to check for any of multiple patterns
+---@private
+---@param value any The value to check
+---@param patterns string[] Array of patterns to search for
+---@return boolean contains True if value contains any of the patterns
 local function contains_any_pattern(value, patterns)
   if type(value) ~= "string" or not patterns or #patterns == 0 then
     return false
@@ -406,7 +453,8 @@ local function read_file(filename)
   return lines
 end
 
--- Initialize quality module
+---@param options? {enabled?: boolean, level?: number, strict?: boolean, custom_rules?: table, coverage_data?: table, debug?: boolean, verbose?: boolean} Configuration options for the quality module
+---@return QualityModule self The initialized quality module
 function M.init(options)
   local central_config = get_central_config()
   
@@ -478,7 +526,7 @@ function M.init(options)
   return M
 end
 
--- Reset quality data
+---@return QualityModule self The reset quality module
 function M.reset()
   logger.debug("Resetting quality module state")
   
@@ -507,7 +555,7 @@ function M.reset()
   return M
 end
 
--- Full reset (clears all data and resets configuration)
+---@return QualityModule self The fully reset quality module
 function M.full_reset()
   -- Reset quality data
   M.reset()
@@ -541,7 +589,8 @@ function M.full_reset()
   return M
 end
 
--- Get level requirements
+---@param level? number The quality level to get requirements for (defaults to configured level)
+---@return table requirements The requirements for the specified quality level
 function M.get_level_requirements(level)
   level = level or M.config.level
   for _, level_def in ipairs(M.levels) do
@@ -811,11 +860,13 @@ local function evaluate_test_quality(test_info)
   }
 end
 
--- Track assertion usage in a test
+---@param type_name string The type of assertion being tracked
+---@param test_name? string The name of the test (optional, uses current test if not provided)
+---@return QualityModule self The quality module
 function M.track_assertion(type_name, test_name)
   if not M.config.enabled then
     logger.trace("Quality module disabled, skipping assertion tracking")
-    return
+    return M
   end
   
   -- Initialize test info if needed
@@ -860,7 +911,8 @@ function M.track_assertion(type_name, test_name)
   return M
 end
 
--- Start test analysis for a specific test
+---@param test_name string The name of the test to analyze
+---@return QualityModule self The quality module
 function M.start_test(test_name)
   if not M.config.enabled then
     logger.trace("Quality module disabled, skipping test start")
@@ -931,7 +983,7 @@ function M.start_test(test_name)
   return M
 end
 
--- End test analysis and record results
+---@return QualityModule self The quality module
 function M.end_test()
   if not M.config.enabled or not current_test then
     logger.trace("Quality module disabled or no current test, skipping test end")
@@ -1000,7 +1052,8 @@ function M.end_test()
   return M
 end
 
--- Analyze test file statically
+---@param file_path string The path to the test file to analyze
+---@return table analysis The analysis results for the test file
 function M.analyze_file(file_path)
   if not M.config.enabled then
     logger.trace("Quality module disabled, skipping file analysis")
@@ -1142,7 +1195,7 @@ function M.analyze_file(file_path)
   return results
 end
 
--- Get structured data for quality report
+---@return {level: number, level_name: string, tests: table, summary: {tests_analyzed: number, tests_passing_quality: number, quality_percent: number, assertions_total: number, assertions_per_test_avg: number, assertion_types_found: table, issues: table[]}} report_data Structured data for quality reporting
 function M.get_report_data()
   logger.debug("Generating quality report data")
   
@@ -1195,7 +1248,8 @@ function M.get_report_data()
   return structured_data
 end
 
--- Get quality report
+---@param format? "summary"|"json"|"html" The format for the report
+---@return string|table report The formatted quality report
 function M.report(format)
   -- Get format from central_config if available
   local central_config = get_central_config()
@@ -1397,7 +1451,8 @@ function M.html_report()
   end
 end
 
--- Check if quality meets level requirement
+---@param level? number The quality level to check against (defaults to configured level)
+---@return boolean meets Whether the quality meets the specified level requirement
 function M.meets_level(level)
   level = level or M.config.level
   
@@ -1418,6 +1473,10 @@ function M.meets_level(level)
   return meets
 end
 
+---@param file_path string The path where to save the quality report
+---@param format? "summary"|"json"|"html" The format for the report
+---@return boolean success Whether the report was successfully saved
+---@return string? error Error message if saving failed
 -- Save a quality report to a file
 function M.save_report(file_path, format)
   -- Get format from central_config if available
@@ -1484,7 +1543,8 @@ function M.save_report(file_path, format)
   end
 end
 
--- Get level name from level number
+---@param level number The quality level number
+---@return string level_name The name of the quality level
 function M.get_level_name(level)
   for _, level_def in ipairs(M.levels) do
     if level_def.level == level then
@@ -1494,8 +1554,10 @@ function M.get_level_name(level)
   return "unknown"
 end
 
--- Wrapper function to check if a test file meets quality requirements
--- This function is used by the test suite
+---@param file_path string The path to the test file to check
+---@param level? number The quality level to check against (defaults to configured level)
+---@return boolean meets Whether the file meets the quality requirements
+---@return table issues Any quality issues found in the file
 function M.check_file(file_path, level)
   level = level or M.config.level
   
@@ -1567,8 +1629,10 @@ function M.check_file(file_path, level)
   return meets_level, issues
 end
 
--- Validate a test against quality standards
--- This is the main entry point for test quality validation
+---@param test_name string The name of the test to validate
+---@param options? {level?: number, strict?: boolean} Options for validation, including level override
+---@return boolean meets Whether the test meets the quality requirements
+---@return table[] issues Any quality issues found in the test
 function M.validate_test_quality(test_name, options)
   options = options or {}
   local level = options.level or M.config.level
@@ -1599,7 +1663,7 @@ function M.validate_test_quality(test_name, options)
   return evaluation.level >= level, test_data[test_name].issues
 end
 
--- Debug information about the quality module configuration
+---@return QualityModule self The quality module
 function M.debug_config()
   local central_config = get_central_config()
   local config_source = central_config and "Centralized configuration system" or "Module-local configuration"

@@ -66,7 +66,7 @@ describe("JSON Formatter", function()
   
   local results_data = {
     name = "Test Suite",
-    timestamp = "2023-01-01T12:00:00",
+    timestamp = "2023-01-01T12:00:00Z", -- ISO format date
     tests = 5,
     failures = 1,
     errors = 1,
@@ -380,6 +380,34 @@ describe("JSON Formatter", function()
       expect(json_output).to.match("passing test")
       expect(json_output).to.match("failing test")
       expect(json_output).to.match("Expected values to match")
+    end)
+    
+    it("validates timestamp format in results data", function()
+      -- Verify the timestamp in the test data is a valid ISO date
+      expect(results_data.timestamp).to.be_iso_date()
+      
+      -- Create test data with different timestamp formats
+      local future_date = "2025-12-31T23:59:59Z"
+      local past_date = "2020-01-01T00:00:00Z"
+      
+      -- Validate date comparison assertions
+      expect(past_date).to.be_before(results_data.timestamp)
+      expect(future_date).to.be_after(results_data.timestamp)
+      
+      -- Test same-day comparison
+      local same_day = "2023-01-01T23:59:59Z"
+      expect(same_day).to.be_same_day_as(results_data.timestamp)
+      
+      -- Test that it correctly validates non-ISO formats
+      local non_iso = "01/01/2023"
+      expect(non_iso).to.be_date()
+      expect(non_iso).to_not.be_iso_date()
+      
+      -- Test with same timestamp at different times of day
+      local morning = "2023-01-01T08:00:00Z"
+      local evening = "2023-01-01T20:00:00Z"
+      expect(morning).to.be_same_day_as(evening)
+      expect(morning).to.be_before(evening)
     end)
     
     it("handles empty test results gracefully", function()

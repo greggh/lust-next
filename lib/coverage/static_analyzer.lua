@@ -4,6 +4,34 @@ This module parses Lua code using our parser and generates code maps
 that identify executable lines, functions, and code blocks.
 ]]
 
+---@class coverage.static_analyzer
+---@field _VERSION string Module version
+---@field LINE_TYPES {EXECUTABLE: string, NON_EXECUTABLE: string, FUNCTION: string, BRANCH: string, END_BLOCK: string, COMMENT: string, EMPTY: string, DECLARATION: string, STRUCT_ONLY: string} Line classification types enum
+---@field init fun(options?: {control_flow_keywords_executable?: boolean, debug?: boolean, verbose?: boolean, cache_files?: boolean, deep_analysis?: boolean}): coverage.static_analyzer Initialize the static analyzer
+---@field clear_cache fun() Clear the file cache and multiline comment cache
+---@field create_multiline_comment_context fun(): {in_comment: boolean, state_stack: table, line_status: table<number, boolean>} Create a context for tracking multiline comments
+---@field find_multiline_comments fun(content: string): table<number, boolean> Process a content string to find all multiline comments
+---@field process_line_for_comments fun(line_text: string, line_num: number, context: {in_comment: boolean, state_stack: table, line_status: table<number, boolean>}): boolean Process a line for comment state tracking
+---@field update_multiline_comment_cache fun(file_path: string): boolean, table? Cache multiline comments for a file
+---@field is_in_multiline_comment fun(file_path: string, line_num: number): boolean Check if a line is within a multiline comment
+---@field classify_line fun(line_text: string, context: {in_comment: boolean, state_stack: table, line_status: table<number, boolean>}): string Classify a line of code by its type
+---@field classify_line_simple fun(line_text: string, options?: {control_flow_keywords_executable?: boolean}): boolean Simple line classification (executable or not)
+---@field get_function_at_line fun(file_path: string, line_num: number): {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}|nil Get function details at a specific line
+---@field get_code_map fun(file_path: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table<string, {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}>, blocks: table<string, {id: string, type: string, start_line: number, end_line: number, parent?: string}>, conditions: table<string, {id: string, line: number, type: string, parent?: string}>}|nil, table? Get or create a code map for a file
+---@field generate_code_map fun(file_path: string, ast?: table, source?: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table<string, table>, blocks: table<string, table>, conditions: table<string, table>, source_lines: table<number, string>, ast: table}|nil, table? Generate a detailed code map for a file
+---@field process_file fun(file_path: string): boolean, table? Process a file for analysis
+---@field is_line_executable fun(code_map: table, line_num: number): boolean Check if a line is executable
+---@field get_blocks_for_line fun(code_map: table, line_num: number): table<number, {id: string, type: string, start_line: number, end_line: number, parent?: string}>|nil Get blocks that include a specific line
+---@field get_conditions_for_line fun(code_map: table, line_num: number): table<number, {id: string, line: number, type: string, parent?: string}>|nil Get conditions on a specific line
+---@field get_functions_for_line fun(code_map: table, line_num: number): table<number, {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}>|nil Get functions that include a specific line
+---@field analyze_control_flow fun(ast: table): {branches: table<number, {type: string, line: number}>, blocks: table<string, {type: string, start_line: number, end_line: number}>, conditions: table<string, {type: string, line: number}>, computed: boolean} Analyze control flow in an AST
+---@field get_line_type fun(code_map: table, line_num: number): string Get the type of a specific line
+---@field get_multiline_comments fun(file_path: string): table<number, boolean>|nil Get multiline comment information for a file
+---@field invalidate_cache_for_file fun(file_path: string): boolean Remove a file from the cache
+---@field get_ast fun(file_path: string): table|nil Get the AST for a file
+---@field is_line_executable fun(code_map: {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>}, line_num: number): boolean Check if a line is executable
+---@field apply_code_map fun(coverage_data: table, file_path: string, code_map: {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table, blocks: table, conditions: table}): boolean Update coverage data with code map info
+---@field analyze_file fun(file_path: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table, blocks: table, conditions: table}, table? Parse a file and generate a code map
 local M = {}
 
 local parser = require("lib.tools.parser")
@@ -36,6 +64,8 @@ local config = {
 -- Create a logger for this module
 local logger = logging.get_logger("StaticAnalyzer")
 
+---@param options? table Configuration options for the static analyzer
+---@return coverage.static_analyzer The static analyzer module
 -- Initializes the static analyzer
 function M.init(options)
   options = options or {}
@@ -70,6 +100,7 @@ end
 -- Multiline comment detection API
 -- This centralizes the previously duplicated comment detection logic
 
+---@return table context New comment tracking context
 -- Create a context for comment tracking
 function M.create_multiline_comment_context()
   return {

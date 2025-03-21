@@ -10,6 +10,25 @@ local error_handler = require("lib.tools.error_handler")
 local logger = logging.get_logger("mocking")
 logging.configure_from_config("mocking")
 
+---@class mocking
+---@field _VERSION string Module version
+---@field spy table|fun(target: table|function, name?: string): spy_object Spy on a function or object method
+---@field stub table|fun(value_or_fn?: any): stub_object Create a stub function that returns a specified value
+---@field mock table|fun(target: table, method_or_options?: string|table, impl_or_value?: any): table Create a mock object with controlled behavior
+---@field with_mocks fun(fn: function): any Execute a function with automatic mock cleanup
+---@field register_cleanup_hook fun(after_test_fn?: function): function Register a cleanup hook for mocks
+---@field ensure_assertions fun(firmo_module: table): boolean, table? Ensure required assertions are available
+---@field reset_all fun(): boolean Reset all spies, stubs, and mocks created through this module
+---@field create_spy fun(fn?: function): spy_object Create a new spy function
+---@field create_stub fun(return_value?: any): stub_object Create a new stub function
+---@field create_mock fun(methods?: table<string, function|any>): table Create a new mock object with specified methods
+---@field is_spy fun(obj: any): boolean Check if an object is a spy
+---@field is_stub fun(obj: any): boolean Check if an object is a stub
+---@field is_mock fun(obj: any): boolean Check if an object is a mock
+---@field get_all_mocks fun(): table<number, any> Get all mocks created through this module
+---@field safe_mock fun(target: table, method_name: string, unsafe_fn: function): function Create a safe mock that won't cause infinite recursion
+---@field verify fun(mock_obj: table): boolean Verify that a mock's expectations were met
+---@field configure fun(options: table): mocking Configure the mocking system
 local mocking = {
   -- Module version
   _VERSION = "1.0.0",
@@ -20,6 +39,11 @@ mocking.spy = setmetatable({
   on = spy.on,
   new = spy.new,
 }, {
+  ---@param _ any The table being used as a function
+  ---@param target table|function The target to spy on (table or function)
+  ---@param name? string Optional name of the method to spy on (for table targets)
+  ---@return table|nil spy The created spy, or nil on error
+  ---@return table|nil error Error information if spy creation failed
   __call = function(_, target, name)
     -- Input validation with error handling
     if target == nil then
@@ -164,6 +188,11 @@ mocking.spy = setmetatable({
 
 -- Export the stub module with compatibility for both object-oriented and functional API
 mocking.stub = setmetatable({
+  ---@param target table The object to stub a method on
+  ---@param name string The name of the method to stub
+  ---@param value_or_impl any The value or function implementation for the stub
+  ---@return table|nil stub The created stub, or nil on error
+  ---@return table|nil error Error information if creation failed
   on = function(target, name, value_or_impl)
     -- Input validation
     if target == nil then
@@ -222,6 +251,9 @@ mocking.stub = setmetatable({
     return stub_obj
   end,
 
+  ---@param value_or_fn? any The value or function implementation for the stub
+  ---@return table|nil stub The created stub, or nil on error
+  ---@return table|nil error Error information if creation failed
   new = function(value_or_fn)
     logger.debug("Creating new stub function", {
       value_type = type(value_or_fn),
@@ -249,6 +281,10 @@ mocking.stub = setmetatable({
     return stub_obj
   end,
 }, {
+  ---@param _ any The table being used as a function
+  ---@param value_or_fn? any The value or function implementation for the stub
+  ---@return table|nil stub The created stub, or nil on error
+  ---@return table|nil error Error information if creation failed
   __call = function(_, value_or_fn)
     -- Input validation (optional, as stub can be called without arguments)
     if
@@ -299,6 +335,10 @@ mocking.stub = setmetatable({
 
 -- Export the mock module with compatibility for functional API
 mocking.mock = setmetatable({
+  ---@param target table The object to create a mock of
+  ---@param options? table Optional configuration { verify_all_expectations?: boolean }
+  ---@return table|nil mock The created mock object, or nil on error
+  ---@return table|nil error Error information if creation failed
   create = function(target, options)
     -- Input validation
     if target == nil then
@@ -354,6 +394,8 @@ mocking.mock = setmetatable({
     return mock_obj
   end,
 
+  ---@return boolean success Whether all mocks were successfully restored
+  ---@return table|nil error Error information if restoration failed
   restore_all = function()
     logger.debug("Restoring all mocks")
 
@@ -375,6 +417,9 @@ mocking.mock = setmetatable({
     return true
   end,
 
+  ---@param fn function The function to execute with automatic mock cleanup
+  ---@return any result The result from the function execution
+  ---@return table|nil error Error information if execution failed
   with_mocks = function(fn)
     -- Input validation
     if type(fn) ~= "function" then
@@ -411,6 +456,12 @@ mocking.mock = setmetatable({
     return result
   end,
 }, {
+  ---@param _ any The table being used as a function
+  ---@param target table The object to create a mock of
+  ---@param method_or_options? string|table Either a method name to stub or options table
+  ---@param impl_or_value? any The implementation or return value for the stub (when method specified)
+  ---@return table|nil mock The created mock object, or nil on error
+  ---@return table|nil error Error information if creation failed
   __call = function(_, target, method_or_options, impl_or_value)
     -- Input validation
     if target == nil then
@@ -512,6 +563,8 @@ mocking.mock = setmetatable({
 -- Export the with_mocks context manager through our enhanced version
 mocking.with_mocks = mocking.mock.with_mocks
 
+---@param after_test_fn? function Function to call after each test (optional)
+---@return function hook The cleanup hook function to use
 -- Register cleanup hook for mocks after tests
 function mocking.register_cleanup_hook(after_test_fn)
   logger.debug("Registering mock cleanup hook")
@@ -580,6 +633,9 @@ function mocking.register_cleanup_hook(after_test_fn)
   end
 end
 
+---@param firmo_module table The firmo module instance to modify
+---@return boolean success Whether the assertions were successfully registered
+---@return table|nil error Error information if registration failed
 -- Function to add be_truthy/be_falsy assertions to firmo
 function mocking.ensure_assertions(firmo_module)
   logger.debug("Ensuring mocking assertions are registered")

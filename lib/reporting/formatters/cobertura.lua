@@ -1,4 +1,10 @@
--- Cobertura XML formatter for coverage reports
+---@class CoberturaFormatter
+---@field format_coverage fun(coverage_data: {files: table<string, {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, stats: {total: number, covered: number, executable: number, percentage: number}}>, summary: {total_lines: number, executed_lines: number, covered_lines: number, coverage_percentage: number}}): string|nil, table? Format coverage data as Cobertura XML
+---@field get_config fun(): CoberturaFormatterConfig Get current formatter configuration
+---@field set_config fun(config: table): boolean Set formatter configuration options
+---@field escape_xml fun(str: any): string Escape special characters in string for XML output
+-- Cobertura XML formatter for coverage reports that produces XML compatible with
+-- the Cobertura coverage reporting format, widely used by CI/CD systems
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -10,7 +16,21 @@ local error_handler = require("lib.tools.error_handler")
 -- Configure module logging
 logging.configure_from_config("Reporting:Cobertura")
 
+---@class CoberturaFormatterConfig
+---@field schema_version string XML schema version to use in output (e.g. "4.0")
+---@field include_packages boolean Whether to include package information in XML structure
+---@field include_branches boolean Whether to include branch coverage data (even if not available)
+---@field include_line_counts boolean Whether to include line counts in XML summary
+---@field add_xml_declaration boolean Whether to add XML declaration at the top of output (<?xml ...?>)
+---@field format_output boolean Whether to format the output with indentation for readability
+---@field normalize_paths boolean Whether to normalize file paths (convert backslashes, remove unnecessary parts)
+---@field include_sources boolean Whether to include source file paths in XML output
+---@field project_name? string Optional project name to include in coverage report
+---@field timestamp? string Optional timestamp to include in coverage report (ISO format)
+---@field source_encoding? string Optional source encoding to specify in XML
+
 -- Default formatter configuration
+---@type CoberturaFormatterConfig
 local DEFAULT_CONFIG = {
   schema_version = "4.0",
   include_packages = true,
@@ -22,7 +42,13 @@ local DEFAULT_CONFIG = {
   include_sources = true
 }
 
--- Get configuration for Cobertura formatter
+---@private
+---@return CoberturaFormatterConfig config The configuration for the Cobertura formatter
+-- Retrieves configuration for the Cobertura formatter with the following priority:
+-- 1. From the reporting module's formatter-specific configuration
+-- 2. From the central_config system's formatter-specific configuration
+-- 3. Falls back to default configuration if neither is available
+-- Handles errors gracefully during configuration retrieval
 local function get_config()
   -- Try to load the reporting module for configuration access
   local success, result, err = error_handler.try(function()
@@ -65,7 +91,15 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
--- Function to indent XML if formatting is enabled
+---@private
+---@param xml string Raw XML string to format
+---@param config CoberturaFormatterConfig|nil Configuration for the formatter
+---@return string formatted_xml Indented XML if formatting is enabled, otherwise the original XML
+-- Formats XML with proper indentation if config.format_output is enabled
+-- The function analyzes XML tag structure to properly indent based on tag nesting
+-- Handles opening tags, closing tags, and self-closing tags
+-- Preserves content between tags and maintains original tag content
+-- Falls back to the original XML string if formatting fails for any reason
 local function format_xml(xml, config)
   if not config or not config.format_output then
     return xml
@@ -126,6 +160,9 @@ local function format_xml(xml, config)
   end
 end
 
+---@private
+---@param str any Value to escape (will be converted to string if not a string)
+---@return string escaped_string The XML-escaped string
 -- Helper function to escape XML special characters
 local function escape_xml(str)
   -- Handle nil or non-string values safely
@@ -186,6 +223,8 @@ local function escape_xml(str)
   end
 end
 
+---@private
+---@return string timestamp Current timestamp in ISO format
 -- Get current timestamp in ISO format
 local function get_timestamp()
   local success, result = error_handler.try(function()
@@ -204,6 +243,10 @@ local function get_timestamp()
   end
 end
 
+---@private
+---@param covered number|string Number of covered lines
+---@param total number|string Total number of lines
+---@return number line_rate Line coverage rate (0-1)
 -- Helper function to calculate line rate
 local function calculate_line_rate(covered, total)
   local success, result = error_handler.try(function()
@@ -239,6 +282,8 @@ local function calculate_line_rate(covered, total)
   end
 end
 
+---@param coverage_data table|nil Coverage data from the coverage module
+---@return string xml_output XML representation of the coverage report in Cobertura format
 -- Generate Cobertura XML coverage report
 -- Format specification: https://github.com/cobertura/cobertura/wiki/XML-Format
 function M.format_coverage(coverage_data)
@@ -808,6 +853,9 @@ function M.format_coverage(coverage_data)
   return result
 end
 
+---@param formatters table Table of formatter registries
+---@return boolean success True if registration was successful
+---@return table|nil error Error object if registration failed
 -- Register formatter
 return function(formatters)
   -- Validate parameters

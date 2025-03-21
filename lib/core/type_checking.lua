@@ -1,8 +1,19 @@
 -- Enhanced type checking for firmo
 -- Implements advanced type and class validation features
 
+---@class type_checking
+---@field is_exact_type fun(value: any, expected_type: string, message?: string): boolean
+---@field is_instance_of fun(object: table, class: table, message?: string): boolean
+---@field implements fun(object: table, interface: table, message?: string): boolean
+---@field contains fun(container: table|string, item: any, message?: string): boolean
+---@field has_error fun(fn: function, message?: string): string|table
 local type_checking = {}
 
+---@param value any The value to check the type of
+---@param expected_type string The expected type name (e.g., 'string', 'number', 'table')
+---@param message? string Optional custom error message
+---@return boolean true If the type matches (otherwise throws an error)
+---@error if type doesn't match the expected_type
 -- Checks if an object is exactly of the specified primitive type
 function type_checking.is_exact_type(value, expected_type, message)
   local actual_type = type(value)
@@ -16,6 +27,11 @@ function type_checking.is_exact_type(value, expected_type, message)
   return true
 end
 
+---@param object table The object to check
+---@param class table The class/metatable to check against
+---@param message? string Optional custom error message
+---@return boolean true If object is an instance of class (otherwise throws an error)
+---@error if object is not an instance of class
 -- Check if an object is an instance of a class (metatable-based)
 function type_checking.is_instance_of(object, class, message)
   -- Validate arguments
@@ -45,8 +61,12 @@ function type_checking.is_instance_of(object, class, message)
     return true
   end
 
-  -- Handle inheritance: Check if any metatable in the hierarchy is the class
+    -- Handle inheritance: Check if any metatable in the hierarchy is the class
   -- Check both metatable.__index (for inheritance) and getmetatable(metatable) for inheritance
+  ---@param meta table The metatable to check
+  ---@param target_class table The target class to compare against
+  ---@param seen? table Table to track already seen metatables (prevents infinite recursion)
+  ---@return boolean true if meta is or inherits from target_class
   local function check_inheritance_chain(meta, target_class, seen)
     seen = seen or {}
     if not meta or seen[meta] then
@@ -97,6 +117,11 @@ function type_checking.is_instance_of(object, class, message)
   error(message or default_message, 2)
 end
 
+---@param object table The object to check
+---@param interface table Table defining the required methods and properties
+---@param message? string Optional custom error message
+---@return boolean true If object implements all interface requirements (otherwise throws an error)
+---@error if object doesn't implement interface requirements
 -- Check if an object implements all the required interface methods and properties
 function type_checking.implements(object, interface, message)
   -- Validate arguments
@@ -145,6 +170,11 @@ function type_checking.implements(object, interface, message)
   return true
 end
 
+---@param container table|string The container to check (either a table or string)
+---@param item any The item to look for in the container
+---@param message? string Optional custom error message
+---@return boolean true If container contains item (otherwise throws an error)
+---@error if container doesn't contain item
 -- Enhanced contains implementation that works with both tables and strings
 function type_checking.contains(container, item, message)
   -- For tables, check if the item exists as a value
@@ -175,6 +205,10 @@ function type_checking.contains(container, item, message)
   end
 end
 
+---@param fn function The function to test (should throw an error when called)
+---@param message? string Optional custom error message if function doesn't throw
+---@return string|table error The error value returned by the function
+---@error if function doesn't throw an error
 -- Helper function to check if a function throws an error
 function type_checking.has_error(fn, message)
   if type(fn) ~= "function" then

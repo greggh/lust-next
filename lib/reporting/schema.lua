@@ -1,4 +1,23 @@
--- Schema module for coverage report validation
+---@class ReportingSchema
+---@field _VERSION string Module version
+---@field COVERAGE_SCHEMA table Schema definition for internal coverage data structure
+---@field TEST_RESULTS_SCHEMA table Schema definition for test results data structure
+---@field QUALITY_SCHEMA table Schema definition for quality validation data structure
+---@field HTML_COVERAGE_SCHEMA table Schema definition for HTML coverage format
+---@field JSON_COVERAGE_SCHEMA table Schema definition for JSON coverage format
+---@field LCOV_COVERAGE_SCHEMA table Schema definition for LCOV coverage format
+---@field COBERTURA_COVERAGE_SCHEMA table Schema definition for Cobertura XML coverage format
+---@field TAP_RESULTS_SCHEMA table Schema definition for TAP test results format
+---@field JUNIT_RESULTS_SCHEMA table Schema definition for JUnit XML test results format
+---@field CSV_RESULTS_SCHEMA table Schema definition for CSV test results format
+---@field validate fun(data: any, schema_name: string): boolean, string? Validate data against a named schema
+---@field get_schema fun(schema_name: string): table|nil, string? Get a schema definition by name
+---@field detect_schema fun(data: any): string? Automatically detect which schema matches the data
+---@field validate_format fun(data: any, format: string): boolean, string? Validate data against a specific output format
+---@field format_validation_error fun(err: string): string Format a validation error message for better readability
+---@field create_schema fun(schema_def: table): table Create a new validation schema with proper metatable
+-- Schema module for validating coverage reports and test results against defined schemas
+-- Used to ensure data structures are properly formatted before processing or outputting
 local M = {}
 
 -- Import logging module
@@ -203,6 +222,11 @@ M.CSV_RESULTS_SCHEMA = {
 }
 
 -- Utility functions for schema validation
+---@private
+---@param value any The value to validate
+---@param schema table The schema to validate against
+---@return boolean success
+---@return string? error_message
 local function validate_type(value, schema)
   -- Check for nil values
   if value == nil then
@@ -257,6 +281,12 @@ local function validate_type(value, schema)
   end
 end
 
+---@private
+---@param value any The value to validate
+---@param schema table The schema to validate against
+---@param path? string The current path in the validation (for error messages)
+---@return boolean success
+---@return string? error_message
 local function validate_schema(value, schema, path)
   path = path or ""
   
@@ -323,7 +353,10 @@ local function validate_schema(value, schema, path)
   return true
 end
 
--- Validate data against a schema
+---@param data any The data to validate
+---@param schema_name string The name of the schema to validate against
+---@return boolean success Whether the data is valid
+---@return string? error_message Error message if validation failed
 function M.validate(data, schema_name)
   logger.debug("Validating data against schema", {schema = schema_name})
   
@@ -361,7 +394,8 @@ function M.validate(data, schema_name)
   return true
 end
 
--- Detect schema for data
+---@param data any The data to detect schema for
+---@return string? schema_name The detected schema name or nil if no match
 function M.detect_schema(data)
   logger.debug("Detecting schema for data")
   
@@ -415,7 +449,10 @@ function M.detect_schema(data)
   return nil
 end
 
--- Main validation function
+---@param data any The data to validate
+---@param format string The format name to validate against
+---@return boolean success Whether the data is valid for the given format
+---@return string? error_message Error message if validation failed
 function M.validate_format(data, format)
   logger.debug("Validating format", {format = format})
   

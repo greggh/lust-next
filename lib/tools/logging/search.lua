@@ -1,7 +1,18 @@
+---@class LogSearchModule
+---@field _VERSION string Module version
+---@field search_logs fun(log_file: string, query: table): {entries: table[], total: number, matched: number}|nil, table? Search log files with filters
+---@field filter_entries fun(entries: table[], filters: table): table[] Filter log entries by criteria
+---@field parse_log_file fun(log_file: string, format?: string): table[]|nil, table? Parse a log file into entries
+---@field query fun(logs: table[], options: {level?: string|string[], module?: string|string[], message?: string, from?: string, to?: string, limit?: number}): table[] Query logs with various criteria
+---@field get_logs_for_date fun(date: string, log_dir?: string): table[]|nil, table? Get logs for a specific date
+---@field extract_log_stats fun(log_entries: table[]): {by_level: table<string, number>, by_module: table<string, number>, errors_by_module: table<string, number>, time_distribution: table<number, number>} Extract statistics from log entries
+---@field get_recent_errors fun(count?: number, log_dir?: string): table[]|nil, table? Get recent error logs
+
 -- Log search and query module for firmo
 -- This module provides search and filtering capabilities for log files
 
 local M = {}
+M._VERSION = "1.0.0"
 
 -- Require filesystem module - fail if not available
 local fs = require("lib.tools.filesystem")

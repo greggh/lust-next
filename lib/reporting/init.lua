@@ -1,3 +1,12 @@
+---@class reporting
+---@field configure fun(options?: table): reporting Configure the reporting module
+---@field get_config fun(): table Get the current configuration
+---@field register_formatter fun(format: string, formatter: table): reporting Register a custom formatter
+---@field get_formatter fun(format: string): table|nil Get a formatter by name
+---@field generate_report fun(data: table, options?: table): boolean|nil, string? Generate a report
+---@field get_report_path fun(type: string, format: string, options?: table): string Get the path for a report file
+---@field load_formatter fun(format: string): table|nil Load a formatter module
+---@field run_formatter fun(formatter: table, data: table, options?: table): string|nil Generate report output with a formatter
 -- firmo reporting module
 -- Centralized module for all report generation and file output
 
@@ -83,6 +92,8 @@ local logger = logging.get_logger("Reporting")
 -- Lazy loading of central_config to avoid circular dependencies
 local _central_config
 
+---@return table|nil central_config The central config module if loaded
+---@private
 local function get_central_config()
   if not _central_config then
     -- Use pcall to safely attempt loading central_config
@@ -171,6 +182,9 @@ else
   }
 end
 
+---@param str string|any String to escape or value to convert to string
+---@return string escaped_string String with XML special characters escaped
+---@private
 -- Helper function to escape XML special characters
 ---@diagnostic disable-next-line: unused-local, unused-function
 local function escape_xml(str)
@@ -181,6 +195,8 @@ local function escape_xml(str)
   return str:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"):gsub("'", "&apos;")
 end
 
+---@return boolean success Whether the listener was registered
+---@private
 -- Set up change listener for central configuration
 local function register_change_listener()
   local central_config = get_central_config()
@@ -229,6 +245,8 @@ local function register_change_listener()
   return true
 end
 
+---@param options? table Configuration options for the reporting module
+---@return reporting The reporting module for method chaining
 -- Configure the module
 function M.configure(options)
   options = options or {}
@@ -333,6 +351,8 @@ function M.configure(options)
   return M
 end
 
+---@param formatter_name string Name of the formatter to get configuration for
+---@return table|nil formatter_config Configuration for the formatter or nil if not found
 -- Get configuration for a specific formatter
 function M.get_formatter_config(formatter_name)
   if not formatter_name then
@@ -374,6 +394,9 @@ function M.get_formatter_config(formatter_name)
   return {}
 end
 
+---@param formatter_name string Name of the formatter to configure
+---@param formatter_config table Configuration options for the formatter
+---@return reporting The reporting module for method chaining
 -- Configure a specific formatter
 function M.configure_formatter(formatter_name, formatter_config)
   if not formatter_name then
@@ -411,6 +434,8 @@ function M.configure_formatter(formatter_name, formatter_config)
   return M
 end
 
+---@param formatters_config table Table of formatter configurations {formatter_name = config, ...}
+---@return reporting The reporting module for method chaining
 -- Configure multiple formatters at once
 function M.configure_formatters(formatters_config)
   if type(formatters_config) ~= "table" then
@@ -545,6 +570,10 @@ local results_formatters = formatters.results
 -- CUSTOM FORMATTER REGISTRATION
 ---------------------------
 
+---@param name string Name of the formatter to register
+---@param formatter_fn function Function to format coverage reports
+---@return boolean|nil success True if formatter was registered successfully, nil if failed
+---@return table|nil error Error object if registration failed
 -- Register a custom coverage report formatter
 function M.register_coverage_formatter(name, formatter_fn)
   -- Validate name parameter
@@ -597,6 +626,10 @@ function M.register_coverage_formatter(name, formatter_fn)
   return true
 end
 
+---@param name string Name of the formatter to register
+---@param formatter_fn function Function to format quality reports
+---@return boolean|nil success True if formatter was registered successfully, nil if failed
+---@return table|nil error Error object if registration failed
 -- Register a custom quality report formatter
 function M.register_quality_formatter(name, formatter_fn)
   -- Validate name parameter
@@ -649,6 +682,10 @@ function M.register_quality_formatter(name, formatter_fn)
   return true
 end
 
+---@param name string Name of the formatter to register
+---@param formatter_fn function Function to format test results
+---@return boolean|nil success True if formatter was registered successfully, nil if failed
+---@return table|nil error Error object if registration failed
 -- Register a custom test results formatter
 function M.register_results_formatter(name, formatter_fn)
   -- Validate name parameter
@@ -701,6 +738,9 @@ function M.register_results_formatter(name, formatter_fn)
   return true
 end
 
+---@param formatter_module table Module containing formatters {coverage={}, quality={}, results={}}
+---@return number|nil registered Number of formatters registered or nil if failed
+---@return table|nil error Error object if some formatters failed to register
 -- Load formatters from a module (table with format functions)
 function M.load_formatters(formatter_module)
   -- Validate formatter_module parameter
@@ -850,6 +890,7 @@ function M.load_formatters(formatter_module)
   return registered
 end
 
+---@return table available_formatters Table with lists of formatters by type {coverage={}, quality={}, results={}}
 -- Get list of available formatters for each type
 function M.get_available_formatters()
   logger.debug("Getting available formatters")
@@ -894,6 +935,9 @@ end
 -- FORMAT OUTPUT FUNCTIONS
 ---------------------------
 
+---@param type string Type of report ("coverage", "quality", or "results")
+---@return string format Default format name for the specified report type
+---@private
 -- Get default format from configuration
 local function get_default_format(type)
   -- Check central_config first

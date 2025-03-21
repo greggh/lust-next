@@ -3,6 +3,16 @@ This module implements a validator for the AST
 Based on lua-parser by Andre Murbach Maidl (https://github.com/andremm/lua-parser)
 ]]
 
+---@class parser.validator
+---@field _VERSION string Module version
+---@field validate_ast fun(ast: table): boolean, string? Validate Abstract Syntax Tree structure
+---@field validate_node fun(node: table, node_type: string): boolean, string? Validate a specific AST node
+---@field get_validation_schema fun(node_type: string): table|nil Get validation schema for a node type
+---@field register_schema fun(node_type: string, schema: table): boolean Register a custom validation schema
+---@field is_valid_lua fun(source: string): boolean, string? Check if a string is valid Lua code
+---@field get_error fun(): string|nil Get the last validation error
+---@field NODE_TYPES table<string, string> Enumeration of valid AST node types
+
 local logging = require("lib.tools.logging")
 
 -- Initialize module logger

@@ -3,6 +3,15 @@ This module implements a pretty printer for the AST
 Based on lua-parser by Andre Murbach Maidl (https://github.com/andremm/lua-parser)
 ]]
 
+---@class parser.pp
+---@field _VERSION string Module version
+---@field tostring fun(ast: table, options?: {indent?: number, line_length?: number, colors?: boolean}): string Convert AST to formatted string
+---@field format fun(ast: table, options?: {indent?: number, line_length?: number, colors?: boolean}): string Format AST with indentation
+---@field node_to_string fun(node: table, indent?: number): string Convert a specific node to string
+---@field to_readable fun(ast: table): string Convert AST to human-readable format
+---@field set_color_scheme fun(scheme: table): boolean Set color scheme for syntax highlighting
+---@field register_formatter fun(node_type: string, formatter: function): boolean Register custom formatter for node type
+
 local M = {}
 
 local logging

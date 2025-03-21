@@ -1,3 +1,10 @@
+---@class TestHelper
+---@field with_error_capture fun(func: function): function Wraps a function to safely capture errors
+---@field expect_error fun(func: function, expected_message?: string): table Throws if function doesn't raise error matching expected message
+---@field create_temp_test_directory fun(): TestDirectory Create a temporary test directory with utility functions
+---@field with_temp_test_directory fun(files_content: table, callback: function): any Create directory with files and run callback
+---@field register_temp_file fun(file_path: string): boolean Register a file for cleanup after tests
+---@field register_temp_directory fun(dir_path: string): boolean Register a directory for cleanup after tests
 -- Test helper module for improved error handling and temporary file management
 --
 -- This module provides utilities to make it easier to test error conditions
@@ -65,6 +72,8 @@ local fs = require("lib.tools.filesystem")
 
 local helper = {}
 
+---@param fn function Function to wrap
+---@return function wrapper Function that returns nil, error when fn throws
 -- Function that safely wraps test functions expected to fail
 -- This provides a standardized way to test error conditions
 function helper.with_error_capture(fn)
@@ -99,6 +108,10 @@ function helper.with_error_capture(fn)
   end
 end
 
+---@param fn function Function that should throw an error
+---@param message_pattern? string Expected pattern in error message
+---@return table error Error object if matching requirements
+---@throws Test assertion error if function doesn't throw or message doesn't match
 -- Function to verify that a function throws an error
 -- Returns the error object/message for further inspection
 function helper.expect_error(fn, message_pattern)
@@ -132,6 +145,17 @@ function helper.expect_error(fn, message_pattern)
   return err
 end
 
+---@class TestDirectory
+---@field path string Path to the test directory
+---@field create_file fun(file_path: string, content: string): string Creates a file in the test directory
+---@field read_file fun(file_path: string): string|nil, string? Reads a file from the test directory
+---@field create_subdirectory fun(subdir_path: string): string Creates a subdirectory
+---@field file_exists fun(file_name: string): boolean Checks if a file exists in the test directory
+---@field unique_filename fun(prefix?: string, extension?: string): string Generates a unique filename in the test directory
+---@field create_numbered_files fun(basename: string, content_pattern: string, count: number): string[] Creates multiple numbered files
+---@field write_file fun(filename: string, content: string): boolean, string? Writes a file and registers it for cleanup
+
+---@return TestDirectory test_directory Directory object with helper methods
 -- Helper to create a temporary directory that tests can use throughout their execution
 function helper.create_temp_test_directory()
   -- Create a temporary directory
@@ -148,6 +172,9 @@ function helper.create_temp_test_directory()
     -- Full path to the temporary directory
     path = dir_path,
     
+    ---@param file_name string Relative path of the file to create
+    ---@param content string Content to write to the file
+    ---@return string file_path Full path to the created file
     -- Helper to create a file in this directory
     create_file = function(file_name, content)
       local file_path = dir_path .. "/" .. file_name
@@ -181,6 +208,8 @@ function helper.create_temp_test_directory()
       return file_path
     end,
     
+    ---@param subdir_name string Relative path of the subdirectory to create
+    ---@return string subdir_path Full path to the created subdirectory
     -- Helper to create a subdirectory
     create_subdirectory = function(subdir_name)
       local subdir_path = dir_path .. "/" .. subdir_name
@@ -198,16 +227,24 @@ function helper.create_temp_test_directory()
       return subdir_path
     end,
     
+    ---@param file_name string Name of the file relative to the test directory
+    ---@return boolean exists Whether the file exists
     -- Helper to check if a file exists in this directory
     file_exists = function(file_name)
       return fs.file_exists(dir_path .. "/" .. file_name)
     end,
     
+    ---@param file_name string Name of the file relative to the test directory
+    ---@return string|nil content Content of the file, or nil if file couldn't be read
+    ---@return string? error Error message if reading failed
     -- Helper to read a file from this directory
     read_file = function(file_name)
       return fs.read_file(dir_path .. "/" .. file_name)
     end,
     
+    ---@param prefix? string Prefix for the filename (default: "temp")
+    ---@param extension? string File extension without dot (default: "tmp")
+    ---@return string filename A unique filename (not a full path)
     -- Helper to generate a unique filename in the test directory
     unique_filename = function(prefix, extension)
       prefix = prefix or "temp"
@@ -218,18 +255,34 @@ function helper.create_temp_test_directory()
       return prefix .. "_" .. timestamp .. "_" .. random .. "." .. extension
     end,
     
+    ---@param basename string Base name for the numbered files
+    ---@param content_pattern string Pattern to format the content, should include a %d placeholder
+    ---@param count number Number of files to create
+    ---@return string[] List of created file paths
     -- Helper to create a series of numbered files
     create_numbered_files = function(basename, content_pattern, count)
       local files = {}
       for i = 1, count do
         local filename = string.format("%s_%03d.txt", basename, i)
         local content = string.format(content_pattern, i)
-        local path = self.create_file(filename, content)
+        local path = dir_path .. "/" .. filename
+        local success, err = fs.write_file(path, content)
+        if not success then
+          error(error_handler.io_error(
+            "Failed to create numbered test file: " .. path,
+            { error = err }
+          ))
+        end
+        temp_file.register_file(path)
         table.insert(files, path)
       end
       return files
     end,
     
+    ---@param filename string Name of the file relative to the test directory
+    ---@param content string Content to write to the file
+    ---@return boolean success Whether the file was successfully written
+    ---@return string? error Error message if writing failed
     -- Helper to write a file that automatically registers it
     write_file = function(filename, content)
       local file_path = dir_path .. "/" .. filename
@@ -242,6 +295,9 @@ function helper.create_temp_test_directory()
   }
 end
 
+---@param files_map table<string, string> Map of file paths to their content
+---@param callback fun(dir_path: string, files: string[], test_dir: TestDirectory): any Function to call with created directory
+---@return any Results from the callback function
 -- Helper for creating a temporary test directory with predefined content
 function helper.with_temp_test_directory(files_map, callback)
   -- Create a temporary directory
@@ -269,11 +325,15 @@ function helper.with_temp_test_directory(files_map, callback)
   return unpack_table(results)
 end
 
+---@param file_path string Path to the file to register for cleanup
+---@return boolean success Whether the file was successfully registered
 -- Helper to manually register existing files for cleanup
 function helper.register_temp_file(file_path)
   return temp_file.register_file(file_path)
 end
 
+---@param dir_path string Path to the directory to register for cleanup
+---@return boolean success Whether the directory was successfully registered 
 -- Helper to manually register existing directories for cleanup
 function helper.register_temp_directory(dir_path)
   return temp_file.register_directory(dir_path)

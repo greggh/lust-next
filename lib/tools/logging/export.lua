@@ -1,6 +1,13 @@
 -- Log export module for firmo
 -- This module provides export mechanisms for external log analysis tools
 
+---@class logging_export
+---@field adapters table Adapter collection for popular log analysis platforms
+---@field export_to_platform fun(entries: table, platform: string, options?: table): table|nil, string? Export logs to an external platform
+---@field create_platform_file fun(log_file: string, platform: string, output_file: string, options?: table): table|nil, string? Create a log file in a format suitable for a specific platform
+---@field create_platform_config fun(platform: string, output_file: string, options?: table): table|nil, string? Create a configuration file for the specified platform
+---@field create_realtime_exporter fun(platform: string, options?: table): table|nil, string? Create a real-time log exporter
+---@field get_supported_platforms fun(): string[] Get list of supported platforms
 local M = {}
 
 -- Require filesystem module - fail if not available
@@ -8,6 +15,8 @@ local fs = require("lib.tools.filesystem")
 
 -- Try to import JSON module if available
 local json
+---@private
+---@return table json JSON encoding module (built-in or fallback)
 local function get_json()
   if not json then
     -- Try to load JSON module
@@ -267,6 +276,11 @@ local adapters = {
 -- Make adapters available externally
 M.adapters = adapters
 
+---@param entries table Array of log entries to export
+---@param platform string Name of the target platform (logstash, elasticsearch, splunk, datadog, loki)
+---@param options? table Platform-specific options
+---@return table|nil formatted_entries Formatted entries for the platform, or nil on error
+---@return string? error Error message if operation failed
 -- Export logs to an external platform
 function M.export_to_platform(entries, platform, options)
   options = options or {}
@@ -287,6 +301,12 @@ function M.export_to_platform(entries, platform, options)
   return formatted_entries
 end
 
+---@param log_file string Path to the source log file
+---@param platform string Name of the target platform (logstash, elasticsearch, splunk, datadog, loki)
+---@param output_file string Path to the output file to create
+---@param options? table Options: { source_format?: string } where source_format can be "json" or "text"
+---@return table|nil result Details about the operation, or nil on error
+---@return string? error Error message if operation failed
 -- Create a log file in a format suitable for a specific platform
 function M.create_platform_file(log_file, platform, output_file, options)
   options = options or {}
@@ -441,6 +461,11 @@ function M.create_platform_file(log_file, platform, output_file, options)
   }
 end
 
+---@param platform string Name of the target platform (logstash, elasticsearch, splunk, datadog, loki)
+---@param output_file string Path to the output configuration file to create
+---@param options? table Platform-specific options like { es_host?: string, service?: string }
+---@return table|nil result Details about the operation, or nil on error
+---@return string? error Error message if operation failed
 -- Create a configuration file for the specified platform
 function M.create_platform_config(platform, output_file, options)
   options = options or {}
@@ -633,6 +658,10 @@ table_manager:
   }
 end
 
+---@param platform string Name of the target platform (logstash, elasticsearch, splunk, datadog, loki)
+---@param options? table Platform-specific options
+---@return table|nil exporter Exporter object with export function, or nil on error
+---@return string? error Error message if operation failed
 -- Create a real-time log exporter
 function M.create_realtime_exporter(platform, options)
   options = options or {}
@@ -661,6 +690,7 @@ function M.create_realtime_exporter(platform, options)
   }
 end
 
+---@return string[] platforms List of supported platform names
 -- Get list of supported platforms
 function M.get_supported_platforms()
   local platforms = {}

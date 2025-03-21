@@ -1,5 +1,34 @@
 -- stub.lua - Function stubbing implementation for firmo
 
+---@class stub_module
+---@field _VERSION string Module version
+---@field new fun(value_or_fn?: any): stub_object Create a new stub function that returns a specified value
+---@field create fun(implementation?: function): stub_object Create a new stub with a custom implementation
+---@field sequence fun(values: table): stub_object Create a stub that returns values in sequence
+---@field from_spy fun(spy_obj: table): stub_object Create a stub from an existing spy object
+---@field is_stub fun(obj: any): boolean Check if an object is a stub
+---@field reset_all fun(): boolean Reset all created stubs to their initial state
+
+---@class stub_object : spy_object
+---@field returns fun(value: any): stub_object Configure stub to return a specific value
+---@field returns_self fun(): stub_object Configure stub to return itself (for method chaining)
+---@field returns_nil fun(): stub_object Configure stub to return nil
+---@field returns_true fun(): stub_object Configure stub to return true
+---@field returns_false fun(): stub_object Configure stub to return false
+---@field returns_function fun(fn: function): stub_object Configure stub to execute a custom function
+---@field returns_args fun(index?: number): stub_object Configure stub to return the arguments it receives
+---@field throws fun(error_or_message: string|table): stub_object Configure stub to throw an error
+---@field returns_sequence fun(values: table): stub_object Configure stub to return values from a sequence
+---@field returns_async fun(value: any, delay?: number): stub_object Configure stub to return a value asynchronously
+---@field set_sequence_behavior fun(options: {cycles?: boolean, exhausted_behavior?: string, exhausted_value?: any}): stub_object Configure sequence behavior
+---@field _is_firmo_stub boolean Flag indicating this is a stub object
+---@field _sequence_values table|nil Values to return in sequence
+---@field _sequence_index number Current index in the sequence
+---@field _sequence_cycles boolean Whether the sequence should cycle when exhausted
+---@field _sequence_exhausted_behavior string Behavior when sequence is exhausted ("nil", "fallback", "custom")
+---@field _sequence_exhausted_value any Value to return when sequence is exhausted
+---@field _original_implementation function Original implementation function
+
 local spy = require("lib.mocking.spy")
 local logging = require("lib.tools.logging")
 
@@ -12,7 +41,14 @@ local stub = {
   _VERSION = "1.0.0"
 }
 
+---@private
+---@param stub_obj stub_object The stub object to modify
+---@param implementation function The original implementation function
+---@param sequence_table table|nil Table of values to return in sequence
+---@return function sequence_implementation Function that implements sequence behavior
 -- Helper function to add sequential return values implementation
+-- Creates a function that returns values from sequence_table one by one
+-- Handles cycling, exhaustion behavior, and function values in the sequence
 local function add_sequence_methods(stub_obj, implementation, sequence_table)
   logger.debug("Setting up sequence methods for stub", {
     sequence_length = sequence_table and #sequence_table or 0
@@ -104,7 +140,10 @@ local function add_sequence_methods(stub_obj, implementation, sequence_table)
   return sequence_implementation
 end
 
--- Create a standalone stub function
+---@param return_value_or_implementation any Value to return when stub is called, or function to use as implementation
+---@return stub_object stub A new stub function object
+-- Create a standalone stub function that returns a specified value
+-- or uses a custom implementation if a function is provided
 function stub.new(return_value_or_implementation)
   logger.debug("Creating new stub", {
     value_type = type(return_value_or_implementation)

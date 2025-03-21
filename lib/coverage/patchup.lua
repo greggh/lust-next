@@ -1,3 +1,10 @@
+---@class coverage.patchup
+---@field _VERSION string Module version
+---@field patch_file fun(file_path: string, file_data: {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string, code_map?: table}): number, table? Patch coverage data for a file by fixing non-executable lines
+---@field patch_all fun(coverage_data: {files: table<string, table>, lines: table, executed_lines: table, covered_lines: table}): number, table? Patch all files in coverage data
+---@field count_files fun(files_table: table): number, table? Count files in a table
+---@field get_line_classification fun(file_path: string, line_num: number): string|nil, table? Get classification for a specific line (comment, code, structural, etc.)
+---@field get_stats fun(): {patched_files: number, patched_lines: number, errors: number} Get statistics about patchup operations
 local M = {}
 M._VERSION = "1.2.0"
 
@@ -14,7 +21,11 @@ logger.debug("Coverage patchup module initialized", {
   version = M._VERSION,
 })
 
--- Is this line a comment or blank?
+---@private
+---@param line string Line of code to check
+---@return boolean is_comment Whether the line is a comment or blank
+-- Determines if a line is a comment or blank by removing trailing comments and whitespace
+-- Returns true for empty lines, lines with only whitespace, or lines containing only comments
 local function is_comment_or_blank(line)
   -- Remove trailing single-line comment
   local code = line:gsub("%-%-.*$", "")
@@ -24,8 +35,16 @@ local function is_comment_or_blank(line)
   return code == ""
 end
 
--- Check if line is inside a multi-line comment
--- This function now uses the static_analyzer's centralized API
+---@private
+---@param line string|nil Line of code to check
+---@param file_path string|nil Path to the file
+---@param line_num number|nil Line number in the file
+---@param file_data {source?: table<number, string>, code_map?: table}|nil File data from coverage
+---@return boolean is_in_comment Whether the line is in a multi-line comment
+-- Check if line is inside a multi-line comment using multiple detection strategies
+-- 1. First tries to use the static_analyzer's centralized API for accurate detection
+-- 2. Falls back to basic pattern matching if file path or static analyzer is not available
+-- 3. For single lines, uses simple pattern detection for --[[ and ]] markers
 local function is_in_multiline_comment(line, file_path, line_num, file_data)
   -- Use the centralized API from static_analyzer if file_path is available
   if file_path and static_analyzer and static_analyzer.is_in_multiline_comment then
@@ -87,7 +106,13 @@ local function is_in_multiline_comment(line, file_path, line_num, file_data)
   return false
 end
 
--- Is this a non-executable line that should be patched?
+---@private
+---@param line_text string Line of code to check
+---@return boolean is_patchable Whether the line is structural code that should be patched
+-- Determines if a line is non-executable structural code that should be patched as covered
+-- Identifies control flow structures (end, else, until, etc.), function declarations,
+-- closing brackets/braces, empty tables, and module return statements that are structural
+-- but don't actually execute as regular code
 local function is_patchable_line(line_text)
   -- Standalone structural keywords
   if
@@ -131,7 +156,13 @@ local function is_patchable_line(line_text)
   return false
 end
 
--- Patch coverage data for a file
+---@param file_path string Path to the file to patch
+---@param file_data {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string, code_map?: table} Coverage data for the file
+---@return number patched Number of lines patched
+---@return table|nil err Error information if patching failed
+-- Patches coverage data for a file by identifying and marking structural code and comments
+-- Uses static analysis when available for precise line classification
+-- Falls back to pattern matching when static analysis is not available
 function M.patch_file(file_path, file_data)
   -- Validate parameters
   if not file_path then
@@ -490,6 +521,9 @@ function M.patch_file(file_path, file_data)
   return result
 end
 
+---@param coverage_data {files: table<string, {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string}>, lines: table, executed_lines: table, covered_lines: table} Coverage data containing files to patch
+---@return number total_patched Total number of lines patched across all files
+---@return table|nil err Error information if patching failed
 -- Patch all files in coverage data
 function M.patch_all(coverage_data)
   -- Validate parameters
@@ -588,6 +622,9 @@ function M.patch_all(coverage_data)
   return total_patched
 end
 
+---@param files_table table<string, any> Table of files to count
+---@return number count Number of files in the table
+---@return table|nil err Error information if counting failed
 -- Helper function to count files in a table
 function M.count_files(files_table)
   -- Validate parameter

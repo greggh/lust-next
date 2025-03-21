@@ -3,6 +3,34 @@
 -- Original source: https://github.com/sqmedeiros/lpeglabel
 -- MIT License
 
+---@class lpeglabel
+---@field _VERSION string Module version
+---@field match fun(pattern: table, subject: string, init?: number): any, ... Match a string against a pattern
+---@field type fun(v: any): string Return the type of the pattern
+---@field P fun(p: string|table|number|boolean|function): table Create a pattern
+---@field S fun(set: string): table Create a set pattern
+---@field R fun(range: string, ...): table Create a range pattern
+---@field V fun(v: string|number): table Create a variable pattern
+---@field C fun(p: table): table Create a capture pattern
+---@field Cc fun(...): table Create a constant capture pattern
+---@field Cp fun(): table Create a position capture pattern
+---@field Cmt fun(p: table, f: function): table Create a match-time capture pattern
+---@field Ct fun(p: table): table Create a table capture pattern
+---@field T fun(l: string): table Create a labeled failure pattern
+---@field B fun(p: table): table Create a back reference pattern
+---@field Carg fun(n: number): table Create an argument capture pattern
+---@field Cb fun(name: string): table Create a back capture pattern
+---@field Cf fun(p: table, f: function): table Create a fold capture pattern
+---@field Cg fun(p: table, name?: string): table Create a group capture pattern
+---@field Cs fun(p: table): table Create a substitution capture pattern
+---@field Lc fun(p: table): table Create a labeled failure capture pattern
+---@field setlabels fun(labels: table): table Set failure labels for patterns
+---@field locale fun(t: table): table Set locale for patterns
+---@field version fun(): string Get the module version
+---@field setmaxstack fun(n: number): boolean Set the maximum stack size for the VM
+---@field getcaptures fun(subject: string, init: number, caps: table): ... Get captures from a match result
+---@field ispatterntable fun(p: any): boolean Check if a value is a pattern table
+
 local M = {}
 local fs = require("lib.tools.filesystem")
 
@@ -29,11 +57,15 @@ print("- vendor_dir: " .. tostring(vendor_dir))
 print("- module_path: " .. tostring(module_path) .. " (type: " .. type(module_path) .. ")")
 print("- build_log_path: " .. tostring(build_log_path) .. " (type: " .. type(build_log_path) .. ")")
 
+---@private
+---@return boolean needs_build Whether the module needs to be built
 -- Check if we need to build the module
 local function needs_build()
   return not fs.file_exists(module_path)
 end
 
+---@private
+---@return string platform The platform string: "windows", "macosx", or "linux"
 -- Helper function to get platform
 local function get_platform()
   if is_windows then
@@ -53,6 +85,9 @@ local function get_platform()
   return success and result or "linux"
 end
 
+---@private
+---@return boolean success Whether the build was successful
+---@return string? error Error message if build failed
 -- Build the module from source
 local function build_module()
   -- Create or empty the log file
@@ -135,6 +170,8 @@ local function build_module()
   end
 end
 
+---@private
+---@return table lpeglabel The loaded LPegLabel module
 -- Load the compiled module
 local function load_module()
   if package.loaded.lpeglabel then

@@ -1,3 +1,20 @@
+---@class ErrorHandler
+---@field CATEGORY table Error categories
+---@field LOG_LEVEL table Log levels for errors
+---@field create fun(message: string, category: string, severity?: string, context?: table, cause?: any): table Create a standardized error object
+---@field validation_error fun(message: string, context?: table): table Create a validation error
+---@field io_error fun(message: string, context?: table): table Create an I/O error
+---@field runtime_error fun(message: string, context?: table, original_error?: any): table Create a runtime error
+---@field parser_error fun(message: string, context?: table): table Create a parser error
+---@field test_expected_error fun(message: string, context?: table): table Create a test expected error
+---@field format_error fun(err: any, include_traceback?: boolean): string Format an error object for display
+---@field set_current_test_metadata fun(metadata: table|nil): table|nil Set metadata for the current test
+---@field get_current_test_metadata fun(): table|nil Get metadata for the current test
+---@field try fun(func: function, ...): boolean, any, any? Execute a function in protected mode
+---@field log_error fun(err: any) Log an error using the logging system
+---@field assert fun(condition: any, message: string, category?: string, context?: table): boolean Assert a condition
+---@field safe_io_operation fun(func: function, file_path: string, context?: table, transform_result?: function): any, any? Safely execute an I/O operation
+---@field rethrow fun(err: table|string, context?: table): nil Rethrow an error with proper error level
 -- Error handling module for firmo
 -- Provides standardized error handling, validation, and error reporting functions
 local M = {}
@@ -15,7 +32,8 @@ local function get_logging()
   return _logging
 end
 
----@diagnostic disable-next-line: unused-local, unused-function
+--- Get the filesystem module lazily to avoid circular dependencies
+---@return table|nil The filesystem module if available
 local function get_fs()
   if not _fs then
     local success, fs = pcall(require, "lib.tools.filesystem")
@@ -166,18 +184,81 @@ end
 -- Add function to module
 M.format_error = format_error
 
--- Rethrow an error
-function M.rethrow(err)
+--- Rethrow an error with proper error level
+---@param err table|string The error object or string to rethrow
+---@param context? table Additional context to add to the error
+---@return nil Never returns, always throws an error
+function M.rethrow(err, context)
+  -- Create a copy of the error to avoid modifying the original
+  local error_to_throw
+  
   if type(err) == "table" and err.message then
-    error(err.message, 2)
+    -- Make a shallow copy of the original error keeping all fields
+    error_to_throw = {}
+    for k, v in pairs(err) do
+      error_to_throw[k] = v
+    end
+    
+    -- If there's context in the original error and it's a table, make a copy of that too
+    if type(err.context) == "table" then
+      error_to_throw.context = {}
+      for k, v in pairs(err.context) do
+        error_to_throw.context[k] = v
+      end
+    end
+    
+    -- If additional context was provided, merge it
+    if context and type(context) == "table" then
+      -- Initialize context table if needed
+      error_to_throw.context = error_to_throw.context or {}
+      -- Merge the additional context
+      for k, v in pairs(context) do
+        error_to_throw.context[k] = v
+      end
+    end
+    
+    -- Log the enhanced error
+    M.log_error(error_to_throw)
+    
+    -- Then throw it
+    error(error_to_throw.message, 2)
+  elseif type(err) == "string" then
+    -- For string errors, create a new error object with the message and context
+    error_to_throw = create_error(
+      err,
+      M.CATEGORY.RUNTIME,
+      M.SEVERITY.ERROR,
+      context
+    )
+    
+    -- Log the error
+    M.log_error(error_to_throw)
+    
+    -- Throw the error
+    error(err, 2)
   else
-    error(tostring(err), 2)
+    -- Fallback for other types
+    local err_str = tostring(err)
+    error_to_throw = create_error(
+      err_str,
+      M.CATEGORY.UNKNOWN,
+      M.SEVERITY.ERROR,
+      context
+    )
+    
+    -- Log the error
+    M.log_error(error_to_throw)
+    
+    -- Throw it
+    error(err_str, 2)
   end
 end
 
 -- REMOVED: Assert functions were moved to firmo.assert
 
--- Internal helper to log an error
+--- Internal helper to log an error
+---@param err table Error object to log
+---@return nil
 local function log_error(err)
   -- Skip all error logging if config says not to log errors
   if not config.log_all_errors then
@@ -292,8 +373,10 @@ local function log_error(err)
   end
 end
 
--- Internal helper to handle an error
----@diagnostic disable-next-line: unused-local, unused-function
+--- Internal helper to handle an error
+---@param err table Error object to handle
+---@return nil
+---@return table err The error object
 local function handle_error(err)
   -- Log the error
   log_error(err)
@@ -302,7 +385,9 @@ local function handle_error(err)
   return nil, err
 end
 
--- Initialize the error handler with configuration
+--- Initialize the error handler with configuration
+---@param options? table Options to configure the error handler
+---@return table The error handler module (for chaining)
 function M.configure(options)
   if options then
     for k, v in pairs(options) do
@@ -350,19 +435,37 @@ function M.configure(options)
   return M
 end
 
--- Public API: Create an error
+--- Create an error object
+---@param message string The error message
+---@param category? string The error category (defaults to UNKNOWN)
+---@param severity? string The error severity (defaults to ERROR)
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return table The error object
 function M.create(message, category, severity, context, cause)
   return create_error(message, category, severity, context, cause)
 end
 
--- Public API: Throw an error (with proper logging)
+--- Throw an error with proper logging
+---@param message string The error message
+---@param category? string The error category (defaults to UNKNOWN)
+---@param severity? string The error severity (defaults to ERROR)
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return nil Never returns, always throws an error
 function M.throw(message, category, severity, context, cause)
   local err = create_error(message, category, severity, context, cause)
   log_error(err)
   error(err.message, 2) -- Level 2 to point to the caller
 end
 
--- Public API: Assert a condition or throw an error
+--- Assert a condition or throw an error
+---@param condition boolean The condition to check
+---@param message string The error message if condition is false
+---@param category? string The error category (defaults to UNKNOWN)
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return boolean The condition value (always true if no error)
 function M.assert(condition, message, category, context, cause)
   if not condition then
     local severity = M.SEVERITY.ERROR
@@ -383,7 +486,11 @@ end
 -- Compatibility function for table unpacking (works with both Lua 5.1 and 5.2+)
 local unpack_table = table.unpack or unpack
 
--- Public API: Safely call a function and catch any errors
+--- Safely call a function and catch any errors
+---@param func function The function to call safely
+---@param ... any Arguments to pass to the function
+---@return boolean success Whether the function call succeeded
+---@return any ... The function's return values or an error object if failed
 function M.try(func, ...)
   local result = { pcall(func, ...) }
   local success = table.remove(result, 1)
@@ -407,47 +514,83 @@ function M.try(func, ...)
   end
 end
 
--- Public API: Create validation error
+--- Create a validation error object
+---@param message string The error message
+---@param context? table Additional context for the error
+---@return table The validation error object
 function M.validation_error(message, context)
   return create_error(message, M.CATEGORY.VALIDATION, M.SEVERITY.ERROR, context)
 end
 
--- Public API: Create I/O error
+--- Create an I/O error object
+---@param message string The error message
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return table The I/O error object
 function M.io_error(message, context, cause)
   return create_error(message, M.CATEGORY.IO, M.SEVERITY.ERROR, context, cause)
 end
 
--- Public API: Create parse error
+--- Create a parse error object
+---@param message string The error message
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return table The parse error object
 function M.parse_error(message, context, cause)
   return create_error(message, M.CATEGORY.PARSE, M.SEVERITY.ERROR, context, cause)
 end
 
--- Public API: Create timeout error
+--- Create a timeout error object
+---@param message string The error message
+---@param context? table Additional context for the error
+---@return table The timeout error object
 function M.timeout_error(message, context)
   return create_error(message, M.CATEGORY.TIMEOUT, M.SEVERITY.ERROR, context)
 end
 
--- Public API: Create a configuration error
+--- Create a configuration error object
+---@param message string The error message
+---@param context? table Additional context for the error
+---@return table The configuration error object
 function M.config_error(message, context)
   return create_error(message, M.CATEGORY.CONFIGURATION, M.SEVERITY.ERROR, context)
 end
 
--- Public API: Create a runtime error
+--- Create a runtime error object
+---@param message string The error message
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return table The runtime error object
 function M.runtime_error(message, context, cause)
   return create_error(message, M.CATEGORY.RUNTIME, M.SEVERITY.ERROR, context, cause)
 end
 
--- Public API: Create a fatal error
+--- Create a fatal error object
+---@param message string The error message
+---@param category? string The error category (defaults to UNKNOWN)
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return table The fatal error object
 function M.fatal_error(message, category, context, cause)
   return create_error(message, category or M.CATEGORY.UNKNOWN, M.SEVERITY.FATAL, context, cause)
 end
 
--- Public API: Create a test expected error (for use in test stubs, mocks, etc.)
+--- Create a test expected error object (for use in test stubs, mocks, etc.)
+---@param message string The error message
+---@param context? table Additional context for the error
+---@param cause? table|string The cause of the error
+---@return table The test expected error object
 function M.test_expected_error(message, context, cause)
   return create_error(message, M.CATEGORY.TEST_EXPECTED, M.SEVERITY.ERROR, context, cause)
 end
 
--- Public API: Safely execute an I/O operation with proper error handling
+--- Safely execute an I/O operation with proper error handling
+---@param operation function The I/O operation to execute
+---@param file_path string The file path being operated on
+---@param context? table Additional context for the error
+---@param transform_result? function Optional function to transform the result
+---@return any|nil result The result of the operation or nil on error
+---@return table|nil error_obj The error object on failure
 function M.safe_io_operation(operation, file_path, context, transform_result)
   transform_result = transform_result or function(result)
     return result
@@ -473,7 +616,9 @@ function M.safe_io_operation(operation, file_path, context, transform_result)
   return nil, error_obj
 end
 
--- Public API: Check if a value is an error object
+--- Check if a value is an error object
+---@param value any The value to check
+---@return boolean Whether the value is an error object
 function M.is_error(value)
   return type(value) == "table" and value.message ~= nil and value.category ~= nil and value.severity ~= nil
 end
@@ -496,7 +641,10 @@ create_error = function(message, category, severity, context, cause)
   return setmetatable(err, mt)
 end
 
--- Public API: Format an error for display
+--- Format an error object for display
+---@param err table|string The error object or string to format
+---@param include_traceback? boolean Whether to include the traceback in the output
+---@return string The formatted error string
 function M.format_error(err, include_traceback)
   if not M.is_error(err) then
     if type(err) == "string" then
@@ -540,7 +688,11 @@ function M.format_error(err, include_traceback)
   return table.concat(parts, "")
 end
 
--- Public API: Configure from global config
+-- Export log_error function for internal use by other module functions
+M.log_error = log_error
+
+--- Configure the error handler from global configuration
+---@return table The error handler module (for chaining)
 function M.configure_from_config()
   -- Try to load central_config directly
   local ok, central_config = pcall(require, "lib.core.central_config")
@@ -579,7 +731,9 @@ function M.configure_from_config()
   return M
 end
 
--- Functions to control test mode
+--- Set whether the error handler is in test mode
+---@param enabled boolean Whether test mode is enabled
+---@return boolean The current test mode state
 function M.set_test_mode(enabled)
   config.in_test_run = enabled and true or false
   
@@ -597,16 +751,21 @@ function M.set_test_mode(enabled)
   return config.in_test_run
 end
 
+--- Check if the error handler is in test mode
+---@return boolean Whether test mode is enabled
 function M.is_test_mode()
   return config.in_test_run
 end
 
--- Check if we're suppressing all logging in tests
+--- Check if we're suppressing all logging in tests
+---@return boolean Whether test logs are being suppressed
 function M.is_suppressing_test_logs()
   return config.in_test_run and config.suppress_all_logging_in_tests
 end
 
--- Helper function to check if an error is an expected test error
+--- Helper function to check if an error is an expected test error
+---@param err table The error object to check
+---@return boolean Whether the error is an expected test error
 function M.is_expected_test_error(err)
   if not M.is_error(err) then
     return false
@@ -631,7 +790,9 @@ function M.is_expected_test_error(err)
   return is_expected_category
 end
 
--- Function to set metadata for the current test
+--- Set metadata for the current test
+---@param metadata table|nil The test metadata or nil to clear
+---@return table|nil The current test metadata
 function M.set_current_test_metadata(metadata)
   -- Log the metadata change
   if metadata then
@@ -654,22 +815,26 @@ function M.set_current_test_metadata(metadata)
   return config.current_test_metadata
 end
 
--- Function to get current test metadata
+--- Get the current test metadata
+---@return table|nil The current test metadata
 function M.get_current_test_metadata()
   return config.current_test_metadata
 end
 
--- Function to check if current test expects errors
+--- Check if current test expects errors
+---@return boolean Whether the current test expects errors
 function M.current_test_expects_errors()
   return config.current_test_metadata and config.current_test_metadata.expect_error == true
 end
 
--- Retrieve expected errors captured during tests
+--- Retrieve expected errors captured during tests
+---@return table Array of expected test errors
 function M.get_expected_test_errors()
   return _G._firmo_test_expected_errors or {}
 end
 
--- Clear the collection of expected errors
+--- Clear the collection of expected errors
+---@return boolean Always returns true
 function M.clear_expected_test_errors()
   _G._firmo_test_expected_errors = {}
   return true

@@ -2,10 +2,20 @@
 local firmo = require('firmo')
 local logging = require("lib.tools.logging")
 
+---@class fix_expect
+---@field validate_path fun(path_key: string, path_elements: string[]): boolean
+---@field inspect_paths fun()
+---@field test_has fun()
+---@field fix_expect_system fun(): boolean
+
 -- Initialize module logger
 local logger = logging.get_logger("fix_expect")
 logging.configure_from_config("fix_expect")
 
+---@private
+---@param path_key string The key in firmo.paths to validate
+---@param path_elements string[] Array of elements that should be in the path
+---@return boolean valid Whether the path contains all expected elements
 -- Function to check if a path is properly set up
 local function validate_path(path_key, path_elements)
   -- Check if the path exists
@@ -33,7 +43,8 @@ local function validate_path(path_key, path_elements)
   return true
 end
 
--- Function to debug paths
+---@private
+-- Function to debug paths and log their contents
 local function inspect_paths()
   logger.debug("Inspecting paths")
   for k, v in pairs(firmo.paths) do
@@ -53,6 +64,7 @@ local function inspect_paths()
   end
 end
 
+---@private
 -- Function to verify has() works as expected
 local function test_has()
   local test_table = {"a", "b", "c"}
@@ -61,6 +73,7 @@ local function test_has()
   logger.debug("has() function verified")
 end
 
+---@return boolean success Whether the expect assertion system was successfully fixed
 -- Function to fix expect assertion system
 local function fix_expect_system()
   logger.info("Fixing expect assertion system")

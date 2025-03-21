@@ -1,7 +1,20 @@
+---@class LogFormatterIntegration
+---@field _VERSION string Module version
+---@field enhance_formatters fun(): boolean Enable logging integration for all formatters
+---@field enable_formatter_logging fun(formatter_name: string, formatter: table): boolean Enable logging for a specific formatter
+---@field collect_logs_for_test fun(test_name: string, test_id: string): table[] Collect logs that occurred during a specific test
+---@field format_logs fun(logs: table[], format?: string): string Format logs for display in test results
+---@field attach_logs_to_results fun(results: table, logs: table[]): table Attach logs to test results
+---@field configure fun(options: {enabled?: boolean, include_debug?: boolean, max_logs_per_test?: number, attach_to_results?: boolean}): LogFormatterIntegration Configure formatter integration
+---@field reset fun(): LogFormatterIntegration Reset to default configuration
+---@field capture_start fun(test_name: string, test_id: string): string Start capturing logs for a test
+---@field capture_end fun(test_id: string): table[] End log capture and return collected logs
+
 -- Integration between logging system and test output formatters
 -- This module enhances test output with structured logging information
 
 local M = {}
+M._VERSION = "1.0.0"
 
 -- Try to load modules
 local function try_require(module_name)

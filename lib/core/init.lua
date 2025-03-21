@@ -1,6 +1,17 @@
 -- lib/core/init.lua - Core module for firmo
+
+---@class core
+---@field type_checking type_checking Type checking utilities
+---@field fix_expect boolean Whether expect system was fixed successfully
+---@field version string Version string
+---@field is_exact_type fun(value: any, expected_type: string, message?: string): boolean
+---@field is_instance_of fun(object: table, class: table, message?: string): boolean
+---@field implements fun(object: table, interface: table, message?: string): boolean
 local M = {}
 
+---@private
+---@param module_name string Name of the module to require
+---@return table|nil The required module or nil if not found
 -- Try to load a module without failing
 local function try_require(module_name)
   local success, module = pcall(require, module_name)

@@ -1,6 +1,24 @@
 -- Parallel test execution module for firmo
 -- Provides functionality to run test files in parallel for better resource utilization
 
+---@class parallel_module
+---@field _VERSION string Module version
+---@field options {workers?: number, timeout?: number, print_output?: boolean, combine_coverage?: boolean, isolate_state?: boolean, memory_limit?: number, show_progress?: boolean, fail_fast?: boolean, randomize?: boolean} Configuration options for parallel execution
+---@field run_files fun(files: string[], options?: {workers?: number, timeout?: number, print_output?: boolean, combine_coverage?: boolean}): {results: table<string, {success: boolean, duration: number, error?: string, tests: number, failures: number, errors: number, skipped: number, test_list: table<number, table>}>, summary: {total_files: number, successful_files: number, failed_files: number, total_duration: number, total_tests: number, total_failures: number, total_errors: number, total_skipped: number}} Run multiple test files in parallel
+---@field configure fun(options?: {workers?: number, timeout?: number, print_output?: boolean, combine_coverage?: boolean, isolate_state?: boolean, memory_limit?: number, show_progress?: boolean}): parallel_module Configure the parallel module
+---@field reset fun(): parallel_module Reset the module to default configuration
+---@field full_reset fun(): parallel_module Fully reset both local and central configuration
+---@field debug_config fun(): {workers: number, timeout: number, print_output: boolean, combine_coverage: boolean, isolate_state: boolean, memory_limit: number, show_progress: boolean, fail_fast: boolean, randomize: boolean, using_central_config: boolean, central_config: table|nil} Debug helper to show current configuration
+---@field get_optimal_workers fun(): number Get the optimal number of worker processes for the current system
+---@field run_file fun(file_path: string, options?: {timeout?: number, print_output?: boolean, isolate_state?: boolean, args?: table}): {success: boolean, duration: number, error?: string, tests: number, failures: number, errors: number, skipped: number, test_list: table<number, table>}|nil, string? Run a single test file in a worker process
+---@field aggregate_results fun(results: table<string, table>): {summary: {total_files: number, successful_files: number, failed_files: number, total_duration: number, total_tests: number, total_failures: number, total_errors: number, total_skipped: number}, results: table<string, table>} Combine results from multiple worker processes
+---@field cancel_all fun(): boolean Cancel all running processes
+---@field is_running fun(): boolean Check if parallel processes are running
+---@field get_active_processes fun(): number Get number of active worker processes
+---@field combine_coverage fun(coverage_data_list: table[]): table Combine coverage data from multiple processes
+---@field monitor_process fun(process_id: string, callback: function): boolean Set up process monitoring with callback
+---@field test_runner fun(): table Get the currently configured test runner
+
 local parallel = {}
 local logging = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
@@ -121,6 +139,9 @@ local function register_change_listener()
 end
 
 -- Configure the module
+--- Configure the parallel module with custom options
+---@param options? table Configuration options to override defaults
+---@return parallel_module The module instance for method chaining
 function parallel.configure(options)
   options = options or {}
   
@@ -408,6 +429,10 @@ local function run_test_file(file, options)
 end
 
 -- Run tests in parallel across multiple processes
+--- Run multiple test files in parallel worker processes
+---@param files table Array of file paths to run
+---@param options? table Run options
+---@return table results Combined results from all test runs
 function parallel.run_tests(files, options)
   options = options or {}
   
@@ -521,6 +546,9 @@ function parallel.run_tests(files, options)
 end
 
 -- Register with firmo
+--- Register parallel testing functionality with the firmo framework
+---@param firmo table The firmo framework instance
+---@return parallel_module The parallel module instance
 function parallel.register_with_firmo(firmo)
   -- Store reference to firmo
   parallel.firmo = firmo
@@ -892,6 +920,8 @@ function parallel.register_with_firmo(firmo)
 end
 
 -- Reset the module configuration to defaults
+--- Reset the module to default configuration
+---@return parallel_module The module instance for method chaining
 function parallel.reset()
   logger.debug("Resetting parallel module configuration to defaults")
   
@@ -904,6 +934,8 @@ function parallel.reset()
 end
 
 -- Fully reset both local and central configuration
+--- Fully reset both local and central configuration
+---@return parallel_module The module instance for method chaining
 function parallel.full_reset()
   -- Reset local configuration
   parallel.reset()
@@ -919,6 +951,8 @@ function parallel.full_reset()
 end
 
 -- Debug helper to show current configuration
+--- Debug helper to show current configuration
+---@return table debug_info Detailed information about the current configuration
 function parallel.debug_config()
   local debug_info = {
     local_config = {},

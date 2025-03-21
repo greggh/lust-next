@@ -1,3 +1,6 @@
+---@class SummaryFormatter
+---@field format_coverage fun(coverage_data: table): table Format coverage data as a text summary
+---@field format_quality fun(quality_data: table): table Format quality data as a text summary
 -- Summary formatter for coverage reports
 local M = {}
 
@@ -17,7 +20,8 @@ local DEFAULT_CONFIG = {
   min_coverage_ok = 80
 }
 
--- Get configuration for Summary formatter
+---@private
+---@return table config The configuration for the summary formatter
 local function get_config()
   -- Try to load the reporting module for configuration access using error_handler.try
   local success, reporting, reporting_err = error_handler.try(function()
@@ -82,7 +86,11 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
--- Function to colorize output if enabled
+---@private
+---@param text string The text to colorize
+---@param color_code string The color code (e.g., "red", "green", "bold")
+---@param config table The formatter configuration
+---@return string colorized_text The colorized text string
 local function colorize(text, color_code, config)
   -- Validate input parameters
   if not text then
@@ -146,7 +154,8 @@ local function colorize(text, color_code, config)
   return result
 end
 
--- Generate a summary coverage report from coverage data
+---@param coverage_data table The coverage data to format
+---@return table report The formatted coverage report with output string and metrics
 function M.format_coverage(coverage_data)
   -- Get formatter configuration with error handling
   local get_config_success, config, config_err = error_handler.try(function()
@@ -485,7 +494,8 @@ function M.format_coverage(coverage_data)
   }
 end
 
--- Generate a text summary of quality data
+---@param quality_data table The quality data to format
+---@return table report The formatted quality report with output string and metrics
 function M.format_quality(quality_data)
   -- Get formatter configuration
   local config = get_config()
@@ -582,6 +592,8 @@ function M.format_quality(quality_data)
   }
 end
 
+---@param formatters table The formatters registry to register with
+---@return nil
 -- Register formatters
 return function(formatters)
   formatters.coverage.summary = M.format_coverage

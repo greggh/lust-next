@@ -18,6 +18,174 @@ firmo is an enhanced Lua testing framework that provides comprehensive testing c
 
 Only remove these comments when you are specifically fixing the issue they're suppressing.
 
+#### Error Handling Diagnostic Patterns
+
+The codebase uses several standardized error handling patterns that require diagnostic suppressions. These suppressions are necessary and intentional, not code smell:
+
+1. **pcall Pattern**:
+   ```lua
+   ---@diagnostic disable-next-line: unused-local
+   local ok, err = pcall(function()
+     return some_operation()
+   end)
+   
+   if not ok then
+     -- Handle error in err
+   end
+   ```
+   The `ok` variable appears unused because it's only used for control flow.
+
+2. **error_handler.try Pattern**:
+   ```lua
+   ---@diagnostic disable-next-line: unused-local
+   local success, result, err = error_handler.try(function()
+     return some_operation()
+   end)
+   
+   if not success then
+     -- Handle error in result (which contains the error object)
+   end
+   ```
+   The `success` variable appears unused for the same reason.
+
+3. **Table Access Without nil Check**:
+   ```lua
+   ---@diagnostic disable-next-line: need-check-nil
+   local value = table[key]
+   ```
+   Used when the code knows the key exists or handles nil values correctly afterward.
+
+4. **Redundant Parameter Pattern**:
+   ```lua
+   ---@diagnostic disable-next-line: redundant-parameter
+   await(50) -- Wait 50ms
+   ```
+   Used when calling functions that are imported from one module and re-exported through another (like `firmo.await` which comes from `lib/async/init.lua`). The Lua Language Server cannot correctly trace the parameter types through these re-exports, resulting in false "redundant parameter" warnings.
+
+Always include these diagnostic suppressions when implementing these patterns. They are part of our standardized approach and removing them would cause unnecessary static analyzer warnings.
+
+### JSDoc-Style Type Annotations
+
+The codebase uses comprehensive JSDoc-style type annotations for improved type checking, documentation, and IDE support. All files MUST include these annotations following our standardized patterns. When implementing new functions or modifying existing ones, adhere to these requirements:
+
+#### Required Type Annotations
+
+1. **Module Interface Declarations** - All module files must begin with class/module definition:
+   ```lua
+   ---@class ModuleName
+   ---@field function_name fun(param: type): return_type Description 
+   ---@field another_function fun(param1: type, param2?: type): return_type|nil, error? Description
+   ---@field _VERSION string Module version
+   local M = {}
+   ```
+
+2. **Module Function Definitions**:
+   ```lua
+   --- Description of what the function does
+   ---@param name type Description of the parameter
+   ---@param optional_param? type Description of the optional parameter
+   ---@return type Description of what the function returns
+   function module.function_name(name, optional_param)
+     -- Implementation
+   end
+   ```
+
+3. **Function Re-exports**:
+   When a function is defined in one module but exported through another:
+   ```lua
+   --- Description of what the function does
+   ---@param name type Description of the parameter
+   ---@param optional_param? type Description of the optional parameter
+   ---@return type Description of what the function returns
+   module.exported_function = original_module.function_name
+   ```
+
+4. **Local Function Annotations** - Helper functions should have annotations:
+   ```lua
+   ---@private
+   ---@param value any The value to process
+   ---@return string The processed value
+   local function process_value(value)
+   ```
+
+5. **Variable Type Annotations** - For complex types:
+   ```lua
+   ---@type string[]
+   local names = {}
+   
+   ---@type table<string, {id: number, name: string}>
+   local cache = {}
+   ```
+
+#### Annotation Style Guidelines
+
+1. **Error Handling Pattern** - For functions that may fail, use this pattern:
+   ```lua
+   ---@return ValueType|nil value The result or nil if operation failed
+   ---@return table|nil error Error information if operation failed
+   ```
+
+2. **Optional Parameters** - Mark with question mark suffix:
+   ```lua
+   ---@param options? table Optional configuration
+   ```
+
+3. **Nullable Types** - Use pipe with nil:
+   ```lua
+   ---@return string|nil The result or nil if not found
+   ```
+
+4. **Union Types** - Use pipe for multiple possible types:
+   ```lua
+   ---@param id string|number The identifier (string or number)
+   ```
+
+5. **Complex Return Patterns** - Document each possible return value:
+   ```lua
+   ---@return boolean|nil success Whether operation succeeded or nil if error
+   ---@return table|nil result Result data if success, nil if error
+   ---@return table|nil error Error data if failure, nil if success
+   ```
+
+6. **Tables with Specific Fields** - Document the structure:
+   ```lua
+   ---@param options {timeout?: number, retry?: boolean, max_attempts?: number} Configuration options
+   ```
+
+7. **Callback Signatures** - Document the callback function signature:
+   ```lua
+   ---@param callback fun(result: string, success: boolean): boolean Function called with result
+   ```
+
+#### When Annotations Are Required
+
+1. **ALL new files** must include comprehensive type annotations
+2. **ALL existing files** being modified must have annotations added if missing
+3. **WHENEVER modifying functions**, ensure annotations are updated to match the changes
+4. **WHENEVER adding new functionality**, include complete annotations
+
+The standard annotation structure follows sumneko Lua Language Server format for optimal IDE integration. This is a mandatory part of our code quality standards.
+
+#### Common Type Annotation Examples
+
+- `---@param name string` - String parameter
+- `---@param count number` - Number parameter
+- `---@param callback function` - Function parameter
+- `---@param options? table` - Optional table parameter (note the `?`)
+- `---@param items table<string, number>` - Table with string keys and number values
+- `---@param handler fun(item: string): boolean` - Function that takes string and returns boolean
+- `---@return boolean` - Boolean return value
+- `---@return nil` - No return value
+- `---@return string|nil, string?` - String or nil, with optional second string
+- `---@return boolean|nil success, table|nil error` - Success flag or error pattern
+
+Until all functions have proper type annotations throughout the export chain, continue using the diagnostic suppressions as needed. The goal is to gradually add type annotations to all major modules in this priority order:
+
+1. Core modules (async, error_handler, logging)
+2. Tools modules (filesystem, benchmark, codefix)  
+3. Public API functions in firmo.lua
+4. Test helper functions and utilities
+
 ### Markdown Formatting
 
 When working with Markdown files:
@@ -686,6 +854,13 @@ Our current priorities in order:
    - Enhance function detection
    - Perfect block boundary identification
    - Fix data flow between components
+
+5. **JSDoc Type Annotation Maintenance**
+   - Maintain comprehensive JSDoc-style type annotations across all files
+   - Update annotations when modifying existing functions
+   - Add annotations to any new functionality or files
+   - Ensure consistent annotation style following our guidelines
+   - Use annotations to improve type checking and IDE integration
 
 ## Future Enhancements
 

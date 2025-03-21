@@ -1,3 +1,24 @@
+---@class coverage
+---@field _VERSION string Module version
+---@field config table Configuration settings for coverage
+---@field init fun(options?: {enabled?: boolean, use_instrumentation?: boolean, instrument_on_load?: boolean, include_patterns?: string[], exclude_patterns?: string[], debugger_enabled?: boolean, report_format?: string, track_blocks?: boolean, track_functions?: boolean, use_static_analysis?: boolean, source_dirs?: string[], threshold?: number, pre_analyze_files?: boolean}): coverage|nil, table? Initialize the coverage module with options
+---@field start fun(options?: {use_instrumentation?: boolean, instrument_on_load?: boolean, track_blocks?: boolean, track_functions?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, sourcemap_enabled?: boolean}): coverage|nil, table? Start coverage collection
+---@field stop fun(): coverage Stop coverage collection
+---@field reset fun(): coverage Reset coverage data
+---@field full_reset fun(): coverage Full reset of coverage data including internal state
+---@field track_file fun(file_path: string): boolean|nil, table? Track a specific file for coverage
+---@field track_execution fun(file_path: string, line_num: number): boolean|nil, table? Track line execution without marking as covered
+---@field track_line fun(file_path: string, line_num: number): boolean|nil, table? Track line as both executed and covered
+---@field mark_line_covered fun(file_path: string, line_num: number): boolean|nil, table? Mark a line as covered (validated by assertions)
+---@field track_function fun(file_path: string, line_num: number, func_name: string): boolean|nil, table? Track function execution
+---@field track_block fun(file_path: string, line_num: number, block_id: string, block_type: string): boolean|nil, table? Track block execution
+---@field process_module_structure fun(file_path: string): boolean|nil, table? Process a module's code structure
+---@field get_raw_data fun(): {files: table, executed_lines: table, covered_lines: table, functions: {all: table, executed: table, covered: table}, blocks: {all: table, executed: table, covered: table}, conditions: {all: table, executed: table, true_outcome: table, false_outcome: table, fully_covered: table}, performance: table} Get raw coverage data for debugging
+---@field get_report_data fun(): {files: table, summary: {total_files: number, covered_files: number, file_coverage_percent: number, total_lines: number, covered_lines: number, executed_lines: number, line_coverage_percent: number, execution_coverage_percent: number, total_functions: number, covered_functions: number, function_coverage_percent: number, total_blocks: number, covered_blocks: number, block_coverage_percent: number, performance: table}} Get coverage report data with statistics
+---@field was_line_executed fun(file_path: string, line_num: number): boolean Check if a line has been executed
+---@field was_line_covered fun(file_path: string, line_num: number): boolean Check if a line has been covered
+---@field mark_current_line_covered fun(level?: number): boolean Mark current line as covered
+
 -- firmo code coverage module
 local M = {}
 M._VERSION = '1.0.0'
@@ -47,6 +68,8 @@ local original_hook = nil
 local instrumentation = nil
 local _central_config = nil
 
+---@private
+---@return table|nil central_config The central configuration module if available
 -- Central configuration access
 local function get_central_config()
   if not _central_config then
@@ -56,6 +79,9 @@ local function get_central_config()
   return _central_config
 end
 
+---@private
+---@return table|nil analyzer The static analyzer module if successfully initialized
+---@return table|nil error Error information if initialization failed
 -- Initialize static analyzer with configuration options
 local function init_static_analyzer()
   if not static_analyzer then
@@ -80,6 +106,10 @@ local function init_static_analyzer()
   return static_analyzer
 end
 
+---@private
+---@param level? number The stack level to get info from (default: 2)
+---@return table|nil caller_info Information about the caller {file_path, line_num}
+---@return table|nil error Error information if failed
 -- Get file information from current stack frame
 -- This is a utility function that's useful for automatic line tracking
 local function get_caller_info(level)
@@ -126,6 +156,10 @@ local function get_caller_info(level)
   }
 end
 
+---@private
+---@param file_path any The file path to normalize
+---@return string|nil normalized_path The normalized file path
+---@return table|nil error Error information if failed
 -- Normalize file path with proper validation
 local function normalize_file_path(file_path)
   if type(file_path) ~= "string" then
@@ -149,6 +183,9 @@ local function normalize_file_path(file_path)
   return file_path:gsub("//", "/"):gsub("\\", "/")
 end
 
+---@param file_path string The absolute path to the file to track
+---@return boolean|nil success Whether the file was successfully tracked
+---@return table|nil error Error information if tracking failed
 -- Directly track a file (helper for tests)
 function M.track_file(file_path)
   if not active or not config.enabled then
@@ -267,6 +304,10 @@ function M.track_file(file_path)
   end
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number to track execution for
+---@return boolean|nil success Whether the line was successfully tracked
+---@return table|nil error Error information if tracking failed
 -- Track execution without marking as covered - for distinguishing execution from coverage
 function M.track_execution(file_path, line_num)
   if not active or not config.enabled then
@@ -415,6 +456,10 @@ function M.track_execution(file_path, line_num)
   return true
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number to track
+---@return boolean|nil success Whether the line was successfully tracked
+---@return table|nil error Error information if tracking failed
 -- Track line coverage through instrumentation (marks as both executed and covered)
 function M.track_line(file_path, line_num)
   if not active or not config.enabled then
@@ -537,6 +582,10 @@ function M.track_line(file_path, line_num)
   return true
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number to mark as covered
+---@return boolean|nil success Whether the line was successfully marked as covered
+---@return table|nil error Error information if marking failed
 -- Mark a line as covered (validated by assertions)
 -- This is a key function for explicitly marking lines that have been validated by assertions
 function M.mark_line_covered(file_path, line_num)
@@ -619,6 +668,11 @@ function M.mark_line_covered(file_path, line_num)
   return true
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number where the function is defined
+---@param func_name string The name of the function
+---@return boolean|nil success Whether the function was successfully tracked
+---@return table|nil error Error information if tracking failed
 -- Track function execution
 function M.track_function(file_path, line_num, func_name)
   if not active or not config.enabled then
@@ -695,6 +749,12 @@ function M.track_function(file_path, line_num, func_name)
   return true
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number where the block starts
+---@param block_id string A unique identifier for the block
+---@param block_type string The type of block (if, while, for, etc.)
+---@return boolean|nil success Whether the block was successfully tracked
+---@return table|nil error Error information if tracking failed
 -- Track block execution
 function M.track_block(file_path, line_num, block_id, block_type)
   if not active or not config.enabled then
@@ -828,6 +888,9 @@ function M.track_block(file_path, line_num, block_id, block_type)
   return true
 end
 
+---@param options? table Configuration options for coverage module
+---@return coverage|nil module The initialized coverage module
+---@return table|nil error Error information if initialization failed
 -- Initialize module
 function M.init(options)
   if options ~= nil and type(options) ~= "table" then
@@ -901,6 +964,9 @@ function M.init(options)
   return M
 end
 
+---@param options? table Additional configuration options for coverage start
+---@return coverage|nil module The coverage module
+---@return table|nil error Error information if start failed
 -- Start coverage collection
 function M.start(options)
   if not config.enabled then
@@ -1111,6 +1177,9 @@ function M.start(options)
   return M
 end
 
+---@param file_path string The absolute path to the file to analyze
+---@return boolean|nil success Whether the module structure was successfully processed
+---@return table|nil error Error information if processing failed
 -- Process a module's code structure to mark logical execution paths
 function M.process_module_structure(file_path)
   if not file_path then
@@ -1175,6 +1244,7 @@ end
 local process_module_structure = M.process_module_structure
 
 -- Stop coverage collection
+---@return coverage module The coverage module
 function M.stop()
   if not active then
     logger.debug("Coverage not active, ignoring stop request")
@@ -1231,6 +1301,7 @@ function M.stop()
   return M
 end
 
+---@return coverage module The coverage module
 -- Reset coverage data
 function M.reset()
   local success, err = error_handler.try(function()
@@ -1246,6 +1317,7 @@ function M.reset()
   return M
 end
 
+---@return coverage module The coverage module
 -- Full reset (more comprehensive than regular reset)
 function M.full_reset()
   local success, err = error_handler.try(function()
@@ -1268,6 +1340,7 @@ function M.full_reset()
   return M
 end
 
+---@return table raw_data Raw coverage data for debugging and analysis
 -- Get raw coverage data for debugging and analysis
 function M.get_raw_data()
   local success, result, err = error_handler.try(function()
@@ -1320,6 +1393,7 @@ function M.get_raw_data()
   return result
 end
 
+---@return table report_data Coverage report data with statistics calculations
 -- Get report data with statistics calculations
 function M.get_report_data()
   local success, result, err = error_handler.try(function()
@@ -1634,6 +1708,9 @@ function M.get_report_data()
   return result
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number to check
+---@return boolean executed Whether the line has been executed
 -- Check if a line has been executed
 -- This is a key function for the execution vs. coverage distinction
 function M.was_line_executed(file_path, line_num)
@@ -1654,6 +1731,9 @@ function M.was_line_executed(file_path, line_num)
   return debug_hook.was_line_executed(normalized_path, line_num)
 end
 
+---@param file_path string The absolute path to the file
+---@param line_num number The line number to check
+---@return boolean covered Whether the line has been covered (validated by tests)
 -- Check if a line has been covered (validated by tests)
 -- This is a key function for the execution vs. coverage distinction
 function M.was_line_covered(file_path, line_num)
@@ -1674,6 +1754,8 @@ function M.was_line_covered(file_path, line_num)
   return debug_hook.was_line_covered(normalized_path, line_num)
 end
 
+---@param level? number Stack level to use for getting caller info (default: 2)
+---@return boolean success Whether the current line was marked as covered
 -- Mark the current line as covered by extracting caller information
 -- This is convenient for assertions to automatically mark their caller lines as covered
 function M.mark_current_line_covered(level)

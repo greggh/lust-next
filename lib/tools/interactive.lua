@@ -1,4 +1,30 @@
 -- Interactive CLI module for firmo
+-- Provides an interactive command-line interface for the test framework
+
+---@class interactive_module
+---@field _VERSION string Module version
+---@field init fun(options?: {history_file?: string, prompt?: string, max_history?: number, colors?: boolean, auto_complete?: boolean, enable_debugging?: boolean, silent?: boolean}): interactive_module Initialize the interactive CLI with configuration options
+---@field start fun(): boolean Start the interactive CLI session
+---@field stop fun(): boolean Stop the interactive CLI session
+---@field run_command fun(command: string): boolean|nil, string? Run a CLI command
+---@field parse_command fun(input: string): {command: string, args: string[]} Parse a command string into command and arguments
+---@field configure fun(options?: table): interactive_module Configure the interactive CLI
+---@field load_history fun(file_path?: string): boolean|nil, string? Load command history from a file
+---@field save_history fun(file_path?: string): boolean|nil, string? Save command history to a file
+---@field add_to_history fun(command: string): boolean Add a command to the history
+---@field get_history fun(): string[] Get the command history
+---@field register_command fun(name: string, handler: fun(args: string[]): boolean|string, help_text: string): boolean Register a custom command
+---@field unregister_command fun(name: string): boolean Remove a registered command
+---@field set_prompt fun(prompt: string): interactive_module Set the command prompt
+---@field colorize fun(text: string, color: string): string Apply ANSI color to text
+---@field get_registered_commands fun(): table<string, {handler: function, help: string}> Get all registered commands
+---@field print fun(text: string, color?: string): nil Print text to the interactive console
+---@field clear fun(): nil Clear the console screen
+---@field set_completion_handler fun(handler: fun(input: string): string[]): interactive_module Set custom auto-completion handler
+---@field handle_tab_completion fun(input: string): string[] Handle tab completion for commands
+---@field get_command_help fun(command?: string): string Get help text for commands
+---@field process_input fun(input: string): boolean Process user input
+
 local interactive = {}
 interactive._VERSION = "1.3.0"
 
@@ -185,6 +211,9 @@ local function register_change_listener()
 end
 
 -- Configure the module
+--- Configure the interactive CLI with custom options
+---@param options? table Configuration options to override defaults
+---@return interactive_module The module instance for method chaining
 function interactive.configure(options)
   options = options or {}
 
@@ -1678,6 +1707,10 @@ local function read_line_with_history()
 end
 
 -- Main entry point for the interactive CLI
+--- Start the interactive CLI session
+---@param firmo table The firmo framework instance
+---@param options? table Additional options for the CLI session
+---@return boolean success Whether the session was started successfully
 function interactive.start(firmo, options)
   options = options or {}
 
@@ -1792,6 +1825,8 @@ function interactive.start(firmo, options)
 end
 
 -- Reset the module configuration to defaults
+--- Reset the interactive CLI to default configuration
+---@return interactive_module The module instance for method chaining
 function interactive.reset()
   logger.debug("Resetting interactive module configuration to defaults")
 
@@ -1829,6 +1864,8 @@ function interactive.reset()
 end
 
 -- Fully reset both local and central configuration
+--- Fully reset both configuration and state
+---@return interactive_module The module instance for method chaining
 function interactive.full_reset()
   -- Reset local configuration
   interactive.reset()
@@ -1844,6 +1881,8 @@ function interactive.full_reset()
 end
 
 -- Debug helper to show current configuration
+--- Get debug information about the current configuration
+---@return table debug_info Detailed information about the current configuration and state
 function interactive.debug_config()
   local debug_info = {
     version = interactive._VERSION,

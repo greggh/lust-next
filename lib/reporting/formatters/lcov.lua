@@ -1,4 +1,13 @@
+---@class LCOVFormatter
+---@field _VERSION string Module version
+---@field format_coverage fun(coverage_data: {files: table<string, {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, stats: {total: number, covered: number, executable: number, percentage: number}}>, summary: {total_lines: number, executed_lines: number, covered_lines: number, coverage_percentage: number}}): string|nil, table? Format coverage data as LCOV format
+---@field get_config fun(): LCOVFormatterConfig Get current formatter configuration
+---@field set_config fun(config: table): boolean Set formatter configuration options
+---@field normalize_path fun(path: string): string Normalize file paths for LCOV format
+---@field validate_coverage fun(coverage_data: table): boolean, string? Validate coverage data before formatting
+---@field calculate_checksums fun(file_path: string): string|nil, table? Calculate checksum for a file
 -- LCOV formatter for coverage reports
+-- Creates output compatible with the LCOV format used by lcov/genhtml tools
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -8,7 +17,24 @@ local error_handler = require("lib.tools.error_handler")
 -- Configure module logging
 logging.configure_from_config("Reporting:LCOV")
 
+---@class LCOVFormatterConfig
+---@field normalize_paths boolean Whether to convert absolute paths to relative paths
+---@field include_function_lines boolean Whether to include function line information
+---@field use_actual_execution_counts boolean Whether to use actual execution count instead of binary 0/1
+---@field include_checksums boolean Whether to include checksums in line records
+---@field exclude_patterns string[] Patterns for files to exclude from report
+---@field include_branch_data boolean Whether to include branch coverage data
+---@field include_uncovered_lines boolean Whether to include lines that weren't covered
+---@field root_dir? string Optional root directory for path normalization
+---@field checksum_algorithm? string Algorithm for checksums (md5, sha1)
+---@field max_line_length? number Maximum length for source lines
+---@field include_source boolean Whether to include source filenames
+---@field break_by_file boolean Whether to add separator between files
+---@field include_test_name boolean Whether to include test name in output
+---@field skip_empty_files boolean Whether to skip files with no executable lines
+
 -- Define default configuration
+---@type LCOVFormatterConfig
 local DEFAULT_CONFIG = {
   normalize_paths = true,        -- Convert absolute paths to relative paths
   include_function_lines = true, -- Include function line information
@@ -17,6 +43,8 @@ local DEFAULT_CONFIG = {
   exclude_patterns = {}          -- Patterns for files to exclude from report
 }
 
+---@private
+---@return LCOVFormatterConfig config The configuration for the LCOV formatter
 -- Get configuration for this formatter
 local function get_config()
   local formatter_config
@@ -51,6 +79,10 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
+---@private
+---@param path string File path to normalize
+---@param config LCOVFormatterConfig|nil Formatter configuration
+---@return string normalized_path Normalized path based on configuration
 -- Helper function to normalize path based on configuration
 local function normalize_path(path, config)
   -- Validate inputs
@@ -89,6 +121,10 @@ local function normalize_path(path, config)
   return normalized
 end
 
+---@private
+---@param filename string File name to check
+---@param config LCOVFormatterConfig|nil Formatter configuration
+---@return boolean should_include Whether the file should be included in the report
 -- Helper function to check if a file should be included in the report
 local function should_include_file(filename, config)
   -- Validate inputs
@@ -127,6 +163,9 @@ local function should_include_file(filename, config)
   return true
 end
 
+---@private
+---@param tbl table|any Table to count entries in
+---@return number count Number of entries in the table, 0 if not a table
 -- Safe function to count table entries
 local function safe_count(tbl)
   if type(tbl) ~= "table" then
@@ -140,6 +179,10 @@ local function safe_count(tbl)
   return count
 end
 
+---@private
+---@param lcov_lines table Table of LCOV lines to add to
+---@param record string Line to add to the LCOV output
+---@return boolean success Whether the record was successfully added
 -- Safe function to add a record to the LCOV output
 local function add_record(lcov_lines, record)
   if not lcov_lines or type(lcov_lines) ~= "table" then
@@ -158,6 +201,11 @@ local function add_record(lcov_lines, record)
   return success
 end
 
+---@private
+---@param lcov_lines table Table of LCOV lines to add to
+---@param file_data table File coverage data
+---@param config LCOVFormatterConfig Formatter configuration
+---@return boolean success Whether function data was successfully processed
 -- Safe function to process function data
 local function process_functions(lcov_lines, file_data, config)
   if not file_data.functions or not config.include_function_lines then
@@ -254,6 +302,11 @@ local function process_functions(lcov_lines, file_data, config)
   return success
 end
 
+---@private
+---@param lcov_lines table Table of LCOV lines to add to
+---@param file_data table File coverage data
+---@param config LCOVFormatterConfig Formatter configuration
+---@return boolean success Whether line data was successfully processed
 -- Safe function to process line data
 local function process_lines(lcov_lines, file_data, config)
   if not file_data.lines then
@@ -320,6 +373,12 @@ local function process_lines(lcov_lines, file_data, config)
   return success
 end
 
+---@private
+---@param lcov_lines table Table of LCOV lines to add to
+---@param filename string File name
+---@param file_data table File coverage data
+---@param config LCOVFormatterConfig Formatter configuration
+---@return boolean success Whether file data was successfully processed
 -- Safe function to create a file entry
 local function process_file(lcov_lines, filename, file_data, config)
   if not lcov_lines or not filename or not file_data then
@@ -358,6 +417,8 @@ local function process_file(lcov_lines, filename, file_data, config)
   return success
 end
 
+---@param coverage_data table|nil Coverage data from the coverage module
+---@return string lcov_report LCOV format representation of the coverage data
 -- Generate an LCOV format coverage report (used by many CI tools)
 function M.format_coverage(coverage_data)
   -- Input validation
@@ -460,6 +521,9 @@ function M.format_coverage(coverage_data)
   end
 end
 
+---@param formatters table Table of formatter registries
+---@return boolean success True if registration was successful
+---@return table|nil error Error object if registration failed
 -- Register formatter
 return function(formatters)
   -- Input validation

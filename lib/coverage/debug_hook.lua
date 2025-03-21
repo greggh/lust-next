@@ -1,3 +1,25 @@
+---@class coverage.debug_hook
+---@field debug_hook fun(event: string, line: number) Debug hook function for Lua's debug.sethook
+---@field should_track_file fun(file_path: string): boolean Determine if a file should be tracked
+---@field set_config fun(new_config: {exclude?: string[], include?: string[], source_dirs?: string[], should_track_example_files?: boolean}): boolean Set configuration options
+---@field track_line fun(file_path: string, line_num: number, options?: {is_executable?: boolean, is_covered?: boolean, operation?: string}): boolean|nil, table? Track a line execution
+---@field set_line_executed fun(file_path: string, line_num: number, is_executed: boolean): boolean|nil, table? Mark a line as executed
+---@field set_line_covered fun(file_path: string, line_num: number, is_covered: boolean): boolean|nil, table? Mark a line as covered
+---@field set_line_executable fun(file_path: string, line_num: number, is_executable: boolean): boolean|nil, table? Mark a line as executable
+---@field mark_line_covered fun(file_path: string, line_num: number): boolean|nil, table? Mark a line as covered (used by assertions)
+---@field was_line_executed fun(file_path: string, line_num: number): boolean Check if a line was executed
+---@field was_line_covered fun(file_path: string, line_num: number): boolean Check if a line was covered
+---@field track_function fun(file_path: string, line_num: number, func_name: string): boolean|nil, table? Track a function execution
+---@field track_block fun(file_path: string, line_num: number, block_id: string, block_type: string): boolean|nil, table? Track a block execution
+---@field initialize_file fun(file_path: string, options?: table): table|nil, table? Initialize file tracking
+---@field activate_file fun(file_path: string): boolean|nil, table? Mark a file as active for reporting
+---@field has_file fun(file_path: string): boolean Check if a file is being tracked
+---@field get_file_data fun(file_path: string): table|nil, table? Get data for a tracked file
+---@field get_coverage_data fun(): {files: table, lines: table, executed_lines: table, covered_lines: table, functions: {all: table, executed: table, covered: table}, blocks: {all: table, executed: table, covered: table}, conditions: {all: table, executed: table, true_outcome: table, false_outcome: table, fully_covered: table}} Get all coverage data
+---@field get_active_files fun(): table<string, boolean> Get list of active files
+---@field get_performance_metrics fun(): {hook_calls: number, hook_execution_time: number, hook_errors: number, last_call_time: number, average_call_time: number, max_call_time: number, line_events: number, call_events: number, return_events: number} Get performance metrics
+---@field reset fun() Reset all coverage data
+
 -- Core debug hook implementation
 local M = {}
 local fs = require("lib.tools.filesystem")
@@ -51,6 +73,8 @@ local performance_metrics = {
 -- Create a logger for this module
 local logger = logging.get_logger("CoverageHook")
 
+---@param file_path string Path to the file to check
+---@return boolean Should the file be tracked by the coverage system
 -- Should we track this file?
 function M.should_track_file(file_path)
   -- Safely normalize file path
@@ -158,6 +182,10 @@ function M.should_track_file(file_path)
   return is_lua
 end
 
+---@param file_path string Path to the file to initialize for tracking
+---@param options? table Optional configuration parameters for initialization
+---@return table|nil file_data The initialized file data object or nil if initialization failed
+---@return table|nil error Error object if initialization failed
 -- Initialize tracking for a file - exposed as public API for other components to use
 function M.initialize_file(file_path, options)
   -- Validate parameters
@@ -229,11 +257,18 @@ function M.initialize_file(file_path, options)
   return coverage_data.files[normalized_path]
 end
 
+---@param file_path string Path to the file to initialize
+---@return table|nil file_data The initialized file data or nil if initialization failed
+---@private
 -- Private function for internal use that calls the public API
 local function initialize_file(file_path)
   return M.initialize_file(file_path)
 end
 
+---@param file_path string Path to the file to check
+---@param line number Line number to check for executability
+---@return boolean is_executable Whether the line is executable
+---@private
 -- Check if a line is executable in a file - delegated to static_analyzer
 local function is_line_executable(file_path, line)
   -- Ensure static_analyzer is loaded
@@ -288,6 +323,8 @@ local function is_line_executable(file_path, line)
   return static_analyzer.classify_line_simple(file_data and file_data.source[line], config)
 end
 
+---@param event string The debug event type ('line', 'call', 'return', etc.)
+---@param line number The line number where the event occurred
 -- Enhanced debug hook function with performance tracking and robust execution vs. coverage distinction
 function M.debug_hook(event, line)
   -- Record start time for performance monitoring
@@ -675,6 +712,9 @@ function M.debug_hook(event, line)
   end
 end
 
+---@param new_config table Configuration options for the debug hook module
+---@return boolean|nil success True if configuration was successful, nil if failed
+---@return table|nil error Error object if configuration failed
 -- Set configuration
 function M.set_config(new_config)
   -- Validate config parameter
@@ -704,21 +744,26 @@ end
 
 -- Coverage Data Accessor Functions --
 
+---@return table coverage_data Complete coverage data structure
 -- Get entire coverage data (legacy function maintained for backward compatibility)
 function M.get_coverage_data()
   return coverage_data
 end
 
+---@return table active_files Table of active files (normalized path as key, true as value)
 -- Get active files list
 function M.get_active_files()
   return active_files
 end
 
+---@return table files Table of all tracked files and their data
 -- Get all files in coverage data
 function M.get_files()
   return coverage_data.files
 end
 
+---@param file_path string Path to the file to get data for
+---@return table|nil file_data Coverage data for the specified file or nil if not found
 -- Get specific file data
 function M.get_file_data(file_path)
   if not file_path then
@@ -733,12 +778,17 @@ function M.get_file_data(file_path)
   return coverage_data.files[normalized_path]
 end
 
+---@param file_path string Path to check if tracked
+---@return boolean exists Whether the file exists in the coverage data
 -- Check if file exists in coverage data
 function M.has_file(file_path)
   local normalized_path = fs.normalize_path(file_path)
   return coverage_data.files[normalized_path] ~= nil
 end
 
+---@param file_path string Path to the file to activate for reporting
+---@return boolean|nil success True if the file was activated successfully, nil if failed
+---@return table|nil error Error object if activation failed
 -- Mark a file as active for reporting
 function M.activate_file(file_path)
   -- Validate parameters
@@ -786,6 +836,8 @@ function M.activate_file(file_path)
   return true
 end
 
+---@param file_path string Path to the file
+---@return table|nil source_lines Table of source lines or nil if file not found
 -- Get file's source lines
 function M.get_file_source(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -795,6 +847,8 @@ function M.get_file_source(file_path)
   return coverage_data.files[normalized_path].source
 end
 
+---@param file_path string Path to the file
+---@return string|nil source_text Full source text or nil if file not found
 -- Get file's source text
 function M.get_file_source_text(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -804,6 +858,8 @@ function M.get_file_source_text(file_path)
   return coverage_data.files[normalized_path].source_text
 end
 
+---@param file_path string Path to the file
+---@return table covered_lines Table of covered lines (line number as key, true as value)
 -- Get covered lines for a file
 function M.get_file_covered_lines(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -813,6 +869,8 @@ function M.get_file_covered_lines(file_path)
   return coverage_data.files[normalized_path].lines or {}
 end
 
+---@param file_path string Path to the file
+---@return table executed_lines Table of executed lines (line number as key, true as value)
 -- Get executed lines for a file
 function M.get_file_executed_lines(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -822,6 +880,8 @@ function M.get_file_executed_lines(file_path)
   return coverage_data.files[normalized_path]._executed_lines or {}
 end
 
+---@param file_path string Path to the file
+---@return table executable_lines Table of executable lines (line number as key, true as value)
 -- Get executable lines for a file
 function M.get_file_executable_lines(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -831,6 +891,8 @@ function M.get_file_executable_lines(file_path)
   return coverage_data.files[normalized_path].executable_lines or {}
 end
 
+---@param file_path string Path to the file
+---@return table functions Table of function data for the file
 -- Get function data for a file
 function M.get_file_functions(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -840,6 +902,8 @@ function M.get_file_functions(file_path)
   return coverage_data.files[normalized_path].functions or {}
 end
 
+---@param file_path string Path to the file
+---@return table logical_chunks Table of logical code blocks for the file
 -- Get logical chunks (blocks) for a file
 function M.get_file_logical_chunks(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -849,6 +913,8 @@ function M.get_file_logical_chunks(file_path)
   return coverage_data.files[normalized_path].logical_chunks or {}
 end
 
+---@param file_path string Path to the file
+---@return table logical_conditions Table of logical conditions for the file
 -- Get logical conditions for a file
 function M.get_file_logical_conditions(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -858,6 +924,8 @@ function M.get_file_logical_conditions(file_path)
   return coverage_data.files[normalized_path].logical_conditions or {}
 end
 
+---@param file_path string Path to the file
+---@return table|nil code_map Static analysis code map or nil if not available
 -- Get code map for a file
 function M.get_file_code_map(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -867,6 +935,8 @@ function M.get_file_code_map(file_path)
   return coverage_data.files[normalized_path].code_map
 end
 
+---@param file_path string Path to the file
+---@return table|nil ast Abstract syntax tree or nil if not available
 -- Get AST for a file
 function M.get_file_ast(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -876,6 +946,8 @@ function M.get_file_ast(file_path)
   return coverage_data.files[normalized_path].ast
 end
 
+---@param file_path string Path to the file
+---@return number line_count Number of lines in the file (0 if file not found)
 -- Get line count for a file
 function M.get_file_line_count(file_path)
   local normalized_path = fs.normalize_path(file_path)
@@ -885,6 +957,11 @@ function M.get_file_line_count(file_path)
   return coverage_data.files[normalized_path].line_count or 0
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to mark as covered
+---@param covered? boolean Whether the line is covered (defaults to true)
+---@return boolean|nil success True if the line was marked successfully, nil if failed
+---@return table|nil error Error object if operation failed
 -- Set or update a covered line in a file
 function M.set_line_covered(file_path, line_num, covered)
   -- Validate parameters
@@ -952,6 +1029,10 @@ function M.set_line_covered(file_path, line_num, covered)
   return covered
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to mark as executed
+---@param executed? boolean Whether the line was executed (defaults to true)
+---@return boolean Was the line marked as executed
 -- Set or update an executed line in a file
 function M.set_line_executed(file_path, line_num, executed)
   local normalized_path = fs.normalize_path(file_path)
@@ -976,6 +1057,11 @@ function M.set_line_executed(file_path, line_num, executed)
   return executed
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to mark as executable
+---@param executable boolean Whether the line is executable
+---@return boolean|nil success True if the line was marked successfully, nil if failed
+---@return table|nil error Error object if operation failed
 -- Set executable status for a line
 function M.set_line_executable(file_path, line_num, executable)
   -- Validate parameters
@@ -1036,6 +1122,10 @@ function M.set_line_executable(file_path, line_num, executable)
   return executable
 end
 
+---@param file_path string Path to the file containing the function
+---@param func_key string Unique key identifying the function
+---@param executed? boolean Whether the function was executed (defaults to true)
+---@return boolean|false success True if function was marked, false if function not found
 -- Set a function's executed status
 function M.set_function_executed(file_path, func_key, executed)
   local normalized_path = fs.normalize_path(file_path)
@@ -1072,6 +1162,10 @@ function M.set_function_executed(file_path, func_key, executed)
   return executed
 end
 
+---@param file_path string Path to the file containing the function
+---@param func_key string Unique key identifying the function
+---@param func_data table Function metadata and tracking information
+---@return table func_data The function data that was added
 -- Add a new function to the coverage data
 function M.add_function(file_path, func_key, func_data)
   local normalized_path = fs.normalize_path(file_path)
@@ -1097,6 +1191,10 @@ function M.add_function(file_path, func_key, func_data)
   return func_data
 end
 
+---@param file_path string Path to the file containing the block
+---@param block_id string Unique ID of the block
+---@param executed? boolean Whether the block was executed (defaults to true)
+---@return boolean|false success True if block was marked, false if block not found
 -- Set a block's executed status
 function M.set_block_executed(file_path, block_id, executed)
   local normalized_path = fs.normalize_path(file_path)
@@ -1133,6 +1231,10 @@ function M.set_block_executed(file_path, block_id, executed)
   return executed
 end
 
+---@param file_path string Path to the file containing the block
+---@param block_id string Unique ID of the block
+---@param block_data table Block metadata and tracking information
+---@return table block_data The block data that was added
 -- Add a new block to the coverage data
 function M.add_block(file_path, block_id, block_data)
   local normalized_path = fs.normalize_path(file_path)
@@ -1158,6 +1260,9 @@ function M.add_block(file_path, block_id, block_data)
   return block_data
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to check
+---@return boolean was_executed Whether the line was executed during coverage tracking
 -- Check if a specific line was executed (important for fixing incorrectly marked lines)
 function M.was_line_executed(file_path, line_num)
   -- Check if we have data for this file
@@ -1176,6 +1281,11 @@ function M.was_line_executed(file_path, line_num)
   return covered_lines and covered_lines[line_num] == true
 end
 
+---@param file_path string Path to the file containing the function
+---@param line_num number Line number where the function is defined
+---@param func_name string|nil Name of the function (can be nil for anonymous functions)
+---@return boolean|nil success True if function tracking was successful, nil if failed
+---@return table|nil error Error object if tracking failed
 -- Track function execution for instrumentation
 function M.track_function(file_path, line_num, func_name)
   -- Validate parameters
@@ -1287,6 +1397,12 @@ function M.track_function(file_path, line_num, func_name)
   return true
 end
 
+---@param file_path string Path to the file containing the block
+---@param line_num number Line number where the block starts
+---@param block_id string Unique identifier for the block
+---@param block_type string Type of the block (e.g., "if", "for", "while", etc.)
+---@return boolean|nil success True if block tracking was successful, nil if failed
+---@return table|nil error Error object if tracking failed
 -- Track block execution for instrumentation
 function M.track_block(file_path, line_num, block_id, block_type)
   -- Validate parameters
@@ -1417,6 +1533,9 @@ function M.track_block(file_path, line_num, block_id, block_type)
   return true
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to check
+---@return boolean was_covered Whether the line was covered by test assertions
 -- Check if a specific line was covered (validated by assertions)
 function M.was_line_covered(file_path, line_num)
   -- Check if we have data for this file
@@ -1429,6 +1548,9 @@ function M.was_line_covered(file_path, line_num)
   return covered_lines and covered_lines[line_num] == true
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to mark as covered
+---@return boolean success True if the line was marked as covered
 -- Mark a line as covered (validated by assertions)
 -- This is a key function for improving the distinction between execution and coverage
 function M.mark_line_covered(file_path, line_num)
@@ -1475,6 +1597,11 @@ function M.mark_line_covered(file_path, line_num)
   return true
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to track
+---@param options? table Additional options: is_executable, is_covered, track_blocks, track_conditions
+---@return boolean|nil success True if tracking was successful, nil if failed
+---@return table|nil error Error object if tracking failed
 -- Track a line execution from instrumentation
 -- This function is a critical part of the robust tracking approach
 -- It provides a reliable way to track line execution that doesn't depend on debug.sethook()
@@ -1665,6 +1792,9 @@ function M.track_line(file_path, line_num, options)
   return true
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to track blocks for
+---@return table|nil blocks Array of tracked blocks or nil if tracking failed
 -- Enhanced block tracking with better parent-child relationship handling
 function M.track_blocks_for_line(file_path, line_num)
   -- Skip if block tracking is disabled
@@ -1722,6 +1852,9 @@ function M.track_blocks_for_line(file_path, line_num)
   return tracked_blocks
 end
 
+---@param file_path string Path to the file
+---@param block table Block data with id, type, start/end line, etc.
+---@return table|nil block_data Updated block data with execution information
 -- Process a single block's execution with complete metadata
 function M.track_block_execution(file_path, block)
   local normalized_path = fs.normalize_path(file_path)
@@ -1839,6 +1972,10 @@ function M.track_block_execution(file_path, block)
   return block_copy
 end
 
+---@param file_path string Path to the file
+---@param line_num number Line number to track conditions for
+---@param execution_context? table Optional context with outcome information
+---@return table|nil conditions Array of tracked conditions or nil if tracking failed
 -- New function for tracking conditions with better outcome detection
 function M.track_conditions_for_line(file_path, line_num, execution_context)
   -- Skip if condition tracking is disabled
@@ -1896,6 +2033,10 @@ function M.track_conditions_for_line(file_path, line_num, execution_context)
   return tracked_conditions
 end
 
+---@param file_path string Path to the file
+---@param condition table Condition data with id, type, start/end line, etc.
+---@param execution_context? table Optional context with outcome information
+---@return table|nil condition_data Updated condition data with execution information
 -- Process a single condition's execution with outcome tracking
 function M.track_condition_execution(file_path, condition, execution_context)
   local normalized_path = fs.normalize_path(file_path)
@@ -2112,6 +2253,7 @@ function M.track_condition_execution(file_path, condition, execution_context)
   return condition_copy
 end
 
+---@return coverage.debug_hook The reset debug hook module
 -- Reset coverage data with enhanced structure
 function M.reset()
   -- Reset coverage data with enhanced structure
@@ -2163,6 +2305,7 @@ function M.reset()
   return M
 end
 
+---@return table metrics Performance metrics for the debug hook
 -- Get performance metrics
 function M.get_performance_metrics()
   return {

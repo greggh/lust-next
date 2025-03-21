@@ -1,3 +1,7 @@
+---@class JSONFormatter
+---@field format_coverage fun(coverage_data: table): string Format coverage data as JSON
+---@field format_quality fun(quality_data: table): string Format quality data as JSON
+---@field format_results fun(results_data: table): string Format test results as JSON
 -- JSON formatter for reports
 local M = {}
 
@@ -16,7 +20,8 @@ local DEFAULT_CONFIG = {
   include_metadata = true
 }
 
--- Get configuration for JSON formatter with error handling
+---@private
+---@return table config The configuration for the JSON formatter
 local function get_config()
   -- Try to load the reporting module for configuration access
   local success, result, err = error_handler.try(function()
@@ -188,7 +193,8 @@ else
   }
 end
 
--- Generate a JSON coverage report with error handling
+---@param coverage_data table The coverage data to format
+---@return string json_report The JSON-formatted coverage report
 function M.format_coverage(coverage_data)
   -- Validate input parameters
   if not coverage_data then
@@ -391,7 +397,8 @@ function M.format_coverage(coverage_data)
   end
 end
 
--- Generate a JSON quality report
+---@param quality_data table The quality data to format
+---@return string json_report The JSON-formatted quality report
 function M.format_quality(quality_data)
   -- Get formatter configuration
   local config = get_config()
@@ -474,7 +481,8 @@ function M.format_quality(quality_data)
   return json_module.encode(result, config.pretty)
 end
 
--- Format test results as JSON
+---@param results_data table The test results data to format
+---@return string json_report The JSON-formatted test results
 function M.format_results(results_data)
   -- Get formatter configuration
   local config = get_config()
@@ -617,6 +625,9 @@ function M.format_results(results_data)
   end
 end
 
+---@param formatters table The formatters registry to register with
+---@return boolean success Whether registration was successful
+---@return table? error Error information if registration failed
 -- Register formatters with error handling
 return function(formatters)
   -- Validate parameters

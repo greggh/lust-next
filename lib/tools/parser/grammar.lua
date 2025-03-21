@@ -5,6 +5,15 @@ and generates an Abstract Syntax Tree.
 Based on lua-parser by Andre Murbach Maidl (https://github.com/andremm/lua-parser)
 ]]
 
+---@class parser.grammar
+---@field _VERSION string Module version
+---@field parser fun(subject: string, filename?: string): table|nil, table? Parse Lua code into an abstract syntax tree
+---@field error_labels table<string, string> Table mapping error label names to error messages
+---@field compile_grammar fun(options?: {annotate_positions?: boolean, label_errors?: boolean, extract_comments?: boolean}): table Compile the Lua grammar with the specified options
+---@field extract_comments fun(subject: string): table<number, {line: number, text: string, type: string}> Extract comments from Lua source code
+---@field parse_expression fun(subject: string): table|nil, table? Parse a Lua expression (not a full chunk)
+---@field tokenize fun(subject: string): table<number, {type: string, value: string, line: number, col: number}> Split Lua code into tokens
+
 local logging = require("lib.tools.logging")
 
 -- Initialize module logger

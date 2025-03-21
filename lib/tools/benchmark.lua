@@ -1,6 +1,26 @@
 -- Benchmarking module for firmo
 -- Provides utilities for measuring and analyzing test performance
 
+---@class benchmark_module
+---@field _VERSION string Module version
+---@field options {iterations?: number, warmup?: number, gc_collect?: boolean, measure_memory?: boolean, time_unit?: string, sort_by?: string, show_memory?: boolean, show_median?: boolean, show_min_max?: boolean, show_stddev?: boolean, precision?: number} Configuration options for benchmarking
+---@field time fun(func: function, ...): {time: number, iterations: number, memory_before: number, memory_after: number, memory_used: number, median: number, min: number, max: number, stddev: number} Measure execution time of a function
+---@field run fun(name: string, func: function, options?: table, ...): {name: string, time: number, iterations: number, memory_before: number, memory_after: number, memory_used: number, median: number, min: number, max: number, stddev: number} Run a named benchmark with options
+---@field compare fun(benchmarks: table): {fastest: string, slowest: string, memory_efficient: string, comparisons: table<string, table>, summary: table} Compare multiple benchmark results
+---@field print_results fun(results: table, format?: string) Print formatted benchmark results
+---@field save_results fun(results: table, file_path: string): boolean|nil, string? Save benchmark results to a file
+---@field load_results fun(file_path: string): table|nil, string? Load benchmark results from a file
+---@field gc fun() Force garbage collection before benchmarking
+---@field memory fun(): number Get current memory usage in bytes
+---@field configure fun(options: table): benchmark_module Configure benchmark options
+---@field reset fun(): benchmark_module Reset benchmark options to defaults
+---@field stats fun(results: table): {mean: number, median: number, min: number, max: number, stddev: number, variance: number} Calculate statistics for benchmark results
+---@field suite fun(suite_name: string, benchmarks: table<string, function>, options?: table): table Run a suite of benchmarks
+---@field async_time fun(func: function, callback: function, ...): nil Measure execution time asynchronously
+---@field human_size fun(bytes: number): string Format a size in bytes to human-readable form
+---@field human_time fun(time: number, unit?: string): string Format a time value to human-readable form
+---@field measure_call_overhead fun(): number Measure function call overhead
+
 local benchmark = {}
 local logging = require("lib.tools.logging")
 local error_handler = require("lib.tools.error_handler")
@@ -197,6 +217,11 @@ local function deep_clone(t)
 end
 
 -- Measure function execution time
+--- Measure the execution time and performance metrics of a function
+---@param func function The function to benchmark
+---@param args table Arguments to pass to the function
+---@param options? table Benchmark options (iterations, warmup, etc.)
+---@return table results Detailed benchmark results including timing and stats
 function benchmark.measure(func, args, options)
   -- Validate required parameters
   error_handler.assert(
@@ -389,6 +414,10 @@ function benchmark.measure(func, args, options)
 end
 
 -- Run a suite of benchmarks
+--- Run a benchmark suite containing multiple benchmark cases
+---@param suite_def table Suite definition with name and test cases
+---@param options? table Benchmark options
+---@return table results Combined results from all benchmark cases
 function benchmark.suite(suite_def, options)
   -- Validate required parameters
   error_handler.assert(
@@ -559,6 +588,11 @@ function benchmark.suite(suite_def, options)
 end
 
 -- Comparison function for benchmarks
+--- Compare two benchmark results and calculate performance differences
+---@param benchmark1 table First benchmark result
+---@param benchmark2 table Second benchmark result
+---@param options? table Comparison options
+---@return table comparison Detailed comparison between benchmarks
 function benchmark.compare(benchmark1, benchmark2, options)
   -- Validate required parameters
   error_handler.assert(
@@ -775,6 +809,9 @@ function benchmark.compare(benchmark1, benchmark2, options)
 end
 
 -- Print benchmark results
+--- Print formatted benchmark results to the console
+---@param result table Benchmark result to print
+---@param options? table Formatting options
 function benchmark.print_result(result, options)
   -- Validate required parameters
   error_handler.assert(
@@ -897,6 +934,9 @@ end
 -- Load the filesystem module has been moved to the top of the file
 
 -- Generate benchmark data for large test suites
+--- Generate a large test suite for benchmarking purposes
+---@param options? table Generation options
+---@return table suite Generated test suite definition
 function benchmark.generate_large_test_suite(options)
   -- Process options
   local success, config = error_handler.try(function()
@@ -1105,6 +1145,9 @@ function benchmark.generate_large_test_suite(options)
 end
 
 -- Register the module with firmo
+--- Register benchmark functionality with the firmo framework
+---@param firmo table The firmo framework instance
+---@return benchmark_module The benchmark module instance
 function benchmark.register_with_firmo(firmo)
   -- Validate input
   error_handler.assert(

@@ -2,6 +2,32 @@
 -- This provides a limited subset of the LPegLabel functionality
 -- for systems where compilation of the C module is not possible
 
+---@class lpeglabel.fallback
+---@field _VERSION string Module version
+---@field version fun(): string Get the version of the fallback module
+---@field P fun(p: string|table|number): table Create a pattern (limited functionality)
+---@field S fun(set: string): table Create a set pattern (limited functionality)
+---@field R fun(range: string): table Create a range pattern (limited functionality)
+---@field V fun(v: string|number): table Create a variable pattern (limited functionality)
+---@field match fun(pattern: table, subject: string, init?: number): number|nil Match a pattern against a string
+---@field type fun(pattern: any): string|nil Get the type of a pattern
+---@field C fun(p: table): table Create a capture pattern (limited functionality)
+---@field Ct fun(p: table): table Create a table capture pattern (limited functionality)
+---@field Cc fun(...): table Create a constant capture pattern (limited functionality)
+---@field T fun(label: string): table Create a labeled failure pattern (limited functionality)
+---@field Cmt fun(p: table, f: function): table Create a match-time capture pattern (limited functionality)
+---@field Cp fun(): table Create a position capture pattern (limited functionality)
+---@field setlabels fun(labels: table): table Set failure labels for patterns (stub implementation)
+---@field B fun(p: table): table Create a back reference pattern (limited functionality)
+---@field Carg fun(n: number): table Create an argument capture pattern (limited functionality)
+---@field Cb fun(name: string): table Create a back capture pattern (limited functionality)
+---@field Cf fun(p: table, f: function): table Create a fold capture pattern (limited functionality)
+---@field Cg fun(p: table, name?: string): table Create a group capture pattern (limited functionality)
+---@field Cs fun(p: table): table Create a substitution capture pattern (limited functionality)
+---@field Lc fun(p: table): table Create a labeled failure capture pattern (limited functionality)
+---@field locale fun(t: table): table Set locale for patterns (stub implementation)
+---@field is_fallback boolean Flag indicating this is the fallback implementation
+
 local M = {}
 
 -- Version info

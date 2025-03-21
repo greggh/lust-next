@@ -1,8 +1,54 @@
 -- Centralized logging module for firmo
+-- Provides structured, configurable logging system
+
+---@class logging
+---@field _VERSION string Module version
+---@field DEBUG number Debug log level (most verbose)
+---@field INFO number Info log level
+---@field WARN number Warning log level
+---@field ERROR number Error log level (least verbose)
+---@field get_logger fun(name: string): logger_instance Create a named logger instance
+---@field configure fun(options: {level?: number|string, file?: string, format?: string, console?: boolean, max_file_size?: number, include_source?: boolean, include_timestamp?: boolean, include_level?: boolean, include_colors?: boolean, colors?: table<string, string>}): logging Configure the logging system
+---@field configure_from_config fun(config_key: string): logging Configure logging from central config
+---@field set_level fun(level: number|string): logging Set global log level
+---@field reset fun(): logging Reset logging to defaults
+---@field disable fun(): logging Disable all logging
+---@field enable fun(): logging Re-enable logging
+---@field is_enabled fun(): boolean Check if logging is enabled
+---@field get_level fun(): number Get current log level
+---@field get_current_config fun(): table Get current logging configuration
+---@field formats table<string, string> Built-in formatting patterns
+---@field register_formatter fun(name: string, formatter: fun(log_entry: table): string): boolean Register a custom formatter
+---@field log fun(level: number, message: string, context?: table, source?: string): boolean Log a message with level
+---@field debug fun(message: string, context?: table, source?: string): boolean Log a debug message
+---@field info fun(message: string, context?: table, source?: string): boolean Log an info message
+---@field warn fun(message: string, context?: table, source?: string): boolean Log a warning message
+---@field error fun(message: string, context?: table, source?: string): boolean Log an error message
+---@field search_logs fun(pattern: string, options?: table): table Search logs for a pattern
+---@field flush fun(): boolean Flush pending log messages
+
+---@class logger_instance
+---@field debug fun(message: string, context?: table): boolean Log a debug message
+---@field info fun(message: string, context?: table): boolean Log an info message
+---@field warn fun(message: string, context?: table): boolean Log a warning message
+---@field error fun(message: string, context?: table): boolean Log an error message
+---@field is_debug_enabled fun(): boolean Check if debug logging is enabled
+---@field is_info_enabled fun(): boolean Check if info logging is enabled
+---@field is_warn_enabled fun(): boolean Check if warning logging is enabled
+---@field is_error_enabled fun(): boolean Check if error logging is enabled
+---@field set_level fun(level: number|string): logger_instance Set log level for this logger instance
+---@field get_level fun(): number Get log level for this logger instance
+---@field get_name fun(): string Get logger name
+---@field configure fun(options: table): logger_instance Configure this logger instance
+---@field log fun(level: number, message: string, context?: table): boolean Log a message with level
+---@field with_context fun(context: table): logger_instance Create a logger with predefined context
+
 local M = {}
 
 -- Try to import filesystem module (might not be available during first load)
 local fs
+--- Get the filesystem module (lazy loading)
+---@return table The filesystem module
 local function get_fs()
   if not fs then
     fs = require("lib.tools.filesystem")
@@ -13,7 +59,8 @@ end
 -- Load optional components (lazy loading to avoid circular dependencies)
 local search_module, export_module, formatter_integration_module
 
--- Function to get the search module
+--- Get the search module for log searching functionality (lazy loading)
+---@return table|nil The search module or nil if not available
 local function get_search()
   if not search_module then
     local success, module = pcall(require, "lib.tools.logging.search")
@@ -24,7 +71,8 @@ local function get_search()
   return search_module
 end
 
--- Function to get the export module
+--- Get the export module for log exporting functionality (lazy loading)
+---@return table|nil The export module or nil if not available
 local function get_export()
   if not export_module then
     local success, module = pcall(require, "lib.tools.logging.export")
@@ -35,7 +83,8 @@ local function get_export()
   return export_module
 end
 
--- Function to get the formatter integration module
+--- Get the formatter integration module (lazy loading)
+---@return table|nil The formatter integration module or nil if not available
 local function get_formatter_integration()
   if not formatter_integration_module then
     local success, module = pcall(require, "lib.tools.logging.formatter_integration")
@@ -120,12 +169,16 @@ local buffer = {
   last_flush_time = os.time(),
 }
 
--- Get current timestamp
+--- Get current timestamp formatted for logs
+---@return string The formatted timestamp
 local function get_timestamp()
   return os.date("%Y-%m-%d %H:%M:%S")
 end
 
--- Check if logging is enabled for a specific level and module
+--- Check if logging is enabled for a specific level and module
+---@param level number The log level to check
+---@param module_name? string The module name to check
+---@return boolean Whether logging is enabled for this level and module
 local function is_enabled(level, module_name)
   if config.silent then
     return false
@@ -210,7 +263,12 @@ local function is_enabled(level, module_name)
   return level <= config.global_level
 end
 
--- Format a log message for text output
+--- Format a log message for text output
+---@param level number The log level
+---@param module_name? string The module name
+---@param message string The log message
+---@param params? table Additional parameters to include in the log
+---@return string The formatted log message
 local function format_log(level, module_name, message, params)
   local parts = {}
   
@@ -263,6 +321,8 @@ local function format_log(level, module_name, message, params)
 end
 
 -- Ensure the log directory exists
+--- Ensure the log directory exists
+---@return nil
 local function ensure_log_dir()
   local fs = get_fs()
   if config.log_dir then
@@ -273,7 +333,8 @@ local function ensure_log_dir()
   end
 end
 
--- Get the full path to the log file
+--- Get the full path to the log file
+---@return string|nil The full path to the log file or nil if not configured
 local function get_log_file_path()
   if not config.output_file then return nil end
   
@@ -286,7 +347,8 @@ local function get_log_file_path()
   return config.log_dir .. "/" .. config.output_file
 end
 
--- Rotate log files if needed
+--- Rotate log files if needed based on size
+---@return nil
 local function rotate_log_files()
   local fs = get_fs()
   local log_path = get_log_file_path()
@@ -683,7 +745,9 @@ local function log(level, module_name, message, params)
   end
 end
 
--- Configure the logging module
+--- Configure the logging module
+---@param options? table Options for configuring the logging module
+---@return table The logging module for chaining
 function M.configure(options)
   options = options or {}
   
@@ -856,42 +920,73 @@ function M.get_logger(module_name)
 end
 
 -- Direct module-level logging
+--- Log a fatal level message
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.fatal(message, params)
   log(M.LEVELS.FATAL, nil, message, params)
 end
 
+--- Log an error level message
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.error(message, params)
   log(M.LEVELS.ERROR, nil, message, params)
 end
 
+--- Log a warning level message
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.warn(message, params)
   log(M.LEVELS.WARN, nil, message, params)
 end
 
+--- Log an info level message
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.info(message, params)
   log(M.LEVELS.INFO, nil, message, params)
 end
 
+--- Log a debug level message
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.debug(message, params)
   log(M.LEVELS.DEBUG, nil, message, params)
 end
 
+--- Log a trace level message
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.trace(message, params)
   log(M.LEVELS.TRACE, nil, message, params)
 end
 
--- For backward compatibility
+--- Log a verbose level message (for backward compatibility)
+---@param message string The message to log
+---@param params? table Additional parameters to log
+---@return nil
 function M.verbose(message, params)
   log(M.LEVELS.VERBOSE, nil, message, params)
 end
 
--- Flush buffered logs
+--- Flush buffered logs to output
+---@return table The logging module for chaining
 function M.flush()
   flush_buffer()
   return M
 end
 
--- Would log check for module
+--- Check if a log at the specified level would be output
+---@param level string|number The log level to check
+---@param module_name? string The module name to check
+---@return boolean Whether logging is enabled for this level and module
 function M.would_log(level, module_name)
   if type(level) == "string" then
     local level_name = level:upper()
@@ -908,7 +1003,11 @@ function M.would_log(level, module_name)
   end
 end
 
--- Temporarily change log level
+--- Temporarily change log level for a module while executing a function
+---@param module_name string The module name to change the level for
+---@param level string|number The log level to use temporarily
+---@param func function The function to execute with the temporary log level
+---@return any The result from the executed function
 function M.with_level(module_name, level, func)
   local original_level = config.module_levels[module_name]
   
@@ -943,19 +1042,27 @@ function M.with_level(module_name, level, func)
   return result
 end
 
--- Set the log level for a specific module
+--- Set the log level for a specific module
+---@param module_name string The name of the module
+---@param level number The log level to set for the module
+---@return table The logging module for chaining
 function M.set_module_level(module_name, level)
   config.module_levels[module_name] = level
   return M
 end
 
--- Set the global log level
+--- Set the global log level
+---@param level number The log level to set globally
+---@return table The logging module for chaining
 function M.set_level(level)
   config.global_level = level
   return M
 end
 
--- Configure module level based on debug/verbose settings from options object
+--- Configure module log level based on debug/verbose settings from options object
+---@param module_name string The module name to configure
+---@param options table The options object with debug/verbose flags
+---@return number The configured log level
 function M.configure_from_options(module_name, options)
   local log_level = M.LEVELS.INFO
   if options.debug then
@@ -967,7 +1074,9 @@ function M.configure_from_options(module_name, options)
   return log_level
 end
 
--- Configure logging for a module using the global config system
+--- Configure logging for a module using the global config system
+---@param module_name string The module name to configure
+---@return number The configured log level
 function M.configure_from_config(module_name)
   -- First try to load the global config
   local log_level = M.LEVELS.INFO
@@ -1057,7 +1166,9 @@ function M.configure_from_config(module_name)
   return log_level
 end
 
--- Module filtering helper functions
+--- Add a module pattern to the module filter
+---@param module_pattern string The module pattern to add to the filter
+---@return table The logging module for chaining
 function M.filter_module(module_pattern)
   if not config.module_filter then
     config.module_filter = {}
@@ -1079,12 +1190,22 @@ function M.filter_module(module_pattern)
   return M
 end
 
+--- Clear all module filters
+---@return table The logging module for chaining
 function M.clear_module_filters()
   config.module_filter = nil
   return M
 end
 
+--- Add a module pattern to the blacklist (these modules won't log)
+---@param module_pattern string The module pattern to blacklist
+---@return table The logging module for chaining
 function M.blacklist_module(module_pattern)
+  -- Make sure module_blacklist is initialized
+  if not config.module_blacklist then
+    config.module_blacklist = {}
+  end
+  
   -- Add to blacklist if not already present
   for _, pattern in ipairs(config.module_blacklist) do
     if pattern == module_pattern then
@@ -1096,22 +1217,30 @@ function M.blacklist_module(module_pattern)
   return M
 end
 
+--- Remove a module pattern from the blacklist
+---@param module_pattern string The module pattern to remove from the blacklist
+---@return table The logging module for chaining
 function M.remove_from_blacklist(module_pattern)
-  for i, pattern in ipairs(config.module_blacklist) do
-    if pattern == module_pattern then
-      table.remove(config.module_blacklist, i)
-      return M
+  if config.module_blacklist then
+    for i, pattern in ipairs(config.module_blacklist) do
+      if pattern == module_pattern then
+        table.remove(config.module_blacklist, i)
+        return M
+      end
     end
   end
   return M
 end
 
+--- Clear all module blacklist entries
+---@return table The logging module for chaining
 function M.clear_blacklist()
   config.module_blacklist = {}
   return M
 end
 
--- Get current config (useful for debugging)
+--- Get current logging configuration (useful for debugging)
+---@return table A copy of the current configuration
 function M.get_config()
   -- Return a copy to prevent modification
   local copy = {}
@@ -1121,16 +1250,24 @@ function M.get_config()
   return copy
 end
 
--- Compatibility with existing code
+--- Log a debug message (compatibility with existing code)
+---@param message string The message to log
+---@param module_name? string The module name
+---@return nil
 function M.log_debug(message, module_name)
   log(M.LEVELS.DEBUG, module_name, message)
 end
 
+--- Log a verbose message (compatibility with existing code)
+---@param message string The message to log
+---@param module_name? string The module name
+---@return nil
 function M.log_verbose(message, module_name)
   log(M.LEVELS.VERBOSE, module_name, message)
 end
 
--- Expose advanced functionality through submodules
+--- Get the log search module for searching logs
+---@return table The log search module
 function M.search()
   local search = get_search()
   if not search then
@@ -1139,6 +1276,8 @@ function M.search()
   return search
 end
 
+--- Get the log export module for exporting logs
+---@return table The log export module
 function M.export()
   local export = get_export()
   if not export then
@@ -1147,6 +1286,8 @@ function M.export()
   return export
 end
 
+--- Get the formatter integration module
+---@return table The formatter integration module
 function M.formatter_integration()
   local formatter_integration = get_formatter_integration()
   if not formatter_integration then
@@ -1155,7 +1296,10 @@ function M.formatter_integration()
   return formatter_integration
 end
 
--- Create a buffered logger for high-volume logging
+--- Create a buffered logger for high-volume logging
+---@param module_name string The module name for the logger
+---@param options? table Options for the buffered logger
+---@return table The buffered logger instance
 function M.create_buffered_logger(module_name, options)
   options = options or {}
   

@@ -2,6 +2,24 @@
 -- Based on lua-parser (https://github.com/andremm/lua-parser)
 -- MIT License
 
+---@class parser_module
+---@field _VERSION string Module version
+---@field parse fun(input: string, options?: {annotate_positions?: boolean, label_errors?: boolean, extract_comments?: boolean, syntax_level?: number}): table|nil, table? Parse Lua code into an abstract syntax tree
+---@field parse_file fun(file_path: string, options?: {annotate_positions?: boolean, label_errors?: boolean, extract_comments?: boolean, syntax_level?: number}): table|nil, table? Parse a Lua file into an abstract syntax tree
+---@field validate fun(ast: table, options?: {detailed?: boolean, check_scope?: boolean, check_references?: boolean}): boolean, table? Check if an AST is valid
+---@field to_string fun(ast: table, options?: {indentation?: number, line_length?: number, preserve_comments?: boolean}): string Convert an AST back to Lua code
+---@field AST table<string, fun(...): table> AST node constructors for building syntax trees
+---@field analyze fun(ast: table, options?: {count_nodes?: boolean, calculate_metrics?: boolean, detect_patterns?: boolean}): {node_count: table<string, number>, metrics: table, patterns: table} Analyze a Lua AST for metrics and statistics
+---@field format fun(input: string, options?: {indentation?: number, line_length?: number, preserve_comments?: boolean}): string|nil, string? Format Lua code
+---@field get_line_info fun(subject: string, pos: number): {line: number, col: number} Get line and column info for a position in code
+---@field extract_comments fun(subject: string): table<number, {line: number, text: string, type: string}> Extract comments from Lua source code
+---@field get_grammar fun(): table Get the Lua grammar definition
+---@field tokenize fun(subject: string): table<number, {type: string, value: string, line: number, col: number}> Split Lua code into tokens
+---@field find_syntax_errors fun(subject: string): table<number, {message: string, line: number, col: number}> Find syntax errors in Lua code
+---@field get_node_at_position fun(ast: table, line: number, col: number): table|nil Find AST node at a specific position in the code
+---@field parse_expression fun(expression: string): table|nil, table? Parse a Lua expression (not a full chunk)
+---@field check_lua_syntax fun(subject: string): boolean, string? Check if a string is valid Lua syntax
+
 local M = {
   -- Module version
   _VERSION = "1.0.0"
@@ -56,6 +74,11 @@ local scope_util = {
 -- @param name (string, optional) Name to use in error messages
 -- @return (table) The AST representing the Lua code, or nil if there was an error
 -- @return (string) Error message in case of failure
+--- Parse Lua code into an abstract syntax tree
+---@param source string The Lua source code to parse
+---@param name? string Optional name for the source (for error messages)
+---@return table|nil ast The abstract syntax tree, or nil on error
+---@return table? error_info Error information if parsing failed
 function M.parse(source, name)
   name = name or "input"
   
@@ -164,6 +187,10 @@ end
 -- @param file_path (string) Path to the Lua file
 -- @return (table) The AST representing the Lua code, or nil if there was an error
 -- @return (string) Error message in case of failure
+--- Parse a Lua file into an abstract syntax tree
+---@param file_path string Path to the Lua file to parse
+---@return table|nil ast The abstract syntax tree, or nil on error
+---@return table? error_info Error information if parsing failed
 function M.parse_file(file_path)
   logger.debug("Parsing Lua file", {
     file_path = file_path
@@ -196,6 +223,9 @@ end
 -- Pretty print an AST
 -- @param ast (table) The AST to print
 -- @return (string) Pretty-printed representation of the AST
+--- Convert an AST to a human-readable string representation
+---@param ast table The abstract syntax tree to print
+---@return string representation String representation of the AST
 function M.pretty_print(ast)
   if type(ast) ~= "table" then
     return "Not a valid AST"
@@ -208,6 +238,10 @@ end
 -- @param ast (table) The AST to validate
 -- @return (boolean) True if the AST is valid, false otherwise
 -- @return (string) Error message in case of failure
+--- Validate that an AST is properly structured
+---@param ast table The abstract syntax tree to validate
+---@return boolean is_valid Whether the AST is valid
+---@return table? error_info Error information if validation failed
 function M.validate(ast)
   if type(ast) ~= "table" then
     return false, "Not a valid AST"
@@ -263,6 +297,10 @@ end
 -- @param ast (table) The AST to analyze
 -- @param source (string) Optional source code for more precise line mapping
 -- @return (table) Map of line numbers to executable status (true if executable)
+--- Get a list of executable lines from a Lua AST
+---@param ast table The abstract syntax tree 
+---@param source string The original source code
+---@return table executable_lines Table mapping line numbers to executability status
 function M.get_executable_lines(ast, source)
   if type(ast) ~= "table" then
     return {}
@@ -365,6 +403,10 @@ end
 -- @param ast (table) The AST to analyze
 -- @param source (string) Optional source code for more precise line mapping
 -- @return (table) List of function definitions with their line ranges
+--- Get a list of functions and their positions from a Lua AST
+---@param ast table The abstract syntax tree
+---@param source string The original source code
+---@return table functions List of functions with their line numbers and names
 function M.get_functions(ast, source)
   if type(ast) ~= "table" then
     return {}
@@ -380,6 +422,11 @@ end
 -- @param source (string) The Lua source code
 -- @param name (string, optional) Name to use in error messages
 -- @return (table) Code map with detailed information
+--- Create a detailed map of a Lua source code file including AST, executable lines, and functions
+---@param source string The Lua source code
+---@param name? string Optional name for the source (for error messages)
+---@return table|nil code_map The code map containing AST and analysis, or nil on error
+---@return table? error_info Error information if mapping failed
 function M.create_code_map(source, name)
   name = name or "input"
   
@@ -450,6 +497,10 @@ end
 -- Create a code map from a file
 -- @param file_path (string) Path to the Lua file
 -- @return (table) Code map with detailed information
+--- Create a detailed map of a Lua file including AST, executable lines, and functions
+---@param file_path string Path to the Lua file
+---@return table|nil code_map The code map containing AST and analysis, or nil on error
+---@return table? error_info Error information if mapping failed
 function M.create_code_map_from_file(file_path)
   logger.debug("Creating code map from file", {
     file_path = file_path

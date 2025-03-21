@@ -1,4 +1,17 @@
--- HTML formatter for reports
+---@class HTMLFormatter
+---@field _VERSION string Module version
+---@field format_coverage fun(coverage_data: {files: table<string, {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, stats: {total: number, covered: number, executable: number, percentage: number}}>, summary: {total_lines: number, executed_lines: number, covered_lines: number, coverage_percentage: number}}): string|nil, table? Format coverage data as HTML
+---@field format_quality fun(quality_data: {level: number, level_name: string, tests: table, summary: table}): string|nil, table? Format quality data as HTML
+---@field format_test_results fun(results_data: table): string|nil, table? Format test results as HTML
+---@field get_config fun(): HTMLFormatterConfig Get current formatter configuration
+---@field set_config fun(config: table): boolean Set formatter configuration options
+---@field format_source_file fun(file_path: string, lines: table): string|nil, table? Format a source file with line highlighting
+---@field format_summary fun(summary: table): string Format summary information as HTML
+---@field escape_html fun(str: string): string Escape special characters in HTML
+---@field colorize fun(percentage: number): string Get color for a coverage percentage
+---@field minify fun(html: string): string Minify HTML output
+-- HTML formatter for reports that generates visually appealing reports
+-- Including syntax highlighting, interactive elements, and responsive design
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -10,7 +23,30 @@ local logger = logging.get_logger("Reporting:HTML")
 -- Configure module logging
 logging.configure_from_config("Reporting:HTML")
 
+---@class HTMLFormatterConfig
+---@field theme string Theme for the HTML report ("light", "dark", or "auto")
+---@field show_line_numbers boolean Whether to show line numbers in source code
+---@field collapsible_sections boolean Whether sections can be collapsed
+---@field highlight_syntax boolean Whether to highlight syntax in source code
+---@field inline_css boolean Whether to include CSS inline or in a separate file
+---@field inline_js boolean Whether to include JavaScript inline or in a separate file
+---@field include_timestamp boolean Whether to include generation timestamp
+---@field include_chart boolean Whether to include coverage charts
+---@field sort_files string Sort files by ("name", "coverage", or "size")
+---@field show_uncovered_only boolean Whether to show only uncovered lines
+---@field execution_count_tooltips boolean Whether to show execution counts in tooltips
+---@field nav_style string Navigation style ("tabs", "sidebar", or "dropdown")
+---@field min_coverage_high number Minimum percentage for "high" coverage classification
+---@field min_coverage_medium number Minimum percentage for "medium" coverage classification
+---@field pagesize number Number of files to show per page in file list
+---@field custom_css? string Optional custom CSS to include
+---@field custom_header? string Optional custom header HTML
+---@field custom_footer? string Optional custom footer HTML
+---@field asset_base_path string|nil Base path for assets
+---@field include_legend boolean Whether to include a coverage legend
+
 -- Default formatter configuration
+---@type HTMLFormatterConfig
 local DEFAULT_CONFIG = {
   theme = "dark",
   show_line_numbers = true,
@@ -20,7 +56,8 @@ local DEFAULT_CONFIG = {
   include_legend = true
 }
 
--- Get configuration for HTML formatter
+---@private
+---@return HTMLFormatterConfig config The configuration for the HTML formatter
 local function get_config()
   -- Try to load the reporting module for configuration access
   local success, result, err = error_handler.try(function()
@@ -62,6 +99,9 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
+---@private
+---@param str any Value to escape (will be converted to string if not a string)
+---@return string escaped_string The HTML-escaped string
 -- Helper function to escape HTML special characters with error handling
 local function escape_html(str)
   -- Handle nil or non-string values safely
@@ -116,6 +156,16 @@ local function escape_html(str)
   end
 end
 
+---@private
+---@param line_num number Line number
+---@param content string Line content
+---@param is_covered boolean|nil Whether the line is covered by tests
+---@param is_executable boolean|nil Whether the line is executable
+---@param blocks table[]|nil Array of block data containing this line
+---@param conditions table[]|nil Array of condition data for this line
+---@param is_executed boolean|nil Whether the line was executed 
+---@param execution_count number|nil Number of times the line was executed
+---@return string html_line HTML representation of the source line with coverage information
 -- Format a single line of source code with coverage highlighting
 local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed, execution_count)
   -- Validate parameters
@@ -476,6 +526,8 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
   return html
 end
 
+---@private
+---@return string legend_html HTML for the coverage legend
 -- Create a legend for the coverage report
 local function create_coverage_legend()
   return [[
@@ -579,6 +631,8 @@ local function create_coverage_legend()
   ]]
 end
 
+---@param coverage_data table|nil Coverage data from the coverage module
+---@return string html HTML representation of the coverage report
 -- Generate HTML coverage report with comprehensive error handling
 function M.format_coverage(coverage_data)
   -- Validate input parameters
@@ -1858,6 +1912,8 @@ function M.format_coverage(coverage_data)
   return html
 end
 
+---@param quality_data table|nil Quality data from the quality module
+---@return string html HTML representation of the quality report
 -- Generate HTML quality report with error handling
 function M.format_quality(quality_data)
   -- Validate input parameters
@@ -2066,6 +2122,9 @@ function M.format_quality(quality_data)
   return html
 end
 
+---@param formatters table Table of formatter registries
+---@return boolean success True if registration was successful
+---@return table|nil error Error object if registration failed
 -- Register formatters with error handling
 return function(formatters)
   -- Validate parameters

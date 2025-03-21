@@ -1,5 +1,40 @@
 -- spy.lua - Function spying implementation for firmo
 
+---@class spy_module
+---@field _VERSION string Module version
+---@field new fun(fn?: function): spy_object Create a new standalone spy function
+---@field on fun(obj: table, method_name: string): spy_object|nil, table? Create a spy on an object method
+---@field assert fun(spy_obj: table): spy_assert Helper to create assertion functions for a spy
+---@field is_spy fun(obj: any): boolean Check if an object is a spy
+---@field get_all_spies fun(): table<number, spy_object> Get all created spy objects
+---@field reset_all fun(): boolean Reset all created spy objects
+---@field wrap fun(fn: function, options?: table): spy_object Create a spy that wraps a function
+
+---@class spy_object
+---@field calls table<number, {args: table, returned: table, threw: boolean|nil, error: any, this: any}> Record of all calls to the spy
+---@field call_count number Number of times the spy was called
+---@field called boolean Whether the spy was called at least once
+---@field call_sequence table<number, number> Sequence of calls in the test
+---@field reset fun(): spy_object Reset the spy's call history
+---@field and_call_through fun(): spy_object Configure spy to also call the original function
+---@field and_call_fake fun(fn: function): spy_object Configure spy to call a fake function
+---@field and_return fun(value: any): spy_object Configure spy to return a specific value
+---@field and_throw fun(error: any): spy_object Configure spy to throw an error
+---@field call_count_by_args fun(args: table): number Get call count with specific arguments
+---@field get_call fun(index: number): table|nil Get details of a specific call
+---@field get_calls fun(): table<number, table> Get all call details
+---@field _is_firmo_spy boolean Flag indicating this is a spy object
+---@field _original_fn function|nil The original wrapped function, if any
+
+---@class spy_assert
+---@field was_called fun(times?: number): boolean Assert the spy was called
+---@field was_not_called fun(): boolean Assert the spy was never called
+---@field was_called_with fun(...): boolean Assert the spy was called with specific arguments
+---@field was_called_times fun(times: number): boolean Assert the spy was called exact number of times
+---@field was_called_before fun(other_spy: spy_object): boolean Assert this spy was called before another
+---@field has_returned fun(value: any): boolean Assert the spy returned a specific value
+---@field has_thrown fun(error_value?: any): boolean Assert the spy threw an error
+
 local logging = require("lib.tools.logging")
 local error_handler = require("lib.tools.error_handler")
 
@@ -157,6 +192,9 @@ local function args_match(expected_args, actual_args)
 end
 
 -- Create a new spy function
+--- Create a new standalone spy function
+---@param fn? function Optional function to spy on
+---@return spy_object spy A spy object that records calls
 function spy.new(fn)
   -- Input validation with fallback
   logger.debug("Creating new spy function", {

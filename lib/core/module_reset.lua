@@ -2,10 +2,34 @@
 -- Provides better isolation between test files by cleaning up module state
 
 local error_handler = require("lib.tools.error_handler")
+
+---@class module_reset
+---@field _VERSION string Version number
+---@field initial_state table|nil Original state of package.loaded
+---@field protected_modules table Modules that should never be reset
+---@field protect fun(modules: string|string[]) Configure modules that should be protected
+---@field count_protected_modules fun(): number Count protected modules
+---@field snapshot fun(): table Take a snapshot of the current module state
+---@field init fun(): module_reset Initialize the module system
+---@field reset_all fun(options?: table): number Reset modules to initial state
+---@field reset_pattern fun(pattern: string, options?: table): number Reset specific modules by pattern
+---@field get_loaded_modules fun(): string[] Get list of currently loaded modules
+---@field get_memory_usage fun(): table Get memory usage information
+---@field analyze_memory_usage fun(options?: table): table[] Calculate memory usage per module
+---@field is_protected fun(module_name: string): boolean Check if a module is protected
+---@field add_protected_module fun(module_name: string): boolean Add a module to the protected list
+---@field register_with_firmo fun(firmo: table): table Register the module with firmo
+---@field configure fun(options: table): table Configure isolation options for firmo
+---@field firmo table|nil Reference to the firmo instance
+
 local module_reset = {}
 module_reset._VERSION = "1.2.0"
 
 -- Enhanced validation functions using error_handler
+---@private
+---@param value any Value to check for nil
+---@param name string Name of the parameter for error message
+---@return boolean true If value is not nil (throws error otherwise)
 local function validate_not_nil(value, name)
   if value == nil then
     error_handler.throw(
@@ -18,6 +42,11 @@ local function validate_not_nil(value, name)
   return true
 end
 
+---@private
+---@param value any Value to check type of
+---@param expected_type string Expected type name
+---@param name string Name of the parameter for error message
+---@return boolean true If value is of expected type (throws error otherwise)
 local function validate_type(value, expected_type, name)
   if type(value) ~= expected_type then
     error_handler.throw(
@@ -34,6 +63,11 @@ local function validate_type(value, expected_type, name)
   return true
 end
 
+---@private
+---@param value any Value to check type of
+---@param expected_type string Expected type name
+---@param name string Name of the parameter for error message
+---@return boolean true If value is nil or of expected type (throws error otherwise)
 local function validate_type_or_nil(value, expected_type, name)
   if value ~= nil and type(value) ~= expected_type then
     error_handler.throw(
@@ -52,6 +86,8 @@ end
 
 -- Import logging with enhanced error handling
 local logging, logger
+---@private
+---@return table|nil logger The logger instance if available, nil otherwise
 local function get_logger()
   if not logger then
     ---@diagnostic disable-next-line: unused-local
@@ -111,6 +147,7 @@ module_reset.protected_modules = {
   ["firmo"] = true,
 }
 
+---@param modules string|string[] Module name or array of module names to protect
 -- Configure additional modules that should be protected
 function module_reset.protect(modules)
   local log = get_logger()
@@ -145,6 +182,7 @@ function module_reset.protect(modules)
   end
 end
 
+---@return number count Number of protected modules
 -- Helper function to count protected modules
 function module_reset.count_protected_modules()
   local count = 0
@@ -154,6 +192,7 @@ function module_reset.count_protected_modules()
   return count
 end
 
+---@return table snapshot Table mapping module names to boolean (true)
 -- Take a snapshot of the current module state
 function module_reset.snapshot()
   local log = get_logger()
@@ -192,7 +231,6 @@ function module_reset.snapshot()
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(result, {
       operation = "module_reset.snapshot",
       module_version = module_reset._VERSION,
@@ -202,6 +240,7 @@ function module_reset.snapshot()
   return result
 end
 
+---@return module_reset The module instance for chaining
 -- Initialize the module system (capture initial state)
 function module_reset.init()
   local log = get_logger()
@@ -238,7 +277,6 @@ function module_reset.init()
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(err, {
       operation = "module_reset.init",
       module_version = module_reset._VERSION,
@@ -248,6 +286,8 @@ function module_reset.init()
   return module_reset
 end
 
+---@param options? table Options: { verbose?: boolean }
+---@return number count Number of modules reset
 -- Reset modules to initial state, excluding protected modules
 function module_reset.reset_all(options)
   local log = get_logger()
@@ -366,6 +406,9 @@ function module_reset.reset_all(options)
   return result
 end
 
+---@param pattern string Lua pattern to match module names against
+---@param options? table Options: { verbose?: boolean }
+---@return number count Number of modules reset
 -- Reset specific modules by pattern
 function module_reset.reset_pattern(pattern, options)
   local log = get_logger()
@@ -503,7 +546,6 @@ function module_reset.reset_pattern(pattern, options)
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(result, {
       operation = "module_reset.reset_pattern",
       pattern = pattern,
@@ -514,6 +556,7 @@ function module_reset.reset_pattern(pattern, options)
   return result
 end
 
+---@return string[] module_names List of loaded, non-protected module names
 -- Get list of currently loaded modules
 function module_reset.get_loaded_modules()
   local log = get_logger()
@@ -551,7 +594,6 @@ function module_reset.get_loaded_modules()
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(result, {
       operation = "module_reset.get_loaded_modules",
       module_version = module_reset._VERSION,
@@ -561,6 +603,7 @@ function module_reset.get_loaded_modules()
   return result
 end
 
+---@return table info Memory usage information { current: number, count: number }
 -- Get memory usage information
 function module_reset.get_memory_usage()
   local log = get_logger()
@@ -598,6 +641,8 @@ function module_reset.get_memory_usage()
   return result
 end
 
+---@param options? table Options: { track_level?: string }
+---@return table[] results Array of { name: string, memory: number } sorted by memory usage
 -- Calculate memory usage per module (approximately)
 function module_reset.analyze_memory_usage(options)
   local log = get_logger()
@@ -736,6 +781,8 @@ function module_reset.analyze_memory_usage(options)
   return result
 end
 
+---@param module_name string Name of the module to check
+---@return boolean is_protected Whether the module is protected
 -- Check if a module is protected
 function module_reset.is_protected(module_name)
   validate_not_nil(module_name, "module_name")
@@ -744,6 +791,8 @@ function module_reset.is_protected(module_name)
   return module_reset.protected_modules[module_name] or false
 end
 
+---@param module_name string Name of the module to protect
+---@return boolean added Whether the module was newly added (false if already protected)
 -- Add a module to the protected list
 function module_reset.add_protected_module(module_name)
   local log = get_logger()
@@ -779,7 +828,6 @@ function module_reset.add_protected_module(module_name)
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(result, {
       operation = "module_reset.add_protected_module",
       module_name = module_name,
@@ -790,6 +838,8 @@ function module_reset.add_protected_module(module_name)
   return result
 end
 
+---@param firmo table The firmo instance to register with
+---@return table firmo The firmo instance with module_reset registered
 -- Register the module with firmo
 function module_reset.register_with_firmo(firmo)
   local log = get_logger()
@@ -886,7 +936,6 @@ function module_reset.register_with_firmo(firmo)
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(err, {
       operation = "module_reset.register_with_firmo",
       module_version = module_reset._VERSION,
@@ -896,6 +945,8 @@ function module_reset.register_with_firmo(firmo)
   return firmo
 end
 
+---@param options table Options: { reset_modules?: boolean, verbose?: boolean, track_memory?: boolean }
+---@return table firmo The configured firmo instance
 -- Configure isolation options for firmo
 function module_reset.configure(options)
   local log = get_logger()
@@ -946,7 +997,6 @@ function module_reset.configure(options)
       })
     end
 
-    ---@diagnostic disable-next-line: redundant-parameter
     error_handler.rethrow(result, {
       operation = "module_reset.configure",
       module_version = module_reset._VERSION,

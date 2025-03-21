@@ -1,3 +1,27 @@
+---@class TempFileModule
+---@field _VERSION string Module version
+---@field create_temp_file fun(extension?: string): string|nil, table? Create a temporary file with optional extension
+---@field create_with_content fun(content: string, extension?: string): string|nil, table? Create a temporary file with content
+---@field create_temp_directory fun(): string|nil, table? Create a temporary directory
+---@field get_temp_dir fun(): string Get the temporary directory path
+---@field register_file fun(file_path: string): boolean Register a file for cleanup
+---@field register_directory fun(dir_path: string): boolean Register a directory for cleanup 
+---@field remove fun(file_path: string): boolean, string? Remove a temporary file
+---@field remove_directory fun(dir_path: string): boolean, string? Remove a temporary directory
+---@field with_temp_file fun(content: string, callback: fun(temp_path: string): any, extension?: string): any|nil, table? Create and use a temporary file with automatic cleanup
+---@field with_temp_directory fun(callback: fun(dir_path: string): any): any|nil, table? Create and use a temporary directory with automatic cleanup
+---@field cleanup_test_context fun(context?: string): boolean, table[] Clean up files from current test context
+---@field cleanup_all fun(): boolean, table[], table Clean up all registered temporary files
+---@field get_stats fun(): {registered_files: number, registered_directories: number, cleanup_errors: number, contexts: table<string, number>, orphaned_files: number} Get statistics about temporary files
+---@field set_current_test_context fun(context: table|string): nil Set the current test context
+---@field clear_current_test_context fun(): nil Clear the current test context
+---@field configure fun(options: {temp_dir?: string, force_cleanup?: boolean, file_prefix?: string, auto_register?: boolean, cleanup_on_exit?: boolean}): TempFileModule Configure temp file behavior
+---@field set_temp_dir fun(dir_path: string): boolean, string? Set the temporary directory path
+---@field get_registered_files fun(): table<string, {context: string, created: number, size: number}> Get list of all registered temporary files
+---@field get_registered_directories fun(): table<string, {context: string, created: number}> Get list of all registered temporary directories
+---@field create_nested_directory fun(path: string): string|nil, table? Create a nested directory structure in the temp directory
+---@field is_registered fun(path: string): boolean Check if a file or directory is registered
+---@field get_context_for_file fun(file_path: string): string|nil Get the context a file was registered with
 --[[
 Utility for working with temporary files.
 
@@ -60,6 +84,8 @@ local function get_current_test_context()
     return "_global_context_"
 end
 
+---@param file_path string Path to the file to register for cleanup
+---@return boolean success Whether the file was successfully registered
 -- Register a file with the current test context
 function M.register_file(file_path)
     local logger = get_logger()
@@ -83,6 +109,8 @@ function M.register_file(file_path)
     return file_path
 end
 
+---@param dir_path string Path to the directory to register for cleanup
+---@return boolean success Whether the directory was successfully registered
 -- Register a directory with the current test context
 function M.register_directory(dir_path)
     local logger = get_logger()
@@ -105,6 +133,9 @@ function M.register_directory(dir_path)
     return dir_path
 end
 
+---@private
+---@param extension? string File extension (without the dot)
+---@return string temp_path Temporary file path
 -- Generate a temporary file path with specified extension
 function M.generate_temp_path(extension)
     extension = extension or "tmp"
@@ -121,6 +152,10 @@ function M.generate_temp_path(extension)
     return temp_path .. "." .. extension
 end
 
+---@param content string Content to write to the file
+---@param extension? string File extension (without the dot)
+---@return string|nil temp_path Path to the created temporary file, or nil on error
+---@return table? error Error object if file creation failed
 -- Create a temporary file with the given content (enhanced with registration)
 function M.create_with_content(content, extension)
     local temp_path = M.generate_temp_path(extension)
@@ -147,6 +182,8 @@ function M.create_with_content(content, extension)
     return result -- Result contains the path in success case
 end
 
+---@return string|nil dir_path Path to the created temporary directory, or nil on error
+---@return table? error Error object if directory creation failed
 -- Create a temporary directory (enhanced with registration)
 function M.create_temp_directory()
     local temp_dir = os.tmpname() .. "_dir"
@@ -173,6 +210,9 @@ function M.create_temp_directory()
     return result -- Result contains the path in success case
 end
 
+---@param file_path string Path to the temporary file to remove
+---@return boolean success Whether the file was successfully removed
+---@return string? error Error message if removal failed
 -- Remove a temporary file
 function M.remove(file_path)
     if not file_path then
@@ -185,6 +225,9 @@ function M.remove(file_path)
     return fs.delete_file(file_path)
 end
 
+---@param dir_path string Path to the temporary directory to remove
+---@return boolean success Whether the directory was successfully removed
+---@return string? error Error message if removal failed
 -- Remove a temporary directory
 function M.remove_directory(dir_path)
     if not dir_path then
@@ -209,6 +252,11 @@ function M.remove_directory(dir_path)
     end
 end
 
+---@param content string Content to write to the file
+---@param callback fun(temp_path: string): any Function to call with the temporary file path
+---@param extension? string File extension (without the dot)
+---@return any|nil result Result from the callback function, or nil on error
+---@return table? error Error object if operation failed
 -- Create a temporary file, use it with a callback, and then remove it
 function M.with_temp_file(content, callback, extension)
     local temp_path, create_err = M.create_with_content(content, extension)
@@ -235,6 +283,9 @@ function M.with_temp_file(content, callback, extension)
     return result
 end
 
+---@param callback fun(dir_path: string): any Function to call with the temporary directory path
+---@return any|nil result Result from the callback function, or nil on error
+---@return table? error Error object if operation failed
 -- Create a temporary directory, use it with a callback, and then remove it
 function M.with_temp_directory(callback)
     local dir_path, create_err = M.create_temp_directory()
@@ -260,6 +311,9 @@ function M.with_temp_directory(callback)
     return result
 end
 
+---@param context? string Test context identifier (optional)
+---@return boolean success Whether all files were cleaned up successfully
+---@return table[] errors Array of resources that could not be cleaned up
 -- Clean up all temporary files and directories for a specific test context
 function M.cleanup_test_context(context)
     local logger = get_logger()
@@ -328,6 +382,7 @@ function M.cleanup_test_context(context)
     return #errors == 0, errors
 end
 
+---@return table stats Statistics about temporary files and their contexts
 -- Get statistics about temporary files
 function M.get_stats()
     local stats = {
@@ -365,6 +420,9 @@ function M.get_stats()
     return stats
 end
 
+---@return boolean success Whether all files were cleaned up successfully
+---@return table[] errors Array of resources that could not be cleaned up
+---@return table stats Statistics about the cleanup operation
 -- Clean up all temporary files across all contexts
 function M.cleanup_all()
     local logger = get_logger()
@@ -384,6 +442,8 @@ function M.cleanup_all()
     return success, errors, stats
 end
 
+---@param context table|string The test context to set
+---@return nil
 -- Set the current test context (for use by test runners)
 function M.set_current_test_context(context)
     -- If we can modify firmo, use it
@@ -395,6 +455,7 @@ function M.set_current_test_context(context)
     _G._current_temp_file_context = context
 end
 
+---@return nil
 -- Clear the current test context (for use by test runners)
 function M.clear_current_test_context()
     -- If we can modify firmo, use it

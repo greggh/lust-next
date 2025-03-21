@@ -2,6 +2,23 @@
 -- Provides functions to fix common markdown issues
 -- This is a Lua implementation of the shell scripts in scripts/markdown/
 
+---@class markdown_module
+---@field _VERSION string The module version
+---@field find_markdown_files fun(dir?: string): string[]|nil, table? Find all markdown files in a directory
+---@field fix_heading_levels fun(content: string): string|nil, table? Fix heading levels in markdown content
+---@field fix_list_numbering fun(content: string): string|nil, table? Fix list numbering in markdown content
+---@field fix_comprehensive fun(content: string): string|nil, table? Comprehensive markdown fixing (headings, lists, spacing)
+---@field fix_all_in_directory fun(dir?: string): number, table? Fix all markdown files in a directory
+---@field register_with_codefix fun(codefix: table): table|nil, table? Register with codefix module if available
+---@field validate_markdown fun(content: string): boolean, table? Validate markdown content for common issues
+---@field fix_code_blocks fun(content: string): string|nil, table? Fix markdown code blocks (remove redundant language specifiers)
+---@field fix_links fun(content: string): string|nil, table? Fix broken links in markdown content
+---@field fix_tables fun(content: string): string|nil, table? Fix table formatting in markdown content
+---@field fix_spacing fun(content: string): string|nil, table? Fix spacing issues in markdown content
+---@field fix_file fun(file_path: string): boolean, table? Fix a specific markdown file
+---@field generate_table_of_contents fun(content: string): string|nil, table? Generate table of contents from headings
+---@field extract_headings fun(content: string): table<number, {level: number, text: string, line: number}> Extract headings from markdown content
+
 -- Import filesystem module for file operations
 local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
@@ -18,7 +35,10 @@ local markdown = {
   _VERSION = "1.0.0"
 }
 
--- Find all markdown files in a directory
+--- Find all markdown files in a directory
+---@param dir? string Directory to search in (default: current directory)
+---@return string[]|nil files List of markdown files found, or nil on error
+---@return table? error Error object if operation failed
 function markdown.find_markdown_files(dir)
   -- Input validation
   if dir ~= nil and type(dir) ~= "string" then
@@ -113,7 +133,10 @@ function markdown.find_markdown_files(dir)
   return files
 end
 
--- Fix heading levels in markdown
+--- Fix heading levels in markdown content
+---@param content string The markdown content to fix
+---@return string|nil fixed_content The fixed markdown content, or nil on error
+---@return table? error Error object if operation failed
 function markdown.fix_heading_levels(content)
   -- Input validation
   if content ~= nil and type(content) ~= "string" then
@@ -312,7 +335,10 @@ function markdown.fix_heading_levels(content)
   return result
 end
 
--- Fix list numbering in markdown
+--- Fix list numbering in markdown content
+---@param content string The markdown content to fix
+---@return string|nil fixed_content The fixed markdown content, or nil on error
+---@return table? error Error object if operation failed
 function markdown.fix_list_numbering(content)
   -- Input validation
   if content ~= nil and type(content) ~= "string" then
@@ -570,7 +596,10 @@ function markdown.fix_list_numbering(content)
   return result
 end
 
--- Comprehensive markdown fixing
+--- Comprehensive markdown fixing - combines heading, list, and spacing fixes
+---@param content string The markdown content to comprehensively fix
+---@return string|nil fixed_content The fixed markdown content, or nil on error
+---@return table? error Error object if operation failed
 function markdown.fix_comprehensive(content)
   -- Input validation
   if content ~= nil and type(content) ~= "string" then
@@ -1003,7 +1032,10 @@ But outside of code blocks, the list should be fixed:
   return final_result
 end
 
--- Fix all markdown files in a directory
+--- Fix all markdown files in a directory
+---@param dir? string Directory to search for markdown files to fix (default: current directory)
+---@return number fixed_count Number of files that were fixed
+---@return table? error Error object if operation failed
 function markdown.fix_all_in_directory(dir)
   -- Input validation
   if dir ~= nil and type(dir) ~= "string" then
@@ -1114,7 +1146,10 @@ function markdown.fix_all_in_directory(dir)
   return fixed_count
 end
 
--- Register with codefix module if available
+--- Register markdown fixing functionality with the codefix module
+---@param codefix table The codefix module to register with
+---@return table|nil codefix_module The codefix module with markdown fixer registered, or nil on error
+---@return table? error Error object if registration failed
 function markdown.register_with_codefix(codefix)
   -- Input validation
   if codefix ~= nil and type(codefix) ~= "table" then

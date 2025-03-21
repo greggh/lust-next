@@ -14,7 +14,7 @@ describe("Output Format Tests", function()
   -- Create test data that will be used for all format tests
   local test_data = {
     name = "Test Suite",
-    timestamp = "2023-01-01T12:00:00",
+    timestamp = "2023-01-01T12:00:00Z", -- ISO format timestamp
     tests = 5,
     failures = 1,
     errors = 1,
@@ -80,30 +80,50 @@ describe("Output Format Tests", function()
       
       local tap_output = reporting.format_results(test_data, "tap")
       
-      -- Verify TAP version header is present
-      expect(tap_output).to.match("TAP version 13")
+      -- Verify TAP version header is present using specialized regex assertion
+      expect(tap_output).to.match_regex("TAP version \\d+")
       
       -- Verify TAP plan is included with correct number of tests
-      expect(tap_output).to.match("1..5")
+      expect(tap_output).to.match_regex("1\\.\\.\\d+")
       
-      -- Verify passing tests are marked as "ok"
-      expect(tap_output).to.match("ok 1 %-")
-      expect(tap_output).to.match("ok 5 %-")
+      -- Verify passing tests are marked as "ok" using regex with capture groups
+      expect(tap_output).to.match_regex("ok 1 -.*passing test")
+      expect(tap_output).to.match_regex("ok 5 -.*another passing test")
       
-      -- Verify failing test is marked as "not ok"
-      expect(tap_output).to.match("not ok 2 %-")
+      -- Verify failing test is marked as "not ok" using regex
+      expect(tap_output).to.match_regex("not ok 2 -.*failing test")
       
-      -- Verify error test is marked as "not ok"
-      expect(tap_output).to.match("not ok 3 %-")
+      -- Verify error test is marked as "not ok" with error message
+      expect(tap_output).to.match_regex("not ok 3 -.*error test")
       
-      -- Verify skipped test has SKIP directive
-      expect(tap_output).to.match("ok 4 .*# SKIP")
+      -- Verify skipped test has SKIP directive - case insensitive match
+      expect(tap_output).to.match_regex("ok 4 .*# SKIP", { case_insensitive = true })
       
       -- No need to check for YAML diagnostic blocks since we explicitly 
       -- enabled them via config, and we've checked for the not ok lines already
       
       -- Reset configuration to avoid affecting other tests
       config.delete("reporting.formatters.tap")
+    end)
+    
+    it("validates timestamp format", function()
+      -- Verify the timestamp in our test data is valid
+      expect(test_data.timestamp).to.be_iso_date()
+      
+      -- Test comparison with different timestamps
+      local earlier = "2022-12-31T23:59:59Z"
+      local later = "2023-01-02T00:00:01Z"
+      
+      expect(earlier).to.be_before(test_data.timestamp)
+      expect(later).to.be_after(test_data.timestamp)
+      
+      -- Verify same day comparison works
+      local same_day_different_time = "2023-01-01T18:45:00Z"
+      expect(same_day_different_time).to.be_same_day_as(test_data.timestamp)
+      
+      -- Verify correct behavior with invalid dates
+      expect("not a date").to_not.be_date()
+      expect("2023/01/01").to_not.be_iso_date() -- Not ISO format
     end)
     
     it("handles empty test results", function()

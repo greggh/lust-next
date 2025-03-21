@@ -1,4 +1,13 @@
--- CSV formatter for test results
+---@class CSVFormatter
+---@field _VERSION string Module version
+---@field format_results fun(results_data: {name: string, tests: number, failures?: number, errors?: number, skipped?: number, time?: number, timestamp?: string, test_cases?: table<number, {name: string, classname?: string, time?: number, status?: string, failure?: table, error?: table}>}): string|nil, table? Format test results as CSV
+---@field format_coverage fun(coverage_data: {files: table<string, table>, summary: table}): string|nil, table? Format coverage data as CSV
+---@field get_config fun(): CSVFormatterConfig Get current formatter configuration
+---@field set_config fun(config: table): boolean Set formatter configuration options
+---@field escape_field fun(field: any): string Escape a field value according to CSV rules
+---@field validate_results fun(results_data: table): boolean, string? Validate test results data before formatting
+-- CSV formatter for test results and coverage data
+-- Creates CSV-formatted output suitable for spreadsheet programs or data analysis
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -10,7 +19,26 @@ local error_handler = require("lib.tools.error_handler")
 -- Configure module logging
 logging.configure_from_config("Reporting:CSV")
 
+---@class CSVFormatterConfig
+---@field delimiter string Field delimiter character (e.g., comma, tab, semicolon)
+---@field quote string Quote character for fields containing special characters
+---@field double_quote boolean Whether to double quotes for escaping
+---@field include_header boolean Whether to include header row with column names
+---@field include_summary boolean Whether to include summary row at end
+---@field newline string Line ending character(s) (CR, LF, or CRLF)
+---@field columns? string[] Optional array of columns to include (and their order)
+---@field escape_special_chars boolean Whether to escape special characters
+---@field null_value string String to use for nil values
+---@field true_value string String to use for true values
+---@field false_value string String to use for false values
+---@field precision? number Optional decimal precision for numbers
+---@field null_placeholder string Value to use when a field is missing
+---@field dateformat? string Optional date format string for timestamp fields
+---@field date_format string Date format for timestamps
+---@field fields string[] Fields to include in output (in order)
+
 -- Define default configuration
+---@type CSVFormatterConfig
 local DEFAULT_CONFIG = {
   delimiter = ",",               -- Field delimiter character
   quote = "\"",                  -- Quote character for fields
@@ -31,6 +59,8 @@ local DEFAULT_CONFIG = {
   }
 }
 
+---@private
+---@return CSVFormatterConfig config The configuration for the CSV formatter
 -- Get configuration for this formatter
 local function get_config()
   -- Try reporting module first with error handling
@@ -74,6 +104,10 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
+---@private
+---@param s any Value to escape (will be converted to string if not a string)
+---@param config CSVFormatterConfig|nil Formatter configuration
+---@return string escaped_value The CSV-escaped string
 -- Helper to escape CSV field values based on configuration
 local function escape_csv(s, config)
   -- Handle nil or non-string values safely
@@ -154,6 +188,10 @@ local function escape_csv(s, config)
   end
 end
 
+---@private
+---@param config CSVFormatterConfig Formatter configuration
+---@param ... any Field values to format as a CSV line
+---@return string csv_line A single line of CSV-formatted data
 -- Helper to create a CSV line from field values
 local function csv_line(config, ...)
   -- Validate parameters
@@ -222,6 +260,8 @@ local function csv_line(config, ...)
   end
 end
 
+---@param results_data table|nil Test results data to format
+---@return string csv_output CSV representation of the test results
 -- Format test results as CSV (comma-separated values)
 function M.format_results(results_data)
   -- Validate input parameter
@@ -577,6 +617,9 @@ function M.format_results(results_data)
   end
 end
 
+---@param formatters table Table of formatter registries
+---@return boolean success True if registration was successful
+---@return table|nil error Error object if registration failed
 -- Register formatter
 return function(formatters)
   -- Validate parameters

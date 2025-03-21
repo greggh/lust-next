@@ -4,6 +4,22 @@ Temporary File Integration for test runners
 This module integrates the temp_file module with test runners.
 ]]
 
+---@class temp_file_integration
+---@field _VERSION string Module version
+---@field patch_runner fun(runner: table): boolean, string? Patch a test runner to handle temp file cleanup automatically
+---@field register_test_start fun(callback: fun(context: string)): boolean Register a callback to be called at the start of each test
+---@field register_test_end fun(callback: fun(context: string, success: boolean, duration: number)): boolean Register a callback to be called at the end of each test
+---@field register_suite_end fun(callback: fun(stats: {tests: number, passed: number, failed: number, skipped: number, duration: number})): boolean Register a callback to be called at the end of a test suite
+---@field cleanup_all fun(): boolean, table? Clean up all managed temporary files
+---@field get_stats fun(): {registered_callbacks: number, test_starts: number, test_ends: number, suite_ends: number, cleanup_operations: number, cleanup_errors: number, files_cleaned: number, bytes_cleaned: number} Get statistics about temp file management
+---@field integrate_with_firmo fun(firmo: table): boolean Integrate with the firmo test framework
+---@field extract_context fun(test: table): string Extract context information from a test object
+---@field register_for_cleanup fun(file_path: string, context: string): boolean Register a file for cleanup with a specific context
+---@field set_cleanup_policy fun(policy: string): boolean Set the cleanup policy ("immediate", "end-of-test", "end-of-suite")
+---@field cleanup_for_context fun(context: string): number, table? Clean up files for a specific test context
+---@field get_test_contexts fun(): table<string, {files: number, directories: number, created: number, cleaned: boolean}> Get all registered test contexts
+---@field configure fun(options: {auto_register?: boolean, cleanup_policy?: string, cleanup_on_suite_end?: boolean, cleanup_on_test_failure?: boolean}): temp_file_integration Configure the integration module
+
 local M = {}
 local temp_file = require("lib.tools.temp_file")
 local logging = require("lib.tools.logging")
@@ -22,7 +38,9 @@ local function get_context_string(test)
   return tostring(test)
 end
 
--- Patch the runner.lua file's execute_test function
+--- Patch the runner.lua file's execute_test function to handle temp file tracking and cleanup
+---@param runner table The test runner instance to patch
+---@return boolean success Whether the patching was successful
 function M.patch_runner(runner)
   -- Save original execute_test function
   if runner.execute_test then
@@ -66,6 +84,8 @@ function M.patch_runner(runner)
 end
 
 -- Cleanup all temporary files (run after all tests)
+--- Clean up all managed temporary files
+---@return boolean success Whether the cleanup was successful
 function M.cleanup_all()
   logger.info("Performing final cleanup of all temporary files")
   
@@ -90,6 +110,9 @@ function M.cleanup_all()
 end
 
 -- Add the final cleanup step to the runner
+--- Add final cleanup hooks to a test runner
+---@param runner table The test runner instance
+---@return boolean success Whether the hooks were added successfully
 function M.add_final_cleanup(runner)
   if runner.run_all_tests then
     runner._original_run_all_tests = runner.run_all_tests
@@ -123,6 +146,9 @@ function M.add_final_cleanup(runner)
 end
 
 -- Patch the firmo module to store test context
+--- Patch the firmo framework instance to integrate temp file management
+---@param firmo table The firmo framework instance
+---@return boolean success Whether the patching was successful
 function M.patch_firmo(firmo)
   if firmo then
     -- Add test context tracking
@@ -270,6 +296,8 @@ function M.patch_firmo(firmo)
 end
 
 -- Initialize the integration
+--- Initialize the temp file integration module
+---@return boolean success Whether the initialization was successful
 function M.initialize()
   logger.info("Initializing temp file integration")
   

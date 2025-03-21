@@ -1,4 +1,13 @@
--- TAP (Test Anything Protocol) formatter
+---@class TAPFormatter
+---@field _VERSION string Module version
+---@field format_results fun(results_data: {name: string, tests: number, failures?: number, errors?: number, skipped?: number, time?: number, timestamp?: string, test_cases?: table<number, {name: string, classname?: string, time?: number, status?: string, failure?: table, error?: table}>}): string|nil, table? Format test results as TAP
+---@field get_config fun(): TAPFormatterConfig Get current formatter configuration
+---@field set_config fun(config: table): boolean Set formatter configuration options
+---@field format_test_case fun(test_case: table, test_number: number): string Format a single test case as TAP
+---@field format_diagnostics fun(test_case: table): string Format diagnostic information for a test
+---@field validate_results fun(results_data: table): boolean, string? Validate test results data before formatting
+-- TAP (Test Anything Protocol) formatter that outputs test results in the TAP format
+-- for compatibility with TAP consumers like Jenkins, Prove, or other CI systems
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -10,7 +19,24 @@ local error_handler = require("lib.tools.error_handler")
 -- Configure module logging
 logging.configure_from_config("Reporting:TAP")
 
+---@class TAPFormatterConfig
+---@field version number TAP version (12 or 13)
+---@field include_yaml_diagnostics boolean Whether to include YAML diagnostics for failures
+---@field include_summary boolean Whether to include summary comments at the end
+---@field include_stack_traces boolean Whether to include stack traces in diagnostics
+---@field default_skip_reason string Default reason for skipped tests
+---@field include_timestamps boolean Whether to include test execution timestamps
+---@field include_durations boolean Whether to include test execution durations
+---@field use_strict_formatting boolean Whether to use strict TAP formatting
+---@field bail_on_fail boolean Whether to include Bail out! directive on first failure
+---@field normalize_test_names boolean Whether to normalize test names
+---@field show_plan_at_end boolean Whether to show the plan at end instead of beginning
+---@field diagnostic_format string Format for diagnostics ("yaml", "comment", "both")
+---@field subtest_level number Indentation level for subtests (0 to disable)
+---@field indent_yaml number Number of spaces to indent YAML blocks
+
 -- Define default configuration
+---@type TAPFormatterConfig
 local DEFAULT_CONFIG = {
   version = 13,                  -- TAP version (12 or 13)
   include_yaml_diagnostics = true, -- Include YAML diagnostics for failures
@@ -20,6 +46,8 @@ local DEFAULT_CONFIG = {
   indent_yaml = 2                -- Number of spaces to indent YAML blocks
 }
 
+---@private
+---@return TAPFormatterConfig config The configuration for the TAP formatter
 -- Get configuration for this formatter
 local function get_config()
   -- Try reporting module first with error handling
@@ -63,6 +91,11 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
+---@private
+---@param test_case table Test case data
+---@param test_number number Test number in the sequence
+---@param config TAPFormatterConfig Formatter configuration
+---@return string tap_line TAP-formatted test result line(s)
 -- Helper function to format test case result
 local function format_test_case(test_case, test_number, config)
   -- Validate input parameters
@@ -277,6 +310,8 @@ local function format_test_case(test_case, test_number, config)
   return line
 end
 
+---@param results_data table|nil Test results data to format
+---@return string tap_output TAP-formatted test results
 -- Format test results as TAP (Test Anything Protocol)
 function M.format_results(results_data)
   -- Validate input parameter
@@ -500,6 +535,9 @@ function M.format_results(results_data)
   end
 end
 
+---@param formatters table Table of formatter registries
+---@return boolean success True if registration was successful
+---@return table|nil error Error object if registration failed
 -- Register formatter
 return function(formatters)
   -- Validate parameters

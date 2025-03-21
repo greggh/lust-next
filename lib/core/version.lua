@@ -7,6 +7,23 @@
 -- Should follow semantic versioning: MAJOR.MINOR.PATCH
 -- See https://semver.org/ for more details
 
+---@class version
+---@field MAJOR number Major version component
+---@field MINOR number Minor version component
+---@field PATCH number Patch version component
+---@field _VERSION string Combined version string
+---@field parse fun(version_string: string): {major: number, minor: number, patch: number, prerelease?: string, buildmetadata?: string}|nil, table? Parse a version string into components
+---@field compare fun(version1: string|table, version2: string|table): number|nil, table? Compare two versions (-1, 0, 1)
+---@field satisfies_requirement fun(version: string|table, required_version: string|table): boolean|nil, table? Check if version satisfies requirement
+---@field get_version fun(): string Get full version string
+---@field get_version_table fun(): {major: number, minor: number, patch: number, prerelease?: string, buildmetadata?: string} Get version as table
+---@field check_version fun(min_version: string|table): boolean|nil, table? Check if current version meets minimum required
+---@field is_compatible fun(other_version: string|table): boolean|nil, table? Check compatibility with another version
+---@field compare_versions fun(version_a: string|table, version_b: string|table): number|nil, table? Compare two version strings (-1, 0, 1)
+---@field format fun(version_table: table): string Format a version table as a string
+---@field has_breaking_changes fun(version1: string|table, version2: string|table): boolean|nil, table? Check if versions have breaking changes
+---@field LUA_VERSION {major: number, minor: number, is_luajit: boolean, is_51_compatible: boolean} Information about the Lua runtime version
+
 -- Require error handler for comprehensive error handling
 local error_handler
 local error_handler_loaded, error_handler_module = pcall(require, "lib.tools.error_handler")
@@ -30,6 +47,7 @@ pcall(function()
   end
 end)
 
+---@type version
 local M = {}
 
 -- Individual version components
@@ -40,10 +58,10 @@ M.patch = 3
 -- Combined semantic version
 M.string = string.format("%d.%d.%d", M.major, M.minor, M.patch)
 
+---@param version_string string Version string to parse in format "MAJOR.MINOR.PATCH"
+---@return table|nil parsed_version Table with major, minor, patch components or nil on error
+---@return table|nil error Error object if operation failed
 -- Version parsing function with error handling
--- @param version_string (string) Version string to parse
--- @return parsed_version (table|nil) Table with major, minor, patch components or nil on error
--- @return error (table|nil) Error object if operation failed
 function M.parse(version_string)
   -- Parameter validation
   if version_string == nil then
@@ -116,11 +134,11 @@ function M.parse(version_string)
   return result
 end
 
+---@param version1 string|table First version to compare (string or version table)
+---@param version2 string|table Second version to compare (string or version table)
+---@return number|nil comparison -1 if v1 < v2, 0 if equal, 1 if v1 > v2, nil on error
+---@return table|nil error Error object if operation failed
 -- Version comparison function with error handling
--- @param version1 (string|table) First version to compare
--- @param version2 (string|table) Second version to compare
--- @return comparison (number|nil) -1 if v1 < v2, 0 if equal, 1 if v1 > v2, nil on error
--- @return error (table|nil) Error object if operation failed
 function M.compare(version1, version2)
   -- Parameter validation
   if version1 == nil then
@@ -226,10 +244,10 @@ function M.compare(version1, version2)
   return 0
 end
 
+---@param required_version string|table Minimum required version (string or version table)
+---@return boolean|nil satisfies True if current version satisfies requirement, nil on error
+---@return table|nil error Error object if operation failed
 -- Check if current version satisfies a minimum required version
--- @param required_version (string|table) Minimum required version
--- @return satisfies (boolean|nil) True if current version satisfies requirement, nil on error
--- @return error (table|nil) Error object if operation failed
 function M.satisfies_requirement(required_version)
   -- Parameter validation
   if required_version == nil then

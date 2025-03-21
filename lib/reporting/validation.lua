@@ -1,4 +1,19 @@
--- Validation module for coverage reports
+---@class ReportingValidation
+---@field _VERSION string Module version
+---@field validate_coverage_data fun(coverage_data: table): boolean, table Validates coverage data structure against schema
+---@field analyze_coverage_statistics fun(coverage_data: table): table Performs statistical analysis of coverage data
+---@field cross_check_with_static_analysis fun(coverage_data: table): table Cross-checks coverage data with static analysis
+---@field get_validation_issues fun(): table<number, {severity: string, message: string, context: table, file?: string, line?: number}> Returns all validation issues found
+---@field reset_validation_issues fun() Resets the validation issues list
+---@field validate_report_format fun(data: any, format: string): boolean, string? Validates report format against schema
+---@field validate_report fun(coverage_data: table, options?: {validate_schema?: boolean, analyze_statistics?: boolean, cross_check?: boolean, validate_files?: boolean}): table Performs comprehensive report validation
+---@field validate_file_paths fun(coverage_data: table): boolean, table Validates that file paths exist and are readable
+---@field validate_test_results fun(results_data: table): boolean, table Validates test results data structure
+---@field configure fun(options: table): boolean Configure validation options
+---@field is_coverage_threshold_met fun(coverage_data: table, threshold: number): boolean, table Check if coverage meets threshold
+---@field get_error_summary fun(): string Get a human-readable summary of validation errors
+-- Validation module for coverage reports and test results
+-- Ensures data conforms to expected schemas and performs sanity checks
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -22,7 +37,8 @@ local DEFAULT_CONFIG = {
   warn_on_validation_failure = true
 }
 
--- Get configuration for validation
+---@private
+---@return table config The validation configuration
 local function get_config()
   -- Try to load central_config module
   local success, central_config = pcall(require, "lib.core.central_config")
@@ -37,7 +53,8 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
--- Register validation configuration schema with central_config if available
+---@private
+---@return nil
 local function register_config_schema()
   local success, central_config = pcall(require, "lib.core.central_config")
   if success then
@@ -61,7 +78,11 @@ register_config_schema()
 -- List of validation issues
 local validation_issues = {}
 
--- Add a validation issue
+---@private
+---@param category string The issue category
+---@param message string The issue message
+---@param severity? string The issue severity (error or warning)
+---@param details? table Additional details about the issue
 local function add_issue(category, message, severity, details)
   table.insert(validation_issues, {
     category = category,
@@ -78,7 +99,9 @@ local function add_issue(category, message, severity, details)
   end
 end
 
--- Validate line counts in a coverage report
+---@private
+---@param coverage_data table The coverage data to validate
+---@return boolean valid Whether the line counts are valid
 local function validate_line_counts(coverage_data)
   local config = get_config()
   if not config.validate_line_counts then return true end
@@ -214,7 +237,9 @@ local function validate_line_counts(coverage_data)
   return valid
 end
 
--- Validate percentage calculations in a coverage report
+---@private
+---@param coverage_data table The coverage data to validate percentages for
+---@return boolean valid Whether the percentages are valid
 local function validate_percentages(coverage_data)
   local config = get_config()
   if not config.validate_percentages then return true end
@@ -321,7 +346,9 @@ local function validate_percentages(coverage_data)
   return valid
 end
 
--- Validate file paths in a coverage report
+---@private
+---@param coverage_data table The coverage data to validate file paths for
+---@return boolean valid Whether the file paths are valid
 local function validate_file_paths(coverage_data)
   local config = get_config()
   if not config.validate_file_paths then return true end
@@ -353,7 +380,9 @@ local function validate_file_paths(coverage_data)
   return valid
 end
 
--- Validate cross-module references
+---@private
+---@param coverage_data table The coverage data to validate cross-module references for
+---@return boolean valid Whether the cross-module references are valid
 local function validate_cross_module(coverage_data)
   local config = get_config()
   if not config.validate_cross_module then return true end
@@ -396,7 +425,9 @@ local function validate_cross_module(coverage_data)
   return valid
 end
 
--- Main validation function for coverage data
+---@param coverage_data table The coverage data to validate
+---@return boolean is_valid Whether the coverage data is valid
+---@return table validation_issues List of validation issues
 function M.validate_coverage_data(coverage_data)
   -- Reset issues list
   validation_issues = {}
@@ -496,7 +527,8 @@ function M.validate_coverage_data(coverage_data)
   return is_valid, validation_issues
 end
 
--- Statistical analysis of coverage data for anomaly detection
+---@param coverage_data table The coverage data to analyze
+---@return table stats Statistical analysis results
 function M.analyze_coverage_statistics(coverage_data)
   local stats = {
     median_line_coverage = 0,
@@ -602,7 +634,8 @@ function M.analyze_coverage_statistics(coverage_data)
   return stats
 end
 
--- Cross-check with static analysis results
+---@param coverage_data table The coverage data to cross-check with static analysis
+---@return table results The cross-check results
 function M.cross_check_with_static_analysis(coverage_data)
   local results = {
     files_checked = 0,
@@ -723,17 +756,20 @@ function M.cross_check_with_static_analysis(coverage_data)
   return results
 end
 
--- Get validation issues
+---@return table validation_issues List of validation issues found
 function M.get_validation_issues()
   return validation_issues
 end
 
--- Reset validation issues
+---@return nil
 function M.reset_validation_issues()
   validation_issues = {}
 end
 
--- Validate report format against its schema
+---@param data any The data to validate
+---@param format string The format name to validate against
+---@return boolean success Whether the format is valid
+---@return string? error_message Error message if validation failed
 function M.validate_report_format(data, format)
   logger.debug("Validating report format", {format = format})
   
@@ -765,7 +801,9 @@ function M.validate_report_format(data, format)
   end
 end
 
--- Complete report validation
+---@param coverage_data table The coverage data to validate
+---@param options? table Options for validation
+---@return table validation_result The comprehensive validation results
 function M.validate_report(coverage_data, options)
   options = options or {}
   

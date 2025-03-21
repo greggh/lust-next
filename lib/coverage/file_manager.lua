@@ -1,3 +1,21 @@
+---@class coverage.file_manager
+---@field _VERSION string Module version
+---@field discover_files fun(config?: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean}): table<string, {path: string, size: number, last_modified: number, discovered: boolean}>, table? Find all Lua files in directories matching patterns
+---@field add_uncovered_files fun(coverage_data: table, config?: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean}): number, table? Update coverage data with discovered files
+---@field count_files fun(files_table: table): number, table? Count files in a table
+---@field track_file fun(file_path: string): boolean, string? Add a file for coverage tracking
+---@field track_directory fun(dir_path: string, options?: {pattern?: string, recursive?: boolean, exclude?: string|string[]}): number, table? Track files in a directory
+---@field is_tracked fun(file_path: string): boolean Check if a file is being tracked
+---@field untrack_file fun(file_path: string): boolean Remove a file from tracking
+---@field untrack_all fun(): boolean Remove all files from tracking
+---@field get_tracked_files fun(): table<string, {path: string, discovered: boolean, loaded: boolean}> Get all tracked files
+---@field load_file fun(file_path: string): string|nil, string? Load file content for coverage tracking
+---@field set_include_pattern fun(pattern: string): boolean Set pattern for files to include
+---@field set_exclude_pattern fun(pattern: string): boolean Set pattern for files to exclude
+---@field scan_for_files fun(options?: {root_dir?: string, pattern?: string, exclude?: string|string[], recursive?: boolean}): table<string, {path: string, size: number, last_modified: number}> Scan filesystem for matching files
+---@field normalize_file_path fun(file_path: string): string Normalize a file path for consistent tracking
+---@field configure fun(options: table): coverage.file_manager Configure the file manager
+---@field get_config fun(): table Get current configuration
 local M = {}
 M._VERSION = "1.1.0"
 
@@ -15,6 +33,9 @@ logger.debug("Coverage file manager module initialized", {
   version = M._VERSION
 })
 
+---@param config? table Configuration options including source_dirs, include and exclude patterns
+---@return table discovered Table of discovered files (keys are file paths, values are true)
+---@return table|nil err Error information if file discovery failed
 -- Find all Lua files in directories matching patterns
 function M.discover_files(config)
   -- Validate input
@@ -220,6 +241,10 @@ function M.discover_files(config)
   return discovered, discover_err
 end
 
+---@param coverage_data table The coverage data object to update
+---@param config? table Configuration options for file discovery
+---@return number added Number of files added to coverage data
+---@return table|nil err Error information if operation failed
 -- Update coverage data with discovered files
 function M.add_uncovered_files(coverage_data, config)
   -- Validate input parameters
@@ -319,6 +344,9 @@ function M.add_uncovered_files(coverage_data, config)
   return added, discover_err
 end
 
+---@param files_table table Table of files to count
+---@return number count The number of files in the table
+---@return table|nil err Error information if counting failed
 -- Helper function to count files in a table
 function M.count_files(files_table)
   -- Validate input

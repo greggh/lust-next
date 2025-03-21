@@ -1,4 +1,24 @@
 -- File watcher module for firmo
+-- Monitors filesystem for changes and provides change notifications
+
+---@class watcher_module
+---@field _VERSION string Module version
+---@field configure fun(options?: {include_patterns?: string[], exclude_patterns?: string[], directories?: string|string[], check_interval?: number, recursive?: boolean, use_polling?: boolean, polling_interval?: number, ignore_hidden?: boolean, enable_event_dispatch?: boolean, max_files?: number, throttle_notifications?: boolean, save_state?: boolean}): watcher_module Configure the module with various options
+---@field init fun(directories?: string|string[], exclude_patterns?: string[]): boolean|nil, table? Initialize the watcher by scanning all files in the given directories
+---@field check_for_changes fun(): string[]|nil, table? Check for file changes since the last check
+---@field add_patterns fun(patterns: string[]): watcher_module|nil, table? Add patterns to watch
+---@field set_check_interval fun(interval: number): watcher_module|nil, table? Set check interval
+---@field on_change fun(callback: fun(changed_files: string[])): watcher_module|nil, table? Register a callback for when files change
+---@field watch fun(start?: boolean): boolean|nil, table? Start watching for changes with continuous polling
+---@field stop fun(): boolean|nil, table? Stop watching for changes
+---@field reset fun(): watcher_module|nil, table? Reset the module configuration to defaults
+---@field full_reset fun(): watcher_module|nil, table? Fully reset both local and central configuration
+---@field debug_config fun(): table Debug helper to show current configuration
+---@field get_watched_files fun(): table<string, {mtime: number, size: number}> Get currently watched files with metadata
+---@field add_directory fun(dir_path: string, recursive?: boolean): number|nil, table? Add a directory to watch
+---@field add_file fun(file_path: string): boolean|nil, table? Add a specific file to watch
+---@field is_watching fun(): boolean Check if the watcher is currently active
+
 local watcher = {}
 local logging = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
@@ -41,6 +61,8 @@ local last_check_time = 0
 -- Lazy loading of central_config to avoid circular dependencies
 local _central_config
 
+---@private
+---@return table|nil central_config The central_config module if available, nil otherwise
 local function get_central_config()
   if not _central_config then
     -- Use pcall to safely attempt loading central_config
@@ -76,6 +98,8 @@ local function get_central_config()
   return _central_config
 end
 
+---@private
+---@return boolean success Whether the change listener was registered successfully
 -- Set up change listener for central configuration
 local function register_change_listener()
   local central_config = get_central_config()
@@ -152,7 +176,9 @@ local function register_change_listener()
   return true
 end
 
--- Configure the module
+--- Configure the watcher module with various options
+---@param options? table Configuration options { check_interval?: number, default_directory?: string, debug?: boolean, verbose?: boolean, watch_patterns?: string[] }
+---@return watcher_module The module instance for method chaining
 function watcher.configure(options)
   options = options or {}
   
@@ -306,6 +332,9 @@ end
 -- Initialize the module
 watcher.configure()
 
+---@private
+---@param filename string The filename to check against watch patterns
+---@return boolean should_watch Whether the file should be watched
 -- Function to check if a file matches any of the watch patterns
 local function should_watch_file(filename)
   -- Validate input
@@ -383,6 +412,9 @@ local function should_watch_file(filename)
   return result
 end
 
+---@private
+---@param path string The file path to check for modification time
+---@return number|nil mtime Modification time as a number, or nil on error
 -- Get file modification time
 local function get_file_mtime(path)
   -- Validate input
@@ -440,7 +472,11 @@ local function get_file_mtime(path)
   return mtime
 end
 
--- Initialize the watcher by scanning all files in the given directories
+--- Initialize the watcher by scanning all files in the given directories
+---@param directories? string|string[] Directory or array of directories to scan (default: current directory)
+---@param exclude_patterns? string[] Array of patterns to exclude from watching
+---@return boolean|nil success True if initialization succeeded, nil on failure
+---@return table? error Error object if operation failed
 function watcher.init(directories, exclude_patterns)
   logger.info("Initializing file watcher", {
     directories = directories,
@@ -737,7 +773,9 @@ function watcher.init(directories, exclude_patterns)
   return true
 end
 
--- Check for file changes since the last check
+--- Check for file changes since the last check
+---@return string[]|nil changed_files Array of changed files, or nil if no changes detected
+---@return table? error Error object if operation failed
 function watcher.check_for_changes()
   -- Validate configuration before proceeding
   if not config then
@@ -1068,7 +1106,10 @@ function watcher.check_for_changes()
   end
 end
 
--- Add patterns to watch
+--- Add patterns to watch
+---@param patterns string[] Array of patterns to add to the watch list
+---@return watcher_module|nil watcher The module instance for method chaining, or nil on failure
+---@return table? error Error object if operation failed
 function watcher.add_patterns(patterns)
   -- Validate patterns parameter
   if not patterns then
@@ -1204,7 +1245,10 @@ function watcher.add_patterns(patterns)
   return watcher
 end
 
--- Set check interval
+--- Set check interval for file change detection
+---@param interval number Time in seconds between file checks (must be greater than 0)
+---@return watcher_module|nil watcher The module instance for method chaining, or nil on failure
+---@return table? error Error object if operation failed
 function watcher.set_check_interval(interval)
   -- Validate interval parameter
   if not interval then
@@ -1292,7 +1336,9 @@ function watcher.set_check_interval(interval)
   return watcher
 end
 
--- Reset the module configuration to defaults
+--- Reset the module configuration to defaults
+---@return watcher_module|nil watcher The module instance for method chaining, or nil on failure
+---@return table? error Error object if reset failed
 function watcher.reset()
   logger.debug("Resetting watcher module configuration to defaults")
   
@@ -1385,7 +1431,9 @@ function watcher.reset()
   return watcher
 end
 
--- Fully reset both local and central configuration
+--- Fully reset both local and central configuration
+---@return watcher_module|nil watcher The module instance for method chaining, or nil on failure
+---@return table? error Error object if reset failed
 function watcher.full_reset()
   logger.info("Performing full reset of watcher module")
   
@@ -1424,7 +1472,8 @@ function watcher.full_reset()
   return watcher
 end
 
--- Debug helper to show current configuration
+--- Debug helper to show current configuration
+---@return table config_info Configuration details including local and central configuration
 function watcher.debug_config()
   logger.debug("Generating configuration debug information")
   

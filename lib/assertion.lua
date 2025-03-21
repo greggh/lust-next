@@ -1,6 +1,6 @@
--- Assertion module for firmo
--- This is a standalone module for assertions that resolves circular dependencies
--- and provides consistent error handling patterns.
+--- Assertion module for firmo
+--- This is a standalone module for assertions that resolves circular dependencies
+--- and provides consistent error handling patterns.
 
 local M = {}
 
@@ -10,6 +10,9 @@ local unpack = table.unpack or _G.unpack
 -- Lazy-load dependencies to avoid circular dependencies
 ---@diagnostic disable-next-line: unused-local
 local _error_handler, _logging, _firmo
+
+--- Get the error handler module with lazy loading to avoid circular dependencies
+---@return table|nil The error handler module or nil if not available
 local function get_error_handler()
   if not _error_handler then
     local success, error_handler = pcall(require, "lib.tools.error_handler")
@@ -18,6 +21,8 @@ local function get_error_handler()
   return _error_handler
 end
 
+--- Get the logging module with lazy loading to avoid circular dependencies
+---@return table|nil The logging module or nil if not available
 local function get_logging()
   if not _logging then
     local success, logging = pcall(require, "lib.tools.logging")
@@ -26,7 +31,8 @@ local function get_logging()
   return _logging
 end
 
--- Logger for this module
+--- Get a logger instance for this module
+---@return table A logger instance (either real or stub)
 local function get_logger()
   local logging = get_logging()
   if logging then
@@ -56,6 +62,11 @@ end
 local logger = get_logger()
 
 -- Utility functions
+
+--- Check if a table contains a specific value
+---@param t table The table to search in
+---@param x any The value to search for
+---@return boolean True if the value is found, false otherwise
 local function has(t, x)
   for _, v in pairs(t) do
     if v == x then
@@ -65,8 +76,12 @@ local function has(t, x)
   return false
 end
 
--- Enhanced stringify function with better formatting for different types
--- and protection against cyclic references
+--- Enhanced stringify function with better formatting for different types
+--- and protection against cyclic references
+---@param t any The value to stringify
+---@param depth? number The current depth level (for recursive calls)
+---@param visited? table Table of already visited objects (for cycle detection)
+---@return string A string representation of the value
 local function stringify(t, depth, visited)
   depth = depth or 0
   visited = visited or {}
@@ -139,7 +154,10 @@ local function stringify(t, depth, visited)
   end
 end
 
--- Generate a simple diff between two values
+--- Generate a simple diff between two values
+---@param v1 any The first value to compare
+---@param v2 any The second value to compare
+---@return string A string representation of the differences
 local function diff_values(v1, v2)
   -- Create a shared visited table for cyclic reference detection
   local visited = {}
@@ -181,7 +199,12 @@ local function diff_values(v1, v2)
   return "Differences:\n  " .. table.concat(differences, "\n  ")
 end
 
--- Deep equality check function with cycle detection
+--- Deep equality check function with cycle detection
+---@param t1 any First value to compare
+---@param t2 any Second value to compare
+---@param eps? number Epsilon for floating point comparison (default 0)
+---@param visited? table Table to track visited objects for cycle detection
+---@return boolean True if the values are considered equal
 function M.eq(t1, t2, eps, visited)
   -- Initialize visited tables on first call
   visited = visited or {}
@@ -270,7 +293,10 @@ function M.eq(t1, t2, eps, visited)
   return true
 end
 
--- Type checking function
+--- Type checking function that checks if a value is of a specific type
+---@param v any The value to check
+---@param x string|table The type string or metatable to check against
+---@return boolean, string, string success, success_message, failure_message
 function M.isa(v, x)
   if type(x) == "string" then
     return type(v) == x,
@@ -305,7 +331,9 @@ end
 -- Assertion Path Definitions
 -- ==========================================
 
--- Define all the assertion paths
+--- Define all the assertion paths
+--- These form the chain of methods that can be called on the expect() assertion object
+--- @type table<string, table|function> Table of assertion paths and their test functions
 local paths = {
   [""] = { "to", "to_not" },
   to = {
@@ -340,6 +368,16 @@ local paths = {
     "increase",
     "decrease",
     "deep_equal",
+    "match_regex",
+    "be_date",
+    "be_iso_date",
+    "be_before",
+    "be_after",
+    "be_same_day_as",
+    "complete",
+    "complete_within",
+    "resolve_with",
+    "reject",
   },
   to_not = {
     "have",
@@ -373,6 +411,16 @@ local paths = {
     "increase",
     "decrease",
     "deep_equal",
+    "match_regex",
+    "be_date",
+    "be_iso_date",
+    "be_before",
+    "be_after",
+    "be_same_day_as",
+    "complete",
+    "complete_within",
+    "resolve_with",
+    "reject",
     chain = function(a)
       a.negate = not a.negate
     end,
@@ -440,38 +488,63 @@ local paths = {
         "expected " .. tostring(v) .. " to not be less than " .. tostring(x)
     end,
   },
+  --- Test if a value exists (is not nil)
   exist = {
+    --- @param v any The value to check for existence
+    --- @return boolean, string, string result, success_message, failure_message
     test = function(v)
       return v ~= nil, "expected " .. tostring(v) .. " to exist", "expected " .. tostring(v) .. " to not exist"
     end,
   },
+  
+  --- Test if a value is truthy
   truthy = {
+    --- @param v any The value to check if truthy
+    --- @return boolean, string, string result, success_message, failure_message
     test = function(v)
       return v and true or false,
         "expected " .. tostring(v) .. " to be truthy",
         "expected " .. tostring(v) .. " to not be truthy"
     end,
   },
+  
+  --- Test if a value is falsy
   falsy = {
+    --- @param v any The value to check if falsy
+    --- @return boolean, string, string result, success_message, failure_message
     test = function(v)
       return not v and true or false,
         "expected " .. tostring(v) .. " to be falsy",
         "expected " .. tostring(v) .. " to not be falsy"
     end,
   },
+  
+  --- Test if a value is nil
   ["nil"] = {
+    --- @param v any The value to check if nil
+    --- @return boolean, string, string result, success_message, failure_message
     test = function(v)
       return v == nil, "expected " .. tostring(v) .. " to be nil", "expected " .. tostring(v) .. " to not be nil"
     end,
   },
+  
+  --- Test if a value is of a specific type
   type = {
+    --- @param v any The value to check the type of
+    --- @param expected_type string The expected type string
+    --- @return boolean, string, string result, success_message, failure_message
     test = function(v, expected_type)
       return type(v) == expected_type,
         "expected " .. tostring(v) .. " to be of type " .. expected_type .. ", got " .. type(v),
         "expected " .. tostring(v) .. " to not be of type " .. expected_type
     end,
   },
+  --- Test if two values are equal using deep equality comparison
   equal = {
+    --- @param v any The actual value to check
+    --- @param x any The expected value to compare against
+    --- @param eps? number Optional epsilon for floating-point comparisons
+    --- @return boolean, string, string result, success_message, failure_message
     test = function(v, x, eps)
       local equal = M.eq(v, x, eps)
       local comparison = ""
@@ -848,387 +921,976 @@ local paths = {
       return M.eq(v, x, eps),
         "expected " .. stringify(v) .. " to deeply equal " .. stringify(x),
         "expected " .. stringify(v) .. " to not deeply equal " .. stringify(x)
-    end,
-  },
-
-  -- Check if a table contains all specified keys
-  keys = {
-    test = function(v, x)
-      if type(v) ~= "table" then
-        error("expected " .. tostring(v) .. " to be a table")
-      end
-
-      if type(x) ~= "table" then
-        error("expected " .. tostring(x) .. " to be a table containing keys to check for")
-      end
-
-      for _, key in ipairs(x) do
-        if v[key] == nil then
-          return false,
-            "expected " .. stringify(v) .. " to contain key " .. tostring(key),
-            "expected " .. stringify(v) .. " to not contain key " .. tostring(key)
-        end
-      end
-
-      return true,
-        "expected " .. stringify(v) .. " to contain keys " .. stringify(x),
-        "expected " .. stringify(v) .. " to not contain keys " .. stringify(x)
-    end,
-  },
-
-  -- Check if a table contains a specific key
-  key = {
-    test = function(v, x)
-      if type(v) ~= "table" then
-        error("expected " .. tostring(v) .. " to be a table")
-      end
-
-      return v[x] ~= nil,
-        "expected " .. stringify(v) .. " to contain key " .. tostring(x),
-        "expected " .. stringify(v) .. " to not contain key " .. tostring(x)
-    end,
-  },
-
-  -- Numeric comparison assertions
-  be_greater_than = {
-    test = function(v, x)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-
-      if type(x) ~= "number" then
-        error("expected " .. tostring(x) .. " to be a number")
-      end
-
-      return v > x,
-        "expected " .. tostring(v) .. " to be greater than " .. tostring(x),
-        "expected " .. tostring(v) .. " to not be greater than " .. tostring(x)
-    end,
-  },
-  be_less_than = {
-    test = function(v, x)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-
-      if type(x) ~= "number" then
-        error("expected " .. tostring(x) .. " to be a number")
-      end
-
-      return v < x,
-        "expected " .. tostring(v) .. " to be less than " .. tostring(x),
-        "expected " .. tostring(v) .. " to not be less than " .. tostring(x)
-    end,
-  },
-  
-  -- Check if a value is empty (string, table)
-  empty = {
-    test = function(v)
-      if type(v) == "string" then
-        return v == "",
-          'expected string "' .. v .. '" to be empty',
-          'expected string to not be empty'
-      elseif type(v) == "table" then
-        return next(v) == nil,
-          "expected table to be empty, but it has " .. 
-          (function() 
-            local count = 0
-            for _ in pairs(v) do count = count + 1 end
-            return count
-          end)() .. " elements",
-          "expected table to not be empty"
-      else
-        error("cannot check emptiness of a " .. type(v))
-      end
-    end,
-  },
-  
-  -- Check if a number is positive
-  positive = {
-    test = function(v)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-      
-      return v > 0,
-        "expected " .. tostring(v) .. " to be positive",
-        "expected " .. tostring(v) .. " to not be positive"
-    end,
-  },
-  
-  -- Check if a number is negative
-  negative = {
-    test = function(v)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-      
-      return v < 0,
-        "expected " .. tostring(v) .. " to be negative",
-        "expected " .. tostring(v) .. " to not be negative"
-    end,
-  },
-  
-  -- Check if a number is an integer
-  integer = {
-    test = function(v)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-      
-      return v == math.floor(v),
-        "expected " .. tostring(v) .. " to be an integer",
-        "expected " .. tostring(v) .. " to not be an integer"
-    end,
-  },
-  
-  -- Check if a string is all uppercase
-  uppercase = {
-    test = function(v)
-      if type(v) ~= "string" then
-        error("expected " .. tostring(v) .. " to be a string")
-      end
-      
-      return v == string.upper(v),
-        'expected string "' .. v .. '" to be uppercase',
-        'expected string "' .. v .. '" to not be uppercase'
-    end,
-  },
-  
-  -- Check if a string is all lowercase
-  lowercase = {
-    test = function(v)
-      if type(v) ~= "string" then
-        error("expected " .. tostring(v) .. " to be a string")
-      end
-      
-      return v == string.lower(v),
-        'expected string "' .. v .. '" to be lowercase',
-        'expected string "' .. v .. '" to not be lowercase'
-    end,
-  },
-
-  be_between = {
-    test = function(v, min, max)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-
-      if type(min) ~= "number" or type(max) ~= "number" then
-        error("expected min and max to be numbers")
-      end
-
-      return v >= min and v <= max,
-        "expected " .. tostring(v) .. " to be between " .. tostring(min) .. " and " .. tostring(max),
-        "expected " .. tostring(v) .. " to not be between " .. tostring(min) .. " and " .. tostring(max)
-    end,
-  },
-
-  be_truthy = {
-    test = function(v)
-      return v and true or false,
-        "expected " .. tostring(v) .. " to be truthy",
-        "expected " .. tostring(v) .. " to not be truthy"
-    end,
-  },
-
-  be_falsy = {
-    test = function(v)
-      return not v, "expected " .. tostring(v) .. " to be falsy", "expected " .. tostring(v) .. " to not be falsy"
-    end,
-  },
-
-  be_falsey = {
-    test = function(v)
-      return not v, "expected " .. tostring(v) .. " to be falsey", "expected " .. tostring(v) .. " to not be falsey"
-    end,
-  },
-
-  be_approximately = {
-    test = function(v, x, delta)
-      if type(v) ~= "number" then
-        error("expected " .. tostring(v) .. " to be a number")
-      end
-
-      if type(x) ~= "number" then
-        error("expected " .. tostring(x) .. " to be a number")
-      end
-
-      delta = delta or 0.0001
-
-      return math.abs(v - x) <= delta,
-        "expected " .. tostring(v) .. " to be approximately " .. tostring(x) .. " (±" .. tostring(delta) .. ")",
-        "expected " .. tostring(v) .. " to not be approximately " .. tostring(x) .. " (±" .. tostring(delta) .. ")"
-    end,
-  },
-
-  -- Satisfy assertion for custom predicates
-  satisfy = {
-    test = function(v, predicate)
-      if type(predicate) ~= "function" then
-        error("expected predicate to be a function, got " .. type(predicate))
-      end
-
-      local success, result = pcall(predicate, v)
-      if not success then
-        error("predicate function failed with error: " .. tostring(result))
-      end
-
-      return result,
-        "expected value to satisfy the given predicate function",
-        "expected value to not satisfy the given predicate function"
-    end,
-  },
-
-  -- String assertions
-  start_with = {
-    test = function(v, x)
-      if type(v) ~= "string" then
-        error("expected " .. tostring(v) .. " to be a string")
-      end
-
-      if type(x) ~= "string" then
-        error("expected " .. tostring(x) .. " to be a string")
-      end
-
-      return v:sub(1, #x) == x,
-        'expected "' .. v .. '" to start with "' .. x .. '"',
-        'expected "' .. v .. '" to not start with "' .. x .. '"'
-    end,
-  },
-
-  end_with = {
-    test = function(v, x)
-      if type(v) ~= "string" then
-        error("expected " .. tostring(v) .. " to be a string")
-      end
-
-      if type(x) ~= "string" then
-        error("expected " .. tostring(x) .. " to be a string")
-      end
-
-      return v:sub(-#x) == x,
-        'expected "' .. v .. '" to end with "' .. x .. '"',
-        'expected "' .. v .. '" to not end with "' .. x .. '"'
-    end,
-  },
-
-  -- Type checking assertions
-  be_type = {
-    "callable",
-    "comparable",
-    "iterable",
-    test = function(v, expected_type)
-      if expected_type == "callable" then
-        local is_callable = type(v) == "function" or (type(v) == "table" and getmetatable(v) and getmetatable(v).__call)
-        return is_callable,
-          "expected " .. tostring(v) .. " to be callable",
-          "expected " .. tostring(v) .. " to not be callable"
-      elseif expected_type == "comparable" then
-        local success = pcall(function()
-          return v < v
-        end)
-        return success,
-          "expected " .. tostring(v) .. " to be comparable",
-          "expected " .. tostring(v) .. " to not be comparable"
-      elseif expected_type == "iterable" then
-        local success = pcall(function()
-          for _ in pairs(v) do
-            break
-          end
-        end)
-        return success,
-          "expected " .. tostring(v) .. " to be iterable",
-          "expected " .. tostring(v) .. " to not be iterable"
-      else
-        error("unknown type check: " .. tostring(expected_type))
-      end
-    end,
-  },
-
-  -- Enhanced error assertions
-  throw = {
-    "error",
-    "error_matching",
-    "error_type",
-    test = function(v)
-      if type(v) ~= "function" then
-        error("expected " .. tostring(v) .. " to be a function")
-      end
-
-      ---@diagnostic disable-next-line: unused-local
-      local ok, err = pcall(v)
-      return not ok, "expected function to throw an error", "expected function to not throw an error"
-    end,
-  },
-
-  error = {
-    test = function(v)
-      if type(v) ~= "function" then
-        error("expected " .. tostring(v) .. " to be a function")
-      end
-
-      ---@diagnostic disable-next-line: unused-local
-      local ok, err = pcall(v)
-      return not ok, "expected function to throw an error", "expected function to not throw an error"
-    end,
-  },
-
-  error_matching = {
-    test = function(v, pattern)
-      if type(v) ~= "function" then
-        error("expected " .. tostring(v) .. " to be a function")
-      end
-
-      if type(pattern) ~= "string" then
-        error("expected pattern to be a string")
-      end
-
-      local ok, err = pcall(v)
-      if ok then
-        return false,
-          'expected function to throw an error matching pattern "' .. pattern .. '"',
-          'expected function to not throw an error matching pattern "' .. pattern .. '"'
-      end
-
-      err = tostring(err)
-      return err:match(pattern) ~= nil,
-        'expected error "' .. err .. '" to match pattern "' .. pattern .. '"',
-        'expected error "' .. err .. '" to not match pattern "' .. pattern .. '"'
-    end,
-  },
-
-  error_type = {
-    test = function(v, expected_type)
-      if type(v) ~= "function" then
-        error("expected " .. tostring(v) .. " to be a function")
-      end
-
-      local ok, err = pcall(v)
-      if ok then
-        return false,
-          "expected function to throw an error of type " .. tostring(expected_type),
-          "expected function to not throw an error of type " .. tostring(expected_type)
-      end
-
-      -- Try to determine the error type
-      local error_type
-      if type(err) == "string" then
-        error_type = "string"
-      elseif type(err) == "table" then
-        error_type = err.__name or "table"
-      else
-        error_type = type(err)
-      end
-
-      return error_type == expected_type,
-        "expected error of type " .. error_type .. " to be of type " .. expected_type,
-        "expected error of type " .. error_type .. " to not be of type " .. expected_type
-    end,
-  },
+    end
+  }
 }
 
--- Main expect function
+-- Advanced regex matching with options
+paths.match_regex = {
+  test = function(v, pattern, options)
+    if type(v) ~= "string" then
+      error("Expected a string, got " .. type(v))
+    end
+    
+    if type(pattern) ~= "string" then
+      error("Expected a string pattern, got " .. type(pattern))
+    end
+    
+    if options ~= nil and type(options) ~= "table" then
+      error("Expected options to be a table, got " .. type(options))
+    end
+    
+    options = options or {}
+    local case_insensitive = options.case_insensitive or false
+    local multiline = options.multiline or false
+    
+    -- Apply case insensitivity by converting to lowercase if requested
+    local compare_v = v
+    local compare_pattern = pattern
+    
+    if case_insensitive then
+      compare_v = string.lower(compare_v)
+      compare_pattern = string.lower(compare_pattern)
+    end
+    
+    -- Handle multiline flag
+    if multiline then
+      -- In multiline mode, ^ and $ match the start/end of each line
+      -- Replace with markers that accomplish this in Lua patterns
+      compare_pattern = compare_pattern:gsub("%^", "(^|\n)")
+      compare_pattern = compare_pattern:gsub("%$", "($|\n)")
+    end
+    
+    -- Perform the match
+    local result = string.find(compare_v, compare_pattern) ~= nil
+    
+    -- Create user-friendly options string for error messages
+    local options_str = ""
+    if next(options) then
+      local opts = {}
+      if options.case_insensitive then table.insert(opts, "case_insensitive") end
+      if options.multiline then table.insert(opts, "multiline") end
+      options_str = " (with options: " .. table.concat(opts, ", ") .. ")"
+    end
+    
+    return result,
+      'expected "' .. v .. '" to match regex pattern "' .. pattern .. '"' .. options_str,
+      'expected "' .. v .. '" to not match regex pattern "' .. pattern .. '"' .. options_str
+  end
+}
+  
+-- Date validation
+paths.be_date = {
+    test = function(v)
+      -- Check if the value is a string that can be parsed as a date
+      if type(v) ~= "string" then
+        return false, 
+          "expected " .. stringify(v) .. " to be a valid date string", 
+          "expected " .. stringify(v) .. " to not be a valid date string"
+      end
+      
+      -- Try to parse as a date using various formats
+      local year, month, day
+      
+      -- Try YYYY-MM-DD format with optional time
+      year, month, day = v:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+      if not year then
+        -- Try MM/DD/YYYY format
+        month, day, year = v:match("^(%d%d)/(%d%d)/(%d%d%d%d)")
+      end
+      if not year then
+        -- Try DD/MM/YYYY format
+        day, month, year = v:match("^(%d%d)/(%d%d)/(%d%d%d%d)")
+      end
+      
+      if not (year and month and day) then
+        return false,
+          'expected "' .. v .. '" to be a valid date string',
+          'expected "' .. v .. '" to not be a valid date string'
+      end
+      
+      -- Convert to numbers
+      year, month, day = tonumber(year), tonumber(month), tonumber(day)
+      
+      -- Basic validation of date components
+      if month < 1 or month > 12 or day < 1 or day > 31 then
+        return false,
+          'expected "' .. v .. '" to be a valid date (invalid month or day)',
+          'expected "' .. v .. '" to not be a valid date'
+      end
+      
+      -- Additional validation for days in month
+      local days_in_month = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+      
+      -- Adjust February for leap years
+      if month == 2 and (year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)) then
+        days_in_month[2] = 29
+      end
+      
+      if day > days_in_month[month] then
+        return false,
+          'expected "' .. v .. '" to be a valid date (invalid days for month)',
+          'expected "' .. v .. '" to not be a valid date'
+      end
+      
+      return true,
+        'expected "' .. v .. '" to be a valid date',
+        'expected "' .. v .. '" to not be a valid date'
+    end
+}
+
+-- ISO date format validation
+paths.be_iso_date = {
+    test = function(v)
+      if type(v) ~= "string" then
+        return false, 
+          "expected " .. stringify(v) .. " to be a valid ISO date string", 
+          "expected " .. stringify(v) .. " to not be a valid ISO date string"
+      end
+      
+      -- Check for ISO 8601 format (YYYY-MM-DDTHH:MM:SS.sssZ)
+      local year, month, day, hour, minute, second = 
+        v:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[Tt](%d%d):(%d%d):(%d%d)")
+      
+      -- If no match, check for simple ISO date (YYYY-MM-DD)
+      if not year then
+        year, month, day = v:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+        hour, minute, second = "00", "00", "00"
+      end
+      
+      if not (year and month and day) then
+        return false,
+          'expected "' .. v .. '" to be a valid ISO date string',
+          'expected "' .. v .. '" to not be a valid ISO date string'
+      end
+      
+      -- Convert to numbers
+      year, month, day = tonumber(year), tonumber(month), tonumber(day)
+      hour = hour and tonumber(hour) or 0
+      minute = minute and tonumber(minute) or 0
+      second = second and tonumber(second) or 0
+      
+      -- Validate date components
+      if month < 1 or month > 12 or day < 1 or day > 31 then
+        return false,
+          'expected "' .. v .. '" to be a valid ISO date (invalid month or day)',
+          'expected "' .. v .. '" to not be a valid ISO date'
+      end
+      
+      -- Validate time components if present
+      if hour and (hour < 0 or hour > 23) then
+        return false,
+          'expected "' .. v .. '" to be a valid ISO date (invalid hour)',
+          'expected "' .. v .. '" to not be a valid ISO date'
+      end
+      
+      if minute and (minute < 0 or minute > 59) then
+        return false,
+          'expected "' .. v .. '" to be a valid ISO date (invalid minute)',
+          'expected "' .. v .. '" to not be a valid ISO date'
+      end
+      
+      if second and (second < 0 or second > 59) then
+        return false,
+          'expected "' .. v .. '" to be a valid ISO date (invalid second)',
+          'expected "' .. v .. '" to not be a valid ISO date'
+      end
+      
+      -- Check days in month
+      local days_in_month = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+      
+      -- Adjust February for leap years
+      if month == 2 and (year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)) then
+        days_in_month[2] = 29
+      end
+      
+      if day > days_in_month[month] then
+        return false,
+          'expected "' .. v .. '" to be a valid ISO date (invalid days for month)',
+          'expected "' .. v .. '" to not be a valid ISO date'
+      end
+      
+      return true,
+        'expected "' .. v .. '" to be a valid ISO date',
+        'expected "' .. v .. '" to not be a valid ISO date'
+    end
+}
+
+-- Helper function to parse date strings into components
+local function parse_date(date_string)
+  if type(date_string) ~= "string" then
+    return nil
+  end
+  
+  local year, month, day, hour, minute, second
+  
+  -- Try ISO format (YYYY-MM-DDTHH:MM:SS)
+  year, month, day, hour, minute, second = 
+    date_string:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[Tt](%d%d):(%d%d):(%d%d)")
+  
+  -- If no match, try simple ISO date (YYYY-MM-DD)
+  if not year then
+    year, month, day = date_string:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    hour, minute, second = "00", "00", "00"
+  end
+  
+  -- If still no match, try MM/DD/YYYY format
+  if not year then
+    month, day, year = date_string:match("^(%d%d)/(%d%d)/(%d%d%d%d)$")
+    hour, minute, second = "00", "00", "00"
+  end
+  
+  -- If still no match, try DD/MM/YYYY format
+  if not year then
+    day, month, year = date_string:match("^(%d%d)/(%d%d)/(%d%d%d%d)$")
+    hour, minute, second = "00", "00", "00"
+  end
+  
+  if not (year and month and day) then
+    return nil
+  end
+  
+  return {
+    year = tonumber(year),
+    month = tonumber(month),
+    day = tonumber(day),
+    hour = hour and tonumber(hour) or 0,
+    minute = minute and tonumber(minute) or 0,
+    second = second and tonumber(second) or 0
+  }
+end
+
+-- Helper function to compare dates
+local function compare_dates(date1, date2)
+  local d1 = parse_date(date1)
+  local d2 = parse_date(date2)
+  
+  if not d1 or not d2 then
+    return nil
+  end
+  
+  -- Compare full timestamps
+  if d1.year ~= d2.year then return d1.year - d2.year end
+  if d1.month ~= d2.month then return d1.month - d2.month end
+  if d1.day ~= d2.day then return d1.day - d2.day end
+  if d1.hour ~= d2.hour then return d1.hour - d2.hour end
+  if d1.minute ~= d2.minute then return d1.minute - d2.minute end
+  return d1.second - d2.second
+end
+
+-- Add date and async assertions to the paths table
+paths.be_before = {
+  test = function(v, expected_date)
+    if type(v) ~= "string" or type(expected_date) ~= "string" then
+      return false, 
+        "Expected a date string, got " .. type(v),
+        "Expected a non-date string"
+    end
+    
+    local result = compare_dates(v, expected_date)
+    
+    if result == nil then
+      return false,
+        'expected "' .. v .. '" and "' .. expected_date .. '" to be valid dates for comparison',
+        'expected "' .. v .. '" and "' .. expected_date .. '" to not be valid dates for comparison'
+    end
+    
+    return result < 0,
+      'expected "' .. v .. '" to be before "' .. expected_date .. '"',
+      'expected "' .. v .. '" to not be before "' .. expected_date .. '"'
+  end
+}
+
+paths.be_after = {
+  test = function(v, expected_date)
+    if type(v) ~= "string" or type(expected_date) ~= "string" then
+      return false, 
+        "Expected a date string, got " .. type(v),
+        "Expected a non-date string"
+    end
+    
+    local result = compare_dates(v, expected_date)
+    
+    if result == nil then
+      return false,
+        'expected "' .. v .. '" and "' .. expected_date .. '" to be valid dates for comparison',
+        'expected "' .. v .. '" and "' .. expected_date .. '" to not be valid dates for comparison'
+    end
+    
+    return result > 0,
+      'expected "' .. v .. '" to be after "' .. expected_date .. '"',
+      'expected "' .. v .. '" to not be after "' .. expected_date .. '"'
+  end
+}
+
+paths.be_same_day_as = {
+  test = function(v, expected_date)
+    if type(v) ~= "string" or type(expected_date) ~= "string" then
+      return false, 
+        "Expected a date string, got " .. type(v),
+        "Expected a non-date string"
+    end
+    
+    local d1 = parse_date(v)
+    local d2 = parse_date(expected_date)
+    
+    if not d1 or not d2 then
+      return false,
+        'expected "' .. v .. '" and "' .. expected_date .. '" to be valid dates for comparison',
+        'expected "' .. v .. '" and "' .. expected_date .. '" to not be valid dates for comparison'
+    end
+    
+    return d1.year == d2.year and d1.month == d2.month and d1.day == d2.day,
+      'expected "' .. v .. '" to be the same day as "' .. expected_date .. '"',
+      'expected "' .. v .. '" to not be the same day as "' .. expected_date .. '"'
+  end
+}
+
+-- Async assertions
+paths.complete = {
+  test = function(async_fn, timeout)
+    if type(async_fn) ~= "function" then
+      error("Expected a promise, got " .. type(async_fn))
+    end
+    
+    timeout = timeout or 1000 -- Default 1 second timeout
+    
+    -- Check if we're in an async context
+    local async_module = package.loaded["lib.async"] or package.loaded["lib.async.init"]
+    if not async_module or not async_module.is_in_async_context then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    if not async_module.is_in_async_context() then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    local completed = false
+    local result_value
+    local error_value
+    
+    -- Function to capture the result
+    local function capture_result(...)
+      completed = true
+      if select('#', ...) > 0 then
+        result_value = ...
+      end
+    end
+    
+    -- Start the async operation
+    local success, err = pcall(function()
+      -- Start the async function and pass the capture function as a callback
+      async_fn(capture_result)
+    end)
+    
+    if not success then
+      error_value = err
+      completed = true
+    end
+    
+    -- Wait for the async operation to complete or timeout
+    local wait_result = pcall(function()
+      async_module.wait_until(function() return completed end, timeout)
+    end)
+    
+    -- If there was an error running the function, throw it
+    if error_value then
+      error(error_value)
+    end
+    
+    -- If wait_until timed out, wait_result will be false
+    return wait_result,
+      "async operation did not complete within " .. timeout .. "ms",
+      "async operation completed when it was expected to timeout"
+  end
+}
+
+paths.complete_within = {
+  test = function(async_fn, timeout)
+    if type(async_fn) ~= "function" then
+      error("Expected a promise, got " .. type(async_fn))
+    end
+    
+    if type(timeout) ~= "number" or timeout <= 0 then
+      error("timeout must be a positive number")
+    end
+    
+    -- Check if we're in an async context
+    local async_module = package.loaded["lib.async"] or package.loaded["lib.async.init"]
+    if not async_module or not async_module.is_in_async_context then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    if not async_module.is_in_async_context() then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    local completed = false
+    local start_time = os.clock() * 1000
+    local result_value
+    local error_value
+    
+    -- Function to capture the result
+    local function capture_result(...)
+      completed = true
+      if select('#', ...) > 0 then
+        result_value = ...
+      end
+    end
+    
+    -- Start the async operation
+    local success, err = pcall(function()
+      -- Start the async function and pass the capture function as a callback
+      async_fn(capture_result)
+    end)
+    
+    if not success then
+      error_value = err
+      completed = true
+    end
+    
+    -- Wait for the async operation to complete or timeout
+    local wait_result = pcall(function()
+      async_module.wait_until(function() return completed end, timeout)
+    end)
+    
+    -- If there was an error running the function, throw it
+    if error_value then
+      error(error_value)
+    end
+    
+    local elapsed = (os.clock() * 1000) - start_time
+    
+    -- If wait_until timed out, wait_result will be false
+    return wait_result,
+      "async operation did not complete within " .. timeout .. "ms",
+      "async operation completed within " .. timeout .. "ms when it was expected to timeout"
+  end
+}
+
+paths.resolve_with = {
+  test = function(async_fn, expected_value, timeout)
+    if type(async_fn) ~= "function" then
+      error("Expected a promise, got " .. type(async_fn))
+    end
+    
+    timeout = timeout or 1000 -- Default 1 second timeout
+    
+    -- Check if we're in an async context
+    local async_module = package.loaded["lib.async"] or package.loaded["lib.async.init"]
+    if not async_module or not async_module.is_in_async_context then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    if not async_module.is_in_async_context() then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    local completed = false
+    local result_value
+    local error_value
+    
+    -- Function to capture the result
+    local function capture_result(...)
+      completed = true
+      if select('#', ...) > 0 then
+        result_value = ...
+      end
+    end
+    
+    -- Start the async operation
+    local success, err = pcall(function()
+      -- Start the async function and pass the capture function as a callback
+      async_fn(capture_result)
+    end)
+    
+    if not success then
+      error_value = err
+      completed = true
+    end
+    
+    -- Wait for the async operation to complete or timeout
+    local wait_result = pcall(function()
+      async_module.wait_until(function() return completed end, timeout)
+    end)
+    
+    -- If there was an error running the function, throw it
+    if error_value then
+      error(error_value)
+    end
+    
+    -- If wait_until timed out
+    if not wait_result then
+      return false, "async operation did not complete within " .. timeout .. "ms", nil
+    end
+    
+    -- Check if the result value matches the expected value
+    return M.eq(result_value, expected_value),
+      "expected async operation to resolve with " .. stringify(expected_value) .. 
+      " but got " .. stringify(result_value),
+      "expected async operation to not resolve with " .. stringify(expected_value)
+  end
+}
+
+paths.reject = {
+  test = function(async_fn, error_pattern, timeout)
+    if type(async_fn) ~= "function" then
+      error("Expected a promise, got " .. type(async_fn))
+    end
+    
+    timeout = timeout or 1000 -- Default 1 second timeout
+    
+    -- Check if we're in an async context
+    local async_module = package.loaded["lib.async"] or package.loaded["lib.async.init"]
+    if not async_module or not async_module.is_in_async_context then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    if not async_module.is_in_async_context() then
+      error("Async assertions can only be used in async test contexts")
+    end
+    
+    local completed = false
+    local rejected = false
+    local error_message
+    
+    -- Function to capture success
+    local function success_callback()
+      completed = true
+    end
+    
+    -- Function to capture error
+    local function error_callback(err)
+      completed = true
+      rejected = true
+      error_message = err
+    end
+    
+    -- Start the async operation
+    local success, err = pcall(function()
+      -- Start the async function with success and error callbacks
+      async_fn(success_callback, error_callback)
+    end)
+    
+    if not success then
+      -- The function itself threw an error (not an async rejection)
+      rejected = true
+      error_message = err
+      completed = true
+    end
+    
+    -- Wait for the async operation to complete or timeout
+    local wait_result = pcall(function()
+      async_module.wait_until(function() return completed end, timeout)
+    end)
+    
+    -- If wait_until timed out
+    if not wait_result then
+      return false, "async operation did not complete within " .. timeout .. "ms", nil
+    end
+    
+    -- If error pattern is provided, check that the error matches
+    if error_pattern and rejected then
+      local matches_pattern = type(error_message) == "string" and 
+                            string.find(error_message, error_pattern) ~= nil
+      
+      if not matches_pattern then
+        return false, 
+          "expected async operation to reject with error matching " .. 
+          stringify(error_pattern) .. " but got " .. stringify(error_message),
+          nil
+      end
+    end
+    
+    return rejected,
+      "expected async operation to reject with an error" .. 
+      (error_pattern and " matching " .. stringify(error_pattern) or ""),
+      "expected async operation to not reject with an error"
+  end
+}
+
+-- Continue adding assertions to the paths table
+
+-- Check if a table contains all specified keys 
+paths.keys = {
+  test = function(v, x)
+    if type(v) ~= "table" then
+      error("expected " .. tostring(v) .. " to be a table")
+    end
+
+    if type(x) ~= "table" then
+      error("expected " .. tostring(x) .. " to be a table containing keys to check for")
+    end
+
+    for _, key in ipairs(x) do
+      if v[key] == nil then
+        return false,
+          "expected " .. stringify(v) .. " to contain key " .. tostring(key),
+          "expected " .. stringify(v) .. " to not contain key " .. tostring(key)
+      end
+    end
+
+    return true,
+      "expected " .. stringify(v) .. " to contain keys " .. stringify(x),
+      "expected " .. stringify(v) .. " to not contain keys " .. stringify(x)
+  end
+}
+
+-- Check if a table contains a specific key
+paths.key = {
+  test = function(v, x)
+    if type(v) ~= "table" then
+      error("expected " .. tostring(v) .. " to be a table")
+    end
+
+    return v[x] ~= nil,
+      "expected " .. stringify(v) .. " to contain key " .. tostring(x),
+      "expected " .. stringify(v) .. " to not contain key " .. tostring(x)
+  end
+}
+
+-- Numeric comparison assertions
+paths.be_greater_than = {
+  test = function(v, x)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+
+    if type(x) ~= "number" then
+      error("expected " .. tostring(x) .. " to be a number")
+    end
+
+    return v > x,
+      "expected " .. tostring(v) .. " to be greater than " .. tostring(x),
+      "expected " .. tostring(v) .. " to not be greater than " .. tostring(x)
+  end
+}
+
+paths.be_less_than = {
+  test = function(v, x)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+
+    if type(x) ~= "number" then
+      error("expected " .. tostring(x) .. " to be a number")
+    end
+
+    return v < x,
+      "expected " .. tostring(v) .. " to be less than " .. tostring(x),
+      "expected " .. tostring(v) .. " to not be less than " .. tostring(x)
+  end
+}
+  
+-- Check if a value is empty (string, table)
+paths.empty = {
+  test = function(v)
+    if type(v) == "string" then
+      return v == "",
+        'expected string "' .. v .. '" to be empty',
+        'expected string to not be empty'
+    elseif type(v) == "table" then
+      return next(v) == nil,
+        "expected table to be empty, but it has " .. 
+        (function() 
+          local count = 0
+          for _ in pairs(v) do count = count + 1 end
+          return count
+        end)() .. " elements",
+        "expected table to not be empty"
+    else
+      error("cannot check emptiness of a " .. type(v))
+    end
+  end
+}
+  
+-- Check if a number is positive
+paths.positive = {
+  test = function(v)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+    
+    return v > 0,
+      "expected " .. tostring(v) .. " to be positive",
+      "expected " .. tostring(v) .. " to not be positive"
+  end
+}
+  
+-- Check if a number is negative
+paths.negative = {
+  test = function(v)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+    
+    return v < 0,
+      "expected " .. tostring(v) .. " to be negative",
+      "expected " .. tostring(v) .. " to not be negative"
+  end
+}
+  
+-- Check if a number is an integer
+paths.integer = {
+  test = function(v)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+    
+    return v == math.floor(v),
+      "expected " .. tostring(v) .. " to be an integer",
+      "expected " .. tostring(v) .. " to not be an integer"
+  end
+}
+  
+-- Check if a string is all uppercase
+paths.uppercase = {
+  test = function(v)
+    if type(v) ~= "string" then
+      error("expected " .. tostring(v) .. " to be a string")
+    end
+    
+    return v == string.upper(v),
+      'expected string "' .. v .. '" to be uppercase',
+      'expected string "' .. v .. '" to not be uppercase'
+  end
+}
+  
+-- Check if a string is all lowercase
+paths.lowercase = {
+  test = function(v)
+    if type(v) ~= "string" then
+      error("expected " .. tostring(v) .. " to be a string")
+    end
+    
+    return v == string.lower(v),
+      'expected string "' .. v .. '" to be lowercase',
+      'expected string "' .. v .. '" to not be lowercase'
+  end
+}
+
+paths.be_between = {
+  test = function(v, min, max)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+
+    if type(min) ~= "number" or type(max) ~= "number" then
+      error("expected min and max to be numbers")
+    end
+
+    return v >= min and v <= max,
+      "expected " .. tostring(v) .. " to be between " .. tostring(min) .. " and " .. tostring(max),
+      "expected " .. tostring(v) .. " to not be between " .. tostring(min) .. " and " .. tostring(max)
+  end
+}
+
+paths.be_truthy = {
+  test = function(v)
+    return v and true or false,
+      "expected " .. tostring(v) .. " to be truthy",
+      "expected " .. tostring(v) .. " to not be truthy"
+  end
+}
+
+paths.be_falsy = {
+  test = function(v)
+    return not v, "expected " .. tostring(v) .. " to be falsy", "expected " .. tostring(v) .. " to not be falsy"
+  end
+}
+
+paths.be_falsey = {
+  test = function(v)
+    return not v, "expected " .. tostring(v) .. " to be falsey", "expected " .. tostring(v) .. " to not be falsey"
+  end
+}
+
+paths.be_approximately = {
+  test = function(v, x, delta)
+    if type(v) ~= "number" then
+      error("expected " .. tostring(v) .. " to be a number")
+    end
+
+    if type(x) ~= "number" then
+      error("expected " .. tostring(x) .. " to be a number")
+    end
+
+    delta = delta or 0.0001
+
+    return math.abs(v - x) <= delta,
+      "expected " .. tostring(v) .. " to be approximately " .. tostring(x) .. " (±" .. tostring(delta) .. ")",
+      "expected " .. tostring(v) .. " to not be approximately " .. tostring(x) .. " (±" .. tostring(delta) .. ")"
+  end
+}
+
+-- Satisfy assertion for custom predicates
+paths.satisfy = {
+  test = function(v, predicate)
+    if type(predicate) ~= "function" then
+      error("expected predicate to be a function, got " .. type(predicate))
+    end
+
+    local success, result = pcall(predicate, v)
+    if not success then
+      error("predicate function failed with error: " .. tostring(result))
+    end
+
+    return result,
+      "expected value to satisfy the given predicate function",
+      "expected value to not satisfy the given predicate function"
+  end
+}
+
+-- String assertions
+paths.start_with = {
+  test = function(v, x)
+    if type(v) ~= "string" then
+      error("expected " .. tostring(v) .. " to be a string")
+    end
+
+    if type(x) ~= "string" then
+      error("expected " .. tostring(x) .. " to be a string")
+    end
+
+    return v:sub(1, #x) == x,
+      'expected "' .. v .. '" to start with "' .. x .. '"',
+      'expected "' .. v .. '" to not start with "' .. x .. '"'
+  end
+}
+
+paths.end_with = {
+  test = function(v, x)
+    if type(v) ~= "string" then
+      error("expected " .. tostring(v) .. " to be a string")
+    end
+
+    if type(x) ~= "string" then
+      error("expected " .. tostring(x) .. " to be a string")
+    end
+
+    return v:sub(-#x) == x,
+      'expected "' .. v .. '" to end with "' .. x .. '"',
+      'expected "' .. v .. '" to not end with "' .. x .. '"'
+  end
+}
+
+-- Type checking assertions
+paths.be_type = {
+  callable = true,
+  comparable = true,
+  iterable = true,
+  test = function(v, expected_type)
+    if expected_type == "callable" then
+      local is_callable = type(v) == "function" or (type(v) == "table" and getmetatable(v) and getmetatable(v).__call)
+      return is_callable,
+        "expected " .. tostring(v) .. " to be callable",
+        "expected " .. tostring(v) .. " to not be callable"
+    elseif expected_type == "comparable" then
+      local success = pcall(function()
+        return v < v
+      end)
+      return success,
+        "expected " .. tostring(v) .. " to be comparable",
+        "expected " .. tostring(v) .. " to not be comparable"
+    elseif expected_type == "iterable" then
+      local success = pcall(function()
+        for _ in pairs(v) do
+          break
+        end
+      end)
+      return success,
+        "expected " .. tostring(v) .. " to be iterable",
+        "expected " .. tostring(v) .. " to not be iterable"
+    else
+      error("unknown type check: " .. tostring(expected_type))
+    end
+  end
+}
+
+-- Enhanced error assertions
+paths.throw = {
+  error = true,
+  error_matching = true,
+  error_type = true,
+  test = function(v)
+    if type(v) ~= "function" then
+      error("expected " .. tostring(v) .. " to be a function")
+    end
+
+    ---@diagnostic disable-next-line: unused-local
+    local ok, err = pcall(v)
+    return not ok, "expected function to throw an error", "expected function to not throw an error"
+  end
+}
+
+paths.error = {
+  test = function(v)
+    if type(v) ~= "function" then
+      error("expected " .. tostring(v) .. " to be a function")
+    end
+
+    ---@diagnostic disable-next-line: unused-local
+    local ok, err = pcall(v)
+    return not ok, "expected function to throw an error", "expected function to not throw an error"
+  end
+}
+
+paths.error_matching = {
+  test = function(v, pattern)
+    if type(v) ~= "function" then
+      error("expected " .. tostring(v) .. " to be a function")
+    end
+
+    if type(pattern) ~= "string" then
+      error("expected pattern to be a string")
+    end
+
+    local ok, err = pcall(v)
+    if ok then
+      return false,
+        'expected function to throw an error matching pattern "' .. pattern .. '"',
+        'expected function to not throw an error matching pattern "' .. pattern .. '"'
+    end
+
+    err = tostring(err)
+    return err:match(pattern) ~= nil,
+      'expected error "' .. err .. '" to match pattern "' .. pattern .. '"',
+      'expected error "' .. err .. '" to not match pattern "' .. pattern .. '"'
+  end
+}
+
+paths.error_type = {
+  test = function(v, expected_type)
+    if type(v) ~= "function" then
+      error("expected " .. tostring(v) .. " to be a function")
+    end
+
+    local ok, err = pcall(v)
+    if ok then
+      return false,
+        "expected function to throw an error of type " .. tostring(expected_type),
+        "expected function to not throw an error of type " .. tostring(expected_type)
+    end
+
+    -- Try to determine the error type
+    local error_type
+    if type(err) == "string" then
+      error_type = "string"
+    elseif type(err) == "table" then
+      error_type = err.__name or "table"
+    else
+      error_type = type(err)
+    end
+
+    return error_type == expected_type,
+      "expected error of type " .. error_type .. " to be of type " .. expected_type,
+      "expected error of type " .. error_type .. " to not be of type " .. expected_type
+  end
+}
+
+--- Main expect function for creating assertions
+---@param v any The value to create assertions for
+---@return table An assertion object with chainable methods
 function M.expect(v)
   ---@diagnostic disable-next-line: unused-local
   local error_handler = get_error_handler()

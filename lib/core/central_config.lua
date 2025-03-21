@@ -4,6 +4,23 @@
 -- Directly require error_handler to ensure it's always available
 local error_handler = require("lib.tools.error_handler")
 
+---@class central_config
+---@field get fun(path?: string, default?: any): any, table|nil Returns the value at the specified path or the default if not found
+---@field set fun(path: string, value: any): central_config Sets a value at the specified path
+---@field delete fun(path: string): boolean, table|nil Deletes a value at the specified path
+---@field on_change fun(path: string, callback: fun(path: string, old_value: any, new_value: any)): central_config Registers a callback for when a value changes
+---@field notify_change fun(path: string, old_value: any, new_value: any) Notifies listeners of a value change
+---@field register_module fun(module_name: string, schema?: table, defaults?: table): central_config Registers a module's schema and defaults
+---@field validate fun(module_name?: string): boolean, table|nil Validates configuration against registered schemas
+---@field load_from_file fun(path?: string): table|nil, table|nil Loads configuration from a file
+---@field save_to_file fun(path?: string): boolean, table|nil Saves configuration to a file
+---@field reset fun(module_name?: string): central_config Resets configuration to defaults
+---@field configure_from_options fun(options: table): central_config Configures from options table (typically from CLI)
+---@field configure_from_config fun(global_config: table): central_config Configures from global config
+---@field serialize fun(obj: any): any Serializes an object for storage
+---@field merge fun(target: table, source: table): table Merges two tables
+---@field DEFAULT_CONFIG_PATH string The default configuration file path
+---@field ERROR_TYPES table Error type constants mapping to error_handler categories
 -- Module table
 local M = {}
 
@@ -15,6 +32,7 @@ local config = {
   defaults = {}, -- Default values by module
 }
 
+---@private
 -- Initialize empty config storage
 local function init_config()
   config.values = {}
@@ -34,6 +52,9 @@ M.ERROR_TYPES = {
   PARSE = error_handler.CATEGORY.PARSE, -- Config file parsing errors
 }
 
+---@private
+---@param path string|nil The dot-separated path to convert to parts
+---@return string[] Array of path segments
 -- Helper for generating pathed keys (a.b.c -> ["a"]["b"]["c"])
 local function path_to_parts(path)
   if not path or path == "" then
@@ -48,6 +69,11 @@ local function path_to_parts(path)
   return parts
 end
 
+---@private
+---@param t table The table to ensure path in
+---@param parts string[] The path parts to ensure exist
+---@return table|nil parent The parent table where the last part would be set
+---@return table|nil error The error if any occurred
 -- Create value at path
 ---@diagnostic disable-next-line: unused-local
 local function ensure_path(t, parts)
@@ -75,6 +101,9 @@ end
 -- Lazy loading of dependencies to avoid circular references
 local _logging, _fs
 
+---@private
+---@return table|nil The logging module if available, nil otherwise
+-- Get the logging module, loading it if necessary
 local function get_logging()
   if not _logging then
     local success, logging = pcall(require, "lib.tools.logging")
@@ -83,6 +112,9 @@ local function get_logging()
   return _logging
 end
 
+---@private
+---@return table|nil The filesystem module if available, nil otherwise
+-- Get the filesystem module, loading it if necessary
 local function get_fs()
   if not _fs then
     local success, fs = pcall(require, "lib.tools.filesystem")
@@ -91,6 +123,10 @@ local function get_fs()
   return _fs
 end
 
+---@private
+---@param level string The log level ('debug', 'info', 'warn', 'error')
+---@param message string The log message
+---@param params? table Additional parameters for structured logging
 -- Log helper with structured logging
 local function log(level, message, params)
   local logging = get_logging()
@@ -100,6 +136,11 @@ local function log(level, message, params)
   end
 end
 
+---@private
+---@param target table|nil The target table to merge into
+---@param source table|nil The source table to merge from
+---@return table|nil merged The merged table
+---@return table|nil error Any error that occurred during merging
 -- Deep merge helper (for merging configs)
 local function deep_merge(target, source)
   -- Input validation
@@ -147,6 +188,9 @@ local function deep_merge(target, source)
   return target
 end
 
+---@private
+---@param obj any The object to copy
+---@return any A deep copy of the input object
 -- Deep copy helper
 local function deep_copy(obj)
   -- Input validation
@@ -171,6 +215,10 @@ local function deep_copy(obj)
   return result
 end
 
+---@private
+---@param a any First value to compare
+---@param b any Second value to compare
+---@return boolean Whether the values are deeply equal
 -- Deep compare helper
 local function deep_equals(a, b)
   -- Direct comparison for identical references or non-table values
@@ -200,6 +248,10 @@ local function deep_equals(a, b)
   return true
 end
 
+---@param path? string The path to get the value at (dot-separated, e.g. 'module.setting')
+---@param default? any Value to return if path doesn't exist
+---@return any value The value at the path or the default
+---@return table|nil error Error if any occurred
 -- Get a value at a specific path
 function M.get(path, default)
   -- Parameter validation
@@ -271,6 +323,9 @@ function M.get(path, default)
   return current
 end
 
+---@param path? string The path to set the value at (dot-separated, e.g. 'module.setting')
+---@param value any The value to set
+---@return central_config The module instance for chaining
 -- Set a value at a specific path
 function M.set(path, value)
   -- Parameter validation
@@ -368,6 +423,9 @@ function M.set(path, value)
   return M
 end
 
+---@param path string The path to delete the value at (dot-separated, e.g. 'module.setting')
+---@return boolean success Whether the delete was successful
+---@return table|nil error Error if any occurred
 -- Delete a value at a specific path
 function M.delete(path)
   -- Parameter validation
@@ -472,6 +530,9 @@ function M.delete(path)
   return false, err
 end
 
+---@param path? string The path to listen for changes on (nil for all changes)
+---@param callback fun(path: string, old_value: any, new_value: any) Function to call when value changes
+---@return central_config The module instance for chaining
 -- Register change listener
 function M.on_change(path, callback)
   -- Parameter validation
@@ -506,6 +567,9 @@ function M.on_change(path, callback)
   return M
 end
 
+---@param path string The path that changed
+---@param old_value any The previous value
+---@param new_value any The new value
 -- Notify change listeners
 function M.notify_change(path, old_value, new_value)
   -- Parameter validation
@@ -628,6 +692,10 @@ function M.notify_change(path, old_value, new_value)
   end
 end
 
+---@param module_name string The name of the module to register
+---@param schema? table Schema definition for validation
+---@param defaults? table Default values for the module
+---@return central_config The module instance for chaining
 -- Register a module's configuration schema and defaults
 function M.register_module(module_name, schema, defaults)
   -- Parameter validation
@@ -747,6 +815,9 @@ function M.register_module(module_name, schema, defaults)
   return M
 end
 
+---@param module_name? string The name of the module to validate (nil for all)
+---@return boolean valid Whether the configuration is valid
+---@return table|nil error Error if validation failed
 -- Validate configuration against registered schemas
 function M.validate(module_name)
   -- Parameter validation
@@ -1019,6 +1090,9 @@ function M.validate(module_name)
   end
 end
 
+---@param path? string The path to the configuration file
+---@return table|nil config The loaded configuration or nil if failed
+---@return table|nil error Error if any occurred
 -- Load configuration from a file
 function M.load_from_file(path)
   -- Parameter validation
@@ -1146,6 +1220,9 @@ function M.load_from_file(path)
   return user_config
 end
 
+---@param path? string The path to save the configuration to
+---@return boolean success Whether the save was successful
+---@return table|nil error Error if any occurred
 -- Save current configuration to a file
 function M.save_to_file(path)
   -- Parameter validation
@@ -1277,6 +1354,8 @@ function M.save_to_file(path)
   return true
 end
 
+---@param module_name? string The name of the module to reset (nil for all)
+---@return central_config The module instance for chaining
 -- Reset configuration to defaults
 function M.reset(module_name)
   -- Parameter validation
@@ -1348,6 +1427,8 @@ function M.reset(module_name)
   return M
 end
 
+---@param options table Table of options from CLI or other source
+---@return central_config The module instance for chaining
 -- Configure from options table (typically from CLI)
 function M.configure_from_options(options)
   -- Parameter validation
@@ -1388,6 +1469,8 @@ function M.configure_from_options(options)
   return M
 end
 
+---@param global_config table Global configuration table to apply
+---@return central_config The module instance for chaining
 -- Configure from global config
 function M.configure_from_config(global_config)
   -- Parameter validation
@@ -1422,6 +1505,8 @@ function M.configure_from_config(global_config)
 end
 
 -- Export public interface with error handling wrappers
+---@param obj any Object to serialize (deep copy)
+---@return any Serialized (deep-copied) object
 M.serialize = function(obj)
   local result = deep_copy(obj)
   if type(result) ~= "table" and obj ~= nil then
@@ -1432,6 +1517,9 @@ M.serialize = function(obj)
   return result
 end
 
+---@param target table Target table to merge into
+---@param source table Source table to merge from
+---@return table Merged result
 M.merge = function(target, source)
   local result, err = deep_merge(target, source)
   if err then
@@ -1445,6 +1533,8 @@ M.merge = function(target, source)
   return result
 end
 
+---@private
+---@return central_config Initialized module
 -- Module initialization with error handling
 local function init()
   -- Initialize with proper error handling

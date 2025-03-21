@@ -1,3 +1,6 @@
+---@class ReportingFormatters
+---@field built_in table Available built-in formatters
+---@field register_all fun(formatters: table): table|nil, table? Load and register all formatters
 -- Formatter registry initialization
 -- Import required modules
 local fs = require("lib.tools.filesystem")
@@ -17,7 +20,9 @@ local M = {
   }
 }
 
--- Load and register all formatters
+---@param formatters table The formatters registry object
+---@return table|nil formatters The updated formatters registry or nil if registration failed
+---@return table? error Error information if registration failed
 function M.register_all(formatters)
   -- Validate formatters parameter
   if not formatters then

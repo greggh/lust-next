@@ -1,5 +1,38 @@
 -- firmo codefix module
 -- Implementation of code quality checking and fixing capabilities
+-- Provides tools for linting, formatting, and automatically fixing common issues
+
+---@class codefix_module
+---@field _VERSION string Module version
+---@field config {stylua_enabled: boolean, luacheck_enabled: boolean, fix_trailing_whitespace: boolean, fix_unused_variables: boolean, fix_string_concat: boolean, fix_type_annotations: boolean, fix_lua_version_compat: boolean, lua_version_target: string, custom_fixers_enabled: boolean, verbose_output: boolean, auto_backup: boolean, include_patterns: string[], exclude_patterns: string[]} Configuration options for the codefix module
+---@field init fun(options?: table): codefix_module Initialize module with configuration
+---@field check_stylua fun(): boolean Check if StyLua is available
+---@field find_stylua_config fun(dir?: string): string|nil Find StyLua configuration file
+---@field run_stylua fun(file_path: string, config_file?: string): boolean, string? Run StyLua on a file
+---@field check_luacheck fun(): boolean Check if Luacheck is available
+---@field find_luacheck_config fun(dir?: string): string|nil Find Luacheck configuration file
+---@field parse_luacheck_output fun(output: string): {issues: table[], summary: {files: number, warnings: number, errors: number}} Parse Luacheck output
+---@field run_luacheck fun(file_path: string, config_file?: string): boolean, table Run Luacheck on a file
+---@field fix_trailing_whitespace fun(content: string): string Fix trailing whitespace in multiline strings
+---@field fix_unused_variables fun(file_path: string, issues?: table): boolean Fix unused variables by prefixing with underscore
+---@field fix_string_concat fun(content: string): string Fix string concatenation (optimize .. operator usage)
+---@field fix_type_annotations fun(content: string): string Add type annotations in function documentation
+---@field fix_lua_version_compat fun(content: string, target_version?: string): string Fix code for Lua version compatibility issues
+---@field run_custom_fixers fun(file_path: string, issues?: table): boolean Run all custom fixers on a file
+---@field fix_file fun(file_path: string): boolean, table? Main function to fix a file
+---@field fix_directory fun(dir_path: string, recursive?: boolean): {fixed: number, total: number, errors: number} Fix all Lua files in a directory
+---@field register_custom_fixer fun(name: string, fixer_fn: fun(content: string, file_path: string, issues?: table): string): boolean Register a custom code fixer
+---@field unregister_custom_fixer fun(name: string): boolean Remove a custom code fixer
+---@field backup_file fun(file_path: string): string|nil, string? Create a backup of a file before modifying
+---@field restore_backup fun(backup_path: string): boolean, string? Restore a file from backup
+---@field get_custom_fixers fun(): table<string, function> Get all registered custom fixers
+---@field validate_lua_syntax fun(content: string): boolean, string? Check if Lua code has valid syntax
+---@field format_issues fun(issues: table): string Format Luacheck issues as readable text
+---@field fix_files fun(file_paths: string[]): boolean, table Fix multiple files
+---@field fix_lua_files fun(directory?: string, options?: table): boolean, table Find and fix Lua files
+---@field run_cli fun(args?: table): boolean Command line interface
+---@field register_with_firmo fun(firmo: table): codefix_module Module interface with firmo
+---@field register_custom_fixer fun(name: string, options: table): boolean Register a custom fixer with codefix
 
 local M = {}
 local logging = require("lib.tools.logging")
@@ -82,6 +115,12 @@ M.config = {
   backup_ext = ".bak", -- Extension for backup files
 }
 
+---@private
+---@param command string The shell command to execute
+---@return string|nil output Command output or nil on error
+---@return boolean success Whether the command succeeded
+---@return number exit_code Exit code from the command
+---@return string|nil error_message Error message if the command failed
 -- Helper function to execute shell commands with robust error handling
 local function execute_command(command)
   -- Validate required parameters
@@ -179,6 +218,8 @@ local function execute_command(command)
   return result, success, code, reason
 end
 
+---@private
+---@return string os_name The detected operating system name (windows, macos, linux, bsd, or unix)
 -- Get the operating system name with error handling
 local function get_os()
   -- Use path separator to detect OS type (cross-platform approach)
@@ -1069,7 +1110,9 @@ local function find_files_lua(include_patterns, exclude_patterns, dir)
   return result
 end
 
--- Initialize module with configuration
+--- Initialize module with configuration
+---@param options? table Custom configuration options to override defaults
+---@return codefix_module The module instance for method chaining
 function M.init(options)
   options = options or {}
 
@@ -1092,7 +1135,8 @@ end
 -- StyLua Integration Functions --
 ----------------------------------
 
--- Check if StyLua is available
+--- Check if StyLua is available in the system
+---@return boolean available Whether StyLua is available
 function M.check_stylua()
   if not command_exists(M.config.stylua_path) then
     log_warning("StyLua not found at: " .. M.config.stylua_path)
@@ -1103,7 +1147,9 @@ function M.check_stylua()
   return true
 end
 
--- Find StyLua configuration file
+--- Find StyLua configuration file in the given directory or its ancestors
+---@param dir? string Directory to start searching from (default: current directory)
+---@return string|nil config_path Path to the found configuration file, or nil if not found
 function M.find_stylua_config(dir)
   local config_file = M.config.stylua_config
 
@@ -1121,7 +1167,11 @@ function M.find_stylua_config(dir)
   return config_file
 end
 
--- Run StyLua on a file
+--- Run StyLua on a file to format it
+---@param file_path string Path to the file to format
+---@param config_file? string Path to StyLua configuration file (optional)
+---@return boolean success Whether the formatting succeeded
+---@return string? error_message Error message if formatting failed
 function M.run_stylua(file_path, config_file)
   if not M.config.use_stylua then
     log_debug("StyLua is disabled, skipping")
@@ -1167,7 +1217,8 @@ end
 -- Luacheck Integration Functions --
 -----------------------------------
 
--- Check if Luacheck is available
+--- Check if Luacheck is available in the system
+---@return boolean available Whether Luacheck is available
 function M.check_luacheck()
   if not command_exists(M.config.luacheck_path) then
     log_warning("Luacheck not found at: " .. M.config.luacheck_path)
@@ -1178,7 +1229,9 @@ function M.check_luacheck()
   return true
 end
 
--- Find Luacheck configuration file
+--- Find Luacheck configuration file in the given directory or its ancestors
+---@param dir? string Directory to start searching from (default: current directory)
+---@return string|nil config_path Path to the found configuration file, or nil if not found
 function M.find_luacheck_config(dir)
   local config_file = M.config.luacheck_config
 
@@ -1196,7 +1249,9 @@ function M.find_luacheck_config(dir)
   return config_file
 end
 
--- Parse Luacheck output
+--- Parse Luacheck output into a structured format
+---@param output string The raw output from Luacheck command
+---@return table issues Array of parsed issues with file, line, col, code, and message fields
 function M.parse_luacheck_output(output)
   if not output then
     return {}
@@ -1223,7 +1278,11 @@ function M.parse_luacheck_output(output)
   return issues
 end
 
--- Run Luacheck on a file
+--- Run Luacheck on a file to check for issues
+---@param file_path string Path to the file to check
+---@param config_file? string Path to Luacheck configuration file (optional)
+---@return boolean success Whether the check succeeded (may have warnings but no errors)
+---@return table issues Array of issues found by Luacheck
 function M.run_luacheck(file_path, config_file)
   if not M.config.use_luacheck then
     log_debug("Luacheck is disabled, skipping")
@@ -1269,7 +1328,9 @@ end
 -- Custom Fixer Functions --
 -----------------------------
 
--- Fix trailing whitespace in multiline strings
+--- Fix trailing whitespace in multiline strings
+---@param content string The source code content to fix
+---@return string fixed_content The fixed content with trailing whitespace removed
 function M.fix_trailing_whitespace(content)
   if not M.config.custom_fixers.trailing_whitespace then
     return content
@@ -1285,7 +1346,10 @@ function M.fix_trailing_whitespace(content)
   return fixed_content
 end
 
--- Fix unused variables by prefixing with underscore
+--- Fix unused variables by prefixing them with underscore
+---@param file_path string Path to the file to fix
+---@param issues? table Array of issues from Luacheck
+---@return boolean modified Whether any changes were made
 function M.fix_unused_variables(file_path, issues)
   if not M.config.custom_fixers.unused_variables or not issues then
     return false
@@ -1345,7 +1409,9 @@ function M.fix_unused_variables(file_path, issues)
   return false
 end
 
--- Fix string concatenation (optimize .. operator usage)
+--- Fix string concatenation by optimizing .. operator usage
+---@param content string The source code content to fix
+---@return string fixed_content The fixed content with optimized string concatenations
 function M.fix_string_concat(content)
   if not M.config.custom_fixers.string_concat then
     return content
@@ -1362,7 +1428,9 @@ function M.fix_string_concat(content)
   return fixed_content
 end
 
--- Add type annotations in function documentation
+--- Add type annotations in function documentation comments
+---@param content string The source code content to fix
+---@return string fixed_content The fixed content with added type annotations
 function M.fix_type_annotations(content)
   if not M.config.custom_fixers.type_annotations then
     return content
@@ -1407,7 +1475,10 @@ function M.fix_type_annotations(content)
   return fixed_content
 end
 
--- Fix code for Lua version compatibility issues
+--- Fix code for Lua version compatibility issues
+---@param content string The source code content to fix
+---@param target_version? string Target Lua version to make code compatible with (default: "5.1")
+---@return string fixed_content The fixed content with compatibility adjustments
 function M.fix_lua_version_compat(content, target_version)
   if not M.config.custom_fixers.lua_version_compat then
     return content
@@ -1438,7 +1509,10 @@ function M.fix_lua_version_compat(content, target_version)
   return fixed_content
 end
 
--- Run all custom fixers on a file
+--- Run all custom fixers on a file
+---@param file_path string Path to the file to fix
+---@param issues? table Array of issues from Luacheck
+---@return boolean modified Whether any changes were made
 function M.run_custom_fixers(file_path, issues)
   log_info("Running custom fixers on " .. file_path)
 
@@ -1509,7 +1583,9 @@ function M.run_custom_fixers(file_path, issues)
   return modified
 end
 
--- Main function to fix a file
+--- Main function to fix a file by running all available fixers
+---@param file_path string Path to the file to fix
+---@return boolean success Whether the file was successfully fixed
 function M.fix_file(file_path)
   if not M.config.enabled then
     log_debug("Codefix is disabled, skipping")
@@ -1549,7 +1625,10 @@ function M.fix_file(file_path)
   return stylua_success and luacheck_success
 end
 
--- Fix multiple files
+--- Fix multiple files by running all available fixers on each
+---@param file_paths string[] Array of file paths to fix
+---@return boolean success Whether all files were successfully fixed
+---@return table results Results for each file, with success status and error message if any
 function M.fix_files(file_paths)
   if not M.config.enabled then
     log_debug("Codefix is disabled, skipping")
@@ -1619,7 +1698,11 @@ function M.fix_files(file_paths)
   return failure_count == 0, results
 end
 
--- Find and fix Lua files
+--- Find and fix Lua files in a directory matching specified patterns
+---@param directory? string Directory to search for Lua files (default: current directory)
+---@param options? table Options for filtering and fixing files { include?: string[], exclude?: string[], limit?: number, sort_by_mtime?: boolean, generate_report?: boolean, report_file?: string }
+---@return boolean success Whether all files were successfully fixed
+---@return table results Results for each file, with success status and error message if any
 function M.fix_lua_files(directory, options)
   directory = directory or "."
   options = options or {}

@@ -1,4 +1,13 @@
--- JUnit XML formatter for test results
+---@class JUnitFormatter
+---@field _VERSION string Module version
+---@field format_results fun(results_data: {name: string, tests: number, failures?: number, errors?: number, skipped?: number, time?: number, timestamp?: string, test_cases?: table<number, {name: string, classname?: string, time?: number, status?: string, failure?: table, error?: table}>}): string|nil, table? Format test results as JUnit XML
+---@field get_config fun(): JUnitFormatterConfig Get current formatter configuration
+---@field set_config fun(config: table): boolean Set formatter configuration options
+---@field escape_xml fun(str: any): string Escape special characters in string for XML output
+---@field format_timestamp fun(timestamp?: number): string Format timestamp for XML output
+---@field validate_results fun(results_data: table): boolean, string? Validate test results data before formatting
+-- JUnit XML formatter for test results that produces XML compatible with 
+-- the JUnit test reporting format, widely used by CI/CD systems
 local M = {}
 
 local logging = require("lib.tools.logging")
@@ -10,7 +19,24 @@ local error_handler = require("lib.tools.error_handler")
 -- Configure module logging
 logging.configure_from_config("Reporting:JUnit")
 
+---@class JUnitFormatterConfig
+---@field schema_version string XML schema version to use in output
+---@field include_timestamp boolean Whether to include timestamps in the output
+---@field include_hostname boolean Whether to include hostname information
+---@field include_system_out boolean Whether to include system output information
+---@field include_system_err boolean Whether to include system error information
+---@field add_xml_declaration boolean Whether to add XML declaration at the top
+---@field format_output boolean Whether to format the output with indentation
+---@field normalize_paths boolean Whether to normalize file paths in classnames
+---@field include_stack_trace boolean Whether to include stack traces in failures
+---@field add_properties boolean Whether to add properties section to test suites
+---@field use_cdata boolean Whether to use CDATA sections for content
+---@field project_name? string Optional project name to include in report
+---@field timestamp_format? string Optional format for timestamps
+---@field format_output boolean Whether to format the output with indentation
+
 -- Default formatter configuration
+---@type JUnitFormatterConfig
 local DEFAULT_CONFIG = {
   schema_version = "2.0",
   include_timestamp = true,
@@ -20,6 +46,8 @@ local DEFAULT_CONFIG = {
   format_output = false
 }
 
+---@private
+---@return JUnitFormatterConfig config The configuration for the JUnit formatter
 -- Get configuration for JUnit formatter
 local function get_config()
   -- Try to load the reporting module for configuration access
@@ -63,6 +91,9 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
+---@private
+---@param str any Value to escape (will be converted to string if not a string)
+---@return string escaped_string The XML-escaped string
 -- Helper function to escape XML special characters
 local function escape_xml(str)
   -- Handle nil or non-string values safely
@@ -256,6 +287,10 @@ local function format_test_cases(test_cases)
   end
 end
 
+---@private
+---@param xml string Raw XML string to format
+---@param config JUnitFormatterConfig|nil Configuration for the formatter
+---@return string formatted_xml Indented XML if formatting is enabled, otherwise the original XML
 -- Function to indent XML if formatting is enabled
 local function format_xml(xml, config)
   if not config or not config.format_output then
@@ -317,6 +352,8 @@ local function format_xml(xml, config)
   end
 end
 
+---@param results_data table|nil Test results data to format
+---@return string xml_output JUnit XML representation of the test results
 -- Format test results as JUnit XML (commonly used for CI integration)
 function M.format_results(results_data)
   -- Validate input parameter
@@ -629,6 +666,9 @@ function M.format_results(results_data)
   return output
 end
 
+---@param formatters table Table of formatter registries
+---@return boolean success True if registration was successful
+---@return table|nil error Error object if registration failed
 -- Register formatter
 return function(formatters)
   -- Validate parameters

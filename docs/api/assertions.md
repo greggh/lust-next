@@ -352,6 +352,35 @@ expect("").to.be.lowercase() -- Empty string is considered lowercase
 
 ```
 
+### expect(string).to.match_regex(pattern, [options])
+Asserts that a string matches the given regular expression pattern with optional configuration.
+**Parameters:**
+
+- `pattern` (string): Lua pattern to match against the string
+- `options` (table, optional): Configuration options for matching
+  - `case_insensitive` (boolean): If true, performs case-insensitive matching
+  - `multiline` (boolean): If true, allows ^ and $ to match start/end of lines
+**Example:**
+
+```lua
+-- Basic matching
+expect("hello world").to.match_regex("hello")
+
+-- Case insensitive matching
+expect("HELLO WORLD").to.match_regex("hello", { case_insensitive = true })
+
+-- Multiline matching
+local multiline_text = "First line\nSecond line\nThird line"
+expect(multiline_text).to.match_regex("^Second", { multiline = true })
+
+-- Both options together
+expect("FIRST LINE\nsecond LINE").to.match_regex("^first.*\n^second", { 
+  case_insensitive = true, 
+  multiline = true 
+})
+
+```
+
 ## Type Assertions
 
 ### expect(value).to.be_type(expected_type)
@@ -458,6 +487,164 @@ expect(-10).to.be.integer()
 expect(0).to.be.integer()
 expect(5.5).to_not.be.integer()
 expect(-0.1).to_not.be.integer()
+
+```
+
+## Date Assertions
+
+### expect(string).to.be_date()
+Asserts that a string is a valid date in any of the supported formats (ISO, MM/DD/YYYY, DD/MM/YYYY).
+**Example:**
+
+```lua
+expect("2023-10-15").to.be_date() -- ISO format
+expect("10/15/2023").to.be_date() -- MM/DD/YYYY format
+expect("15/10/2023").to.be_date() -- DD/MM/YYYY format
+expect("2023-10-15T14:30:15Z").to.be_date() -- ISO with time
+expect("not-a-date").to_not.be_date() -- Invalid date
+
+```
+
+### expect(string).to.be_iso_date()
+Asserts that a string is a valid date in ISO 8601 format (YYYY-MM-DD).
+**Example:**
+
+```lua
+expect("2023-10-15").to.be_iso_date() -- Basic ISO format
+expect("2023-10-15T14:30:15Z").to.be_iso_date() -- ISO with time
+expect("10/15/2023").to_not.be_iso_date() -- Not ISO format
+
+```
+
+### expect(date_string).to.be_before(other_date)
+Asserts that a date string represents a date that is chronologically before another date.
+**Parameters:**
+
+- `other_date` (string): The date to compare against
+**Example:**
+
+```lua
+expect("2022-01-01").to.be_before("2023-01-01")
+expect("01/01/2022").to.be_before("01/01/2023")
+expect("2022-01-01").to_not.be_before("2022-01-01") -- Same date
+expect("2023-01-01").to_not.be_before("2022-01-01") -- Later date
+
+```
+
+### expect(date_string).to.be_after(other_date)
+Asserts that a date string represents a date that is chronologically after another date.
+**Parameters:**
+
+- `other_date` (string): The date to compare against
+**Example:**
+
+```lua
+expect("2023-01-01").to.be_after("2022-01-01")
+expect("01/01/2023").to.be_after("01/01/2022")
+expect("2022-01-01").to_not.be_after("2022-01-01") -- Same date
+expect("2022-01-01").to_not.be_after("2023-01-01") -- Earlier date
+
+```
+
+### expect(date_string).to.be_same_day_as(other_date)
+Asserts that a date string represents the same calendar day as another date, ignoring time components.
+**Parameters:**
+
+- `other_date` (string): The date to compare against
+**Example:**
+
+```lua
+expect("2022-01-01T10:30:00Z").to.be_same_day_as("2022-01-01T15:45:00Z") -- Same day, different times
+expect("01/01/2022 10:30").to.be_same_day_as("01/01/2022 15:45")
+expect("2022-01-01").to_not.be_same_day_as("2022-01-02") -- Different days
+
+```
+
+## Async Assertions
+
+These assertions require an async test context created with `async.test()`.
+
+### expect(promise).to.complete()
+Asserts that a promise resolves successfully.
+**Parameters:**
+
+- `promise` (userdata): A promise object created with async.create_promise
+**Example:**
+
+```lua
+async.test(function()
+  local promise = async.create_promise(function(resolve)
+    async.set_timeout(function() resolve("success") end, 10)
+  end)
+  
+  expect(promise).to.complete()
+end)
+
+```
+
+### expect(promise).to.complete_within(timeout)
+Asserts that a promise resolves successfully within the specified time limit.
+**Parameters:**
+
+- `promise` (userdata): A promise object created with async.create_promise
+- `timeout` (number): Maximum time in milliseconds to wait for resolution
+**Example:**
+
+```lua
+async.test(function()
+  local promise = async.create_promise(function(resolve)
+    async.set_timeout(function() resolve("success") end, 10)
+  end)
+  
+  expect(promise).to.complete_within(50) -- Should resolve within 50ms
+  
+  local slow_promise = async.create_promise(function(resolve)
+    async.set_timeout(function() resolve("success") end, 100)
+  end)
+  
+  expect(slow_promise).to_not.complete_within(20) -- Won't resolve within 20ms
+end)
+
+```
+
+### expect(promise).to.resolve_with(expected_value)
+Asserts that a promise resolves with a specific value.
+**Parameters:**
+
+- `promise` (userdata): A promise object created with async.create_promise
+- `expected_value` (any): The expected resolution value
+**Example:**
+
+```lua
+async.test(function()
+  local promise = async.create_promise(function(resolve)
+    async.set_timeout(function() resolve("expected value") end, 10)
+  end)
+  
+  expect(promise).to.resolve_with("expected value")
+  expect(promise).to_not.resolve_with("wrong value")
+end)
+
+```
+
+### expect(promise).to.reject([error_pattern])
+Asserts that a promise rejects with an error, optionally matching a pattern.
+**Parameters:**
+
+- `promise` (userdata): A promise object created with async.create_promise
+- `error_pattern` (string, optional): Pattern to match against the rejection error
+**Example:**
+
+```lua
+async.test(function()
+  local promise = async.create_promise(function(_, reject)
+    async.set_timeout(function() reject("validation failed") end, 10)
+  end)
+  
+  expect(promise).to.reject() -- Just check that it rejects
+  expect(promise).to.reject("validation") -- Check error message pattern
+  expect(promise).to_not.reject("wrong error") -- Doesn't match pattern
+end)
 
 ```
 

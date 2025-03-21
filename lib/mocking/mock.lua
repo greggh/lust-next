@@ -10,17 +10,42 @@ local error_handler = require("lib.tools.error_handler")
 local logger = logging.get_logger("mock")
 logging.configure_from_config("mock")
 
+---@class mockable_object
+---@field _is_firmo_mock boolean Flag indicating this is a firmo mock object
+---@field target table The original object being mocked
+---@field _stubs table<string, table> Table of stubbed methods
+---@field _originals table<string, function> Table of original methods
+---@field _expectations table Table of expected calls
+---@field _verify_all_expectations_called boolean Whether to verify all expectations are called
+---@field stub fun(self: mockable_object, name: string, implementation_or_value: any): mockable_object|nil, table? Stub a method
+---@field stub_in_sequence fun(self: mockable_object, name: string, sequence_values: table): table|nil, table? Stub a method with sequence values
+---@field restore_stub fun(self: mockable_object, name: string): mockable_object|nil, table? Restore a specific stubbed method
+---@field restore fun(self: mockable_object): mockable_object|nil, table? Restore all stubbed methods
+---@field verify fun(self: mockable_object): boolean|nil, table? Verify all expectations were met
+
+---@class mock
+---@field _VERSION string Module version string
+---@field restore_all fun(): boolean, table? Restore all mocks to their original state
+---@field create fun(target: table, options?: table): mockable_object|nil, table? Create a mock object with verifiable behavior
+---@field with_mocks fun(fn: function): any, table? Context manager for mocks that auto-restores
 local mock = {
   -- Module version
   _VERSION = "1.0.0",
 }
 local _mocks = {}
 
+---@private
+---@param obj any The object to check
+---@return boolean is_mock Whether the object is a mock
 -- Helper function to check if a table is a mock
 local function is_mock(obj)
   return type(obj) == "table" and obj._is_firmo_mock == true
 end
 
+---@private
+---@param mock_obj table The mock object to register for cleanup
+---@return table|nil mock_obj The registered mock object, or nil on error
+---@return table? error Error information if registration failed
 -- Helper function to register a mock for cleanup
 local function register_mock(mock_obj)
   -- Input validation
@@ -72,7 +97,9 @@ local function register_mock(mock_obj)
   return mock_obj
 end
 
--- Helper function to restore all mocks
+--- Restore all mocks to their original state
+---@return boolean success Whether all mocks were successfully restored
+---@return table? error Error object if restoration failed
 function mock.restore_all()
   logger.debug("Restoring all mocks", {
     count = #_mocks,
@@ -142,6 +169,10 @@ function mock.restore_all()
   return true
 end
 
+---@private
+---@param value any The value to convert to a string
+---@param max_depth? number Maximum recursion depth (default: 3)
+---@return string representation String representation of the value
 -- Convert value to string representation for error messages
 local function value_to_string(value, max_depth)
   -- Input validation with fallback
@@ -201,6 +232,9 @@ local function value_to_string(value, max_depth)
   return result
 end
 
+---@private
+---@param args table|nil The arguments to format
+---@return string formatted_args String representation of the arguments
 -- Format args for error messages
 local function format_args(args)
   -- Input validation with fallback
@@ -246,7 +280,11 @@ local function format_args(args)
   return result
 end
 
--- Create a mock object with verifiable behavior
+--- Create a mock object with verifiable behavior
+---@param target table The object to create a mock of
+---@param options? table Optional configuration { verify_all_expectations_called?: boolean }
+---@return table|nil mock_obj The created mock object, or nil on error
+---@return table? error Error information if creation failed
 function mock.create(target, options)
   -- Input validation
   if target == nil then
@@ -309,7 +347,11 @@ function mock.create(target, options)
     return nil, error_obj
   end
 
-  -- Method to stub a function with a return value or implementation
+  --- Stub a function with a return value or implementation
+  ---@param name string The method name to stub
+  ---@param implementation_or_value any The implementation function or return value
+  ---@return table|nil self The mock object for method chaining, or nil on error
+  ---@return table? error Error information if stubbing failed
   function mock_obj:stub(name, implementation_or_value)
     -- Input validation
     if name == nil then
@@ -446,7 +488,11 @@ function mock.create(target, options)
     return self
   end
 
-  -- Method to stub a function with sequential return values
+  --- Stub a function with sequential return values
+  ---@param name string The method name to stub
+  ---@param sequence_values table Array of values to return in sequence
+  ---@return table|nil stub The created stub for method chaining, or nil on error
+  ---@return table? error Error information if stubbing failed
   function mock_obj:stub_in_sequence(name, sequence_values)
     -- Input validation
     if name == nil then
@@ -626,7 +672,10 @@ function mock.create(target, options)
     return stub_obj -- Return the stub for method chaining
   end
 
-  -- Restore a specific stub
+  --- Restore a specific stubbed method to its original implementation
+  ---@param name string The method name to restore
+  ---@return table|nil self The mock object for method chaining, or nil on error
+  ---@return table? error Error information if restoration failed
   function mock_obj:restore_stub(name)
     -- Input validation
     if name == nil then
@@ -706,7 +755,9 @@ function mock.create(target, options)
     return self
   end
 
-  -- Restore all stubs for this mock
+  --- Restore all stubs for this mock to their original implementations
+  ---@return table|nil self The mock object for method chaining, or nil on error
+  ---@return table? error Error information if restoration failed
   function mock_obj:restore()
     logger.debug("Restoring all stubs for mock", {
       stub_count = self._stubs and #self._stubs or 0,
@@ -813,7 +864,9 @@ function mock.create(target, options)
     return self
   end
 
-  -- Verify all expected stubs were called
+  --- Verify all expected stubs were called
+  ---@return boolean|nil success Whether all expectations were met, or nil on error
+  ---@return table? error Error information if verification failed
   function mock_obj:verify()
     logger.debug("Verifying mock expectations", {
       stub_count = self._stubs and #self._stubs or 0,
@@ -911,7 +964,10 @@ function mock.create(target, options)
   return mock_obj
 end
 
--- Context manager for mocks that auto-restores
+--- Context manager for mocks that auto-restores
+---@param fn function The function to execute with mock context
+---@return any result The result from the function execution
+---@return table? error Error information if execution or restoration failed
 function mock.with_mocks(fn)
   -- Input validation
   if fn == nil then
