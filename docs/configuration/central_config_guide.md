@@ -12,42 +12,31 @@ The centralized configuration system (`central_config`) replaces the legacy modu
 - Unified configuration loading from various sources
 - Consistent API across all framework components
 
-## Migrating from Legacy Config
+## Configuration System Overview
 
-If you're using the legacy config module, you should migrate to the centralized configuration system. The legacy system is deprecated and will be removed in a future version.
+The firmo framework uses a centralized configuration system that provides a consistent API for all framework components. This system is implemented in the `lib.core.central_config` module and offers the following features:
 
-### Step 1: Update Imports
+- Hierarchical configuration with dot notation access
+- Schema validation for configuration values
+- Change notification system for reactive updates
+- Unified configuration loading from various sources
+
+Here's how to use the central configuration system:
 
 ```lua
--- Legacy approach (deprecated)
-local config = require("lib.core.config")
-
--- New approach
+-- Import the central configuration module
 local central_config = require("lib.core.central_config")
-```
 
-### Step 2: Update Configuration Access
-
-```lua
--- Legacy approach (deprecated)
-local debug_mode = config.get("debug", false)
-config.set("debug", true)
-
--- New approach
+-- Access configuration values
 local debug_mode = central_config.get("debug", false)
+local coverage_threshold = central_config.get("coverage.threshold", 90)
+
+-- Set configuration values
 central_config.set("debug", true)
-```
+central_config.set("coverage.threshold", 95)
 
-### Step 3: Update Module-Specific Configuration
-
-```lua
--- Legacy approach (deprecated)
-local coverage_config = config.get_coverage_config()
-config.set_coverage_config({ threshold = 90 })
-
--- New approach
+-- Access module-specific configuration
 local coverage_config = central_config.get("coverage")
-central_config.set("coverage.threshold", 90)
 ```
 
 ## Configuration File Structure
