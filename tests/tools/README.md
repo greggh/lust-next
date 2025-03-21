@@ -1,70 +1,32 @@
-# Tools Tests
+# Tools Module Tests
 
-This directory contains tests for the firmo utility tools. These tools provide supporting functionality for the testing framework.
+This directory contains tests for the various utility modules in the `lib/tools` directory.
 
-## Directory Contents
+## Parser Tests
 
-- **codefix_test.lua** - Tests for code quality improvement tools
-- **fix_markdown_script_test.lua** - Tests for Markdown formatting utilities
-- **interactive_mode_test.lua** - Tests for interactive CLI functionality
-- **markdown_test.lua** - Tests for Markdown processing utilities
+The `parser_test.lua` file contains tests for the parser module, which is responsible for parsing Lua code into an abstract syntax tree (AST) and extracting information about the code structure.
 
-### Subdirectories
+The parser module provides functions for:
+- Parsing Lua code into an AST
+- Pretty printing the AST for debugging
+- Detecting executable lines for coverage analysis
+- Finding functions and their parameters
+- Creating a code map of the source code
 
-- **filesystem/** - Tests for filesystem operations
-  - **filesystem_test.lua** - Tests for filesystem module
-- **logging/** - Tests for logging system
-  - **logging_test.lua** - Tests for logging functionality
-- **watcher/** - Tests for file watching system
-  - **watch_mode_test.lua** - Tests for watch mode functionality
+## Vendor Module Tests
 
-## Tools Features
+The `vendor` directory contains tests for third-party libraries used by Firmo:
 
-The firmo tools provide supporting functionality:
+### LPegLabel Tests
 
-- **Filesystem** - Cross-platform file operations
-- **Logging** - Structured logging with levels and filtering
-- **Codefix** - Code quality improvement suggestions
-- **Interactive CLI** - Command-line interface for running tests
-- **Watcher** - File change detection for continuous testing
-- **Markdown** - Documentation processing utilities
+The `vendor/lpeglabel_test.lua` file contains tests for the LPegLabel module, which is an extension of the LPeg (Parsing Expression Grammars for Lua) library that adds support for labeled failures.
 
-## Filesystem Features
+LPegLabel is used by Firmo for parsing Lua code and implementing various code analysis features. The tests verify:
+- Basic LPeg functionality
+- Captures and pattern matching
+- Grammar definition support
+- Error label handling
 
-The filesystem module provides platform-independent file operations:
+## Other Tools Tests
 
-- File reading and writing
-- Directory creation and scanning
-- Path manipulation and normalization
-- Temporary file management
-- Platform detection and adaptation
-
-## Logging System
-
-The logging system provides structured logging capabilities:
-
-- Multiple severity levels (FATAL, ERROR, WARN, INFO, DEBUG, TRACE)
-- Module-specific configurations
-- Colored console output
-- File output with rotation
-- Structured data logging
-- Integration with test reporting
-
-## Running Tests
-
-To run all tools tests:
-```
-lua test.lua tests/tools/
-```
-
-To run specific tools tests:
-```
-lua test.lua tests/tools/codefix_test.lua
-```
-
-To run filesystem tests:
-```
-lua test.lua tests/tools/filesystem/
-```
-
-See the [Tools API Documentation](/docs/api/tools.md) for more information.
+Additional tests for filesystem operations, logging, error handling, and other utilities are organized in their respective directories under the tests directory.
