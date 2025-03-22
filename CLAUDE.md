@@ -880,7 +880,16 @@ Our current priorities in order:
    - ✓ Ensured consistent annotation style following our guidelines
    - ✓ Used annotations to improve type checking and IDE integration
 
-6. **Code Quality and Repository Organization** *(In Progress)*
+6. **✓ HTML Coverage Report Enhancements** *(Completed)*
+   - ✓ Added enhanced navigation features to HTML coverage reports
+   - ✓ Implemented code folding functionality for better code organization
+   - ✓ Added line bookmarking capability for important code sections
+   - ✓ Added visited lines tracking for code review progress
+   - ✓ Implemented execution frequency heatmap visualization
+   - ✓ Updated examples to use new reporting.save_coverage_report() method
+   - ✓ Created source navigation plan document for future enhancements
+
+7. **Code Quality and Repository Organization** *(In Progress)*
    - ✓ Relocated check_syntax.lua from tools/ to scripts/ directory with proper annotations 
    - ✓ Removed redundant tools/ directory from root
    - ✓ Fixed code modernization issues (table.getn, unpacking)
@@ -892,13 +901,16 @@ Our current priorities in order:
 
 ## Future Enhancements
 
-Once the core coverage system is repaired, we plan to:
+Once the core coverage system is fully repaired, we plan to:
 
-1. **Enhance Reporting and Visualization**
+1. **Further Enhance Reporting and Visualization**
 
-   - Add hover tooltips for execution count
-   - Implement visualization for block execution frequency
-   - Add function complexity metrics to reports
+   - ✓ Add hover tooltips for execution count *(Completed)*
+   - ✓ Implement visualization for block execution frequency *(Completed)*
+   - ✓ Add code folding, bookmarking, and tracking features *(Completed)*
+   - [ ] Add function complexity metrics to reports
+   - [ ] Implement responsive design for all screen sizes
+   - [ ] Modernize HTML reports with Tailwind CSS and Alpine.js
 
 2. **Improve Instrumentation Approach**
 
