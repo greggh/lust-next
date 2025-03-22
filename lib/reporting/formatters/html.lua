@@ -541,7 +541,8 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
       
       -- Apply classes and data attributes
       class = class .. block_class
-      block_info = string.format(' data-block-id="%s" data-block-type="%s"', block_id, block_type)
+      block_info = string.format(' data-block-id="%s" data-block-type="%s" data-block-start-line="%d" data-block-end-line="%d"',
+                                 block_id, block_type, block.start_line, block.end_line)
       
       -- Add execution status attribute
       if executed then
@@ -556,6 +557,9 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         tooltip_data = string.format(' title="Line never executed. %s block (start) never executed. Add tests to cover this code path."', 
                                block_type:gsub("^%l", string.upper))
       end
+      
+      -- Add a fold control button for code folding
+      class = class .. " foldable"
       
       -- If there are additional start blocks, add them as data attributes
       if #start_blocks > 1 then
@@ -798,12 +802,23 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
     end
   end
   
+  -- Determine if we need to add a folding control
+  local fold_control = ""
+  if class:match("foldable") and config.enable_code_folding then
+    -- Extract block id from block_info
+    local block_id = block_info:match('data%-block%-id="([^"]+)"')
+    if block_id then
+      fold_control = string.format('<span class="fold-control" data-block-id="%s" onclick="toggleFold(\'%s\', event)">▼</span>', 
+                                  block_id, block_id)
+    end
+  end
+  
   local html = string.format(
     '<div class="line %s"%s%s id="line-%d">' ..
     '<span class="line-number">%d</span>' ..
-    '<span class="line-content">%s</span>' ..
+    '%s<span class="line-content">%s</span>' ..
     '</div>',
-    class, block_info, tooltip_data, line_num, line_num, escape_html(content)
+    class, block_info, tooltip_data, line_num, line_num, fold_control, escape_html(content)
   )
   return html
 end
@@ -982,6 +997,14 @@ local function create_coverage_legend()
     legend_html = legend_html .. [[
       <p class="legend-tip">Line classification details are available in tooltips to help understand line types</p>
       <p class="legend-tip">Classification reasons show why a line is classified as executable or non-executable</p>
+    ]]
+  end
+  
+  -- Add code folding info if enabled
+  if config.enable_code_folding then
+    legend_html = legend_html .. [[
+      <p class="legend-tip">Code blocks can be folded by clicking the ▼ icons at the start of blocks</p>
+      <p class="legend-tip">Press Space key while hovering a block to fold/unfold with keyboard</p>
     ]]
   end
   
@@ -2369,6 +2392,37 @@ function M.format_coverage(coverage_data)
       0% { background-color: var(--accent-color); }
       100% { background-color: inherit; }
     }
+    
+    /* Code folding styles */
+    .fold-control {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+      text-align: center;
+      cursor: pointer;
+      margin-right: 5px;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+    }
+    
+    .fold-control:hover {
+      color: var(--accent-color);
+    }
+    
+    .fold-control.folded {
+      transform: rotate(-90deg);
+    }
+    
+    .line.folded-line {
+      display: none;
+    }
+    
+    /* When hovering over a foldable line, highlight it subtly */
+    .line.foldable:hover {
+      background-color: var(--hover-bg);
+    }
   </style>
   
   <script>
@@ -2573,6 +2627,32 @@ function M.format_coverage(coverage_data)
           // Already set up in the keydown event listener
         }
       }
+      
+      // Initialize code folding if enabled
+      if (window.formatterConfig.enableCodeFolding) {
+        // Prepare fold controls for all foldable blocks
+        document.querySelectorAll('.fold-control').forEach(control => {
+          // Add click handler (should already be added via the onclick attribute)
+          // But ensure the controls are visible
+          control.style.visibility = 'visible';
+        });
+        
+        // Add keyboard shortcut for folding/unfolding (Space key when on a foldable line)
+        if (window.formatterConfig.enableKeyboardShortcuts) {
+          document.addEventListener('keydown', function(e) {
+            if (e.key === ' ' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+              const hoveredLine = document.querySelector('.line:hover');
+              if (hoveredLine && hoveredLine.classList.contains('foldable')) {
+                e.preventDefault();
+                const blockId = hoveredLine.getAttribute('data-block-id');
+                if (blockId) {
+                  toggleFold(blockId);
+                }
+              }
+            }
+          });
+        }
+      }
     });
     
     // Navigation functions
@@ -2686,6 +2766,54 @@ function M.format_coverage(coverage_data)
       if (isNaN(lineNum) || lineNum < 1) return;
       
       scrollToLine(fileId, lineNum);
+    }
+    
+    // Code folding functionality
+    function toggleFold(blockId, event) {
+      if (event) {
+        event.stopPropagation(); // Prevent other click handlers
+      }
+      
+      // Find the fold control
+      const foldControl = document.querySelector(`.fold-control[data-block-id="${blockId}"]`);
+      if (!foldControl) return;
+      
+      // Toggle folded state
+      foldControl.classList.toggle('folded');
+      
+      // Find all lines in this block
+      const startLine = document.querySelector(`[data-block-id="${blockId}"]`);
+      if (!startLine) return;
+      
+      const startLineNumber = parseInt(startLine.getAttribute('data-block-start-line') || '0');
+      const endLineNumber = parseInt(startLine.getAttribute('data-block-end-line') || '0');
+      
+      if (startLineNumber === 0 || endLineNumber === 0 || startLineNumber >= endLineNumber) return;
+      
+      // Get the current file container
+      const fileContainer = startLine.closest('.file-container');
+      if (!fileContainer) return;
+      
+      // Toggle the folded state on each line in the block
+      const isFolded = foldControl.classList.contains('folded');
+      const lines = fileContainer.querySelectorAll('.line');
+      
+      lines.forEach(line => {
+        const lineId = line.id;
+        if (!lineId) return;
+        
+        const lineNumber = parseInt(lineId.replace('line-', ''));
+        if (lineNumber > startLineNumber && lineNumber <= endLineNumber) {
+          if (isFolded) {
+            line.classList.add('folded-line');
+          } else {
+            line.classList.remove('folded-line');
+          }
+        }
+      });
+      
+      // Change the fold icon
+      foldControl.textContent = isFolded ? '►' : '▼';
     }
     
     // Navigation keyboard shortcuts
