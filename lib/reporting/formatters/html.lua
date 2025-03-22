@@ -1024,6 +1024,15 @@ local function create_coverage_legend()
     ]]
   end
   
+  -- Add visited lines tracking info if enabled
+  if config.track_visited_lines then
+    legend_html = legend_html .. [[
+      <p class="legend-tip">Visited lines are marked with a blue left border when you click on them</p>
+      <p class="legend-tip">The counter in the bottom right shows your progress through executable lines</p>
+      <p class="legend-tip">Use the Reset button to clear your visited lines history</p>
+    ]]
+  end
+  
   -- Close all divs
   legend_html = legend_html .. [[
     </div>
@@ -2579,6 +2588,49 @@ function M.format_coverage(coverage_data)
       color: gold;
       text-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
     }
+    
+    /* Visited lines tracking */
+    .line.visited {
+      border-left: 2px solid var(--accent-color);
+    }
+    
+    /* Visited lines counter */
+    .visited-counter {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      padding: 5px 10px;
+      background-color: var(--section-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      font-size: 12px;
+      z-index: 90;
+    }
+    
+    .visited-counter .counter-value {
+      font-weight: bold;
+      color: var(--accent-color);
+    }
+    
+    .visited-counter .counter-total {
+      color: var(--text-muted);
+    }
+    
+    .visited-counter .counter-reset {
+      margin-left: 10px;
+      color: var(--button-text);
+      background-color: var(--button-bg);
+      border: none;
+      border-radius: 3px;
+      padding: 2px 5px;
+      cursor: pointer;
+      font-size: 10px;
+    }
+    
+    .visited-counter .counter-reset:hover {
+      background-color: var(--button-hover-bg);
+    }
   </style>
   
   <script>
@@ -2831,6 +2883,23 @@ function M.format_coverage(coverage_data)
           });
         }
       }
+      
+      // Initialize visited lines tracking if enabled
+      if (window.formatterConfig.trackVisitedLines) {
+        // Load visited lines from localStorage
+        loadVisitedLines();
+        
+        // Add click handler to track visited lines
+        document.addEventListener('click', function(e) {
+          const lineElement = e.target.closest('.line');
+          if (lineElement) {
+            markLineAsVisited(lineElement);
+          }
+        });
+        
+        // Update the counter with initial values
+        updateVisitedCounter();
+      }
     });
     
     // Navigation functions
@@ -2911,6 +2980,11 @@ function M.format_coverage(coverage_data)
         const fileEntry = document.querySelector(`.file-entry[data-file-id="${fileId}"]`);
         if (fileEntry) {
           fileEntry.classList.add('active');
+        }
+        
+        // Update visited lines counter for this file if tracking is enabled
+        if (window.formatterConfig.trackVisitedLines) {
+          updateVisitedCounter();
         }
       }
     }
@@ -3198,6 +3272,132 @@ function M.format_coverage(coverage_data)
       }
     }
     
+    // Visited lines tracking
+    
+    // Store visited lines
+    window.visitedLines = {};
+    
+    // Mark a line as visited
+    function markLineAsVisited(lineElement) {
+      if (!lineElement || !window.formatterConfig.trackVisitedLines) return;
+      
+      // Get the current active file
+      const activeFile = document.querySelector('.file-container.active');
+      if (!activeFile) return;
+      
+      const fileId = activeFile.id;
+      const lineId = lineElement.id;
+      if (!lineId) return;
+      
+      const lineNumber = parseInt(lineId.replace('line-', ''));
+      if (!lineNumber) return;
+      
+      // Initialize file entry if needed
+      if (!window.visitedLines[fileId]) {
+        window.visitedLines[fileId] = {};
+      }
+      
+      // Mark line as visited if not already
+      if (!window.visitedLines[fileId][lineNumber]) {
+        window.visitedLines[fileId][lineNumber] = true;
+        
+        // Add visual indicator
+        lineElement.classList.add('visited');
+        
+        // Save to localStorage
+        saveVisitedLines();
+        
+        // Update counter
+        updateVisitedCounter();
+      }
+    }
+    
+    // Save visited lines to localStorage
+    function saveVisitedLines() {
+      try {
+        localStorage.setItem('coverage_visited_lines', JSON.stringify(window.visitedLines));
+      } catch (e) {
+        console.error('Failed to save visited lines:', e);
+      }
+    }
+    
+    // Load visited lines from localStorage
+    function loadVisitedLines() {
+      try {
+        const savedVisitedLines = localStorage.getItem('coverage_visited_lines');
+        if (savedVisitedLines) {
+          window.visitedLines = JSON.parse(savedVisitedLines);
+          
+          // Apply visited status to visible elements
+          applyVisitedStatus();
+        }
+      } catch (e) {
+        console.error('Failed to load visited lines:', e);
+      }
+    }
+    
+    // Apply visited status to visible elements
+    function applyVisitedStatus() {
+      for (const fileId in window.visitedLines) {
+        for (const lineNumber in window.visitedLines[fileId]) {
+          const lineElement = document.getElementById(`line-${lineNumber}`);
+          if (lineElement) {
+            lineElement.classList.add('visited');
+          }
+        }
+      }
+    }
+    
+    // Reset visited lines tracking
+    function resetVisitedLines() {
+      window.visitedLines = {};
+      
+      // Clear visited class from all lines
+      document.querySelectorAll('.line.visited').forEach(line => {
+        line.classList.remove('visited');
+      });
+      
+      // Clear localStorage
+      try {
+        localStorage.removeItem('coverage_visited_lines');
+      } catch (e) {
+        console.error('Failed to clear visited lines from localStorage:', e);
+      }
+      
+      // Update counter
+      updateVisitedCounter();
+    }
+    
+    // Update visited lines counter
+    function updateVisitedCounter() {
+      const counterElement = document.getElementById('visitedCount');
+      const totalElement = document.getElementById('visitedTotal');
+      if (!counterElement || !totalElement) return;
+      
+      // Count visited executable lines in current file
+      let visitedCount = 0;
+      let totalCount = 0;
+      
+      // Get the current active file
+      const activeFile = document.querySelector('.file-container.active');
+      if (!activeFile) return;
+      
+      const fileId = activeFile.id;
+      
+      // Count executable lines in this file
+      const executableLines = activeFile.querySelectorAll('.line.covered, .line.uncovered, .line.executed-not-covered');
+      totalCount = executableLines.length;
+      
+      // Count visited lines
+      if (window.visitedLines[fileId]) {
+        visitedCount = Object.keys(window.visitedLines[fileId]).length;
+      }
+      
+      // Update counter display
+      counterElement.textContent = visitedCount;
+      totalElement.textContent = totalCount;
+    }
+    
     // Initialize file navigation on page load
     document.addEventListener('DOMContentLoaded', function() {
       // Show the first file by default
@@ -3237,6 +3437,13 @@ function M.format_coverage(coverage_data)
     </div>
   </div>
   <button class="bookmarks-toggle" onclick="toggleBookmarksPanel()" title="View bookmarks">Bookmarks</button>
+  ]] or "") .. [[
+  ]] .. (config.track_visited_lines and [[
+  <!-- Visited lines counter -->
+  <div class="visited-counter" id="visitedCounter">
+    <span>Visited lines: <span class="counter-value" id="visitedCount">0</span>/<span class="counter-total" id="visitedTotal">0</span></span>
+    <button class="counter-reset" onclick="resetVisitedLines()" title="Reset visited lines tracking">Reset</button>
+  </div>
   ]] or "") .. [[
   <div class="container]] .. (config.enhanced_navigation and config.show_file_navigator and " with-navigator" or "") .. [[">
     <h1>Firmo Coverage Report</h1>
