@@ -1,4 +1,50 @@
--- mocking.lua - Mocking system integration for firmo
+--[[
+    Mocking system integration for the Firmo testing framework
+    
+    This module provides a comprehensive mocking system for test isolation and verification.
+    It integrates the spy, stub, and mock subsystems into a unified API with enhanced error
+    handling and automatic cleanup. The mocking system is a key component for writing
+    reliable and maintainable tests.
+    
+    Features:
+    - Unified API for all mocking capabilities
+    - Dual interface supporting both functional and object-oriented styles
+    - Spies for tracking function calls without changing behavior
+    - Stubs for replacing functions with controlled implementations
+    - Mocks for creating complete test doubles with verification
+    - Automatic cleanup and restoration of original behavior
+    - Integration with test lifecycle hooks
+    - Comprehensive error handling with detailed reporting
+    - Context manager for guaranteed mock cleanup (with_mocks)
+    
+    API Styles:
+    - Functional: mocking.spy(fn), mocking.stub(value), mocking.mock(obj)
+    - Object-oriented: mocking.spy.on(obj, "method"), mocking.stub.new(), mocking.mock.create()
+]]
+
+---@class mocking
+---@field _VERSION string Module version (following semantic versioning)
+---@field spy table|fun(target: table|function, name?: string): spy_object Spy on a function or object method
+---@field stub table|fun(value_or_fn?: any): stub_object Create a stub function that returns a specified value
+---@field mock table|fun(target: table, method_or_options?: string|table, impl_or_value?: any): table Create a mock object with controlled behavior
+---@field with_mocks fun(fn: function): any Execute a function with automatic mock cleanup
+---@field register_cleanup_hook fun(after_test_fn?: function): function Register a cleanup hook for mocks
+---@field ensure_assertions fun(firmo_module: table): boolean, table? Ensure required assertions are available
+---@field reset_all fun(): boolean Reset all spies, stubs, and mocks created through this module
+---@field create_spy fun(fn?: function): spy_object Create a new spy function
+---@field create_stub fun(return_value?: any): stub_object Create a new stub function
+---@field create_mock fun(methods?: table<string, function|any>): table Create a new mock object with specified methods
+---@field is_spy fun(obj: any): boolean Check if an object is a spy
+---@field is_stub fun(obj: any): boolean Check if an object is a stub
+---@field is_mock fun(obj: any): boolean Check if an object is a mock
+---@field get_all_mocks fun(): table<number, any> Get all mocks created through this module
+---@field safe_mock fun(target: table, method_name: string, unsafe_fn: function): function Create a safe mock that won't cause infinite recursion
+---@field verify fun(mock_obj: table): boolean Verify that a mock's expectations were met
+---@field configure fun(options: table): mocking Configure the mocking system
+---@author Firmo Team
+---@license MIT
+---@copyright 2023-2025
+---@version 1.0.0
 
 local spy = require("lib.mocking.spy")
 local stub = require("lib.mocking.stub")
@@ -563,9 +609,21 @@ mocking.mock = setmetatable({
 -- Export the with_mocks context manager through our enhanced version
 mocking.with_mocks = mocking.mock.with_mocks
 
----@param after_test_fn? function Function to call after each test (optional)
----@return function hook The cleanup hook function to use
--- Register cleanup hook for mocks after tests
+--- Register a cleanup hook for mocks that runs after each test
+--- Creates a composite hook function that restores all mocks after running
+--- the provided hook function. This ensures that tests don't leak mocked state
+--- to subsequent tests, preventing hard-to-debug test interactions.
+---
+--- @param after_test_fn? function Function to call after each test (optional)
+--- @return function hook The cleanup hook function to use with firmo's after_each
+---
+--- @usage
+--- -- In your test setup code
+--- local firmo = require("firmo")
+--- local mocking = require("lib.mocking")
+--- 
+--- -- Register the cleanup hook with firmo
+--- firmo.after_each = mocking.register_cleanup_hook(firmo.after_each)
 function mocking.register_cleanup_hook(after_test_fn)
   logger.debug("Registering mock cleanup hook")
 
@@ -633,10 +691,25 @@ function mocking.register_cleanup_hook(after_test_fn)
   end
 end
 
----@param firmo_module table The firmo module instance to modify
----@return boolean success Whether the assertions were successfully registered
----@return table|nil error Error information if registration failed
--- Function to add be_truthy/be_falsy assertions to firmo
+--- Ensure that mocking-related assertions are available in firmo
+--- This function ensures that assertions needed for mocking tests are registered
+--- with the firmo assertion system. In newer versions, these assertions are built-in,
+--- so this function primarily serves as a compatibility layer for older versions.
+---
+--- @param firmo_module table The firmo module instance to modify
+--- @return boolean success Whether the assertions were successfully registered or already present
+--- @return table|nil error Error information if registration failed
+---
+--- @usage
+--- -- In your test setup code
+--- local firmo = require("firmo")
+--- local mocking = require("lib.mocking")
+--- 
+--- -- Make sure mocking assertions are available
+--- local success, err = mocking.ensure_assertions(firmo)
+--- if not success then
+---   print("Warning: Failed to register mocking assertions: " .. err.message)
+--- end
 function mocking.ensure_assertions(firmo_module)
   logger.debug("Ensuring mocking assertions are registered")
 
