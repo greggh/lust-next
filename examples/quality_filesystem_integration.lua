@@ -54,7 +54,13 @@ end
 -- Generate and save a quality report
 print("\nGenerating quality report...")
 local report_path = "/tmp/quality-report.html"
-local success, err = quality.save_report(report_path, "html")
+
+-- Get quality report data
+local quality_data = quality.get_report_data()
+
+-- Use the reporting module to save the quality report
+local reporting = require("lib.reporting")
+local success, err = reporting.save_quality_report(report_path, quality_data, "html")
 
 if success then
     print("Quality report saved to: " .. report_path)

@@ -99,7 +99,12 @@ local report_data = coverage.get_report_data()
 local report_path = "/tmp/block-coverage-example.html"
 
 -- Use the coverage module's save_report function which properly integrates with the reporting module
-local success = coverage.save_report(report_path, "html")
+-- Get coverage report data
+local report_data = coverage.get_report_data()
+
+-- Use the reporting module to save the coverage report
+local reporting = require("lib.reporting")
+local success, err = reporting.save_coverage_report(report_path, report_data, "html")
 
 -- The report should now include proper block highlighting using the HTML formatter
 

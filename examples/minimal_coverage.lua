@@ -421,7 +421,10 @@ print("Subtraction works:", result)
   
   -- Save real coverage report
   local fixed_report = report_dir .. "/fixed_coverage.html"
-  coverage.save_report(fixed_report, "html")
+  -- Use the reporting module instead of coverage.save_report
+  local report_data = coverage.get_report_data()
+  local reporting = require("lib.reporting")
+  reporting.save_coverage_report(fixed_report, report_data, "html")
   
   print("\nReal executed-but-not-covered HTML report saved to:", fixed_report)
   print("- Lines 1-2: executed but not covered (add function)")

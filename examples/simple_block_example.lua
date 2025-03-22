@@ -37,5 +37,8 @@ end)
 -- Stop tracking and generate report
 coverage.stop()
 local html_path = "./coverage-reports/simple-block-example.html"
-coverage.save_report(html_path, "html")
+-- Use the reporting module instead of coverage.save_report
+local report_data = coverage.get_report_data()
+local reporting = require("lib.reporting")
+reporting.save_coverage_report(html_path, report_data, "html")
 print("Report saved to: " .. html_path)

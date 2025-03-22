@@ -219,11 +219,12 @@ local file_path = "/tmp/simple-coverage-example.html"
 local html_content
 print("Generating HTML coverage report...")
 
--- Try to use the built-in save_report function first (preferred method)
-local success = coverage.save_report(file_path, "html")
+-- Use the reporting module to save the coverage report (modern approach)
+local success, err = reporting.save_coverage_report(file_path, report_data, "html")
 
 if not success then
-  -- Fallback to manual report generation
+  -- Error handling for report generation failures
+  print("Failed to generate report: " .. (err and err.message or "Unknown error"))
   print("Falling back to manual HTML report generation...")
   
   -- First initialize the formatters

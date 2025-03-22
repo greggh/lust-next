@@ -96,7 +96,12 @@ local report_data = coverage.get_report_data()
 
 -- Save HTML report
 local html_path = "/tmp/simple-block-coverage.html"
-local success = coverage.save_report(html_path, "html")
+-- Get coverage report data
+local report_data = coverage.get_report_data()
+
+-- Use the reporting module to save the coverage report
+local reporting = require("lib.reporting")
+local success, err = reporting.save_coverage_report(html_path, report_data, "html")
 
 print("\nCoverage Statistics:")
 print("  Files: " .. report_data.summary.covered_files .. "/" .. report_data.summary.total_files)

@@ -249,7 +249,12 @@ print("\nGenerating reports...")
 
 -- 1. Save HTML report directly using the coverage module
 local html_path = "/tmp/comprehensive-coverage.html"
-local success = coverage.save_report(html_path, "html")
+-- Get coverage report data
+local report_data = coverage.get_report_data()
+
+-- Use the reporting module to save the coverage report
+local reporting = require("lib.reporting")
+local success, err = reporting.save_coverage_report(html_path, report_data, "html")
 if success then
   print("HTML report saved to: " .. html_path)
 else

@@ -43,7 +43,12 @@ local function run_coverage_test(control_flow_keywords_executable)
   local report_path = "/tmp/keywords-" .. setting_name .. "-example.html"
   
   -- Save the report
-  local success = coverage.save_report(report_path, "html")
+  -- Get coverage report data
+local report_data = coverage.get_report_data()
+
+-- Use the reporting module to save the coverage report
+local reporting = require("lib.reporting")
+local success, err = reporting.save_coverage_report(report_path, report_data, "html")
   
   -- Get coverage data
   local coverage_data = coverage.get_report_data()

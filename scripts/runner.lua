@@ -562,6 +562,7 @@ function runner.run_all(files_or_dir, firmo, options)
       -- Start coverage tracking
       if coverage.start then
         coverage.start()
+        logger.info("Coverage tracking started successfully")
       else
         logger.error("Function not found", { function_name = "coverage.start" })
       end
@@ -570,6 +571,8 @@ function runner.run_all(files_or_dir, firmo, options)
         error = error_handler.format_error(coverage),
       })
     end
+  else
+    logger.debug("Coverage not enabled in options", { coverage_option = options.coverage })
   end
 
   -- Try to load quality module
@@ -842,53 +845,99 @@ function runner.run_all(files_or_dir, firmo, options)
   end
 
   -- Generate coverage reports if enabled
+  -- Check if we should generate coverage reports
+  logger.debug("Checking coverage conditions:", {
+    coverage_loaded = coverage_loaded,
+    has_coverage_object = coverage ~= nil,
+    coverage_option_set = options.coverage
+  })
+  
   if coverage_loaded and coverage and options.coverage then
+    logger.info("Coverage conditions met - will generate reports")
+    
+    -- Stop coverage tracking
+    logger.info("Stopping coverage tracking")
     if coverage.stop then
       coverage.stop()
+      logger.info("Coverage tracking stopped successfully")
     else
       logger.error("Function not found", { function_name = "coverage.stop" })
     end
 
     -- Calculate and save coverage reports
     logger.info("Generating coverage report")
-
-    if coverage.calculate_stats then
-      coverage.calculate_stats()
-    else
-      logger.error("Function not found", { function_name = "coverage.calculate_stats" })
-    end
-
+    
+    -- get_report_data() handles stats computation internally
     -- Generate reports in different formats
     local report_dir = options.report_dir or "./coverage-reports"
     fs.ensure_directory_exists(report_dir)
     local formats = { "html", "json", "lcov", "cobertura" }
 
-    for _, format in ipairs(formats) do
-      if coverage.save_report then
-        local report_path = fs.join_paths(report_dir, "coverage-report." .. format)
-        local success = coverage.save_report(report_path, format)
-        if success then
-          logger.info("Generated coverage report", { format = format, path = report_path })
-        else
-          logger.error("Failed to generate coverage report", { format = format })
+    -- Try to load the reporting module
+    local reporting_loaded, reporting
+    reporting_loaded, reporting = pcall(require, "lib.reporting")
+    
+    if not reporting_loaded then
+      logger.error("Failed to load reporting module", {
+        error = error_handler.format_error(reporting),
+      })
+    end
+
+    -- Get coverage report data
+    logger.info("Getting coverage report data")
+    local report_data = coverage.get_report_data()
+    
+    if not report_data then
+      logger.error("Failed to get coverage report data")
+    else
+      -- Get file count safely with manual counting
+      local file_count = 0
+      if report_data.files then
+        for _ in pairs(report_data.files) do
+          file_count = file_count + 1
+        end
+      end
+      
+      logger.info("Successfully got coverage report data", {
+        has_summary = report_data.summary ~= nil,
+        has_files = report_data.files ~= nil,
+        files_count = file_count
+      })
+      
+      if reporting_loaded and reporting then
+        logger.info("Reporting module loaded, generating reports")
+        
+        -- Use reporting module to generate reports
+        for _, format in ipairs(formats) do
+          local report_path = fs.join_paths(report_dir, "coverage-report." .. format)
+          logger.info("Generating report", { format = format, path = report_path })
+          
+          local success, err = reporting.save_coverage_report(report_path, report_data, format)
+          if success then
+            logger.info("Generated coverage report", { format = format, path = report_path })
+          else
+            logger.error("Failed to generate coverage report", { 
+              format = format, 
+              error = err and error_handler.format_error(err) or "Unknown error" 
+            })
+          end
         end
       else
-        logger.error("Function not found", { function_name = "coverage.save_report" })
-        break
+        logger.error("Reporting module not available for generating reports")
       end
     end
 
     -- Print coverage summary
-    if coverage.summary_report then
-      local report = coverage.summary_report()
+    local summary = report_data and report_data.summary
+    if summary then
       logger.info("Coverage summary", {
-        overall = string.format("%.2f%%", report.overall_pct),
-        lines = string.format("%.2f%%", report.lines_pct),
-        functions = string.format("%.2f%%", report.functions_pct),
-        meets_threshold = coverage.meets_threshold and coverage.meets_threshold() or false,
+        overall = string.format("%.2f%%", summary.overall_coverage_percent or 0),
+        lines = string.format("%.2f%%", summary.line_coverage_percent or 0),
+        functions = string.format("%.2f%%", summary.function_coverage_percent or 0),
+        files = string.format("%.2f%%", summary.file_coverage_percent or 0),
       })
     else
-      logger.error("Function not found", { function_name = "coverage.summary_report" })
+      logger.error("Failed to get coverage summary from report data")
     end
   end
 
@@ -901,16 +950,61 @@ function runner.run_all(files_or_dir, firmo, options)
     local report_dir = options.report_dir or "./coverage-reports"
     fs.ensure_directory_exists(report_dir)
 
-    -- Generate HTML quality report
-    local success = quality.save_report(fs.join_paths(report_dir, "quality-report.html"), "html")
-    if success then
-      logger.info("Generated HTML quality report")
-    end
-
-    -- Generate JSON quality report
-    success = quality.save_report(fs.join_paths(report_dir, "quality-report.json"), "json")
-    if success then
-      logger.info("Generated JSON quality report")
+    -- Use the reporting module if available, otherwise fall back to quality.save_report
+    local reporting_loaded, reporting = pcall(require, "lib.reporting")
+    
+    if reporting_loaded and reporting then
+      -- Get quality report data
+      local quality_data = quality.get_report_data()
+      
+      if quality_data then
+        -- Generate HTML quality report
+        local success, err = reporting.save_quality_report(
+          fs.join_paths(report_dir, "quality-report.html"), 
+          quality_data, 
+          "html"
+        )
+        
+        if success then
+          logger.info("Generated HTML quality report")
+        else
+          logger.error("Failed to generate HTML quality report", {
+            error = err and error_handler.format_error(err) or "Unknown error"
+          })
+        end
+        
+        -- Generate JSON quality report
+        success, err = reporting.save_quality_report(
+          fs.join_paths(report_dir, "quality-report.json"), 
+          quality_data, 
+          "json"
+        )
+        
+        if success then
+          logger.info("Generated JSON quality report")
+        else
+          logger.error("Failed to generate JSON quality report", {
+            error = err and error_handler.format_error(err) or "Unknown error"
+          })
+        end
+      else
+        logger.error("Failed to get quality report data")
+      end
+    else
+      -- Fall back to legacy approach
+      logger.warn("Reporting module not available, using legacy quality.save_report")
+      
+      -- Generate HTML quality report
+      local success = quality.save_report(fs.join_paths(report_dir, "quality-report.html"), "html")
+      if success then
+        logger.info("Generated HTML quality report")
+      end
+      
+      -- Generate JSON quality report
+      success = quality.save_report(fs.join_paths(report_dir, "quality-report.json"), "json")
+      if success then
+        logger.info("Generated JSON quality report")
+      end
     end
 
     -- Print quality summary
@@ -1120,6 +1214,11 @@ function runner.parse_arguments(args)
     threshold = 80, -- Coverage/quality threshold
     exclude_patterns = { "fixtures/*" }, -- Patterns to exclude
   }
+  
+  print("Parse arguments input:")
+  for i, arg in ipairs(args) do
+    print(i, arg)
+  end
 
   local path = nil
   local i = 1
@@ -1136,6 +1235,7 @@ function runner.parse_arguments(args)
       options.performance = true
     elseif arg == "--coverage" or arg == "-c" then
       options.coverage = true
+      print("SET COVERAGE OPTION TO TRUE")
     elseif arg == "--coverage-debug" or arg == "-cd" then
       options.coverage_debug = true
     elseif arg == "--quality" or arg == "-q" then
@@ -1225,9 +1325,21 @@ end
 
 -- Main function to run tests from command line
 function runner.main(args)
+  -- Print all args for debugging
+  print("Runner.main called with arguments:")
+  for i, arg in ipairs(args) do
+    print(i, arg)
+  end
+  
   -- Parse command-line arguments
   local path, options = runner.parse_arguments(args)
-
+  
+  -- Print options for debugging
+  print("Parsed options:")
+  print("  path:", path)
+  print("  coverage:", options.coverage)
+  print("  report_dir:", options.report_dir)
+  
   -- Make sure we have a path
   if not path then
     logger.error("No path specified", { usage = "lua scripts/runner.lua [options] [path]" })

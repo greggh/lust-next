@@ -102,7 +102,10 @@ print(string.format("- Line coverage: %.2f%%", summary.line_coverage_percent))
 
 -- Create and save HTML report with our custom highlighting
 local report_path = "/tmp/executed_vs_covered_demo.html"
-coverage.save_report(report_path, "html")
+-- Use the reporting module instead of coverage.save_report
+local report_data = coverage.get_report_data()
+local reporting = require("lib.reporting")
+reporting.save_coverage_report(report_path, report_data, "html")
 print("\nGenerated HTML report:", report_path)
 
 -- Let's verify our distinction worked

@@ -44,7 +44,9 @@ end
 -- Generate a coverage report
 print("\nGenerating coverage report...")
 local report_path = "/tmp/coverage-report.html"
-local success, err = coverage.save_report(report_path, "html")
+local report_data = coverage.get_report_data()
+local reporting = require("lib.reporting")
+local success, err = reporting.save_coverage_report(report_path, report_data, "html")
 
 if success then
     print("Coverage report saved to: " .. report_path)
