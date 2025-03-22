@@ -915,8 +915,8 @@ Once the core coverage system is fully repaired, we plan to:
    - ✓ Implement visualization for block execution frequency *(Completed)*
    - ✓ Add code folding, bookmarking, and tracking features *(Completed)*
    - [ ] Add function complexity metrics to reports
-   - [ ] Implement responsive design for all screen sizes
    - [ ] Modernize HTML reports with Tailwind CSS and Alpine.js
+   - [ ] Implement responsive design as part of modernization
 
 2. **Improve Instrumentation Approach**
 
