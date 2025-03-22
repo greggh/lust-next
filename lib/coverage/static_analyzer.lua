@@ -260,6 +260,10 @@ end
 --- Each line is analyzed character by character to properly track comment state
 --- transitions, ensuring accurate comment detection even in complex scenarios.
 ---
+--- Note: This function is used for multiline context tracking across multiple
+--- track_line calls. It's critical that we properly maintain the in_comment flag
+--- for both the start and middle lines of multiline comments.
+---
 --- @usage
 --- -- Process multiple lines using a shared context
 --- local context = static_analyzer.create_multiline_comment_context()
@@ -298,6 +302,9 @@ function M.process_line_for_comments(line_text, line_num, context)
     -- Look for comment end markers
     local end_pos = line_text:find("%]%]")
     
+    -- This line is part of a multiline comment
+    context.line_status[line_num] = true
+    
     if end_pos then
       -- Check if we have nested comments and this is just closing an inner one
       if #context.state_stack > 1 then
@@ -326,7 +333,6 @@ function M.process_line_for_comments(line_text, line_num, context)
     end
     
     -- This entire line is part of a comment
-    context.line_status[line_num] = true
     return true
   end
   
@@ -345,6 +351,7 @@ function M.process_line_for_comments(line_text, line_num, context)
   if ml_comment_pos then
     context.in_comment = true
     table.insert(context.state_stack, "dash")
+    context.line_status[line_num] = true  -- Mark this line as part of a comment
     
     -- Check if the comment also ends on this line
     local end_pos = line_text:find("%]%]", ml_comment_pos + 4)
@@ -380,7 +387,6 @@ function M.process_line_for_comments(line_text, line_num, context)
         -- No code outside the comment
         context.in_comment = false
         context.state_stack = {}
-        context.line_status[line_num] = true
         return true
       else
         -- There's code outside the comment
@@ -721,12 +727,12 @@ function M.classify_line_simple_with_context(file_path, line_num, source_line, o
   
   -- Initialize context tracking
   local context = {
-    multiline_state = nil,    -- Current multiline tracking state
-    in_comment = false,       -- Whether line is in a multiline comment
-    in_string = false,        -- Whether line is in a multiline string
-    source_avail = false,     -- Whether source text was available
-    content_type = "unknown", -- Type of content (code, comment, string)
-    reasons = {}              -- Reasons for classification
+    multiline_state = options.multiline_state,  -- Use provided multiline state if available
+    in_comment = options.in_comment or false,   -- Whether line is in a multiline comment
+    in_string = options.in_string or false,     -- Whether line is in a multiline string
+    source_avail = false,                      -- Whether source text was available
+    content_type = "unknown",                  -- Type of content (code, comment, string)
+    reasons = {}                               -- Reasons for classification
   }
   
   -- Use provided source line or read from file
@@ -761,13 +767,67 @@ function M.classify_line_simple_with_context(file_path, line_num, source_line, o
     context.source_avail = true
   end
   
-  -- Create a multiline comment context and process all lines up to the target line
-  local comment_context = M.create_multiline_comment_context()
+  -- First, identify if we're in a multiline comment from various indications
+  local in_multiline_comment = false
   
-  -- Process previous lines to establish multiline state if we have them
-  if #lines > 0 then
-    for i = 1, math.min(line_num, #lines) do
-      M.process_line_for_comments(lines[i], i, comment_context)
+  -- Check explicit option
+  if options.in_comment == true then
+    in_multiline_comment = true
+  end
+  
+  -- Check if we have a multiline state that indicates we're in a comment
+  if options.multiline_state and options.multiline_state.in_comment then
+    in_multiline_comment = true
+  end
+  
+  -- Check if line_status for this line is marked as in a comment
+  if options.multiline_state and options.multiline_state.line_status and 
+     options.multiline_state.line_status[line_num] then
+    in_multiline_comment = true
+  end
+  
+  -- Check the line text for multiline comment patterns
+  if line_text then
+    -- Check if this line contains only a multiline comment content (no code)
+    -- This is a simplistic check but catches most common cases
+    if in_multiline_comment or 
+       line_text:match("^%s*$") or -- blank line in a comment
+       line_text:match("^%s*%-%-") or -- line starts with comment
+       not line_text:match("[^%s]") then -- only whitespace
+      in_multiline_comment = true
+    end
+  end
+  
+  -- If we've determined we're in a multiline comment, return that immediately
+  if in_multiline_comment then
+    context.in_comment = true
+    context.content_type = "comment"
+    context.reasons[#context.reasons + 1] = "multiline_comment_detection"
+    return M.LINE_TYPES.NON_EXECUTABLE, context
+  end
+  
+  -- Create a multiline comment context and process all lines up to the target line
+  -- Use provided multiline state if available, otherwise create a new one
+  local comment_context
+  if options.track_multiline_context and options.multiline_state then
+    comment_context = options.multiline_state
+    context.in_comment = comment_context.in_comment
+    
+    -- If the multiline state indicates we're in a comment, return immediately
+    if context.in_comment or comment_context.line_status[line_num] then
+      context.in_comment = true
+      context.content_type = "comment"
+      context.reasons[#context.reasons + 1] = "in_multiline_comment_from_context"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+  else
+    comment_context = M.create_multiline_comment_context()
+    
+    -- Process previous lines to establish multiline state if we have them
+    if #lines > 0 then
+      for i = 1, math.min(line_num, #lines) do
+        M.process_line_for_comments(lines[i], i, comment_context)
+      end
     end
     
     -- Store multiline state in context
@@ -777,10 +837,13 @@ function M.classify_line_simple_with_context(file_path, line_num, source_line, o
     if comment_context.line_status[line_num] then
       context.in_comment = true
       context.content_type = "comment"
+      context.reasons[#context.reasons + 1] = "line_marked_as_comment_by_processor"
       context.reasons[#context.reasons + 1] = "in_multiline_comment"
       return M.LINE_TYPES.NON_EXECUTABLE, context
     end
-  elseif line_text then
+  end
+  
+  if line_text then
     -- If we only have the target line, check for line-level comments
     -- Basic check for single-line comment
     if line_text:match("^%s*%-%-") then
@@ -816,6 +879,83 @@ function M.classify_line_content_with_context(line_text, options, context)
   if not line_text or line_text:match("^%s*$") then
     context.content_type = "whitespace"
     context.reasons[#context.reasons + 1] = "empty_or_whitespace"
+    return M.LINE_TYPES.NON_EXECUTABLE, context
+  end
+  
+  -- Check for multiline context from options directly
+  if options.in_comment or context.in_comment then
+    context.in_comment = true
+    context.content_type = "comment"
+    context.reasons[#context.reasons + 1] = "in_multiline_comment"
+    
+    -- Check if we're exiting a multiline comment
+    if line_text:match("%]%]") then
+      local end_pos = line_text:find("%]%]")
+      local after_end = line_text:sub(end_pos + 2)
+      
+      -- If there's code after the comment end, mark as executable
+      if after_end:match("[^%s]") and not after_end:match("^%s*%-%-") then
+        context.in_comment = false
+        context.content_type = "mixed"
+        context.reasons[#context.reasons + 1] = "code_after_comment_end"
+        return M.LINE_TYPES.EXECUTABLE, context
+      else
+        context.in_comment = false
+        context.reasons[#context.reasons + 1] = "comment_end_no_code"
+        return M.LINE_TYPES.NON_EXECUTABLE, context
+      end
+    end
+    
+    return M.LINE_TYPES.NON_EXECUTABLE, context
+  end
+  
+  -- Important to reset in_comment flag if not in a comment
+  context.in_comment = false
+  
+  -- Check for single-line comments first
+  local single_comment_pos = line_text:match("^%s*%-%-[^%[]")
+  if single_comment_pos then
+    context.content_type = "comment"
+    context.reasons[#context.reasons + 1] = "single_line_comment"
+    return M.LINE_TYPES.NON_EXECUTABLE, context
+  end
+  
+  -- Check for multiline comment start
+  local ml_comment_start = line_text:find("%-%-%[%[")
+  if ml_comment_start then
+    -- Check if the comment ends on the same line
+    local ml_comment_end = line_text:find("%]%]", ml_comment_start + 4)
+    
+    -- If there's a start and end on the same line, check if there's code outside
+    if ml_comment_end then
+      local before_comment = line_text:sub(1, ml_comment_start - 1)
+      local after_comment = line_text:sub(ml_comment_end + 2)
+      
+      if before_comment:match("^%s*$") and 
+         (after_comment:match("^%s*$") or after_comment:match("^%s*%-%-")) then
+        -- No code outside the comment
+        context.content_type = "comment"
+        context.reasons[#context.reasons + 1] = "balanced_multiline_comment"
+        return M.LINE_TYPES.NON_EXECUTABLE, context
+      else
+        -- There's code outside the comment
+        context.content_type = "mixed"
+        context.reasons[#context.reasons + 1] = "code_with_comment"
+        return M.LINE_TYPES.EXECUTABLE, context
+      end
+    else
+      -- Multiline comment starts but doesn't end on this line
+      context.content_type = "comment"
+      context.reasons[#context.reasons + 1] = "multiline_comment_start"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+  end
+  
+  -- If we're in a multiline string (from context), it's non-executable
+  if context.in_string or options.in_multiline_string then
+    context.in_string = true
+    context.content_type = "string"
+    context.reasons[#context.reasons + 1] = "in_multiline_string"
     return M.LINE_TYPES.NON_EXECUTABLE, context
   end
   
@@ -866,6 +1006,14 @@ function M.classify_line_content_with_context(line_text, options, context)
     if line_text:match("=%s*%[%[") then
       context.content_type = "multiline_string_start"
       context.reasons[#context.reasons + 1] = "multiline_string_assignment"
+      context.in_string = false  -- Mark next line as in string
+      return M.LINE_TYPES.EXECUTABLE, context
+    end
+    
+    -- Check for complete single-line multiline string (var = [[content]])
+    if line_text:match("=%s*%[%[.*%]%]") then
+      context.content_type = "single_line_multiline_string"
+      context.reasons[#context.reasons + 1] = "complete_multiline_string"
       return M.LINE_TYPES.EXECUTABLE, context
     end
     
@@ -873,11 +1021,12 @@ function M.classify_line_content_with_context(line_text, options, context)
     if line_text:match("%]%]") and not line_text:match("=%s*[^%[]*%[%[.*%]%]") then
       context.content_type = "multiline_string_end"
       context.reasons[#context.reasons + 1] = "multiline_string_end"
+      context.in_string = false  -- End of string
       return M.LINE_TYPES.NON_EXECUTABLE, context
     end
     
-    -- Check if this might be a multiline string content
-    if options.in_multiline_string then
+    -- Check for multiline string content
+    if line_text:match("^%s*[^=]*%[%[") or options.in_multiline_string then
       context.in_string = true
       context.content_type = "multiline_string_content"
       context.reasons[#context.reasons + 1] = "multiline_string_content"
