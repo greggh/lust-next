@@ -51,6 +51,12 @@ logging.configure_from_config("Reporting:HTML")
 ---@field classification_tooltip_style string Style for classification tooltips ("hover", "click", or "both")
 ---@field highlight_multiline_constructs boolean Whether to highlight multiline constructs
 ---@field show_classification_reasons boolean Whether to show reasons for line classification
+---@field enhanced_navigation boolean Whether to enable enhanced navigation features
+---@field show_file_navigator boolean Whether to show the file navigation panel
+---@field enable_code_folding boolean Whether to enable code folding functionality
+---@field enable_line_bookmarks boolean Whether to enable line bookmarking
+---@field track_visited_lines boolean Whether to track visited lines
+---@field enable_keyboard_shortcuts boolean Whether to enable keyboard shortcuts for navigation
 
 -- Default formatter configuration
 ---@type HTMLFormatterConfig
@@ -64,7 +70,13 @@ local DEFAULT_CONFIG = {
   show_classification_details = true,
   classification_tooltip_style = "hover",
   highlight_multiline_constructs = true,
-  show_classification_reasons = true
+  show_classification_reasons = true,
+  enhanced_navigation = true,
+  show_file_navigator = true,
+  enable_code_folding = true,
+  enable_line_bookmarks = true,
+  track_visited_lines = true,
+  enable_keyboard_shortcuts = true
 }
 
 ---@private
@@ -165,6 +177,209 @@ local function escape_html(str)
       return "[ENCODING ERROR]"
     end
   end
+end
+
+---@private
+---@param file_data table Coverage data for a file
+---@return string coverage_class CSS class based on the coverage level
+-- Get coverage class for a file based on coverage percentage
+local function get_coverage_class(file_data)
+  local percentage = 0
+  
+  if file_data.line_coverage_percent then
+    percentage = file_data.line_coverage_percent
+  elseif file_data.coverage_percent then
+    percentage = file_data.coverage_percent
+  elseif file_data.stats and file_data.stats.percentage then
+    percentage = file_data.stats.percentage
+  end
+  
+  if percentage >= 80 then
+    return "high-coverage"
+  elseif percentage >= 50 then
+    return "medium-coverage"
+  else
+    return "low-coverage"
+  end
+end
+
+---@private
+---@param file_path string The file path to escape for use in HTML IDs
+---@return string escaped Safe string to use as HTML ID
+-- Escape a file path for use as an HTML ID
+local function escape_file_id(file_path)
+  if not file_path then return "unknown-file" end
+  
+  -- Replace characters that aren't valid in HTML IDs
+  local escaped = file_path:gsub("[^%w%-_:]", "_")
+  
+  -- Ensure it starts with a letter (HTML ID requirement)
+  if not escaped:match("^[a-zA-Z]") then
+    escaped = "file_" .. escaped
+  end
+  
+  return escaped
+end
+
+---@private
+---@param files table<string, table> Files with their coverage data
+---@return string html HTML for the file navigation panel
+-- Create a file navigation panel for easy file navigation
+local function create_file_navigation_panel(files)
+  if not files or type(files) ~= "table" then
+    return ""
+  end
+  
+  local panel_html = [[
+  <div class="file-nav-panel" id="fileNavPanel">
+    <div class="panel-header">
+      <h3>Files</h3>
+      <button class="toggle-button" onclick="toggleFileNav()">⟩</button>
+    </div>
+    <div class="panel-search">
+      <input type="text" id="fileSearchInput" placeholder="Search files..." onkeyup="filterFiles()">
+      <div class="filter-options">
+        <select id="coverageFilter" onchange="filterFilesByCoverage()">
+          <option value="all">All Files</option>
+          <option value="high">High Coverage (>80%)</option>
+          <option value="medium">Medium Coverage (50-80%)</option>
+          <option value="low">Low Coverage (<50%)</option>
+        </select>
+      </div>
+    </div>
+    <div class="file-list" id="fileNavList">
+  ]]
+  
+  -- Add file entries
+  for file_path, file_data in pairs(files) do
+    local coverage_class = get_coverage_class(file_data)
+    local file_id = escape_file_id(file_path)
+    
+    -- Calculate coverage percentage
+    local coverage_pct = 0
+    if file_data.line_coverage_percent then
+      coverage_pct = file_data.line_coverage_percent
+    elseif file_data.coverage_percent then
+      coverage_pct = file_data.coverage_percent
+    elseif file_data.stats and file_data.stats.percentage then
+      coverage_pct = file_data.stats.percentage
+    end
+    
+    panel_html = panel_html .. string.format([[
+      <div class="file-entry %s" data-coverage="%0.1f" data-file-id="%s" onclick="showFile('%s')">
+        <span class="file-path">%s</span>
+        <span class="file-coverage">%0.1f%%</span>
+      </div>
+    ]], coverage_class, coverage_pct, file_id, file_id, escape_html(file_path), coverage_pct)
+  end
+  
+  panel_html = panel_html .. [[
+    </div>
+  </div>
+  ]]
+  
+  return panel_html
+end
+
+---@private
+---@param file_path string Path to the file
+---@param file_data table Coverage data for the file
+---@return string html HTML for the file navigation aids
+-- Add navigation aids to a file display
+local function create_file_navigation_aids(file_path, file_data)
+  if not file_path or not file_data then
+    return ""
+  end
+  
+  local file_id = escape_file_id(file_path)
+  local line_count = 0
+  
+  -- Determine line count
+  if file_data.line_count then
+    line_count = file_data.line_count
+  elseif file_data.source and type(file_data.source) == "table" then
+    line_count = #file_data.source
+  end
+  
+  if line_count == 0 then
+    return "" -- No navigation needed for empty files
+  end
+  
+  -- Create file overview bar
+  local overview_html = [[
+  <div class="file-overview-bar" id="overviewBar-]] .. file_id .. [[">
+  ]]
+  
+  -- Create segments for the overview bar (one per ~10 lines)
+  local segments_count = math.ceil(line_count / 10)
+  for i = 1, segments_count do
+    local start_line = (i - 1) * 10 + 1
+    local end_line = math.min(i * 10, line_count)
+    
+    -- Calculate coverage for this segment
+    local segment_covered = 0
+    local segment_total = 0
+    
+    for line_num = start_line, end_line do
+      local is_executable = false
+      local is_covered = false
+      
+      -- Check if line is executable
+      if file_data.executable_lines and file_data.executable_lines[line_num] ~= nil then
+        is_executable = file_data.executable_lines[line_num]
+      elseif file_data.lines and file_data.lines[line_num] and 
+             type(file_data.lines[line_num]) == "table" and
+             file_data.lines[line_num].executable ~= nil then
+        is_executable = file_data.lines[line_num].executable
+      end
+      
+      -- Check if line is covered
+      if file_data.lines and file_data.lines[line_num] then
+        if type(file_data.lines[line_num]) == "table" then
+          is_covered = file_data.lines[line_num].covered
+        else
+          is_covered = file_data.lines[line_num]
+        end
+      end
+      
+      if is_executable then
+        segment_total = segment_total + 1
+        if is_covered then
+          segment_covered = segment_covered + 1
+        end
+      end
+    end
+    
+    -- Determine segment color
+    local segment_color = "#eee" -- Default gray for non-executable
+    if segment_total > 0 then
+      local segment_pct = (segment_covered / segment_total) * 100
+      if segment_pct >= 80 then
+        segment_color = "#4caf50" -- Green for high coverage
+      elseif segment_pct >= 50 then
+        segment_color = "#ff9800" -- Orange for medium coverage
+      else
+        segment_color = "#f44336" -- Red for low coverage
+      end
+    end
+    
+    overview_html = overview_html .. string.format([[
+      <div class="overview-segment" style="height: %dpx; background-color: %s" 
+           data-start-line="%d" data-end-line="%d" onclick="scrollToLine('%s', %d)"></div>
+    ]], math.max(5, 400 / segments_count), segment_color, start_line, end_line, file_id, start_line)
+  end
+  
+  overview_html = overview_html .. [[
+  </div>
+  
+  <div class="line-number-nav">
+    <input type="number" id="gotoLine-]] .. file_id .. [[" 
+           placeholder="Line #" min="1" max="]] .. line_count .. [[">
+    <button onclick="gotoLine(']] .. file_id .. [[')">Go</button>
+  </div>
+  ]]
+  
+  return overview_html
 end
 
 ---@private
@@ -1051,6 +1266,10 @@ function M.format_coverage(coverage_data)
   -- Get theme CSS based on configuration
   local theme = config.theme or "dark"
   
+  -- Check if navigation features are enabled
+  local enhanced_navigation = config.enhanced_navigation
+  local show_file_navigator = config.show_file_navigator
+  
   -- Start building HTML report
   local html = [[
 <!DOCTYPE html>
@@ -1349,6 +1568,191 @@ function M.format_coverage(coverage_data)
     
     [data-theme="dark"] .line.content-multiline-string {
       background-color: rgba(0, 128, 0, 0.1);
+    }
+    
+    /* Navigation styling */
+    .file-nav-panel {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 300px;
+      background-color: #f5f5f5;
+      border-right: 1px solid #ddd;
+      overflow-y: auto;
+      z-index: 100;
+      transition: left 0.3s ease;
+    }
+    
+    .file-nav-panel.collapsed {
+      left: -290px;
+    }
+    
+    .file-nav-panel .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .file-nav-panel .panel-search {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .file-nav-panel .panel-search input {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    
+    .file-nav-panel .filter-options {
+      margin-top: 10px;
+    }
+    
+    .file-nav-panel .filter-options select {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    
+    .file-nav-panel .file-list {
+      overflow-y: auto;
+    }
+    
+    .file-nav-panel .file-entry {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+    
+    .file-nav-panel .file-entry:hover {
+      background-color: #e9e9e9;
+    }
+    
+    .file-nav-panel .file-entry.active {
+      background-color: #e3f2fd;
+      border-left: 3px solid #2196f3;
+    }
+    
+    .file-nav-panel .file-entry.high-coverage .file-coverage {
+      color: #4caf50;
+    }
+    
+    .file-nav-panel .file-entry.medium-coverage .file-coverage {
+      color: #ff9800;
+    }
+    
+    .file-nav-panel .file-entry.low-coverage .file-coverage {
+      color: #f44336;
+    }
+    
+    .file-overview-bar {
+      position: fixed;
+      right: 5px;
+      top: 100px;
+      bottom: 100px;
+      width: 15px;
+      background-color: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+      z-index: 50;
+    }
+    
+    .overview-segment {
+      width: 100%;
+      cursor: pointer;
+    }
+    
+    .overview-segment:hover {
+      filter: brightness(1.1);
+    }
+    
+    .line-number-nav {
+      position: fixed;
+      right: 25px;
+      top: 60px;
+      display: flex;
+      align-items: center;
+      z-index: 50;
+      background-color: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px;
+    }
+    
+    .line-number-nav input {
+      width: 60px;
+      margin-right: 5px;
+      padding: 3px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    
+    .line-number-nav button {
+      padding: 3px 8px;
+      background-color: #2196f3;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    
+    .file-container {
+      display: none;
+      margin-bottom: 30px;
+    }
+    
+    .file-container.active {
+      display: block;
+    }
+    
+    /* Dark theme navigation styles */
+    [data-theme="dark"] .file-nav-panel {
+      background-color: #1e1e1e;
+      border-color: #333;
+    }
+    
+    [data-theme="dark"] .file-nav-panel .panel-header,
+    [data-theme="dark"] .file-nav-panel .panel-search {
+      border-color: #333;
+    }
+    
+    [data-theme="dark"] .file-nav-panel .file-entry {
+      border-color: #333;
+    }
+    
+    [data-theme="dark"] .file-nav-panel .file-entry:hover {
+      background-color: #2d2d2d;
+    }
+    
+    [data-theme="dark"] .file-nav-panel .file-entry.active {
+      background-color: #1e3a5f;
+      border-left-color: #64b5f6;
+    }
+    
+    [data-theme="dark"] .file-overview-bar {
+      background-color: #333;
+    }
+    
+    [data-theme="dark"] .line-number-nav {
+      background-color: #1e1e1e;
+      border-color: #333;
+    }
+    
+    [data-theme="dark"] .line-number-nav input {
+      background-color: #333;
+      color: #eee;
+      border-color: #555;
+    }
+    
+    [data-theme="dark"] .line-number-nav button {
+      background-color: #0d47a1;
     }
     
     /* Classification modal styling */
@@ -1790,6 +2194,181 @@ function M.format_coverage(coverage_data)
       background-color: #4285f4;
       color: white;
     }
+    
+    /* Navigation panel styles */
+    .container.with-navigator {
+      margin-left: 250px; /* Make room for navigation panel */
+      transition: margin-left 0.3s ease;
+    }
+    
+    .file-nav-panel {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 250px;
+      background-color: var(--section-bg);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      z-index: 100;
+      transition: transform 0.3s ease;
+    }
+    
+    .file-nav-panel.collapsed {
+      transform: translateX(-230px);
+    }
+    
+    .file-nav-panel .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background-color: var(--header-bg);
+      color: var(--header-text);
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .file-nav-panel .panel-search {
+      padding: 10px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .file-nav-panel .panel-search input {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+    
+    .file-nav-panel .filter-options {
+      margin-top: 5px;
+    }
+    
+    .file-nav-panel .filter-options select {
+      width: 100%;
+      padding: 5px;
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+    
+    .file-nav-panel .file-list {
+      margin: 0;
+      border: none;
+    }
+    
+    .file-nav-panel .file-entry {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .file-nav-panel .file-entry:hover {
+      background-color: var(--highlight-bg);
+    }
+    
+    .file-nav-panel .file-entry.active {
+      background-color: var(--active-bg);
+      border-left: 3px solid var(--accent-color);
+    }
+    
+    .file-nav-panel .file-path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    
+    .file-nav-panel .file-coverage {
+      margin-left: 10px;
+    }
+    
+    .file-container {
+      display: none;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    
+    .file-container.active {
+      display: block;
+    }
+    
+    /* File overview bar */
+    .file-overview-bar {
+      width: 20px;
+      position: absolute;
+      left: -25px;
+      top: 0;
+      bottom: 0;
+      background-color: var(--section-bg);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    
+    .file-overview-bar .overview-segment {
+      width: 100%;
+      cursor: pointer;
+    }
+    
+    /* Line number navigation */
+    .line-number-nav {
+      position: absolute;
+      right: 0;
+      top: 0;
+      padding: 5px;
+      background-color: var(--section-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      display: flex;
+    }
+    
+    .line-number-nav input {
+      width: 60px;
+      padding: 3px;
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      background-color: var(--input-bg);
+      color: var(--text-color);
+    }
+    
+    .line-number-nav button {
+      margin-left: 5px;
+      padding: 3px 8px;
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    
+    /* High, medium, low coverage files */
+    .high-coverage {
+      border-left: 3px solid #4caf50; /* Green for high coverage */
+    }
+    
+    .medium-coverage {
+      border-left: 3px solid #ff9800; /* Orange for medium coverage */
+    }
+    
+    .low-coverage {
+      border-left: 3px solid #f44336; /* Red for low coverage */
+    }
+    
+    /* Highlight line during navigation */
+    .highlight-line {
+      animation: highlight-animation 2s ease;
+    }
+    
+    @keyframes highlight-animation {
+      0% { background-color: var(--accent-color); }
+      100% { background-color: inherit; }
+    }
   </style>
   
   <script>
@@ -1954,7 +2533,13 @@ function M.format_coverage(coverage_data)
         showClassificationDetails: document.body.getAttribute('data-show-classification-details') === 'true',
         classificationTooltipStyle: document.body.getAttribute('data-classification-tooltip-style') || 'hover',
         highlightMultilineConstructs: document.body.getAttribute('data-highlight-multiline-constructs') === 'true',
-        showClassificationReasons: document.body.getAttribute('data-show-classification-reasons') === 'true'
+        showClassificationReasons: document.body.getAttribute('data-show-classification-reasons') === 'true',
+        enhancedNavigation: document.body.getAttribute('data-enhanced-navigation') === 'true',
+        showFileNavigator: document.body.getAttribute('data-show-file-navigator') === 'true',
+        enableCodeFolding: document.body.getAttribute('data-enable-code-folding') === 'true',
+        enableLineBookmarks: document.body.getAttribute('data-enable-line-bookmarks') === 'true',
+        trackVisitedLines: document.body.getAttribute('data-track-visited-lines') === 'true',
+        enableKeyboardShortcuts: document.body.getAttribute('data-enable-keyboard-shortcuts') === 'true'
       };
       
       // Add click handlers for showing classification details
@@ -1971,14 +2556,200 @@ function M.format_coverage(coverage_data)
           });
         });
       }
+      
+      // Initialize file navigation
+      if (window.formatterConfig.enhancedNavigation && window.formatterConfig.showFileNavigator) {
+        // Show the first file by default if available
+        const firstFileEntry = document.querySelector('.file-entry');
+        if (firstFileEntry) {
+          const fileId = firstFileEntry.getAttribute('data-file-id');
+          if (fileId) {
+            showFile(fileId);
+          }
+        }
+        
+        // Add keyboard shortcuts for navigation
+        if (window.formatterConfig.enableKeyboardShortcuts) {
+          // Already set up in the keydown event listener
+        }
+      }
+    });
+    
+    // Navigation functions
+    
+    // Toggle file navigation panel
+    function toggleFileNav() {
+      const panel = document.getElementById('fileNavPanel');
+      if (panel) {
+        panel.classList.toggle('collapsed');
+        
+        // Update button text
+        const button = panel.querySelector('.toggle-button');
+        if (button) {
+          button.textContent = panel.classList.contains('collapsed') ? '⟨' : '⟩';
+        }
+      }
+    }
+    
+    // Filter files by name
+    function filterFiles() {
+      const searchInput = document.getElementById('fileSearchInput');
+      const filterText = searchInput ? searchInput.value.toLowerCase() : '';
+      const fileEntries = document.querySelectorAll('.file-entry');
+      
+      fileEntries.forEach(entry => {
+        const filePath = entry.querySelector('.file-path').textContent.toLowerCase();
+        if (filePath.includes(filterText)) {
+          entry.style.display = '';
+        } else {
+          entry.style.display = 'none';
+        }
+      });
+    }
+    
+    // Filter files by coverage level
+    function filterFilesByCoverage() {
+      const coverageFilter = document.getElementById('coverageFilter');
+      const selectedValue = coverageFilter ? coverageFilter.value : 'all';
+      const fileEntries = document.querySelectorAll('.file-entry');
+      
+      fileEntries.forEach(entry => {
+        if (selectedValue === 'all') {
+          entry.style.display = '';
+          return;
+        }
+        
+        const coverage = parseFloat(entry.getAttribute('data-coverage') || '0');
+        
+        if (selectedValue === 'high' && coverage >= 80) {
+          entry.style.display = '';
+        } else if (selectedValue === 'medium' && coverage >= 50 && coverage < 80) {
+          entry.style.display = '';
+        } else if (selectedValue === 'low' && coverage < 50) {
+          entry.style.display = '';
+        } else {
+          entry.style.display = 'none';
+        }
+      });
+    }
+    
+    // Show a specific file
+    function showFile(fileId) {
+      // Hide all file containers
+      document.querySelectorAll('.file-container').forEach(container => {
+        container.classList.remove('active');
+      });
+      
+      // Show the selected file
+      const fileContainer = document.getElementById(fileId);
+      if (fileContainer) {
+        fileContainer.classList.add('active');
+        
+        // Mark file as active in the nav panel
+        document.querySelectorAll('.file-entry').forEach(entry => {
+          entry.classList.remove('active');
+        });
+        
+        const fileEntry = document.querySelector(`.file-entry[data-file-id="${fileId}"]`);
+        if (fileEntry) {
+          fileEntry.classList.add('active');
+        }
+      }
+    }
+    
+    // Scroll to a specific line
+    function scrollToLine(fileId, lineNum) {
+      // Make sure the file is visible
+      showFile(fileId);
+      
+      // Find the line element
+      const lineSelector = `#${fileId} .line:nth-child(${lineNum})`;
+      const lineElement = document.querySelector(lineSelector);
+      
+      if (lineElement) {
+        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Highlight the line temporarily
+        lineElement.classList.add('highlight-line');
+        setTimeout(() => {
+          lineElement.classList.remove('highlight-line');
+        }, 2000);
+      }
+    }
+    
+    // Go to a specific line number
+    function gotoLine(fileId) {
+      const input = document.getElementById(`gotoLine-${fileId}`);
+      if (!input) return;
+      
+      const lineNum = parseInt(input.value);
+      if (isNaN(lineNum) || lineNum < 1) return;
+      
+      scrollToLine(fileId, lineNum);
+    }
+    
+    // Navigation keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      // Check if keyboard shortcuts are enabled
+      const body = document.body;
+      const enableKeyboardShortcuts = body.getAttribute('data-enable-keyboard-shortcuts') === 'true';
+      if (!enableKeyboardShortcuts) return;
+      
+      // Don't trigger shortcuts when typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      if (e.ctrlKey && e.key === 'f') {
+        // Ctrl+F: Focus file search
+        e.preventDefault();
+        const searchInput = document.getElementById('fileSearchInput');
+        if (searchInput) searchInput.focus();
+      } else if (e.ctrlKey && e.key === 'g') {
+        // Ctrl+G: Focus line number input for active file
+        e.preventDefault();
+        const activeFile = document.querySelector('.file-container.active');
+        if (activeFile) {
+          const fileId = activeFile.id;
+          const lineInput = document.getElementById(`gotoLine-${fileId}`);
+          if (lineInput) lineInput.focus();
+        }
+      } else if (e.key === 'Escape') {
+        // Escape: Clear search or close panels
+        const searchInput = document.getElementById('fileSearchInput');
+        if (document.activeElement === searchInput) {
+          searchInput.value = '';
+          filterFiles();
+        }
+      }
+    });
+    
+    // Initialize file navigation on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      // Show the first file by default
+      const firstFile = document.querySelector('.file-container');
+      if (firstFile) {
+        showFile(firstFile.id);
+      }
+      
+      // Add data attributes for navigation features
+      document.body.setAttribute('data-enhanced-navigation', 
+        document.body.getAttribute('data-enhanced-navigation') || 'true');
+      document.body.setAttribute('data-enable-keyboard-shortcuts', 
+        document.body.getAttribute('data-enable-keyboard-shortcuts') || 'true');
     });
   </script>
 </head>
 <body data-show-classification-details="]] .. tostring(config.show_classification_details or false) .. [[" 
         data-classification-tooltip-style="]] .. (config.classification_tooltip_style or "hover") .. [[" 
         data-highlight-multiline-constructs="]] .. tostring(config.highlight_multiline_constructs or false) .. [[" 
-        data-show-classification-reasons="]] .. tostring(config.show_classification_reasons or false) .. [[">
-  <div class="container">
+        data-show-classification-reasons="]] .. tostring(config.show_classification_reasons or false) .. [["
+        data-enhanced-navigation="]] .. tostring(config.enhanced_navigation or true) .. [[" 
+        data-show-file-navigator="]] .. tostring(config.show_file_navigator or true) .. [[" 
+        data-enable-code-folding="]] .. tostring(config.enable_code_folding or true) .. [[" 
+        data-enable-line-bookmarks="]] .. tostring(config.enable_line_bookmarks or true) .. [[" 
+        data-track-visited-lines="]] .. tostring(config.track_visited_lines or true) .. [[" 
+        data-enable-keyboard-shortcuts="]] .. tostring(config.enable_keyboard_shortcuts or true) .. [[">
+  ]] .. (config.enhanced_navigation and config.show_file_navigator and create_file_navigation_panel(coverage_data.files) or "") .. [[
+  <div class="container]] .. (config.enhanced_navigation and config.show_file_navigator and " with-navigator" or "") .. [[">
     <h1>Firmo Coverage Report</h1>
     
     <!-- Theme toggle -->
@@ -2146,6 +2917,17 @@ function M.format_coverage(coverage_data)
       end
       
       if original_file_data and original_file_data.source then
+        -- Create file ID for linking
+        local file_id = escape_file_id(filename)
+        
+        -- Start file container with ID for navigation
+        html = html .. '<div id="file-' .. file_id .. '" class="file-container">'
+        
+        -- Add navigation aids if enabled
+        if config.enhanced_navigation then
+          html = html .. create_file_navigation_aids(filename, original_file_data)
+        end
+        
         html = html .. '<div class="source-code">'
         
         -- Split source into lines
@@ -2270,7 +3052,8 @@ function M.format_coverage(coverage_data)
           html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line, nil, is_executed, execution_count, classification_data)
         end
         
-        html = html .. '</div>'
+        html = html .. '</div>' -- Close source-code div
+        html = html .. '</div>' -- Close file-container div
       end
     end
   end
