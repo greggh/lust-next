@@ -1,13 +1,36 @@
--- Tests for JSON formatter with comprehensive error handling
+--[[
+Tests for JSON Formatter with Comprehensive Error Handling
+
+This test suite verifies the JSON formatter's ability to:
+- Generate valid, well-structured JSON for coverage reports
+- Handle test results and quality metrics correctly
+- Provide proper error handling for edge cases
+- Support various output options and configurations
+- Format data according to schema requirements
+- Manage file output with appropriate permissions
+
+The tests use structured error handling patterns and temporary file management
+to ensure proper isolation and cleanup.
+]]
+---@type Firmo
 local firmo = require("firmo")
+---@type fun(description: string, callback: function) describe Test suite container function
+---@type fun(description: string, options: table|nil, callback: function) it Test case function with optional parameters
+---@type fun(value: any) expect Assertion generator function
+---@type fun(callback: function) before Setup function that runs before each test
+---@type fun(callback: function) after Teardown function that runs after each test
 local describe, it, expect, before, after = firmo.describe, firmo.it, firmo.expect, firmo.before, firmo.after
 
 -- Import test_helper for error testing
+---@type TestHelperModule
 local test_helper = require("lib.tools.test_helper")
+---@type ErrorHandlerModule
 local error_handler = require("lib.tools.error_handler")
 
 -- Import modules needed for testing
+---@type ReportingModule
 local reporting = require("lib.reporting")
+---@type FilesystemModule
 local fs = require("lib.tools.filesystem")
 
 describe("JSON Formatter", function()

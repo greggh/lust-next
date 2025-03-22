@@ -1,12 +1,28 @@
--- Fix for the firmo expect assertion system
+--- Fix for the firmo expect assertion system
+--- 
+--- This module repairs missing or incomplete expect assertion paths in the Firmo
+--- testing framework. It ensures that all necessary assertion paths and methods
+--- are properly set up, enabling the complete range of expect-style assertions.
+---
+--- Fixes include:
+--- - Adding missing paths (to_not, be_truthy, be_falsey, be_greater, be_less)
+--- - Ensuring path elements like 'truthy' and 'falsey' are present
+--- - Creating the 'has' function if it doesn't exist
+--- - Setting up path aliases (to.not as an alias for to_not)
+--- - Validating the expect assertion system is properly configured
+---
+--- @version 0.2.1
+--- @author Firmo Team
+
 local firmo = require('firmo')
 local logging = require("lib.tools.logging")
 
 ---@class fix_expect
----@field validate_path fun(path_key: string, path_elements: string[]): boolean
----@field inspect_paths fun()
----@field test_has fun()
----@field fix_expect_system fun(): boolean
+---@field validate_path fun(path_key: string, path_elements: string[]): boolean Validates if a path contains all expected elements
+---@field inspect_paths fun() Logs all paths and their contents for debugging
+---@field test_has fun() Tests if the has() function works correctly
+---@field fix_expect_system fun(): boolean Fixes the expect assertion system, returns true if successful
+---@field _VERSION string Module version identifier
 
 -- Initialize module logger
 local logger = logging.get_logger("fix_expect")
@@ -218,6 +234,11 @@ inspect_paths()
 
 -- Test has function
 test_has()
+
+-- Module version
+local M = {
+  _VERSION = "0.2.1"
+}
 
 -- Return success status
 return success

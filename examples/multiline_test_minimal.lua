@@ -1,12 +1,16 @@
 -- Minimal example to test multiline comment coverage detection
+---@type CoverageModule
 local coverage = require("lib.coverage")
+---@type ReportingModule
 local reporting = require("lib.reporting")
+---@type FilesystemModule
 local fs = require("lib.tools.filesystem")
 
 -- Start coverage tracking
 coverage.start()
 
 -- Define a function with multiline comments
+---@return number sum The sum of x and y
 local function test_comments()
   -- Single line comment above code
   print("Line after single-line comment")
@@ -31,9 +35,17 @@ print("Function returned:", result)
 -- Stop coverage tracking
 coverage.stop()
 
--- Create output directory for report
-local report_dir = "./test-reports-tmp"
-fs.ensure_directory_exists(report_dir)
+-- Create temporary directory for report
+---@type TempFileModule
+local temp_file = require("lib.tools.temp_file")
+---@type string|nil report_dir Path to the temporary directory or nil if creation failed
+---@type table|nil err Error object if directory creation failed
+local report_dir, err = temp_file.create_temp_directory()
+if not report_dir then
+  print("Failed to create temp directory:", err)
+  os.exit(1)
+end
+---@type string html_path Full path to the HTML report file
 local html_path = fs.join_paths(report_dir, "multiline-minimal.html")
 
 -- Get file path of this script

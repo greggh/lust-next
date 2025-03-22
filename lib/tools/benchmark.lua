@@ -1,35 +1,55 @@
--- Benchmarking module for firmo
--- Provides utilities for measuring and analyzing test performance
+--[[
+Benchmarking Module for Firmo
+
+Provides comprehensive utilities for measuring and analyzing test and code performance
+with statistical analysis, memory tracking, and comparative benchmarking capabilities.
+
+The module enables precise performance measurement through:
+- Multiple iterations with statistical analysis (mean, median, min/max, standard deviation)
+- Memory usage tracking (before/after measurements)
+- Function call overhead compensation
+- Warmup runs to prime caches and JIT compilation
+- Suite-based benchmarking for comparing multiple implementations
+- Asynchronous performance measurement
+- Human-readable formatting of results
+]]
 
 ---@class benchmark_module
----@field _VERSION string Module version
----@field options {iterations?: number, warmup?: number, gc_collect?: boolean, measure_memory?: boolean, time_unit?: string, sort_by?: string, show_memory?: boolean, show_median?: boolean, show_min_max?: boolean, show_stddev?: boolean, precision?: number} Configuration options for benchmarking
----@field time fun(func: function, ...): {time: number, iterations: number, memory_before: number, memory_after: number, memory_used: number, median: number, min: number, max: number, stddev: number} Measure execution time of a function
----@field run fun(name: string, func: function, options?: table, ...): {name: string, time: number, iterations: number, memory_before: number, memory_after: number, memory_used: number, median: number, min: number, max: number, stddev: number} Run a named benchmark with options
----@field compare fun(benchmarks: table): {fastest: string, slowest: string, memory_efficient: string, comparisons: table<string, table>, summary: table} Compare multiple benchmark results
----@field print_results fun(results: table, format?: string) Print formatted benchmark results
----@field save_results fun(results: table, file_path: string): boolean|nil, string? Save benchmark results to a file
----@field load_results fun(file_path: string): table|nil, string? Load benchmark results from a file
----@field gc fun() Force garbage collection before benchmarking
----@field memory fun(): number Get current memory usage in bytes
----@field configure fun(options: table): benchmark_module Configure benchmark options
----@field reset fun(): benchmark_module Reset benchmark options to defaults
----@field stats fun(results: table): {mean: number, median: number, min: number, max: number, stddev: number, variance: number} Calculate statistics for benchmark results
----@field suite fun(suite_name: string, benchmarks: table<string, function>, options?: table): table Run a suite of benchmarks
----@field async_time fun(func: function, callback: function, ...): nil Measure execution time asynchronously
----@field human_size fun(bytes: number): string Format a size in bytes to human-readable form
----@field human_time fun(time: number, unit?: string): string Format a time value to human-readable form
----@field measure_call_overhead fun(): number Measure function call overhead
+---@field _VERSION string Module version (following semantic versioning)
+---@field options {iterations?: number, warmup?: number, gc_collect?: boolean, measure_memory?: boolean, time_unit?: string, sort_by?: string, show_memory?: boolean, show_median?: boolean, show_min_max?: boolean, show_stddev?: boolean, precision?: number, compensate_overhead?: boolean, confidence_interval?: number} Configuration options for benchmarking behavior
+---@field time fun(func: function, ...): {time: number, iterations: number, memory_before: number, memory_after: number, memory_used: number, median: number, min: number, max: number, stddev: number, samples: number[], unit: string, confidence_interval: table} Measure execution time of a function with detailed performance metrics
+---@field run fun(name: string, func: function, options?: table, ...): {name: string, time: number, iterations: number, memory_before: number, memory_after: number, memory_used: number, median: number, min: number, max: number, stddev: number, samples: number[], unit: string, confidence_interval: table} Run a named benchmark with options and arguments
+---@field compare fun(benchmarks: table): {fastest: string, slowest: string, memory_efficient: string, comparisons: table<string, table>, summary: table, relative_performance: table<string, number>, statistical_significance: table<string, boolean>} Compare multiple benchmark results with statistical analysis
+---@field print_results fun(results: table, format?: string): nil Print formatted benchmark results in various formats (text, markdown, table)
+---@field save_results fun(results: table, file_path: string, format?: string): boolean|nil, string? Save benchmark results to a file in the specified format
+---@field load_results fun(file_path: string): table|nil, string? Load benchmark results from a file with format auto-detection
+---@field gc fun(): nil Force garbage collection before benchmarking to reduce interference
+---@field memory fun(): number Get current memory usage in kilobytes with high precision
+---@field configure fun(options: table): benchmark_module Configure benchmark options for customized measurement
+---@field reset fun(): benchmark_module Reset benchmark options to defaults for consistent behavior
+---@field stats fun(results: table): {mean: number, median: number, min: number, max: number, stddev: number, variance: number, samples: number, confidence_interval: table} Calculate comprehensive statistics for benchmark results
+---@field suite fun(suite_name: string, benchmarks: table<string, function>, options?: table): table Run a suite of benchmarks for convenient multiple function comparison
+---@field async_time fun(func: function, callback: function, ...): nil Measure execution time asynchronously for non-blocking operations
+---@field human_size fun(bytes: number, precision?: number): string Format a size in bytes to human-readable form with appropriate units
+---@field human_time fun(time: number, unit?: string, precision?: number): string Format a time value to human-readable form with appropriate time units
+---@field measure_call_overhead fun(): number Measure function call overhead for more accurate benchmarking
+---@field histogram fun(results: table, buckets?: number): table Generate a histogram of benchmark results for visualization
+---@field is_significant fun(benchmark1: table, benchmark2: table, confidence?: number): boolean Determine if performance difference is statistically significant
+---@field plot fun(results: table, options?: table): string Generate ASCII or markdown chart of benchmark results
 
 local benchmark = {}
+---@type Logging
 local logging = require("lib.tools.logging")
+---@type ErrorHandler
 local error_handler = require("lib.tools.error_handler")
+---@type Filesystem
 local fs = require("lib.tools.filesystem")
 
 -- Compatibility function for table unpacking (works with both Lua 5.1 and 5.2+)
 local unpack_table = table.unpack or unpack
 
 -- Initialize module logger
+---@type Logger
 local logger = logging.get_logger("benchmark")
 logging.configure_from_config("benchmark")
 

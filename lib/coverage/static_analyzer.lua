@@ -38,7 +38,7 @@
 ---@field get_code_map fun(file_path: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table<string, {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}>, blocks: table<string, {id: string, type: string, start_line: number, end_line: number, parent?: string}>, conditions: table<string, {id: string, line: number, type: string, parent?: string}>}|nil, table? Get or create a code map for a file
 ---@field generate_code_map fun(file_path: string, ast?: table, source?: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table<string, table>, blocks: table<string, table>, conditions: table<string, table>, source_lines: table<number, string>, ast: table}|nil, table? Generate a detailed code map for a file
 ---@field process_file fun(file_path: string): boolean, table? Process a file for analysis
----@field parse_content fun(content: string, source_name?: string): table|nil, table|nil, table|nil Parse Lua code content directly without requiring a file
+---@field parse_content fun(content: string, source_name?: string, options?: {track_multiline_constructs?: boolean, enhanced_comment_detection?: boolean}): table|nil, table|nil, table|nil, table? Parse Lua code content directly without requiring a file
 ---@field is_line_executable fun(file_path_or_code_map: string|table, line_num: number): boolean Check if a line is executable
 ---@field get_blocks_for_line fun(code_map: table, line_num: number): table<number, {id: string, type: string, start_line: number, end_line: number, parent?: string}>|nil Get blocks that include a specific line
 ---@field get_conditions_for_line fun(code_map: table, line_num: number): table<number, {id: string, line: number, type: string, parent?: string}>|nil Get conditions on a specific line
@@ -706,6 +706,191 @@ function M.classify_line_simple_content(line_text, options)
 end
 
 -- Simpler line classification that doesn't require AST
+--- Enhanced line classification with context tracking
+--- This function extends classify_line_simple to provide additional context
+--- information about the classification, including tracking multiline constructs.
+---
+--- @param file_path string Path to the file to analyze
+--- @param line_num number Line number to check
+--- @param source_line? string Optional source line text (to avoid file reading)
+--- @param options? table Optional settings {control_flow_keywords_executable?: boolean}
+--- @return string line_type The type of line according to M.LINE_TYPES
+--- @return table context Context information about the classification
+function M.classify_line_simple_with_context(file_path, line_num, source_line, options)
+  options = options or {}
+  
+  -- Initialize context tracking
+  local context = {
+    multiline_state = nil,    -- Current multiline tracking state
+    in_comment = false,       -- Whether line is in a multiline comment
+    in_string = false,        -- Whether line is in a multiline string
+    source_avail = false,     -- Whether source text was available
+    content_type = "unknown", -- Type of content (code, comment, string)
+    reasons = {}              -- Reasons for classification
+  }
+  
+  -- Use provided source line or read from file
+  local line_text = source_line
+  local lines = {}
+  
+  if not line_text then
+    -- Read file if needed
+    local content, err = error_handler.safe_io_operation(
+      function() return filesystem.read_file(file_path) end,
+      file_path,
+      {operation = "classify_line_simple_with_context"}
+    )
+    
+    if not content then
+      context.reasons[#context.reasons + 1] = "file_not_readable"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+    
+    -- Split into lines
+    for line in content:gmatch("[^\r\n]+") do
+      table.insert(lines, line)
+    end
+    
+    -- Line might be out of range
+    if line_num > #lines then
+      context.reasons[#context.reasons + 1] = "line_out_of_range"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+    
+    line_text = lines[line_num]
+    context.source_avail = true
+  end
+  
+  -- Create a multiline comment context and process all lines up to the target line
+  local comment_context = M.create_multiline_comment_context()
+  
+  -- Process previous lines to establish multiline state if we have them
+  if #lines > 0 then
+    for i = 1, math.min(line_num, #lines) do
+      M.process_line_for_comments(lines[i], i, comment_context)
+    end
+    
+    -- Store multiline state in context
+    context.multiline_state = comment_context
+    
+    -- Check if target line is in a comment
+    if comment_context.line_status[line_num] then
+      context.in_comment = true
+      context.content_type = "comment"
+      context.reasons[#context.reasons + 1] = "in_multiline_comment"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+  elseif line_text then
+    -- If we only have the target line, check for line-level comments
+    -- Basic check for single-line comment
+    if line_text:match("^%s*%-%-") then
+      context.content_type = "comment"
+      context.reasons[#context.reasons + 1] = "single_line_comment"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+  end
+  
+  -- The rest of the classification is based on the line_text
+  return M.classify_line_content_with_context(line_text, options, context)
+end
+
+--- Classify line content with detailed context
+--- @private
+--- @param line_text string The text of the line to classify
+--- @param options? table Optional settings
+--- @param context? table Existing context information
+--- @return string line_type The type of line according to M.LINE_TYPES
+--- @return table context Context information about the classification
+function M.classify_line_content_with_context(line_text, options, context)
+  options = options or {}
+  context = context or {
+    multiline_state = nil,
+    in_comment = false,
+    in_string = false,
+    source_avail = true,
+    content_type = "unknown",
+    reasons = {}
+  }
+  
+  -- Check for empty lines
+  if not line_text or line_text:match("^%s*$") then
+    context.content_type = "whitespace"
+    context.reasons[#context.reasons + 1] = "empty_or_whitespace"
+    return M.LINE_TYPES.NON_EXECUTABLE, context
+  end
+  
+  -- Apply options for control flow keywords
+  local count_control_flow = true
+  if options.control_flow_keywords_executable ~= nil then
+    count_control_flow = options.control_flow_keywords_executable
+  elseif config.control_flow_keywords_executable ~= nil then
+    count_control_flow = config.control_flow_keywords_executable
+  end
+  
+  -- Check for specific line patterns for more precise classification
+  -- Function definitions
+  if line_text:match("^%s*function%s+") or line_text:match("^%s*local%s+function%s+") then
+    context.content_type = "function_definition"
+    context.reasons[#context.reasons + 1] = "function_definition"
+    return M.LINE_TYPES.FUNCTION, context
+  end
+  
+  -- Control flow statements
+  if line_text:match("^%s*if%s+") or
+     line_text:match("^%s*elseif%s+") or
+     line_text:match("^%s*for%s+") or
+     line_text:match("^%s*while%s+") or
+     line_text:match("^%s*until%s+") then
+    context.content_type = "control_flow"
+    context.reasons[#context.reasons + 1] = "control_flow_statement"
+    return M.LINE_TYPES.BRANCH, context
+  end
+  
+  -- End keywords and else statements
+  if line_text:match("^%s*end%s*$") or
+     line_text:match("^%s*else%s*$") or
+     line_text:match("^%s*elseif%s+") then
+    context.content_type = "control_flow_end"
+    if count_control_flow then
+      context.reasons[#context.reasons + 1] = "control_flow_end_executable"
+      return M.LINE_TYPES.EXECUTABLE, context
+    else
+      context.reasons[#context.reasons + 1] = "control_flow_end_non_executable"
+      return M.LINE_TYPES.END_BLOCK, context
+    end
+  end
+  
+  -- Multi-line string check
+  if line_text:match("%[%[") or line_text:match("%]%]") then
+    -- Check for string assignment (first line is executable)
+    if line_text:match("=%s*%[%[") then
+      context.content_type = "multiline_string_start"
+      context.reasons[#context.reasons + 1] = "multiline_string_assignment"
+      return M.LINE_TYPES.EXECUTABLE, context
+    end
+    
+    -- Check for string content or end (non-executable)
+    if line_text:match("%]%]") and not line_text:match("=%s*[^%[]*%[%[.*%]%]") then
+      context.content_type = "multiline_string_end"
+      context.reasons[#context.reasons + 1] = "multiline_string_end"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+    
+    -- Check if this might be a multiline string content
+    if options.in_multiline_string then
+      context.in_string = true
+      context.content_type = "multiline_string_content"
+      context.reasons[#context.reasons + 1] = "multiline_string_content"
+      return M.LINE_TYPES.NON_EXECUTABLE, context
+    end
+  end
+  
+  -- Default to executable for any other code line
+  context.content_type = "code"
+  context.reasons[#context.reasons + 1] = "executable_code"
+  return M.LINE_TYPES.EXECUTABLE, context
+end
+
 function M.classify_line_simple(file_path, line_num)
   -- Read file if needed
   local content, err = error_handler.safe_io_operation(
@@ -801,8 +986,10 @@ end
 ---
 --- @param file_path_or_code_map string|table File path or code map object
 --- @param line_num number The line number to check
+--- @param options? table Optional configuration {use_enhanced_classification?: boolean, track_multiline_context?: boolean}
 --- @return boolean is_executable Whether the line is considered executable
-function M.is_line_executable(file_path_or_code_map, line_num)
+--- @return table? context Optional context information about the classification
+function M.is_line_executable(file_path_or_code_map, line_num, options)
   -- Validate input
   if not file_path_or_code_map then
     local err = error_handler.validation_error(
@@ -828,6 +1015,11 @@ function M.is_line_executable(file_path_or_code_map, line_num)
     logger.error(err.message, err.context)
     return false
   end
+  
+  -- Handle options
+  options = options or {}
+  local use_enhanced_classification = options.use_enhanced_classification
+  local track_multiline_context = options.track_multiline_context
 
   -- Handle code map or file path
   if type(file_path_or_code_map) == "table" then
@@ -987,8 +1179,49 @@ function M.is_line_executable(file_path_or_code_map, line_num)
 end
 
 -- Get all executable lines in a file
-function M.get_executable_lines(file_path)
+--- Get a map of executable lines in a file or code map
+--- @param file_path_or_code_map string|table File path or code map
+--- @param options? table Optional settings {use_enhanced_detection?: boolean}
+--- @return table<number, boolean> executable_lines Map of executable lines
+function M.get_executable_lines(file_path_or_code_map, options)
   local executable_lines = {}
+  options = options or {}
+  
+  -- If we received a code map instead of a file path, use the enhanced approach
+  if type(file_path_or_code_map) == "table" then
+    local code_map = file_path_or_code_map
+    
+    -- Use multiline tracking data if available and enhanced detection is requested
+    if options.use_enhanced_detection and code_map.multiline_comments then
+      -- Initialize executable lines using multiline context information
+      for line_num, line_data in pairs(code_map.lines or {}) do
+        -- Skip lines in multiline comments
+        if not code_map.multiline_comments[line_num] then
+          -- Skip lines in multiline strings unless they are the first line
+          local is_multiline_string = code_map.multiline_strings and code_map.multiline_strings[line_num]
+          local is_first_string_line = is_multiline_string and is_multiline_string.start_line == line_num
+          
+          if not is_multiline_string or is_first_string_line then
+            local is_exec, _ = M.is_line_executable(code_map, line_num, {use_enhanced_classification = true})
+            executable_lines[line_num] = is_exec
+          end
+        end
+      end
+      
+      return executable_lines
+    end
+    
+    -- Use basic approach if enhanced detection isn't available
+    for line_num, _ in pairs(code_map.lines or {}) do
+      local is_exec = M.is_line_executable(code_map, line_num)
+      executable_lines[line_num] = is_exec
+    end
+    
+    return executable_lines
+  end
+  
+  -- Handle file path
+  local file_path = file_path_or_code_map
   
   -- Try to get content from cache
   local content
@@ -1013,10 +1246,17 @@ function M.get_executable_lines(file_path)
     line_count = line_count + 1
   end
   
-  -- Check each line
+  -- Check each line with enhanced detection if requested
   for i = 1, line_count do
-    if M.is_line_executable(file_path, i) then
-      table.insert(executable_lines, i)
+    if options.use_enhanced_detection then
+      local line_type, context = M.classify_line_simple_with_context(file_path, i, nil, options)
+      executable_lines[i] = (
+        line_type == M.LINE_TYPES.EXECUTABLE or
+        line_type == M.LINE_TYPES.FUNCTION or
+        line_type == M.LINE_TYPES.BRANCH
+      )
+    else
+      executable_lines[i] = M.is_line_executable(file_path, i)
     end
   end
   
@@ -1822,7 +2062,7 @@ end
 --- @return table|nil ast The abstract syntax tree or nil on error
 --- @return table|nil code_map The generated code map with detailed line classification information
 --- @return table|nil error Error information if parsing failed
-function M.parse_content(content, source_name)
+function M.parse_content(content, source_name, options)
   if not content or type(content) ~= "string" then
     return nil, nil, error_handler.validation_error(
       "content must be a non-empty string",
@@ -1834,6 +2074,18 @@ function M.parse_content(content, source_name)
   end
 
   source_name = source_name or "inline"
+  options = options or {}
+  
+  -- Create a parsing context to track additional information
+  local parsing_context = {
+    multiline_tracking = {},       -- Track multiline constructs
+    multiline_comments = {},       -- Specifically track multiline comments
+    multiline_strings = {},        -- Track multiline strings
+    parse_error = nil,             -- Store any parse errors
+    options = options,             -- Store options for reference
+    source_name = source_name,     -- Source name for reference
+    using_fallback_ast = false     -- Whether we're using a fallback AST
+  }
 
   -- Parse the content to get AST - wrapped in pcall for safety
   local success, result
@@ -1853,6 +2105,10 @@ function M.parse_content(content, source_name)
     )
     logger.error(err.message, err.context)
     
+    -- Store the error in the parsing context
+    parsing_context.parse_error = err
+    parsing_context.using_fallback_ast = true
+    
     -- For test compatibility, create an empty AST object
     result = {
       tag = "Block",
@@ -1867,11 +2123,70 @@ function M.parse_content(content, source_name)
   -- Create a temporary file path for the code map
   local temp_file_path = "__temp_" .. os.time() .. "_" .. source_name
 
+  -- Enhanced multiline comment detection if requested
+  if options.enhanced_comment_detection then
+    -- Find all multiline comments in the content
+    local comment_context = M.create_multiline_comment_context()
+    
+    -- Split content into lines
+    local lines = {}
+    for line in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+      table.insert(lines, line)
+    end
+    
+    -- Process all lines to find multiline comments
+    for i, line_text in ipairs(lines) do
+      local is_comment = M.process_line_for_comments(line_text, i, comment_context)
+      parsing_context.multiline_comments[i] = is_comment
+    end
+    
+    -- Store the multiline comment context
+    parsing_context.multiline_tracking.comment_context = comment_context
+  end
+  
+  -- Track multiline string constructs if requested
+  if options.track_multiline_constructs then
+    -- Simple heuristic to detect multiline strings
+    local in_multiline_string = false
+    local multiline_string_start = nil
+    
+    -- Split content into lines
+    local lines = {}
+    for line in (content .. "\n"):gmatch("([^\r\n]*)[\r\n]") do
+      table.insert(lines, line)
+    end
+    
+    -- Process lines to find multiline strings
+    for i, line_text in ipairs(lines) do
+      -- Check for string start markers not in comments
+      if line_text:match("=%s*%[%[") and not parsing_context.multiline_comments[i] then
+        in_multiline_string = true
+        multiline_string_start = i
+      end
+      
+      -- Mark lines within multiline strings
+      if in_multiline_string then
+        parsing_context.multiline_strings[i] = {
+          in_string = true,
+          start_line = multiline_string_start
+        }
+      end
+      
+      -- Check for string end markers
+      if in_multiline_string and line_text:match("%]%]") then
+        in_multiline_string = false
+        multiline_string_start = nil
+      end
+    end
+  end
+
   -- Debug log the parsing result
   logger.debug("Successfully parsed Lua content", {
     source_name = source_name,
     ast_type = type(ast),
-    ast_tag = ast and ast.tag or "nil_ast"
+    ast_tag = ast and ast.tag or "nil_ast",
+    enhanced_detection = options.enhanced_comment_detection or false,
+    multiline_tracking = options.track_multiline_constructs or false
   })
 
   -- Create a code map from the AST
@@ -1880,6 +2195,8 @@ function M.parse_content(content, source_name)
     ast = ast,
     content = content,
     functions = {},
+    multiline_tracking = options.track_multiline_constructs or false,
+    enhanced_comment_detection = options.enhanced_comment_detection or false,
     blocks = {},
     conditions = {},
     lines = {},
@@ -1997,7 +2314,13 @@ function M.parse_content(content, source_name)
   code_map.multiline_comments = multiline_comments
   code_map.multiline_string_lines = multiline_string_lines
 
-  return ast, code_map
+  -- Store multiline tracking information in code map if available
+  if options.track_multiline_constructs or options.enhanced_comment_detection then
+    code_map.multiline_comments = parsing_context.multiline_comments
+    code_map.multiline_strings = parsing_context.multiline_strings
+  end
+
+  return ast, code_map, nil, parsing_context
 end
 
 -- Analyze a file, generating a code map

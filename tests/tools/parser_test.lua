@@ -1,4 +1,20 @@
--- Parser module tests
+--[[
+Parser Module Tests
+
+This test suite verifies the functionality of the Lua parser module which provides:
+- AST (Abstract Syntax Tree) generation from Lua source code
+- Code structure analysis for coverage and static analysis
+- Syntax validation and error detection
+- Support for function and block boundary detection
+- Integration with the coverage instrumentation system
+
+The tests cover different Lua syntax constructs including:
+- Function declarations and definitions
+- Control structures (if/else, loops, etc.)
+- Table constructors and indexing
+- Comments (single and multi-line)
+- Various expression types
+]]
 
 local firmo = require("firmo")
 local parser = require("lib.tools.parser")

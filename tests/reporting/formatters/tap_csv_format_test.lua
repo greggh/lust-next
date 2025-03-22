@@ -1,4 +1,23 @@
--- Tests for TAP and CSV report formats
+--[[
+Tests for TAP and CSV Report Formats
+
+This test suite verifies the TAP (Test Anything Protocol) and CSV formatters:
+
+TAP Format Testing:
+- Generation of standard TAP output with test counts and status
+- Proper handling of passing, failing and skipped tests
+- Correct formatting of test descriptions and diagnostics
+- Compliance with TAP specification
+
+CSV Format Testing:
+- Proper CSV generation with headers and test details
+- Correct escape handling for special characters
+- Structured output with consistent columns
+- Support for various test result types
+
+Both formatters are tested for proper error handling, file output capabilities,
+and compatibility with the reporting system.
+]]
 local firmo = require("firmo")
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 

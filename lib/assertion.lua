@@ -1,6 +1,53 @@
---- Assertion module for firmo
---- This is a standalone module for assertions that resolves circular dependencies
---- and provides consistent error handling patterns.
+---@class AssertionModule
+---@field create_expectation fun(value: any): ExpectChain Create an expectation chain for value assertions
+---@field eq fun(v1: any, v2: any, depth?: number): boolean Deep equality comparison between two values
+---@field type_of fun(value: any, expected_type: string): boolean Type checking with enhanced type detection
+---@field same fun(v1: any, v2: any): boolean Shallow equality comparison (alias for ==)
+---@field isa fun(value: any, expected_class: string|table): boolean Check if value is instance of class
+---@field near fun(v1: number, v2: number, tolerance?: number): boolean Check if numbers are close within tolerance
+---@field has_error fun(fn: function, expected_error?: string): boolean Check if function raises expected error
+---@field has_key fun(tbl: table, key: any): boolean Check if table has specific key
+---@field has_keys fun(tbl: table, keys: table): boolean Check if table has all specified keys
+---@field contains fun(tbl: table, value: any): boolean Check if table contains value
+---@field contains_all fun(tbl: table, values: table): boolean Check if table contains all specified values
+---@field matches fun(str: string, pattern: string): boolean Check if string matches Lua pattern
+---@field is_callable fun(value: any): boolean Check if value is callable (function or has __call metatable)
+---@field normalize_type fun(value: any): string Get normalized type including metatable-based types
+---@field array_contains fun(array: table, value: any): boolean Check if array contains specific value
+---@field is_array fun(value: any): boolean Check if value is an array-like table
+---@field is_empty fun(value: table|string): boolean Check if collection is empty
+---@field has_metatable fun(value: any, mt: table): boolean Check if value has specific metatable
+---@field register_assertion fun(name: string, fn: function): boolean Register a custom assertion function
+---@field stringify fun(value: any, depth?: number, visited?: table): string Convert any value to a readable string
+---@field check_and_throw fun(condition: boolean, message: string, category?: string): boolean Check condition and throw error if false
+---@field diff_values fun(v1: any, v2: any): string Generate a human-readable diff between values
+
+--[[
+    Assertion Module for the Firmo testing framework
+    
+    This is a standalone module for assertions that resolves circular dependencies
+    and provides consistent error handling patterns. It implements the expect-style
+    assertion chain API and includes comprehensive equality testing, type checking,
+    and formatted error messages for test failures.
+    
+    Features:
+    - Fluent, chainable assertion API with expect() function
+    - Deep equality comparison with cycle detection and diff generation
+    - Enhanced type checking beyond Lua's basic types (detects class instances)
+    - Rich error messages with detailed value formatting
+    - Support for custom assertions through registration
+    - Collection and string validation utilities
+    - Metatable-aware comparison operations
+    - Expectation negation through to_not chain
+    - Structured error reporting with categories and context
+    - Enhanced diff algorithm for readable failure messages
+    
+    @module assertion
+    @author Firmo Team
+    @license MIT
+    @copyright 2023-2025
+    @version 1.0.0
+]]
 
 local M = {}
 
@@ -1888,9 +1935,49 @@ paths.error_type = {
   end
 }
 
+---@class ExpectChain
+---@field val any The value being tested
+---@field action string The current assertion action
+---@field negate boolean Whether the assertion is negated
+---@field to ExpectChain Reference to self for chaining positive assertions
+---@field to_not ExpectChain Reference to self for chaining negated assertions
+---@field a fun(type: string): ExpectChain Assert value is of specified type (shorthand for be.a)
+---@field an fun(type: string): ExpectChain Assert value is of specified type (alias for a)
+---@field be table<string, function> Group of assertions for value state/type
+---@field be.a fun(type: string): ExpectChain Assert value is of specified type
+---@field be.truthy fun(): ExpectChain Assert value is truthy (evaluates to true in a conditional)
+---@field be.falsy fun(): ExpectChain Assert value is falsy (evaluates to false in a conditional)
+---@field be.empty fun(): ExpectChain Assert value is an empty collection
+---@field be.positive fun(): ExpectChain Assert value is a positive number
+---@field be.negative fun(): ExpectChain Assert value is a negative number
+---@field be.integer fun(): ExpectChain Assert value is an integer (no decimal component)
+---@field be.uppercase fun(): ExpectChain Assert string is all uppercase
+---@field be.lowercase fun(): ExpectChain Assert string is all lowercase
+---@field equal fun(expected: any): ExpectChain Assert deep equality with expected value
+---@field exist fun(): ExpectChain Assert value is not nil
+---@field match fun(pattern: string): ExpectChain Assert string matches Lua pattern
+---@field contain fun(value: any): ExpectChain Assert collection contains value
+---@field have fun(key: any): ExpectChain Assert table has specific key
+---@field have_length fun(length: number): ExpectChain Assert collection has specific length
+---@field have_property fun(property: string, value?: any): ExpectChain Assert object has property with optional value
+---@field be_type fun(type: string): ExpectChain Assert value is of specified type
+---@field be_greater_than fun(value: number): ExpectChain Assert number is greater than value
+---@field be_less_than fun(value: number): ExpectChain Assert number is less than value
+---@field be_between fun(min: number, max: number): ExpectChain Assert number is between min and max
+---@field start_with fun(prefix: string): ExpectChain Assert string starts with prefix
+---@field end_with fun(suffix: string): ExpectChain Assert string ends with suffix
+---@field throw fun(): ExpectChain Assert function throws an error
+---@field throw.error fun(): ExpectChain Assert function throws an error (alias)
+---@field throw.error_matching fun(pattern: string): ExpectChain Assert function throws error matching pattern
+---@field throw.error_type fun(type: string): ExpectChain Assert function throws error of specific type
+---@field match_schema fun(schema: table): ExpectChain Assert object matches specified schema
+---@field change fun(getter: function): ExpectChain Assert function changes value returned by getter
+---@field increase fun(getter: function): ExpectChain Assert function increases value returned by getter
+---@field decrease fun(getter: function): ExpectChain Assert function decreases value returned by getter
+
 --- Main expect function for creating assertions
 ---@param v any The value to create assertions for
----@return table An assertion object with chainable methods
+---@return ExpectChain An assertion object with chainable assertion methods
 function M.expect(v)
   ---@diagnostic disable-next-line: unused-local
   local error_handler = get_error_handler()

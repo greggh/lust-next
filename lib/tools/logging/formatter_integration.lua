@@ -26,8 +26,11 @@ local function try_require(module_name)
 end
 
 -- Load required modules
+---@type Logging|nil
 local logging = try_require("lib.tools.logging")
+---@type Formatters|nil
 local formatters = try_require("lib.reporting.formatters")
+---@type Filesystem
 local fs = require("lib.tools.filesystem")
 
 -- Get a formatter-specific logger

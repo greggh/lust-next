@@ -1,31 +1,63 @@
--- Asynchronous testing support for firmo
--- Provides async(), await(), wait_until(), parallel_async(), and it_async() functions
--- for creating and testing asynchronous code
+--[[
+    Asynchronous Testing Support for the Firmo framework
+    
+    This module provides comprehensive asynchronous testing capabilities, enabling
+    tests to work with asynchronous code, timers, and parallel operations. It
+    implements a simplified promises system and task scheduler to make testing
+    of async operations straightforward and reliable.
+    
+    Features:
+    - Async function transformation and execution control
+    - Precise timeout and delay management with configurable thresholds
+    - Parallel operation execution with proper error propagation
+    - Promise-like deferred objects for async control flow
+    - Condition waiting with polling and timeouts
+    - Comprehensive task scheduling and management
+    - Integration with central configuration system
+    - Structured error handling with detailed messages
+    - Fluent API with method chaining for easy configuration
+    - Runtime context tracking and validation
+    - Support for testing timeout behavior
+    
+    The module provides both low-level utilities for managing asynchronous
+    operations and high-level abstractions for creating async-aware tests
+    that maintain proper execution flow and error reporting.
+    
+    @module async
+    @author Firmo Team
+    @license MIT
+    @copyright 2023-2025
+    @version 1.0.0
+]]
 
 ---@class async_module
----@field _VERSION string Module version
----@field async fun(fn: function): function Converts a function to an async function
----@field parallel_async fun(operations: function[], timeout?: number): any[] Run multiple async operations concurrently
----@field await fun(ms: number): nil Wait for a specified time in milliseconds
----@field wait_until fun(condition: function, timeout?: number, check_interval?: number): boolean, string? Wait until a condition is true
----@field set_timeout fun(ms: number): async_module Set the default timeout for async operations
----@field get_timeout fun(): number Get the current default timeout for async operations
----@field is_in_async_context fun(): boolean Get the current async context state
----@field reset fun(): async_module Reset the async state (used between test runs)
----@field full_reset fun(): async_module Fully reset both local and central configuration
----@field debug_config fun(): {local_config: {default_timeout: number, check_interval: number, debug: boolean, verbose: boolean}, default_timeout_var: number, in_async_context: boolean, testing_timeout: boolean, using_central_config: boolean, central_config: table|nil} Debug helper to show current configuration
----@field configure fun(options: {default_timeout?: number, check_interval?: number, debug?: boolean, verbose?: boolean}): async_module Configure the async module
----@field enable_timeout_testing fun(): function Enable timeout testing mode - for tests only
----@field is_timeout_testing fun(): boolean Check if in timeout testing mode
----@field it_async fun(description: string, async_fn: function, timeout?: number): function Create an async test case
----@field create_deferred fun(): {resolve: fun(value?: any): nil, reject: fun(reason?: any): nil, promise: table} Create a deferred object with promise, resolve and reject functions
----@field all fun(promises: table): table Wait for all promises to resolve
----@field race fun(promises: table): any Wait for the first promise to resolve
----@field any fun(promises: table): any, table[] Wait for any promise to resolve
----@field catch fun(promise: table, handler: function): table Add error handling to a promise
----@field finally fun(promise: table, handler: function): table Add a finally handler to a promise
----@field scheduler fun(): {add: fun(fn: function, delay: number): number, remove: fun(id: number): boolean, tick: fun(): nil} Get the async task scheduler
----@field set_check_interval fun(ms: number): async_module Set the check interval for wait_until
+---@field _VERSION string Module version (following semantic versioning)
+---@field async fun(fn: function): function Converts a synchronous function to return an async-compatible function
+---@field parallel_async fun(operations: function[], timeout?: number): any[] Run multiple async operations concurrently and collect results
+---@field await fun(ms: number): nil Pause execution for a specified time in milliseconds
+---@field wait_until fun(condition: function, timeout?: number, check_interval?: number): boolean, string? Wait until a condition function returns true or timeout expires
+---@field set_timeout fun(ms: number): async_module Set the default timeout for all async operations
+---@field get_timeout fun(): number Get the current default timeout for async operations in milliseconds
+---@field is_in_async_context fun(): boolean Check if code is currently executing in an async context
+---@field reset fun(): async_module Reset the async state between test runs (preserves configuration)
+---@field full_reset fun(): async_module Completely reset module state including configuration
+---@field debug_config fun(): {local_config: {default_timeout: number, check_interval: number, debug: boolean, verbose: boolean}, default_timeout_var: number, in_async_context: boolean, testing_timeout: boolean, using_central_config: boolean, central_config: table|nil} Display current configuration for debugging
+---@field configure fun(options: {default_timeout?: number, check_interval?: number, debug?: boolean, verbose?: boolean, preserve_context?: boolean, throw_on_timeout?: boolean}): async_module Configure the async module behavior
+---@field enable_timeout_testing fun(): function Enable special timeout testing mode for unit tests
+---@field is_timeout_testing fun(): boolean Check if module is in timeout testing mode
+---@field it_async fun(description: string, async_fn: function, timeout?: number): function Create an async-aware test case with proper timeout handling
+---@field create_deferred fun(): {resolve: fun(value?: any): nil, reject: fun(reason?: any): nil, promise: {then: function, catch: function, finally: function}} Create a deferred object for promise-like async operations
+---@field all fun(promises: table): table Wait for all promises to resolve and return results array
+---@field race fun(promises: table): any Wait for the first promise to resolve and return its result
+---@field any fun(promises: table): any, table[] Wait for any promise to resolve, returning first success and errors
+---@field catch fun(promise: table, handler: function): table Add error handling to a promise chain
+---@field finally fun(promise: table, handler: function): table Add a handler that executes regardless of success/failure
+---@field scheduler fun(): {add: fun(fn: function, delay: number): number, remove: fun(id: number): boolean, tick: fun(): nil, clear: fun(): nil, pending_count: fun(): number} Access the async task scheduler for advanced control
+---@field set_check_interval fun(ms: number): async_module Set the polling interval for wait_until conditions
+---@field cancel fun(operation: table): boolean Cancel a running async operation if possible
+---@field poll fun(fn: function, interval: number, timeout?: number): table Set up a polling function that executes repeatedly
+---@field timeout fun(promise: table, ms: number): table Add a timeout to a promise
+---@field defer fun(fn: function, delay?: number): table Schedule a function to run after the current execution completes
 
 local async_module = {}
 
@@ -159,9 +191,25 @@ local function register_change_listener()
   return true
 end
 
----@param options? table Configuration options { default_timeout?: number, check_interval?: number, debug?: boolean, verbose?: boolean }
----@return async_module The module instance for method chaining
--- Configuration function
+--- Configure the async module behavior and settings
+--- Sets up configuration options for the async module, including timeouts, check intervals,
+--- and debugging settings. Changes are persisted in the central configuration system
+--- if available, allowing for consistent settings across the application.
+---
+--- @param options? {default_timeout?: number, check_interval?: number, debug?: boolean, verbose?: boolean} Configuration options
+--- @return async_module The module instance for method chaining
+---
+--- @usage
+--- -- Configure async settings
+--- async.configure({
+---   default_timeout = 2000,  -- 2 seconds default timeout
+---   check_interval = 20,     -- Check conditions every 20ms
+---   debug = true,           -- Enable debug logging
+---   verbose = false         -- Disable verbose logging
+--- })
+---
+--- -- Configure a single setting with method chaining
+--- async.configure({ default_timeout = 5000 }).set_check_interval(50)
 function async_module.configure(options)
   options = options or {}
   
@@ -306,8 +354,26 @@ local function sleep(ms)
 end
 
 --- Convert a function to one that can be executed asynchronously
----@param fn function The function to convert to an async function
----@return function The async wrapped function that accepts arguments and returns an executor
+--- Transforms a regular function into an async-compatible function that can be
+--- used with the async testing infrastructure. The returned function captures
+--- arguments and returns an executor that runs in the async context.
+---
+--- @param fn function The function to convert to an async function
+--- @return function The async wrapped function that accepts arguments and returns an executor
+---
+--- @usage
+--- -- Create an async version of a function
+--- local async_fetch = async.async(function(url)
+---   -- Simulate network delay
+---   async.await(100)
+---   return "Content from " .. url
+--- end)
+---
+--- -- Use it in a test
+--- it("fetches data asynchronously", function()
+---   local result = async_fetch("https://example.com")() -- Note the double call
+---   expect(result).to.match("Content from")
+--- end)
 function async_module.async(fn)
   if type(fn) ~= "function" then
     error("async() requires a function argument", 2)
@@ -342,10 +408,25 @@ function async_module.async(fn)
 end
 
 --- Run multiple async operations concurrently and wait for all to complete
---- Returns a table of results in the same order as the input operations
----@param operations table An array of functions to execute in parallel
----@param timeout? number Optional timeout in milliseconds (defaults to the module's default_timeout)
----@return table Array of results from each operation in the same order
+--- Executes multiple async operations in parallel and collects their results.
+--- This provides simulated concurrency in Lua's single-threaded environment
+--- by executing operations in small chunks using a round-robin approach.
+---
+--- @param operations function[] An array of functions to execute in parallel
+--- @param timeout? number Optional timeout in milliseconds (defaults to the module's default_timeout)
+--- @return any[] Array of results from each operation in the same order as the input operations
+--- @error Throws an error if any operation fails or if the timeout is exceeded
+---
+--- @usage
+--- -- Run multiple async operations concurrently
+--- local results = async.parallel_async({
+---   async.async(function() async.await(50); return "first" end)(),
+---   async.async(function() async.await(30); return "second" end)(),
+---   async.async(function() async.await(10); return "third" end)()
+--- }, 200) -- 200ms timeout
+---
+--- -- Check results (will be ["first", "second", "third"])
+--- expect(#results).to.equal(3)
 function async_module.parallel_async(operations, timeout)
   if not in_async_context then
     error("parallel_async() can only be called within an async test", 2)
@@ -494,8 +575,20 @@ function async_module.parallel_async(operations, timeout)
 end
 
 --- Wait for a specified time in milliseconds
----@param ms number The number of milliseconds to wait. Must be non-negative.
----@return nil
+--- Pauses the execution of the current async function for the specified duration.
+--- This must be called within an async context (created by async.async).
+---
+--- @param ms number The number of milliseconds to wait (must be non-negative)
+--- @return nil
+--- @error Throws an error if called outside an async context or with invalid parameters
+---
+--- @usage
+--- -- Use in an async function
+--- local async_fn = async.async(function()
+---   -- Do something
+---   async.await(100) -- Wait for 100ms
+---   -- Continue execution after the delay
+--- end)
 function async_module.await(ms)
   if not in_async_context then
     error("await() can only be called within an async test", 2)
@@ -512,10 +605,29 @@ function async_module.await(ms)
 end
 
 --- Wait until a condition is true or timeout occurs
----@param condition function Function that returns true when the condition is met
----@param timeout? number Optional timeout in milliseconds (defaults to the module's default_timeout)
----@param check_interval? number Optional interval between condition checks in milliseconds
----@return boolean True if the condition was met before the timeout
+--- Repeatedly checks a condition function until it returns true or until the
+--- timeout is reached. This is useful for waiting for asynchronous operations
+--- to complete or for testing conditions that may become true over time.
+---
+--- @param condition function Function that returns true when the condition is met
+--- @param timeout? number Optional timeout in milliseconds (defaults to the module's default_timeout)
+--- @param check_interval? number Optional interval between condition checks in milliseconds
+--- @return boolean True if the condition was met before the timeout
+--- @error Throws an error if the timeout is exceeded before the condition is met
+---
+--- @usage
+--- -- Wait for an asynchronous condition
+--- local counter = 0
+--- local increment = async.async(function()
+---   async.await(10)
+---   counter = counter + 1
+--- end)
+---
+--- -- Start the async operation
+--- increment()()  
+---
+--- -- Wait until counter reaches the expected value
+--- async.wait_until(function() return counter >= 1 end, 100)
 function async_module.wait_until(condition, timeout, check_interval)
   if not in_async_context then
     error("wait_until() can only be called within an async test", 2)
@@ -566,8 +678,19 @@ function async_module.wait_until(condition, timeout, check_interval)
 end
 
 --- Set the default timeout for async operations
----@param ms number The timeout in milliseconds. Must be a positive number.
----@return table The async_module for method chaining
+--- Changes the global default timeout used for async operations like parallel_async
+--- and wait_until when no explicit timeout is provided. This setting affects all
+--- future async operations in the current test run.
+---
+--- @param ms number The timeout in milliseconds (must be a positive number)
+--- @return async_module The async_module for method chaining
+---
+--- @usage
+--- -- Set a longer default timeout for all async operations
+--- async.set_timeout(5000)  -- 5 seconds
+---
+--- -- Use with method chaining
+--- async.set_timeout(3000).set_check_interval(100)
 function async_module.set_timeout(ms)
   if type(ms) ~= "number" or ms <= 0 then
     error("timeout must be a positive number", 2)

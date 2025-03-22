@@ -1,14 +1,26 @@
 ---@class TestDiscovery
----@field discover fun(dir?: string, pattern?: string): {files: table, matched: number, total: number}|nil, table? Discover test files in a directory
----@field is_test_file fun(path: string): boolean Check if a file is a test file
----@field add_include_pattern fun(pattern: string): table Add a pattern to include
----@field add_exclude_pattern fun(pattern: string): table Add a pattern to exclude
----@field configure fun(options: {ignore?: string[], include?: string[], recursive?: boolean, extensions?: string[]}): table Configure discovery options
+---@field discover fun(dir?: string, pattern?: string): {files: string[], matched: number, total: number}|nil, table? Discover test files in a directory based on configured patterns. Returns a table with discovered files and counts, or nil and an error object if discovery failed.
+---@field is_test_file fun(path: string): boolean Check if a file is a test file based on configured name patterns and extensions.
+---@field add_include_pattern fun(pattern: string): TestDiscovery Add a pattern to include in test file discovery. Returns the module instance for method chaining.
+---@field add_exclude_pattern fun(pattern: string): TestDiscovery Add a pattern to exclude from test file discovery. Returns the module instance for method chaining.
+---@field configure fun(options: {ignore?: string[], include?: string[], exclude?: string[], recursive?: boolean, extensions?: string[]}): TestDiscovery Configure discovery options for customizing test file discovery. Returns the module instance for method chaining.
+---@field _VERSION string Module version identifier
 
--- Test discovery module for firmo
--- Finds test files in directories based on patterns and file extensions
+--- Test discovery module for firmo
+--- Finds test files in directories based on patterns and file extensions.
+--- 
+--- Features:
+--- - Configurable include/exclude patterns for test file identification
+--- - Directory recursion control for deep directory structures
+--- - Pattern-based filtering for targeted test discovery
+--- - Detailed logging of discovery process
+--- - Error handling with structured error objects
+--- - Method chaining for fluent configuration
 
 local M = {}
+
+-- Module version
+M._VERSION = "0.1.0"
 
 -- Load required modules
 local error_handler = require("lib.tools.error_handler")

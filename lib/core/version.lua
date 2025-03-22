@@ -1,11 +1,18 @@
--- Version module for firmo
--- Single source of truth for the project version
-
--- This file is used by other components like documentation generators,
--- package managers, and release scripts to determine the current version.
-
--- Should follow semantic versioning: MAJOR.MINOR.PATCH
--- See https://semver.org/ for more details
+--- Version module for Firmo
+--- This module serves as the single source of truth for the Firmo project version.
+--- It provides semantic versioning capabilities, version parsing, comparison, and
+--- compatibility checking functions. The module follows the semantic versioning 
+--- specification (https://semver.org/) and helps ensure version consistency across
+--- the project.
+---
+--- This module is used by:
+--- - Documentation generators to display current version information
+--- - Package managers to establish dependencies and compatibility
+--- - Release scripts to automate version updates and releases
+--- - Runtime code to validate version requirements and compatibility
+---
+--- @version 0.7.5
+--- @author Firmo Team
 
 ---@class version
 ---@field MAJOR number Major version component
@@ -37,15 +44,35 @@ local M = {}
 -- Individual version components
 M.major = 0
 M.minor = 7
-M.patch = 3
+M.patch = 5
 
 -- Combined semantic version
 M.string = string.format("%d.%d.%d", M.major, M.minor, M.patch)
 
+--- Parse a semantic version string into its components
+--- This function takes a version string in the format "MAJOR.MINOR.PATCH" and 
+--- parses it into a table with separate numeric components. It validates the 
+--- format and returns appropriate error objects if the parsing fails.
+---
 ---@param version_string string Version string to parse in format "MAJOR.MINOR.PATCH"
 ---@return table|nil parsed_version Table with major, minor, patch components or nil on error
 ---@return table|nil error Error object if operation failed
--- Version parsing function with error handling
+---
+---@usage
+--- -- Parse a version string
+--- local version, err = version.parse("1.2.3")
+--- if version then
+---   print(string.format("Major: %d, Minor: %d, Patch: %d",
+---     version.major, version.minor, version.patch))
+--- else
+---   print("Error parsing version: " .. err.message)
+--- end
+---
+--- -- Error handling for invalid format
+--- local invalid, err = version.parse("1.2")
+--- if not invalid then
+---   print("Invalid format: " .. err.message)
+--- end
 function M.parse(version_string)
   -- Parameter validation
   if version_string == nil then
@@ -110,11 +137,41 @@ function M.parse(version_string)
   return result
 end
 
+--- Compare two semantic versions
+--- This function compares two version numbers and determines their relative order
+--- according to semantic versioning rules. It can accept either version strings or
+--- version tables and returns a comparison result (-1, 0, or 1) indicating which
+--- version is newer. The function follows semantic versioning precedence rules where
+--- major versions are compared first, then minor versions, and finally patch versions.
+---
 ---@param version1 string|table First version to compare (string or version table)
 ---@param version2 string|table Second version to compare (string or version table)
 ---@return number|nil comparison -1 if v1 < v2, 0 if equal, 1 if v1 > v2, nil on error
 ---@return table|nil error Error object if operation failed
--- Version comparison function with error handling
+---
+---@usage
+--- -- Compare two version strings
+--- local result, err = version.compare("1.2.3", "1.3.0")
+--- if result then
+---   if result < 0 then
+---     print("1.2.3 is older than 1.3.0")
+---   elseif result > 0 then
+---     print("1.2.3 is newer than 1.3.0")
+---   else
+---     print("Versions are equal")
+---   end
+--- end
+---
+--- -- Compare with version tables
+--- local v1 = {major = 2, minor = 0, patch = 0}
+--- local result = version.compare(v1, "1.9.9")
+--- -- result will be 1 (v1 is newer)
+---
+--- -- Error handling
+--- local result, err = version.compare("invalid", "1.0.0")
+--- if not result then
+---   print("Comparison error: " .. err.message)
+--- end
 function M.compare(version1, version2)
   -- Parameter validation
   if version1 == nil then
@@ -212,10 +269,43 @@ function M.compare(version1, version2)
   return 0
 end
 
+--- Check if current version satisfies a minimum required version
+--- This function determines if the current Firmo version meets or exceeds
+--- a minimum version requirement. It's useful for feature detection and
+--- compatibility checks within code that depends on the Firmo framework.
+--- The function compares the current version against the provided requirement
+--- and returns a boolean result indicating if the requirement is satisfied.
+---
 ---@param required_version string|table Minimum required version (string or version table)
 ---@return boolean|nil satisfies True if current version satisfies requirement, nil on error
 ---@return table|nil error Error object if operation failed
--- Check if current version satisfies a minimum required version
+---
+---@usage
+--- -- Check if current version is compatible with a requirement
+--- local compatible, err = version.satisfies_requirement("0.5.0")
+--- if compatible then
+---   -- Use features introduced in 0.5.0
+---   use_new_feature()
+--- else
+---   -- Use fallback for older versions
+---   use_fallback()
+--- end
+---
+--- -- Handle errors in version requirement check
+--- local compatible, err = version.satisfies_requirement("invalid")
+--- if not compatible then
+---   if err then
+---     print("Requirement check error: " .. err.message)
+---   else
+---     print("Requirement not satisfied")
+---   end
+--- end
+---
+--- -- Check against a version table
+--- local req = {major = 0, minor = 6, patch = 0}
+--- if version.satisfies_requirement(req) then
+---   -- Code for version 0.6.0 and above
+--- end
 function M.satisfies_requirement(required_version)
   -- Parameter validation
   if required_version == nil then

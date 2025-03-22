@@ -1,31 +1,46 @@
 --[[
 Temporary File Integration for test runners
 
-This module integrates the temp_file module with test runners.
+This module integrates the temp_file module with test runners to provide automatic temporary file
+management for tests. It patches test runner functionality to track file creation and cleanup
+within test contexts, ensuring all temporary resources are properly cleaned up after tests complete.
+
+Features:
+- Automatic tracking of temporary files by test context
+- Customizable cleanup policies (immediate, end-of-test, end-of-suite)
+- Integration with firmo test framework
+- Multiple cleanup attempts for resilience against locked files
+- Comprehensive logging and statistics tracking
 ]]
 
 ---@class temp_file_integration
----@field _VERSION string Module version
+---@field _VERSION string Module version (following semantic versioning)
 ---@field patch_runner fun(runner: table): boolean, string? Patch a test runner to handle temp file cleanup automatically
 ---@field register_test_start fun(callback: fun(context: string)): boolean Register a callback to be called at the start of each test
 ---@field register_test_end fun(callback: fun(context: string, success: boolean, duration: number)): boolean Register a callback to be called at the end of each test
 ---@field register_suite_end fun(callback: fun(stats: {tests: number, passed: number, failed: number, skipped: number, duration: number})): boolean Register a callback to be called at the end of a test suite
----@field cleanup_all fun(): boolean, table? Clean up all managed temporary files
+---@field cleanup_all fun(max_attempts?: number): boolean, table?, table? Clean up all managed temporary files with multiple attempts if needed
 ---@field get_stats fun(): {registered_callbacks: number, test_starts: number, test_ends: number, suite_ends: number, cleanup_operations: number, cleanup_errors: number, files_cleaned: number, bytes_cleaned: number} Get statistics about temp file management
 ---@field integrate_with_firmo fun(firmo: table): boolean Integrate with the firmo test framework
 ---@field extract_context fun(test: table): string Extract context information from a test object
 ---@field register_for_cleanup fun(file_path: string, context: string): boolean Register a file for cleanup with a specific context
 ---@field set_cleanup_policy fun(policy: string): boolean Set the cleanup policy ("immediate", "end-of-test", "end-of-suite")
----@field cleanup_for_context fun(context: string): number, table? Clean up files for a specific test context
----@field get_test_contexts fun(): table<string, {files: number, directories: number, created: number, cleaned: boolean}> Get all registered test contexts
----@field configure fun(options: {auto_register?: boolean, cleanup_policy?: string, cleanup_on_suite_end?: boolean, cleanup_on_test_failure?: boolean}): temp_file_integration Configure the integration module
+---@field cleanup_for_context fun(context: string): number, table?, table? Clean up files for a specific test context
+---@field get_test_contexts fun(): table<string, {files: number, directories: number, created: number, cleaned: boolean, last_access: number}> Get all registered test contexts with detailed statistics
+---@field configure fun(options: {auto_register?: boolean, cleanup_policy?: string, cleanup_on_suite_end?: boolean, cleanup_on_test_failure?: boolean, max_cleanup_attempts?: number}): temp_file_integration Configure the integration module
+---@field add_final_cleanup fun(runner: table): boolean Add final cleanup hooks to a test runner
+---@field patch_firmo fun(firmo: table): boolean Patch the firmo framework instance to integrate temp file management
+---@field initialize fun(firmo_instance?: table): boolean Initialize the temp file integration module
 
 local M = {}
 local temp_file = require("lib.tools.temp_file")
 local logging = require("lib.tools.logging")
 local logger = logging.get_logger("temp_file_integration")
 
--- Extract context info from a test object
+---@private
+---@param test table|string The test object or string identifier
+---@return string context A string representation of the test context for tracking
+-- Extract context info from a test object or convert to string
 local function get_context_string(test)
   if type(test) == "table" then
     if test.name then
@@ -39,8 +54,12 @@ local function get_context_string(test)
 end
 
 --- Patch the runner.lua file's execute_test function to handle temp file tracking and cleanup
+--- Creates a wrapper around the original execute_test function that sets/clears the test context
+--- and ensures proper cleanup of temporary files after each test execution.
 ---@param runner table The test runner instance to patch
 ---@return boolean success Whether the patching was successful
+---@return string? error Error message if patching failed
+---@return string|nil error_message Error message if patching failed
 function M.patch_runner(runner)
   -- Save original execute_test function
   if runner.execute_test then
@@ -83,10 +102,13 @@ function M.patch_runner(runner)
   end
 end
 
--- Cleanup all temporary files (run after all tests)
---- Clean up all managed temporary files
+--- Clean up all managed temporary files with retries for resilience
+--- Performs multiple cleanup attempts to handle files that might be temporarily locked or in use.
+--- Logs detailed information about cleanup success/failure and resources cleaned.
 ---@param max_attempts? number Number of cleanup attempts to make (default: 2)
----@return boolean success Whether the cleanup was successful
+---@return boolean success Whether the cleanup was completely successful
+---@return table|nil errors List of resources that could not be cleaned up
+---@return table|nil stats Statistics about the cleanup operation
 function M.cleanup_all(max_attempts)
   logger.info("Performing final cleanup of all temporary files")
   
@@ -145,9 +167,11 @@ function M.cleanup_all(max_attempts)
   return success, errors, stats
 end
 
--- Add the final cleanup step to the runner
 --- Add final cleanup hooks to a test runner
----@param runner table The test runner instance
+--- Patches the run_all_tests function to perform comprehensive cleanup after all tests complete.
+--- This is a crucial integration point that ensures no temporary files are left behind after a test run.
+--- The final cleanup includes multiple attempts and detailed logging of any remaining resources.
+---@param runner table The test runner instance to patch
 ---@return boolean success Whether the hooks were added successfully
 function M.add_final_cleanup(runner)
   if runner.run_all_tests then
@@ -192,9 +216,12 @@ function M.add_final_cleanup(runner)
   end
 end
 
--- Patch the firmo module to store test context
 --- Patch the firmo framework instance to integrate temp file management
----@param firmo table The firmo framework instance
+--- Adds test context tracking to the firmo framework by wrapping the describe and it functions.
+--- This enables accurate tracking of which temporary files are created by which tests, ensuring
+--- proper cleanup and preventing resource leaks between tests. The patching preserves all
+--- original functionality while adding transparent temp file tracking.
+---@param firmo table The firmo framework instance to patch
 ---@return boolean success Whether the patching was successful
 function M.patch_firmo(firmo)
   if firmo then
@@ -342,9 +369,15 @@ function M.patch_firmo(firmo)
   end
 end
 
--- Initialize the integration
 --- Initialize the temp file integration module
---- This doesn't require a firmo instance - the actual patching happens in patch_firmo
+--- Sets up the integration between temporary file management and the test framework.
+--- This function can work with or without an explicit firmo instance:
+--- - If firmo_instance is provided, it will patch that instance directly
+--- - If no instance is provided, it will check for a global firmo instance (_G.firmo)
+--- - If a global instance exists but already has context tracking, it will not patch again
+---
+--- This flexibility allows the integration to work in various testing scenarios while
+--- preventing duplicate patches that could lead to unexpected behavior.
 ---@param firmo_instance? table Optional firmo instance to patch directly
 ---@return boolean success Whether the initialization was successful
 function M.initialize(firmo_instance)

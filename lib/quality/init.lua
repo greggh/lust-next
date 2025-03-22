@@ -1,42 +1,45 @@
 ---@class QualityModule
----@field _VERSION string Module version
----@field LEVEL_BASIC number Quality level 1 - basic
----@field LEVEL_STRUCTURED number Quality level 2 - structured
----@field LEVEL_COMPREHENSIVE number Quality level 3 - comprehensive
----@field LEVEL_ADVANCED number Quality level 4 - advanced
----@field LEVEL_COMPLETE number Quality level 5 - complete
----@field levels table<number, {name: string, description: string, requirements: table<string, number>}> Array of quality level definitions
----@field stats {tests: number, assertions: number, assertion_types: table<string, number>, missing_assertions: table<string, boolean>, files_analyzed: number, tests_analyzed: number, test_duration?: number, quality_score?: number} Statistics about quality validation
----@field config {current_level: number, required_assertion_types: table<string, boolean>, min_assertions_per_test: number, validate_missing_assertions: boolean, analyze_test_files: boolean, require_before_after: boolean, require_test_descriptions: boolean, required_assertion_count: number, allow_dynamic_calculation: boolean, skip_patterns: string[], extra_requirements: table} Configuration for quality validation
----@field init fun(options?: {level?: number, required_assertion_types?: string[], min_assertions_per_test?: number, validate_missing_assertions?: boolean, analyze_test_files?: boolean, require_before_after?: boolean, required_assertion_count?: number, extra_requirements?: table}): QualityModule Initialize quality module
----@field reset fun(): QualityModule Reset quality data
----@field full_reset fun(): QualityModule Full reset (clears all data and resets configuration)
----@field get_level_requirements fun(level?: number): table<string, number> Get requirements for a specific quality level
----@field track_assertion fun(type_name: string, test_name?: string): QualityModule Track assertion usage in a test
----@field start_test fun(test_name: string): QualityModule Start test analysis for a specific test
----@field end_test fun(): QualityModule End test analysis and record results
----@field analyze_file fun(file_path: string): {assertions: number, tests: number, assertion_types: table<string, number>, has_before_after: boolean, test_descriptions: boolean, assertion_per_test: number} Analyze test file statically
----@field get_report_data fun(): {level: number, level_name: string, tests: {count: number, analyzed: number, files: number, missing_assertions: table, below_threshold: table}, assertions: {count: number, types: table, per_test: number}, requirements: table, score: number} Get structured data for quality report
----@field report fun(format?: string): string|table Get quality report
----@field summary_report fun(): {level: number, score: number, tests: number, assertions: number, assertion_types: number, files: number} Generate a summary report
----@field level_name fun(level: number): string Get the name for a quality level
----@field set_level fun(level: number): QualityModule Set the current quality level
----@field get_level fun(): number Get the current quality level
----@field analyze_directory fun(dir_path: string, recursive?: boolean): table Analyze all test files in a directory
----@field register_assertion_type fun(type_name: string, description: string): QualityModule Register a custom assertion type
----@field is_quality_passing fun(): boolean Check if tests meet quality requirements
----@field get_score fun(): number Get the quality score (0-100)
----@field add_custom_requirement fun(name: string, check_fn: function, min_value?: number): QualityModule Add a custom quality requirement
----@field json_report fun(): string Generate a JSON report
----@field html_report fun(): string Generate a HTML report
----@field meets_level fun(level?: number): boolean Check if quality meets level requirement
----@field save_report fun(file_path: string, format?: string): boolean, string? Save a quality report to a file
----@field get_level_name fun(level: number): string Get level name from level number
----@field check_file fun(file_path: string, level?: number): boolean, table Check if a test file meets quality requirements
----@field validate_test_quality fun(test_name: string, options?: table): boolean, table[] Validate a test against quality standards
----@field debug_config fun(): QualityModule Debug information about the quality module configuration
+---@field _VERSION string Module version (following semantic versioning)
+---@field LEVEL_BASIC number Quality level 1 - basic validation with minimal assertions
+---@field LEVEL_STRUCTURED number Quality level 2 - structured tests with multiple assertion types
+---@field LEVEL_COMPREHENSIVE number Quality level 3 - comprehensive tests with error handling and setup/teardown
+---@field LEVEL_ADVANCED number Quality level 4 - advanced tests with specialized assertions and complete test coverage
+---@field LEVEL_COMPLETE number Quality level 5 - complete tests with all assertion types and thorough validation
+---@field levels table<number, {name: string, description: string, requirements: table<string, number>}> Array of quality level definitions with detailed requirements
+---@field stats {tests: number, assertions: number, assertion_types: table<string, number>, missing_assertions: table<string, boolean>, files_analyzed: number, tests_analyzed: number, test_duration?: number, quality_score?: number} Statistics about quality validation results
+---@field config {current_level: number, required_assertion_types: table<string, boolean>, min_assertions_per_test: number, validate_missing_assertions: boolean, analyze_test_files: boolean, require_before_after: boolean, require_test_descriptions: boolean, required_assertion_count: number, allow_dynamic_calculation: boolean, skip_patterns: string[], extra_requirements: table} Configuration for quality validation behavior
+---@field init fun(options?: {level?: number, required_assertion_types?: string[], min_assertions_per_test?: number, validate_missing_assertions?: boolean, analyze_test_files?: boolean, require_before_after?: boolean, required_assertion_count?: number, extra_requirements?: table}): QualityModule Initialize quality module with specified options
+---@field reset fun(): QualityModule Reset quality data while preserving configuration
+---@field full_reset fun(): QualityModule Full reset (clears all data and resets configuration to defaults)
+---@field get_level_requirements fun(level?: number): table<string, number>|nil, table? Get requirements for a specific quality level, returning nil and error if invalid level
+---@field track_assertion fun(type_name: string, test_name?: string): QualityModule Track assertion usage in a specific test
+---@field start_test fun(test_name: string): QualityModule Start test analysis for a specific test and register timing
+---@field end_test fun(): QualityModule End test analysis and record final results including duration
+---@field analyze_file fun(file_path: string): {assertions: number, tests: number, assertion_types: table<string, number>, has_before_after: boolean, test_descriptions: boolean, assertion_per_test: number}|nil, table? Analyze test file statically for quality metrics
+---@field get_report_data fun(): {level: number, level_name: string, tests: {count: number, analyzed: number, files: number, missing_assertions: table, below_threshold: table}, assertions: {count: number, types: table, per_test: number}, requirements: table, score: number} Get structured data for quality report generation
+---@field report fun(format?: string): string|table Generate a quality report in various formats (text, json, html)
+---@field summary_report fun(): {level: number, score: number, tests: number, assertions: number, assertion_types: number, files: number} Generate a concise summary report with key metrics
+---@field level_name fun(level: number): string Get the descriptive name for a quality level
+---@field set_level fun(level: number): QualityModule Set the current quality validation level (1-5)
+---@field get_level fun(): number Get the current quality validation level
+---@field analyze_directory fun(dir_path: string, recursive?: boolean): table|nil, table? Analyze all test files in a directory recursively or non-recursively
+---@field register_assertion_type fun(type_name: string, description: string): QualityModule Register a custom assertion type for quality tracking
+---@field is_quality_passing fun(): boolean Check if tests meet the current quality level requirements
+---@field get_score fun(): number Get the quality score as percentage (0-100)
+---@field add_custom_requirement fun(name: string, check_fn: function, min_value?: number): QualityModule Add a custom quality requirement with validation function
+---@field json_report fun(): string Generate a detailed JSON report with all quality metrics
+---@field html_report fun(): string Generate a formatted HTML report with quality visualization
+---@field meets_level fun(level?: number): boolean Check if quality metrics meet a specific level requirement
+---@field save_report fun(file_path: string, format?: string): boolean, string? Save a quality report to a file in the specified format
+---@field get_level_name fun(level: number): string Get level name from level number (alias for level_name)
+---@field check_file fun(file_path: string, level?: number): boolean, table Check if a test file meets quality requirements for a specific level
+---@field validate_test_quality fun(test_name: string, options?: {level?: number, required_assertions?: number, required_types?: string[]}): boolean, table[] Validate a test against quality standards with detailed feedback
+---@field debug_config fun(): QualityModule Print debug information about the current quality module configuration
+---@field create_test_file fun(level: number, file_path?: string): string, string? Create a template test file that meets a specified quality level
+
 -- firmo test quality validation module
--- Implementation of test quality analysis with level-based validation
+-- Implementation of test quality analysis with level-based validation to ensure
+-- tests meet required standards for reliability, completeness, and maintainability
 
 -- Lazy loading of dependencies to avoid circular references
 local _central_config
@@ -51,9 +54,11 @@ local function get_central_config()
 end
 
 local fs = require("lib.tools.filesystem")
+---@type Logging
 local logging = require("lib.tools.logging")
 
 -- Create module logger
+---@type Logger
 local logger = logging.get_logger("Quality")
 
 -- Configure module logging

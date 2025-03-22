@@ -1,4 +1,22 @@
--- LPegLabel module tests
+--[[
+LPegLabel Module Tests
+
+This test suite verifies the functionality of the LPegLabel module,
+a labeled variant of LPeg (Lua Parsing Expression Grammar) that provides:
+
+- Pattern matching with labeled failure points for better error reporting
+- Core PEG operators and combinators for grammar construction
+- Captures for structured parsing results
+- Grammar rules and recursive pattern definitions
+- Error recovery mechanisms with labeled failures
+
+The tests ensure proper:
+- Module loading and initialization
+- Pattern creation and matching
+- Grammar definition and parsing
+- Error handling with labeled failures
+- Integration with the parser system
+]]
 
 local firmo = require("firmo")
 local test_helper = require("lib.tools.test_helper")

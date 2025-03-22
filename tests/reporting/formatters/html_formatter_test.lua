@@ -1,18 +1,45 @@
--- Comprehensive tests for the HTML formatter
+--[[
+Comprehensive Test Suite for HTML Formatter
 
+This test suite verifies the functionality of the HTML formatter for coverage reports.
+It focuses on testing:
+- HTML generation for different report types (coverage, test results)
+- Template processing and rendering
+- CSS/JS asset inclusion
+- File output and directory handling
+- Error handling and edge cases
+- Configurable options and custom templates
+
+The tests use temp_file_integration for proper test isolation and cleanup.
+]]
+
+---@type Firmo
 local firmo = require("firmo")
+---@type fun(description: string, callback: function) Test suite container function
+---@type fun(description: string, options: table|nil, callback: function) Test case function with optional parameters
+---@type fun(value: any) Assertion generator function
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 ---@diagnostic disable-next-line: unused-local
+---@type fun(callback: function) Setup function that runs before each test
+---@type fun(callback: function) Teardown function that runs after each test
 local before, after = firmo.before, firmo.after
 ---@diagnostic disable-next-line: unused-local
+---@type fun(callback: function) Setup function that runs before each test
+---@type fun(callback: function) Teardown function that runs after each test
 local before_each, after_each = firmo.before, firmo.after
 
 -- Import test_helper for improved error handling
+---@type TestHelperModule
 local test_helper = require("lib.tools.test_helper")
+---@type ErrorHandlerModule
 local error_handler = require("lib.tools.error_handler")
 
 -- Try to load the logging module
-local logging, logger
+---@type LoggingModule?
+local logging
+---@type LoggerInterface?
+local logger
+---@return LoggerInterface? logger The logger instance or nil if not loaded
 local function try_load_logger()
   if not logger then
     -- Use test_helper for error handling
@@ -50,6 +77,8 @@ local fs = require("lib.tools.filesystem")
 local central_config
 
 -- Helper to create a table representation of coverage data
+---@param options? {source?: string, include_not_covered?: boolean, include_blocks?: boolean, include_conditions?: boolean} Options for customizing the mock coverage data
+---@return table coverage_data A mock coverage data structure with various coverage states
 local function create_mock_coverage_data(options)
   options = options or {}
 
@@ -122,6 +151,10 @@ end
 
 -- Helper to extract parts of HTML for easier testing
 ---@diagnostic disable-next-line: unused-local, unused-function
+---@param html string The HTML content to extract from
+---@param marker_start string The start marker to search for
+---@param marker_end string The end marker to search for
+---@return string|nil part The extracted HTML part or nil if markers not found
 local function extract_html_part(html, marker_start, marker_end)
   local start_pos = html:find(marker_start, 1, true)
   if not start_pos then
@@ -466,20 +499,21 @@ describe("HTML Formatter", function()
 
   it("should save HTML report to file when specified", function()
     local coverage_data = create_mock_coverage_data()
-
-    -- Create a temporary directory for testing
-    local temp_dir = "./test-tmp-html-formatter"
     
-    -- Ensure directory exists and is clean
-    if fs.directory_exists(temp_dir) then
-      fs.delete_directory(temp_dir, true)
-    end
-    local success = fs.create_directory(temp_dir)
-    expect(success).to.equal(true)
-
+    -- Create a temporary directory for testing using temp_file module
+    ---@type TempFileModule
+    local temp_file = require("lib.tools.temp_file")
+    ---@type string|nil temp_dir Path to temporary directory or nil if creation failed
+    ---@type table|nil dir_err Error object if directory creation failed
+    local temp_dir, dir_err = temp_file.create_temp_directory()
+    expect(dir_err).to_not.exist("Failed to create temp directory: " .. tostring(dir_err))
+    expect(temp_dir).to.exist()
+    
+    ---@type string file_path Full path to the HTML report file
     local file_path = temp_dir .. "/coverage.html"
 
     -- Use formatter to save to file
+    ---@type string|nil result The HTML content returned by the formatter
     local result = html_formatter_module(coverage_data, {output_file = file_path})
     
     -- Formatter should return the content
@@ -488,27 +522,29 @@ describe("HTML Formatter", function()
     
     -- Verify file exists and contains HTML
     expect(fs.file_exists(file_path)).to.equal(true)
+    ---@type string content The content of the saved HTML file
     local content = fs.read_file(file_path)
     expect(content).to.match("<!DOCTYPE html>")
     expect(content).to.match("77%.8%%")  -- Coverage percentage
 
-    -- Clean up
-    fs.delete_directory(temp_dir, true)
+    -- No need to clean up - temp_file handles this automatically
   end)
   
   it("uses formatter within reporting interface", function()
     -- Test with the module-level formatter rather than direct formatter calls
     -- This better reflects how the formatter is normally used
     
-    -- Create a temporary file path
-    local temp_dir = "./test-tmp-html"
-    if fs.directory_exists(temp_dir) then
-      fs.delete_directory(temp_dir, true)
-    end
-    
-    fs.create_directory(temp_dir)
+    -- Create a temporary directory using temp_file module
+    ---@type TempFileModule
+    local temp_file = require("lib.tools.temp_file")
+    ---@type string|nil temp_dir Path to temporary directory or nil if creation failed
+    ---@type table|nil dir_err Error object if directory creation failed
+    local temp_dir, dir_err = temp_file.create_temp_directory()
+    expect(dir_err).to_not.exist("Failed to create temp directory: " .. tostring(dir_err))
+    expect(temp_dir).to.exist()
     
     -- Use the html formatter by generating HTML directly
+    ---@type string html_content The generated HTML content
     local html_content = html_formatter_module({
       files = {
         ["/example/test.lua"] = {
@@ -537,15 +573,16 @@ describe("HTML Formatter", function()
     expect(html_content:match("<!DOCTYPE html>")).to.exist()
     
     -- Write the content directly
+    ---@type string file_path Path to the output HTML file
     local file_path = temp_dir .. "/direct.html"
+    ---@type boolean success Whether the file was successfully written
     local success = fs.write_file(file_path, html_content)
     
     -- Should have written successfully
     expect(success).to.equal(true)
     expect(fs.file_exists(file_path)).to.equal(true)
     
-    -- Clean up
-    fs.delete_directory(temp_dir, true)
+    -- No need to clean up - temp_file handles this automatically
   end)
 
   -- Configuration Tests
@@ -719,18 +756,22 @@ describe("HTML Formatter", function()
         return -- Skip if reporting module not available
       end
       
-      -- Test directory for file tests
-      local test_dir = "./test-tmp-html-formatter"
-      
-      -- Create test directory if it doesn't exist
-      if not fs.directory_exists(test_dir) then
-        fs.create_directory(test_dir)
-      end
+      -- Create a temporary directory for testing using temp_file module
+      ---@type TempFileModule
+      local temp_file = require("lib.tools.temp_file")
+      ---@type string|nil test_dir Path to temporary directory or nil if creation failed
+      ---@type table|nil dir_err Error object if directory creation failed
+      local test_dir, dir_err = temp_file.create_temp_directory()
+      expect(dir_err).to_not.exist("Failed to create temp directory: " .. tostring(dir_err))
+      expect(test_dir).to.exist()
       
       -- Try to save to an invalid path
+      ---@type string invalid_path An intentionally invalid file path to test error handling
       local invalid_path = "/tmp/firmo-test*?<>|/coverage.html"
       
       -- Use error_capture to handle expected errors
+      ---@type boolean|nil success_invalid_save Whether the operation succeeded
+      ---@type table|nil save_err Error object if operation failed
       local success_invalid_save, save_err = test_helper.with_error_capture(function()
         local result, err = reporting.save_coverage_report(invalid_path, create_mock_coverage_data(), "html")
         -- The reporting module may return errors in different ways
@@ -748,10 +789,7 @@ describe("HTML Formatter", function()
         return reporting.save_coverage_report(test_dir .. "/coverage.html", nil, "html")
       end)()
       
-      -- Clean up
-      if fs.directory_exists(test_dir) then
-        fs.delete_directory(test_dir, true)
-      end
+      -- No need to clean up - temp_file handles this automatically
     end)
   end)
 

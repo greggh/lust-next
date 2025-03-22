@@ -1,10 +1,35 @@
 ---@class coverage.patchup
----@field _VERSION string Module version
----@field patch_file fun(file_path: string, file_data: {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string, code_map?: table}): number, table? Patch coverage data for a file by fixing non-executable lines
----@field patch_all fun(coverage_data: {files: table<string, table>, lines: table, executed_lines: table, covered_lines: table}): number, table? Patch all files in coverage data
----@field count_files fun(files_table: table): number, table? Count files in a table
----@field get_line_classification fun(file_path: string, line_num: number): string|nil, table? Get classification for a specific line (comment, code, structural, etc.)
----@field get_stats fun(): {patched_files: number, patched_lines: number, errors: number} Get statistics about patchup operations
+---@field _VERSION string Module version (following semantic versioning)
+---@field patch_file fun(file_path: string, file_data: {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string, code_map?: table}): number, table? Patch coverage data for a file by fixing non-executable lines (comments, blank lines, etc.)
+---@field patch_all fun(coverage_data: {files: table<string, table>, lines: table, executed_lines: table, covered_lines: table}): number, table? Patch all files in coverage data and update coverage statistics
+---@field count_files fun(files_table: table): number, table? Count files in a table with error handling
+---@field get_line_classification fun(file_path: string, line_num: number): string|nil, table? Get classification for a specific line (comment, code, structural, empty, etc.)
+---@field get_stats fun(): {patched_files: number, patched_lines: number, errors: number, multiline_comments: number, single_line_comments: number, blank_lines: number, structural_lines: number} Get comprehensive statistics about patchup operations
+---@field is_patchable fun(file_path: string): boolean, string? Check if a file can be patched (exists and is a Lua file)
+---@field analyze_file fun(file_path: string): {comments: number, code: number, blank: number, structural: number, total: number}|nil, table? Analyze file content for line classification
+---@field fix_coverage_data fun(coverage_data: table): table, table? Fix and enhance coverage data for reporting
+---@field handle_multiline_comments fun(file_path: string, file_data: table): number, table? Fix multiline comment blocks in coverage data
+---@field update_coverage_stats fun(coverage_data: table): table Updated coverage statistics
+
+--- Firmo coverage patchup module
+--- This module fixes and enhances coverage data for accurate reporting by identifying
+--- and correctly marking non-executable lines in the source code. The patchup process
+--- is critical for generating meaningful coverage metrics, as it ensures that only
+--- truly executable lines are counted when calculating coverage percentages.
+---
+--- The module handles:
+--- - Single-line and multi-line comments
+--- - Blank lines and whitespace-only lines
+--- - Structural code elements (end statements, else clauses)
+--- - Documentation blocks and other non-executable constructs
+---
+--- Without patchup, coverage reports would show artificially low percentages because
+--- many non-executable lines would be incorrectly counted as "not covered" despite
+--- being impossible to execute. This module solves that problem by analyzing source
+--- code structure and properly categorizing each line.
+---
+--- @author Firmo Team
+--- @version 1.2.0
 local M = {}
 M._VERSION = "1.2.0"
 
@@ -156,13 +181,38 @@ local function is_patchable_line(line_text)
   return false
 end
 
----@param file_path string Path to the file to patch
----@param file_data {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string, code_map?: table} Coverage data for the file
----@return number patched Number of lines patched
----@return table|nil err Error information if patching failed
--- Patches coverage data for a file by identifying and marking structural code and comments
--- Uses static analysis when available for precise line classification
--- Falls back to pattern matching when static analysis is not available
+--- Patch coverage data for a file by fixing non-executable lines.
+--- This function analyzes a file's source code and updates its coverage data by
+--- correctly marking non-executable lines (comments, blank lines, etc.) as such.
+--- This prevents these lines from being counted as "not covered" in coverage metrics.
+---
+--- The patching process:
+--- 1. Validates file existence and data format
+--- 2. Analyzes source code structure (using static analysis)
+--- 3. Identifies all non-executable lines (comments, blanks, structural elements)
+--- 4. Updates coverage data to reflect executability status
+--- 5. Returns count of patched lines
+---
+--- The function works closely with the static analyzer to accurately identify
+--- executable vs. non-executable code, handling complex cases like multiline comments
+--- and structural code elements.
+---
+--- @usage
+--- -- Patch coverage data for a single file
+--- local file_data = coverage_data.files["/path/to/file.lua"]
+--- local patched_count = patchup.patch_file("/path/to/file.lua", file_data)
+--- print("Patched " .. patched_count .. " lines in file")
+---
+--- -- Handle potential errors
+--- local patched_count, err = patchup.patch_file(file_path, file_data)
+--- if err then
+---   print("Error patching file: " .. error_handler.format_error(err))
+--- end
+---
+--- @param file_path string Path to the file to patch
+--- @param file_data {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string, code_map?: table} Coverage data for the file
+--- @return number patched Number of lines patched
+--- @return table|nil err Error information if patching failed
 function M.patch_file(file_path, file_data)
   -- Validate parameters
   if not file_path then
@@ -520,10 +570,36 @@ function M.patch_file(file_path, file_data)
   return result
 end
 
----@param coverage_data {files: table<string, {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string}>, lines: table, executed_lines: table, covered_lines: table} Coverage data containing files to patch
----@return number total_patched Total number of lines patched across all files
----@return table|nil err Error information if patching failed
--- Patch all files in coverage data
+--- Patch all files in coverage data for comprehensive coverage accuracy.
+--- This function applies the patching process to all files in the coverage data,
+--- ensuring consistent and accurate coverage metrics across the entire codebase.
+--- It handles validation, error management, and provides progress reporting.
+---
+--- The comprehensive patching process:
+--- 1. Validates coverage data structure
+--- 2. Iterates through all files in the coverage data
+--- 3. Applies the patch_file function to each file
+--- 4. Collects and aggregates patching statistics
+--- 5. Updates global coverage statistics
+---
+--- After patching, the coverage data will have much more accurate metrics because
+--- non-executable lines will be properly marked and excluded from coverage percentage
+--- calculations.
+---
+--- @usage
+--- -- Patch all files in coverage data
+--- local patched_files, err = patchup.patch_all(coverage_data)
+--- if err then
+---   print("Error during patching: " .. error_handler.format_error(err))
+--- else
+---   print("Patched " .. patched_files .. " files")
+---   -- Generate reports with accurate metrics
+---   local report = generate_coverage_report(coverage_data)
+--- end
+---
+--- @param coverage_data {files: table<string, {lines: table<number, {executable: boolean, executed: boolean, covered: boolean, source: string}>, discovered: boolean, source_text: string}>, lines: table, executed_lines: table, covered_lines: table} Coverage data containing files to patch
+--- @return number total_patched Total number of lines patched across all files
+--- @return table|nil err Error information if patching failed
 function M.patch_all(coverage_data)
   -- Validate parameters
   if not coverage_data then

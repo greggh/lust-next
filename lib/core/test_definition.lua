@@ -1,3 +1,23 @@
+--- Test definition module for Firmo
+--- This module provides the core functionality for defining and structuring tests
+--- in Firmo's BDD-style testing framework. It offers a hierarchical approach to testing
+--- with describe blocks for grouping tests, before/after hooks for setup and teardown,
+--- and various options for controlling test execution.
+---
+--- Key features:
+--- - Hierarchical test organization using nested describe blocks
+--- - Test cases defined with 'it' functions
+--- - Setup and teardown with before/after hooks
+--- - Focus mode with fdescribe/fit for running specific tests
+--- - Skipping tests with xdescribe/xit
+--- - Test filtering by tags and patterns
+--- - Structured test results for reporting
+--- - Support for expected errors in tests
+--- - Test isolation with automatic file cleanup
+---
+--- @version 0.4.0
+--- @author Firmo Team
+---
 ---@class TestDefinition
 ---@field describe fun(name: string, fn: function, options?: {focused?: boolean, excluded?: boolean, _parent_focused?: boolean}): nil Create a test group
 ---@field fdescribe fun(name: string, fn: function): nil Create a focused test group
@@ -8,9 +28,6 @@
 ---@field before fun(fn: function): nil Add a setup hook for the current block
 ---@field after fun(fn: function): nil Add a teardown hook for the current block
 ---@field pending fun(message?: string): string Mark a test as pending
-
--- Test definition module for firmo
--- Contains the core functions for defining test blocks and cases
 
 local M = {}
 
@@ -113,16 +130,42 @@ end
 -- Public interface
 
 --- Set active tags for test filtering
+--- This function specifies which tags must be present on a test for it to be run.
+--- Tests without at least one of the specified tags will be skipped during execution.
+--- This provides a way to selectively run subsets of tests, such as running only
+--- "integration" or "performance" tests.
+---
 ---@param ... string Tags to filter by
----@return table The module instance
+---@return table The module instance for method chaining
+---
+---@usage
+--- -- Only run tests tagged with "integration"
+--- firmo.only_tags("integration")
+---
+--- -- Run tests tagged with either "fast" or "critical"
+--- firmo.only_tags("fast", "critical")
 function M.only_tags(...)
   active_tags = {...}
   return M
 end
 
 --- Set tags for the current test block
+--- This function applies tags to the current test block and all tests within it.
+--- Tags can be used to categorize tests and later filter test execution.
+--- Common tags might include "unit", "integration", "slow", or feature names.
+---
 ---@param ... string Tags to apply
----@return table The module instance
+---@return table The module instance for method chaining
+---
+---@usage
+--- -- Tag a block of tests
+--- describe("Database operations", function()
+---   firmo.tags("integration", "database")
+---   
+---   it("should connect to database", function()
+---     -- This test will have both "integration" and "database" tags
+---   end)
+--- end)
 function M.tags(...)
   local new_tags = {...}
   current_tags = new_tags
@@ -130,25 +173,84 @@ function M.tags(...)
 end
 
 --- Set a filter pattern for test names
+--- This function specifies a Lua pattern that test names must match to be run.
+--- Tests with names that don't match the pattern will be skipped.
+--- This allows for focusing on specific types of tests without modifying the code.
+---
 ---@param pattern string Pattern to filter test names
----@return table The module instance
+---@return table The module instance for method chaining
+---
+---@usage
+--- -- Only run tests with "parse" in their name
+--- firmo.filter_pattern("parse")
+---
+--- -- Only run tests that start with "should"
+--- firmo.filter_pattern("^should")
+---
+--- -- Run tests related to file operations
+--- firmo.filter_pattern("file")
 function M.filter_pattern(pattern)
   filter_pattern = pattern
   return M
 end
 
 --- Mark a test as pending
+--- This function is used within test cases to indicate that the test is not yet
+--- implemented or is temporarily disabled. Pending tests will be reported differently
+--- than failures, making it clear they are intentionally incomplete.
+---
 ---@param message? string Optional message explaining why the test is pending
 ---@return string The pending message
+---
+---@usage
+--- -- Mark a test as pending without a message
+--- it("should handle edge cases", function()
+---   return firmo.pending()
+--- end)
+---
+--- -- Mark a test as pending with an explanation
+--- it("should optimize for large datasets", function()
+---   return firmo.pending("Waiting for optimization strategy decision")
+--- end)
 function M.pending(message)
   message = message or "Test not yet implemented"
   return message
 end
 
 --- Create a test group
+--- This function creates a block of related tests, providing hierarchical organization.
+--- Describe blocks can be nested to create a tree-like structure of tests, with each
+--- level having its own setup (before) and teardown (after) hooks. The callback
+--- function contains test definitions and possibly nested describe blocks.
+---
 ---@param name string Name of the test group
 ---@param fn function Function containing the test group
 ---@param options? {focused?: boolean, excluded?: boolean, _parent_focused?: boolean} Options for the test group
+---
+---@usage
+--- -- Basic describe block
+--- describe("User authentication", function()
+---   it("should allow valid users to log in", function()
+---     -- test implementation
+---   end)
+---   
+---   it("should reject invalid credentials", function()
+---     -- test implementation
+---   end)
+--- end)
+---
+--- -- Nested describe blocks
+--- describe("File operations", function()
+---   describe("Reading files", function()
+---     it("should read text files", function() end)
+---     it("should read binary files", function() end)
+---   end)
+---   
+---   describe("Writing files", function()
+---     it("should write text files", function() end)
+---     it("should write binary files", function() end)
+---   end)
+--- end)
 function M.describe(name, fn, options)
   options = options or {}
   local parent_focused = options._parent_focused or false
@@ -217,23 +319,94 @@ function M.describe(name, fn, options)
 end
 
 --- Create a focused test group
+--- This function creates a test group that will be executed exclusively, along with
+--- any other focused tests. All non-focused tests will be skipped when focus mode
+--- is active. This is useful for temporarily focusing on a specific area of the
+--- test suite during development or debugging.
+---
 ---@param name string Name of the test group
 ---@param fn function Function containing the test group
+---
+---@usage
+--- -- Only this test group and its tests will run
+--- fdescribe("Authentication module", function()
+---   it("should authenticate valid users", function()
+---     -- Test implementation
+---   end)
+---   
+---   it("should reject invalid credentials", function()
+---     -- Test implementation
+---   end)
+--- end)
+---
+--- -- These tests will be skipped when focus mode is active
+--- describe("Other module", function()
+---   it("will be skipped when focus mode is active", function() end)
+--- end)
 function M.fdescribe(name, fn)
   return M.describe(name, fn, {focused = true})
 end
 
 --- Create a skipped test group
+--- This function creates a test group that will be skipped during execution.
+--- This is useful for temporarily disabling a group of tests that might be
+--- broken, incomplete, or not relevant to the current development focus.
+---
 ---@param name string Name of the test group
 ---@param fn function Function containing the test group
+---
+---@usage
+--- -- This entire group of tests will be skipped
+--- xdescribe("Work in progress module", function()
+---   it("has tests that aren't ready yet", function()
+---     -- Incomplete test
+---   end)
+---   
+---   it("contains features under development", function()
+---     -- Incomplete test
+---   end)
+--- end)
+---
+--- -- Normal tests continue to run
+--- describe("Stable module", function()
+---   it("runs normally", function() end)
+--- end)
 function M.xdescribe(name, fn)
   return M.describe(name, fn, {excluded = true})
 end
 
 --- Create a test case
+--- This function defines an individual test case within a describe block.
+--- Each test contains assertions that verify specific behaviors of the code
+--- being tested. Tests can have options for controlling execution,
+--- such as focusing, skipping, or expecting errors.
+---
 ---@param name string Name of the test case
 ---@param options_or_fn table|function Options table or test function
 ---@param fn? function Test function if options were provided
+---
+---@usage
+--- -- Basic test case
+--- it("should add two numbers correctly", function()
+---   expect(1 + 2).to.equal(3)
+--- end)
+---
+--- -- Test with options
+--- it("should throw an error for invalid input", {
+---   expect_error = true,
+---   tags = {"validation", "error-handling"}
+--- }, function()
+---   local result = validate_input(nil)
+---   -- This test passes if an error is thrown
+--- end)
+---
+--- -- Test with timeout
+--- it("should complete within time limit", {
+---   timeout = 1000 -- milliseconds
+--- }, function()
+---   perform_operation()
+---   expect(operation_completed).to.be_truthy()
+--- end)
 function M.it(name, options_or_fn, fn)
   -- Determine if first argument is options or function
   local options = {}
@@ -432,9 +605,32 @@ function M.it(name, options_or_fn, fn)
 end
 
 --- Create a focused test case
+--- This function creates a test case that will run exclusively, along with any other
+--- focused tests. When any test is focused, all non-focused tests are skipped.
+--- This is useful for temporarily focusing on a specific test during development
+--- or debugging without having to run the entire test suite.
+---
 ---@param name string Name of the test case
 ---@param options_or_fn table|function Options table or test function
 ---@param fn? function Test function if options were provided
+---
+---@usage
+--- -- Only this test will run (and any other focused tests)
+--- fit("should properly handle the edge case", function()
+---   -- Test implementation
+---   expect(edge_case_function()).to.be_truthy()
+--- end)
+---
+--- -- This test will be skipped when any test is focused
+--- it("regular test that will be skipped", function() end)
+---
+--- -- You can also provide options
+--- fit("focused test with options", {
+---   timeout = 2000,
+---   tags = {"important", "edge-case"}
+--- }, function()
+---   expect(complex_operation()).to.be_truthy()
+--- end)
 function M.fit(name, options_or_fn, fn)
   -- Set focus mode
   focus_mode = true
@@ -453,9 +649,33 @@ function M.fit(name, options_or_fn, fn)
 end
 
 --- Create a skipped test case
+--- This function creates a test case that will be skipped during execution.
+--- This is useful for temporarily disabling specific tests that may be
+--- broken, incomplete, or not relevant to the current development focus.
+---
 ---@param name string Name of the test case
 ---@param options_or_fn table|function Options table or test function
 ---@param fn? function Test function if options were provided
+---
+---@usage
+--- -- This test will be skipped
+--- xit("incomplete feature", function()
+---   -- Incomplete or broken test
+---   expect(unfinished_feature()).to.work()
+--- end)
+---
+--- -- You can still provide options for future reference
+--- xit("test requiring additional setup", {
+---   timeout = 5000,
+---   tags = {"integration", "database"}
+--- }, function()
+---   -- Test that will be skipped
+--- end)
+---
+--- -- Regular tests continue to run
+--- it("working feature", function()
+---   expect(1 + 1).to.equal(2)
+--- end)
 function M.xit(name, options_or_fn, fn)
   -- Determine if first argument is options or function
   local options = {}
@@ -471,20 +691,122 @@ function M.xit(name, options_or_fn, fn)
 end
 
 --- Add a setup hook for the current block
+--- This function registers a setup function that will be executed before each test
+--- within the current describe block, including tests in nested describe blocks.
+--- Setup hooks run in hierarchical order, with parent block hooks running before
+--- child block hooks, providing a way to establish test prerequisites.
+---
 ---@param fn function Hook function to execute before each test
+---
+---@usage
+--- -- Basic setup hook
+--- describe("Database operations", function()
+---   before(function()
+---     -- Setup code that runs before each test in this block
+---     db.connect()
+---     db.clear_test_data()
+---   end)
+---   
+---   it("should insert records", function()
+---     -- db is already connected and cleared due to before hook
+---     db.insert({id = 1, name = "Test"})
+---     expect(db.count()).to.equal(1)
+---   end)
+--- end)
+---
+--- -- Nested hooks demonstration
+--- describe("Parent suite", function()
+---   before(function()
+---     -- This runs first for all tests in this and nested blocks
+---     setup_parent_resources()
+---   end)
+---   
+---   describe("Child suite", function()
+---     before(function()
+---       -- This runs after parent's before but before the test
+---       setup_child_resources()
+---     end)
+---     
+---     it("test in child suite", function()
+---       -- Both parent and child setup have run
+---     end)
+---   end)
+--- end)
 function M.before(fn)
   befores[level] = befores[level] or {}
   table.insert(befores[level], fn)
 end
 
 --- Add a teardown hook for the current block
+--- This function registers a teardown function that will be executed after each test
+--- within the current describe block, including tests in nested describe blocks.
+--- Teardown hooks run in reverse hierarchical order, with child block hooks running before
+--- parent block hooks, providing a way to clean up test resources.
+---
 ---@param fn function Hook function to execute after each test
+---
+---@usage
+--- -- Basic teardown hook
+--- describe("File operations", function()
+---   local temp_file
+---   
+---   before(function()
+---     temp_file = create_temp_file()
+---   end)
+---   
+---   after(function()
+---     -- Cleanup after each test
+---     delete_file(temp_file)
+---   end)
+---   
+---   it("should write to file", function()
+---     write_to_file(temp_file, "content")
+---     expect(read_file(temp_file)).to.equal("content")
+---   end)
+--- end)
+---
+--- -- Error handling in teardown
+--- after(function()
+---   -- Always perform cleanup even if the test fails
+---   local success, err = pcall(function()
+---     if connection then connection:close() end
+---     if temp_files then
+---       for _, file in ipairs(temp_files) do
+---         os.remove(file)
+---       end
+---     end
+---   end)
+---   
+---   if not success then
+---     print("Warning: Cleanup failed - " .. tostring(err))
+---   end
+--- end)
 function M.after(fn)
   afters[level] = afters[level] or {}
   table.insert(afters[level], fn)
 end
 
 --- Reset the test state
+--- This function completely resets the internal state of the test system,
+--- clearing all test definitions, hooks, results, and configuration.
+--- It's typically called between test suite runs to ensure a clean slate
+--- and prevent state from leaking between test executions.
+---
+---@usage
+--- -- Reset before running a new test suite
+--- firmo.reset()
+--- require("my_test_suite")
+---
+--- -- Reset between individual test files
+--- for _, file in ipairs(test_files) do
+---   firmo.reset()
+---   dofile(file)
+--- end
+---
+--- -- Reset with custom configuration
+--- firmo.reset()
+--- firmo.only_tags("unit") -- Only run unit tests after reset
+--- firmo.run()
 function M.reset()
   level = 0
   befores = {}
@@ -503,7 +825,30 @@ function M.reset()
 end
 
 --- Get the current state of the test system
+--- This function returns the current internal state of the test system, including
+--- test counts, focus mode status, and test results. This is useful for generating
+--- reports, monitoring test progress, and debugging test execution.
+---
 ---@return {level: number, passes: number, errors: number, skipped: number, focus_mode: boolean, test_results: TestResult[]} Current test system state
+---
+---@usage
+--- -- Get test statistics
+--- local state = firmo.get_state()
+--- print(string.format("Tests: %d passed, %d failed, %d skipped", 
+---   state.passes, state.errors, state.skipped))
+---
+--- -- Check if focus mode is active
+--- if state.focus_mode then
+---   print("Warning: Focus mode is active - some tests are being skipped")
+--- end
+---
+--- -- Inspect test results
+--- for _, result in ipairs(state.test_results) do
+---   if result.status == "fail" then
+---     print(string.format("FAILURE: %s - %s", 
+---       result.path_string, result.error_message or "unknown error"))
+---   end
+--- end
 function M.get_state()
   return {
     level = level,
@@ -522,16 +867,63 @@ M.STATUS = TEST_STATUS
 local debug_mode = false
 
 --- Set debug mode for test_definition module
+--- This function enables or disables detailed debug output during test execution.
+--- When debug mode is enabled, the system will print detailed information about
+--- test execution, results, and internal state to help troubleshoot issues with
+--- tests or the test framework itself.
+---
 ---@param value boolean Whether to enable debug output
 ---@return table The module instance for chaining
+---
+---@usage
+--- -- Enable debug mode to see detailed output
+--- firmo.set_debug_mode(true)
+---
+--- -- Run tests with detailed debug information
+--- describe("Debugging test suite", function()
+---   it("shows detailed output in debug mode", function()
+---     expect(true).to.be_truthy()
+---   end)
+--- end)
+---
+--- -- Disable debug mode when done troubleshooting
+--- firmo.set_debug_mode(false)
 function M.set_debug_mode(value)
   debug_mode = value == true
   return M
 end
 
 --- Add a test result to the collection
+--- This function adds a structured test result to the internal results collection
+--- and updates the test counters. It's primarily used internally by the test system
+--- but can also be used by test reporters or extensions to record custom test results.
+---
 ---@param result TestResult The test result object to add
 ---@return TestResult|nil The added test result or nil if invalid
+---
+---@usage
+--- -- Custom test reporter
+--- local function my_reporter(results)
+---   for _, result in ipairs(results) do
+---     if result.status == "pass" then
+---       print(string.format("✓ %s (%.3fs)", result.name, result.execution_time or 0))
+---     elseif result.status == "fail" then
+---       print(string.format("✗ %s\n  %s", result.name, result.error_message or "Unknown error"))
+---     else
+---       print(string.format("- %s (%s)", result.name, result.status))
+---     end
+---   end
+--- end
+---
+--- -- For custom test systems or extensions
+--- local result = firmo.add_test_result({
+---   status = "pass",
+---   name = "External test",
+---   path = {"External", "Integration", "API Test"},
+---   path_string = "External / Integration / API Test",
+---   execution_time = 0.125,
+---   timestamp = os.time()
+--- })
 function M.add_test_result(result)
   if not result or type(result) ~= "table" then
     return nil

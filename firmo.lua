@@ -1,58 +1,70 @@
 ---@class firmo
----@field version string Current version of the framework
----@field level number Current depth level of test blocks
----@field passes number Number of passing tests
----@field errors number Number of failing tests
----@field skipped number Number of skipped tests
----@field befores table Setup hooks at each level
----@field afters table Teardown hooks at each level
----@field active_tags table Tags being used for test filtering
----@field current_tags table Tags for the current test block
----@field filter_pattern string|nil Pattern for filtering test names
----@field focus_mode boolean Whether any focused tests exist
----@field async_options table Configuration options for async testing
----@field config table|nil Central configuration if available
----@field _current_test_context table|nil Current test context for temp file tracking
+---@field version string Current version of the framework (following semantic versioning)
+---@field level number Current depth level of test blocks for nested test structures
+---@field passes number Number of passing tests in the current run
+---@field errors number Number of failing tests in the current run
+---@field skipped number Number of skipped tests in the current run
+---@field befores table Setup hooks at each nesting level for test initialization
+---@field afters table Teardown hooks at each nesting level for test cleanup
+---@field active_tags table Tags being used for test filtering when using tag-based filtering
+---@field current_tags table Tags for the current test block in the nesting hierarchy
+---@field filter_pattern string|nil Pattern for filtering test names by regex pattern
+---@field focus_mode boolean Whether any focused tests exist in the test suite
+---@field async_options table Configuration options for async testing (timeout, interval, etc.)
+---@field config table|nil Central configuration if available through central_config module
+---@field _current_test_context table|nil Current test context for temp file tracking integration
+---@field test_results table|nil Structured test results for reporting and analysis
 
 -- Test definition functions
----@field describe fun(name: string, fn: function, options?: {focused?: boolean, excluded?: boolean, _parent_focused?: boolean}): nil Create a test group
----@field fdescribe fun(name: string, fn: function): nil Create a focused test group
----@field xdescribe fun(name: string, fn: function): nil Create a skipped test group
----@field it fun(name: string, options_or_fn: table|function, fn?: function): nil Create a test case
----@field fit fun(name: string, options_or_fn: table|function, fn?: function): nil Create a focused test case
----@field xit fun(name: string, options_or_fn: table|function, fn?: function): nil Create a skipped test case
+---@field describe fun(name: string, fn: function, options?: {focused?: boolean, excluded?: boolean, _parent_focused?: boolean, tags?: string[]}): nil Create a test group that can contain nested tests and other groups
+---@field fdescribe fun(name: string, fn: function): nil Create a focused test group (only focused tests will run)
+---@field xdescribe fun(name: string, fn: function): nil Create a skipped test group (none of the contained tests will run)
+---@field it fun(name: string, options_or_fn: table|function, fn?: function): nil Create a test case with optional configuration
+---@field fit fun(name: string, options_or_fn: table|function, fn?: function): nil Create a focused test case (only focused tests will run)
+---@field xit fun(name: string, options_or_fn: table|function, fn?: function): nil Create a skipped test case (will not run but reports as skipped)
 
 -- Test lifecycle hooks
----@field before fun(fn: function): nil Add a setup hook for the current block
----@field after fun(fn: function): nil Add a teardown hook for the current block
----@field pending fun(message?: string): string Mark a test as pending
+---@field before fun(fn: function): nil Add a setup hook for the current test block that runs before each test
+---@field after fun(fn: function): nil Add a teardown hook for the current test block that runs after each test
+---@field pending fun(message?: string): string Mark a test as pending with an optional explanation message
 
 -- Assertion functions
 ---@field expect fun(value: any): ExpectChain Create an assertion chain that allows chaining various assertions
+---@field assert table Backward compatibility assertion interface for older tests (deprecated)
 
 -- Test organization
----@field tags fun(...: string): firmo Set tags for the current describe block or test
----@field nocolor fun(): nil Disable colors in the output
+---@field tags fun(...: string): firmo Set tags for the current describe block or test for filtering
+---@field nocolor fun(): nil Disable colors in the output for CI environments or logs
 ---@field only_tags fun(...: string): firmo Filter tests to run only those with specified tags
+---@field set_filter fun(pattern: string): firmo Set a pattern filter for test names
 
 -- Test execution and reporting
 ---@field discover fun(dir?: string, pattern?: string): table, table|nil Discover test files in a directory
----@field run_file fun(file: string): table, table|nil Run a single test file
+---@field run_file fun(file: string): table, table|nil Run a single test file with full lifecycle management
 ---@field run_discovered fun(dir?: string, pattern?: string): boolean, table|nil Run all discovered test files
----@field cli_run fun(args?: table): boolean Run tests from command line arguments
----@field report fun(name?: string, options?: table): table Generate a test report
----@field reset fun(): nil Reset the test state
+---@field cli_run fun(args?: table): boolean Run tests from command line arguments with options
+---@field report fun(name?: string, options?: table): table Generate a test report in various formats
+---@field reset fun(): nil Reset the test state completely for a fresh test run
+---@field get_current_test_context fun(): table|nil Get the current test context for temp file tracking
+---@field get_structured_results fun(): table Get structured test results for reporting
+
+-- Advanced testing features
+---@field get_coverage fun(): table|nil Get code coverage data for tests (when coverage module is loaded)
+---@field get_quality fun(): table|nil Get quality metrics for tests (when quality module is loaded)
+---@field watch fun(dir: string, pattern?: string): nil Watch for file changes and run tests automatically
 
 -- Mocking and spying
 ---@field mock fun(target: table, method_or_options?: string|table, impl_or_value?: any): table|nil, table|nil Create a mock object or method
 ---@field spy fun(target: table|function, method?: string): table|nil, table|nil Create a spy on an object method or function
 ---@field stub fun(value_or_fn?: any): table|nil, table|nil Create a stub that returns a value or executes a function
+---@field with_mocks fun(fn: function): any Execute a function with automatic mock cleanup
 
 -- Async testing (when async module is available)
 ---@field async fun(fn: function): function Convert a function to one that can be executed asynchronously
 ---@field await fun(ms: number): nil Wait for a specified time in milliseconds
 ---@field wait_until fun(condition: function, timeout?: number, check_interval?: number): boolean Wait until a condition is true or timeout occurs
 ---@field parallel_async fun(operations: table, timeout?: number): table Run multiple async operations concurrently
+---@field configure_async fun(options: {timeout?: number, interval?: number}): firmo Configure async testing options
 
 -- firmo v0.7.5 - Enhanced Lua test framework
 -- https://github.com/greggh/firmo

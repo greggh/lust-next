@@ -1,13 +1,29 @@
--- lib/core/init.lua - Core module for firmo
+--- Core module for firmo
+--- 
+--- Central module that aggregates core functionality from submodules:
+--- - Type checking utilities for advanced type validation
+--- - Expect system enhancements for improved assertion handling
+--- - Version information for tracking framework version
+---
+--- This module acts as a convenience wrapper around these core submodules,
+--- providing direct access to commonly used functions while maintaining
+--- the option to access the full submodules when needed.
+---
+--- @version 0.3.0
+--- @author Firmo Team
 
 ---@class core
----@field type_checking type_checking Type checking utilities
+---@field type_checking type_checking Type checking utilities for advanced validation
 ---@field fix_expect boolean Whether expect system was fixed successfully
----@field version string Version string
----@field is_exact_type fun(value: any, expected_type: string, message?: string): boolean
----@field is_instance_of fun(object: table, class: table, message?: string): boolean
----@field implements fun(object: table, interface: table, message?: string): boolean
+---@field version string Version string of the framework
+---@field is_exact_type fun(value: any, expected_type: string, message?: string): boolean Checks if a value is exactly of the specified primitive type
+---@field is_instance_of fun(object: table, class: table, message?: string): boolean Checks if an object is an instance of a class
+---@field implements fun(object: table, interface: table, message?: string): boolean Checks if an object implements all interface methods
+---@field _VERSION string Module version identifier
 local M = {}
+
+-- Module version
+M._VERSION = "0.3.0"
 
 ---@private
 ---@param module_name string Name of the module to require

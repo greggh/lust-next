@@ -1,19 +1,46 @@
 ---@class CLI
----@field parse_args fun(args?: table): table Parse command line arguments
----@field show_help fun() Display help information
----@field run fun(args?: table): boolean Run tests from command line
----@field watch fun(options: table): boolean Run tests in watch mode
----@field interactive fun(options: table): boolean Run tests in interactive mode
----@field report fun(options: table): boolean Generate a report based on options
+---@field _VERSION string Version of the CLI module
+---@field parse_args fun(args?: table): table Parse command line arguments into structured options
+---@field show_help fun(): nil Display help information about available commands and options
+---@field run fun(args?: table): boolean Run tests from command line with specified options
+---@field watch fun(options: table): boolean Run tests in watch mode for continuous testing
+---@field interactive fun(options: table): boolean Run tests in interactive mode with TUI interface
+---@field report fun(options: table): boolean Generate reports in various formats
+---@field configure fun(options: table): CLI Configure CLI behavior and defaults
+---@field register_command fun(name: string, handler: function, help: string): boolean Register a custom command
+---@field process_command fun(command: string, args: table): boolean Process a specific command
+---@field get_supported_options fun(): table Get list of all supported command line options
+---@field colorize fun(text: string, color: string): string Apply ANSI color codes to text
+---@field format_error fun(err: table|string): string Format error messages for display
+---@field get_version fun(): string Get CLI version information
+---@field validate_args fun(args: table, schema: table): boolean, string? Validate arguments against schema
 
--- CLI module for firmo
--- Handles command line argument parsing and running tests from the command line
+--[[
+Command Line Interface (CLI) Module for Firmo
+
+Provides a comprehensive command line interface for the Firmo testing framework,
+handling argument parsing, command execution, and user interaction. The module
+supports various testing modes (normal, watch, interactive) and integrates with
+all framework components through a unified interface.
+
+Features:
+- Command argument parsing with validation
+- Help and documentation display
+- Watch mode for continuous testing
+- Interactive TUI for guided test execution
+- Report generation in multiple formats
+- Color terminal output with fallback
+- Extensible command registration
+]]
 
 local M = {}
 
 -- Load required modules
+---@type ErrorHandler
 local error_handler = require("lib.tools.error_handler")
+---@type Logging
 local logging = require("lib.tools.logging")
+---@type Logger
 local logger = logging.get_logger("CLI")
 
 --- Safely require a module without raising an error if it doesn't exist

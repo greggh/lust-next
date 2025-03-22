@@ -19,7 +19,27 @@
 ---@field was_line_covered fun(file_path: string, line_num: number): boolean Check if a line has been covered
 ---@field mark_current_line_covered fun(level?: number): boolean Mark current line as covered
 
--- firmo code coverage module
+--- Firmo code coverage module
+--- This module provides comprehensive code coverage tracking for Lua applications.
+--- It implements both line coverage and branch coverage with support for multiple
+--- tracking mechanisms including debug hooks and code instrumentation.
+---
+--- Key features:
+--- - Line coverage tracking with execution vs validation distinction
+--- - Function and block coverage for more detailed analysis
+--- - Multiple tracking modes (debug hook and instrumentation)
+--- - Support for source code patchup to improve accuracy
+--- - Detailed reporting with coverage statistics
+--- - Configurable filtering with include/exclude patterns
+--- - Integration with assertion systems for validation coverage
+---
+--- The coverage module can be used in multiple ways:
+--- 1. Automatic tracking through the debug hook (simpler but may miss some code)
+--- 2. Instrumentation-based tracking (more thorough but modifies loaded code)
+--- 3. Explicit tracking via direct API calls (for integration with testing frameworks)
+---
+--- @author Firmo Team
+--- @version 1.0.0
 local M = {}
 M._VERSION = '1.0.0'
 
@@ -304,11 +324,53 @@ function M.track_file(file_path)
   end
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number to track execution for
----@return boolean|nil success Whether the line was successfully tracked
----@return table|nil error Error information if tracking failed
--- Track execution without marking as covered - for distinguishing execution from coverage
+--- Track line execution without marking as covered.
+--- This function records that a specific line has been executed but does not mark it
+--- as covered by test assertions. This is important for distinguishing between code
+--- that merely ran (execution) versus code that was explicitly validated (coverage).
+---
+--- The distinction between execution and coverage is a core feature of the Firmo
+--- testing framework:
+--- - Execution tracking (this function) shows what code ran during tests
+--- - Coverage tracking (mark_line_covered) shows what code was validated by assertions
+---
+--- This function is typically called by the debug hook system or instrumented code
+--- to record line execution during program run.
+---
+--- @usage
+--- -- Track execution of a specific line
+--- coverage.track_execution("/path/to/file.lua", 42)
+--- 
+--- -- Instrument code to track execution
+--- local original_function = module.process_data
+--- module.process_data = function(...)
+---   coverage.track_execution("module.lua", 10) -- Track the function entry
+---   local result = original_function(...)
+---   coverage.track_execution("module.lua", 12) -- Track the function exit
+---   return result
+--- end
+--- 
+--- -- Compare execution vs coverage in test results
+--- function report_test_quality()
+---   local executed_lines = 0
+---   local covered_lines = 0
+---   for file_path, file_data in pairs(coverage.get_report_data().files) do
+---     for line_num, line_data in pairs(file_data.lines) do
+---       if coverage.was_line_executed(file_path, line_num) then
+---         executed_lines = executed_lines + 1
+---         if coverage.was_line_covered(file_path, line_num) then
+---           covered_lines = covered_lines + 1
+---         end
+---       end
+---     end
+---   end
+---   return covered_lines / executed_lines -- Validation ratio
+--- end
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number to track execution for
+--- @return boolean|nil success Whether the line was successfully tracked
+--- @return table|nil error Error information if tracking failed
 function M.track_execution(file_path, line_num)
   if not active or not config.enabled then
     logger.debug("Coverage not active or disabled, ignoring track_execution", {
@@ -456,11 +518,67 @@ function M.track_execution(file_path, line_num)
   return true
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number to track
----@return boolean|nil success Whether the line was successfully tracked
----@return table|nil error Error information if tracking failed
--- Track line coverage through instrumentation (marks as both executed and covered)
+--- Track a line as both executed and covered in a single operation.
+--- This function marks a specific line as both executed and covered, which is a
+--- convenience for instrumentation-based coverage tracking. It combines the functionality
+--- of track_execution() and mark_line_covered() into a single call.
+---
+--- This function is particularly useful in:
+--- - Instrumented code where you want to track both execution and coverage
+--- - Test assertions that should both track execution and validate code
+--- - Custom test runners that need to mark lines in a single operation
+---
+--- While track_execution() only marks a line as executed, and mark_line_covered()
+--- only marks it as covered, this function does both, making it more efficient
+--- for instrumentation scenarios.
+---
+--- @usage
+--- -- Track a line as both executed and covered
+--- coverage.track_line("/path/to/file.lua", 42)
+--- 
+--- -- Use in custom assertion functions
+--- function assert_equals(a, b, message)
+---   if a == b then
+---     -- On success, mark the assertion line as both executed and covered
+---     local info = debug.getinfo(2, "Sl")
+---     if info and info.source:sub(1, 1) == "@" then
+---       local file_path = info.source:sub(2)
+---       coverage.track_line(file_path, info.currentline)
+---     end
+---     return true
+---   else
+---     error(message or ("Expected " .. tostring(a) .. " to equal " .. tostring(b)))
+---   end
+--- end
+--- 
+--- -- Use in instrumented code
+--- local original_code = [[
+--- function process(data)
+---   if data.valid then
+---     return handle_valid_data(data)
+---   else
+---     return handle_invalid_data(data)
+---   end
+--- end
+--- ]]
+--- 
+--- local instrumented_code = [[
+--- function process(data)
+---   coverage.track_line("module.lua", 1)
+---   if data.valid then
+---     coverage.track_line("module.lua", 2)
+---     return handle_valid_data(data)
+---   else
+---     coverage.track_line("module.lua", 4)
+---     return handle_invalid_data(data)
+---   end
+--- end
+--- ]]
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number to track
+--- @return boolean|nil success Whether the line was successfully tracked
+--- @return table|nil error Error information if tracking failed
 function M.track_line(file_path, line_num)
   if not active or not config.enabled then
     logger.debug("Coverage not active or disabled, ignoring track_line", {
@@ -582,12 +700,50 @@ function M.track_line(file_path, line_num)
   return true
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number to mark as covered
----@return boolean|nil success Whether the line was successfully marked as covered
----@return table|nil error Error information if marking failed
--- Mark a line as covered (validated by assertions)
--- This is a key function for explicitly marking lines that have been validated by assertions
+--- Mark a line as covered (validated by assertions).
+--- This function explicitly marks a line as covered, meaning it has been validated by test 
+--- assertions or other validation mechanisms. This is distinct from merely executing the line.
+---
+--- The coverage system distinguishes between executed lines (code that ran) and covered lines
+--- (code that was validated). This distinction is crucial for measuring test quality:
+--- - High execution with low coverage suggests tests don't validate much of what they run
+--- - High coverage relative to execution suggests comprehensive validation
+---
+--- This function is typically called automatically by assertion functions to mark the
+--- lines where assertions are successful. It can also be called manually to mark lines
+--- as validated through other means.
+---
+--- @usage
+--- -- Mark a specific line as covered
+--- coverage.mark_line_covered("/path/to/file.lua", 42)
+--- 
+--- -- Implement an assertion that marks the assertion line as covered
+--- function assert_is_valid(value)
+---   if is_valid(value) then
+---     -- Mark the calling line as covered on success
+---     coverage.mark_current_line_covered()
+---     return true
+---   else
+---     error("Value is not valid: " .. tostring(value))
+---   end
+--- end
+--- 
+--- -- Track coverage in a custom validation process
+--- function validate_module(module_path)
+---   local result = run_validation_suite(module_path)
+---   if result.success then
+---     -- Mark key lines as covered based on validation results
+---     for _, line_num in ipairs(result.validated_lines) do
+---       coverage.mark_line_covered(module_path, line_num)
+---     end
+---   end
+---   return result
+--- end
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number to mark as covered
+--- @return boolean|nil success Whether the line was successfully marked as covered
+--- @return table|nil error Error information if marking failed
 function M.mark_line_covered(file_path, line_num)
   if not active or not config.enabled then
     logger.debug("Coverage not active or disabled, ignoring mark_line_covered", {
@@ -668,12 +824,46 @@ function M.mark_line_covered(file_path, line_num)
   return true
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number where the function is defined
----@param func_name string The name of the function
----@return boolean|nil success Whether the function was successfully tracked
----@return table|nil error Error information if tracking failed
--- Track function execution
+--- Track function execution for coverage reporting.
+--- This function records that a specific function has been executed, which is used
+--- for function-level coverage reporting. Function tracking provides a higher-level
+--- view of coverage than line-level tracking, showing which functions have been
+--- called during testing.
+---
+--- Function tracking is particularly useful for:
+--- - Identifying untested functions (those defined but never called)
+--- - Measuring the percentage of functions covered by tests
+--- - Analyzing call patterns between functions
+---
+--- This function is typically called automatically by instrumented code or by the
+--- debug hook system, but can also be called manually for custom tracking.
+---
+--- @usage
+--- -- Track a specific function
+--- coverage.track_function("/path/to/file.lua", 42, "process_data")
+--- 
+--- -- Instrument a module to track function calls
+--- local original_module = require("module")
+--- local instrumented = {}
+--- 
+--- for func_name, func in pairs(original_module) do
+---   if type(func) == "function" then
+---     instrumented[func_name] = function(...)
+---       coverage.track_function("module.lua", 0, func_name)
+---       return func(...)
+---     end
+---   else
+---     instrumented[func_name] = func
+---   end
+--- end
+--- 
+--- return instrumented
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number where the function is defined
+--- @param func_name string The name of the function
+--- @return boolean|nil success Whether the function was successfully tracked
+--- @return table|nil error Error information if tracking failed
 function M.track_function(file_path, line_num, func_name)
   if not active or not config.enabled then
     logger.debug("Coverage not active or disabled, ignoring track_function", {
@@ -749,13 +939,50 @@ function M.track_function(file_path, line_num, func_name)
   return true
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number where the block starts
----@param block_id string A unique identifier for the block
----@param block_type string The type of block (if, while, for, etc.)
----@return boolean|nil success Whether the block was successfully tracked
----@return table|nil error Error information if tracking failed
--- Track block execution
+--- Track code block execution for detailed coverage reporting.
+--- This function records that a specific code block (like an if statement, loop, or 
+--- other control structure) has been executed. Block tracking provides more detailed
+--- coverage information than simple line tracking, showing which control flow paths
+--- have been exercised during testing.
+---
+--- Block tracking helps identify:
+--- - Untested conditions (if blocks that were never entered)
+--- - Unexecuted loop bodies
+--- - Control flow paths that tests missed
+--- - Branch coverage gaps
+---
+--- Each block is identified by a unique block_id within the file, and its type
+--- (if, while, for, etc.) is tracked to enable more detailed reporting.
+---
+--- @usage
+--- -- Track a specific block
+--- coverage.track_block("/path/to/file.lua", 42, "if_condition_1", "if")
+--- 
+--- -- Track both branches of an if statement
+--- function process_data(data)
+---   if data.valid then
+---     coverage.track_block("processor.lua", 10, "valid_data_branch", "if")
+---     return process_valid_data(data)
+---   else
+---     coverage.track_block("processor.lua", 13, "invalid_data_branch", "else")
+---     return handle_invalid_data(data)
+---   end
+--- end
+--- 
+--- -- Track iterations of a loop
+--- function process_items(items)
+---   for i, item in ipairs(items) do
+---     coverage.track_block("processor.lua", 20, "process_loop_" .. i, "for")
+---     process_item(item)
+---   end
+--- end
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number where the block starts
+--- @param block_id string A unique identifier for the block
+--- @param block_type string The type of block (if, while, for, etc.)
+--- @return boolean|nil success Whether the block was successfully tracked
+--- @return table|nil error Error information if tracking failed
 function M.track_block(file_path, line_num, block_id, block_type)
   if not active or not config.enabled then
     logger.debug("Coverage not active or disabled, ignoring track_block", {
@@ -888,10 +1115,49 @@ function M.track_block(file_path, line_num, block_id, block_type)
   return true
 end
 
----@param options? table Configuration options for coverage module
----@return coverage|nil module The initialized coverage module
----@return table|nil error Error information if initialization failed
--- Initialize module
+--- Initialize the coverage module with configuration options.
+--- This function initializes and configures the coverage module with the provided options
+--- or default values. It sets up all required dependencies and prepares the module for use.
+---
+--- The init() function should be called before any other coverage operations. It configures
+--- the module but does not start coverage tracking (use start() for that).
+---
+--- Configuration options include:
+--- - enabled: Whether coverage is enabled at all
+--- - use_instrumentation: Use code instrumentation instead of debug hooks
+--- - instrument_on_load: Automatically instrument modules when loaded
+--- - include_patterns: File patterns to include in coverage
+--- - exclude_patterns: File patterns to exclude from coverage
+--- - track_blocks: Track execution of code blocks (if, while, etc.)
+--- - track_functions: Track function executions
+--- - use_static_analysis: Use static analysis to improve coverage accuracy
+--- - source_dirs: Directories to search for source files
+--- - threshold: Coverage percentage threshold for success
+---
+--- @usage
+--- -- Initialize with defaults
+--- local coverage = require("lib.coverage.init")
+--- coverage.init()
+--- 
+--- -- Initialize with custom options
+--- coverage.init({
+---   enabled = true,
+---   use_instrumentation = true,
+---   include_patterns = {"src/**.lua", "lib/**.lua"},
+---   exclude_patterns = {"tests/**.lua", "vendor/**.lua"},
+---   track_blocks = true,
+---   track_functions = true,
+---   threshold = 85
+--- })
+--- 
+--- -- Initialize with static analysis disabled
+--- coverage.init({
+---   use_static_analysis = false
+--- })
+---
+--- @param options? {enabled?: boolean, use_instrumentation?: boolean, instrument_on_load?: boolean, include_patterns?: string[], exclude_patterns?: string[], debugger_enabled?: boolean, report_format?: string, track_blocks?: boolean, track_functions?: boolean, use_static_analysis?: boolean, source_dirs?: string[], threshold?: number, pre_analyze_files?: boolean} Configuration options for coverage module
+--- @return coverage|nil module The initialized coverage module, nil on failure
+--- @return table|nil error Error information if initialization failed
 function M.init(options)
   if options ~= nil and type(options) ~= "table" then
     local err = error_handler.validation_error(
@@ -964,10 +1230,37 @@ function M.init(options)
   return M
 end
 
----@param options? table Additional configuration options for coverage start
----@return coverage|nil module The coverage module
----@return table|nil error Error information if start failed
--- Start coverage collection
+--- Start coverage collection with optional configuration overrides.
+--- This function activates the coverage tracking system, either using the debug hook approach
+--- or the instrumentation approach based on configuration settings.
+---
+--- The coverage module can operate in two distinct modes:
+--- 1. Debug hook mode: Uses Lua's debug hooks to track line execution during runtime
+--- 2. Instrumentation mode: Modifies Lua code at load time to include explicit tracking calls
+---
+--- Debug hook mode is simpler to set up but may miss some execution paths and has higher runtime
+--- overhead. Instrumentation mode is more thorough but requires additional setup and affects
+--- the loaded code structure.
+---
+--- @usage
+--- -- Start coverage with default settings
+--- coverage.start()
+---
+--- -- Start with instrumentation mode
+--- coverage.start({
+---   use_instrumentation = true,
+---   instrument_on_load = true
+--- })
+---
+--- -- Start with block tracking disabled
+--- coverage.start({
+---   track_blocks = false,
+---   track_functions = true
+--- })
+---
+--- @param options? {use_instrumentation?: boolean, instrument_on_load?: boolean, track_blocks?: boolean, track_functions?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, sourcemap_enabled?: boolean} Additional configuration options for coverage start
+--- @return coverage|nil module The coverage module on success, nil on failure
+--- @return table|nil error Error information if start failed
 function M.start(options)
   if not config.enabled then
     logger.debug("Coverage is disabled, not starting")
@@ -1177,10 +1470,42 @@ function M.start(options)
   return M
 end
 
----@param file_path string The absolute path to the file to analyze
----@return boolean|nil success Whether the module structure was successfully processed
----@return table|nil error Error information if processing failed
--- Process a module's code structure to mark logical execution paths
+--- Process a module's code structure to mark logical execution paths.
+--- This function analyzes a Lua module file and identifies its structure, including
+--- logical execution paths, functions, blocks, and executable lines. It prepares the file
+--- for coverage tracking without requiring execution.
+---
+--- This is particularly useful for:
+--- - Pre-processing files before running tests to improve coverage accuracy
+--- - Analyzing files that might only be partially executed during tests
+--- - Setting up coverage for modules that are loaded dynamically
+---
+--- The function initializes the file in the coverage tracking system and makes it
+--- available for reporting even if it isn't executed during the test run.
+---
+--- @usage
+--- -- Process a specific module
+--- coverage.process_module_structure("/path/to/module.lua")
+--- 
+--- -- Process multiple modules
+--- local files = {"module1.lua", "module2.lua", "subdir/module3.lua"}
+--- for _, file_path in ipairs(files) do
+---   local success, err = coverage.process_module_structure(file_path)
+---   if not success then
+---     print("Failed to process " .. file_path .. ": " .. error_handler.format_error(err))
+---   end
+--- end
+--- 
+--- -- Process all modules in a directory
+--- local fs = require("lib.tools.filesystem")
+--- local files = fs.find_files("lib", "*.lua")
+--- for _, file_path in ipairs(files) do
+---   coverage.process_module_structure(file_path)
+--- end
+---
+--- @param file_path string The absolute path to the file to analyze
+--- @return boolean|nil success Whether the module structure was successfully processed
+--- @return table|nil error Error information if processing failed
 function M.process_module_structure(file_path)
   if not file_path then
     local err = error_handler.validation_error(
@@ -1243,8 +1568,29 @@ end
 -- Local reference to the function
 local process_module_structure = M.process_module_structure
 
--- Stop coverage collection
----@return coverage module The coverage module
+--- Stop coverage collection and finalize coverage data.
+--- This function deactivates the coverage tracking system and performs any necessary
+--- cleanup operations. In debug hook mode, it restores the original debug hook and
+--- applies coverage data patching. In instrumentation mode, it unhooks any loader
+--- instrumentation that may have been added.
+---
+--- When coverage is stopped, the data is still retained and can be accessed through
+--- get_report_data() or get_raw_data(). To clear the data completely, call reset()
+--- or full_reset() after stopping.
+---
+--- @usage
+--- -- Start coverage, run tests, then stop
+--- coverage.start()
+--- run_tests()
+--- coverage.stop()
+--- 
+--- -- Start, stop, and then generate a report
+--- coverage.start()
+--- run_tests()
+--- coverage.stop()
+--- local report_data = coverage.get_report_data()
+--- 
+--- @return coverage module The coverage module
 function M.stop()
   if not active then
     logger.debug("Coverage not active, ignoring stop request")
@@ -1301,8 +1647,33 @@ function M.stop()
   return M
 end
 
----@return coverage module The coverage module
--- Reset coverage data
+--- Reset coverage data while maintaining the active tracking state.
+--- This function clears all collected coverage data but keeps coverage tracking 
+--- active if it was active before the reset. Use this to clear data between test runs
+--- without having to stop and restart the coverage system.
+---
+--- The reset affects:
+--- - Line execution and coverage data
+--- - Function execution data
+--- - Block execution data
+--- - Condition tracking data
+---
+--- This is lighter than full_reset() as it maintains the active state and only clears
+--- the collected data.
+---
+--- @usage
+--- -- Reset coverage data between test runs
+--- coverage.start()
+--- run_first_test_suite()
+--- -- Get the report for the first test suite
+--- local first_report = coverage.get_report_data()
+--- -- Reset for second test suite
+--- coverage.reset()
+--- run_second_test_suite()
+--- -- Get the report for the second test suite
+--- local second_report = coverage.get_report_data()
+---
+--- @return coverage module The coverage module
 function M.reset()
   local success, err = error_handler.try(function()
     debug_hook.reset()
@@ -1317,8 +1688,31 @@ function M.reset()
   return M
 end
 
----@return coverage module The coverage module
--- Full reset (more comprehensive than regular reset)
+--- Perform a complete reset of the coverage system.
+--- This function provides a more comprehensive reset than reset(), completely 
+--- reinitializing the coverage system. It:
+--- - Clears all coverage data
+--- - Resets the active state to false
+--- - Resets the instrumentation mode
+--- - Clears the original hook reference
+---
+--- After a full reset, you will need to call start() again to resume coverage tracking.
+--- Use this when you want to completely reinitialize the coverage system.
+---
+--- @usage
+--- -- Completely reset the coverage system between major test operations
+--- coverage.start()
+--- run_integration_tests()
+--- 
+--- -- Complete reset for unit tests with different configuration
+--- coverage.full_reset()
+--- coverage.start({
+---   track_blocks = true,
+---   use_instrumentation = true
+--- })
+--- run_unit_tests()
+---
+--- @return coverage module The coverage module
 function M.full_reset()
   local success, err = error_handler.try(function()
     -- Reset internal state
@@ -1340,8 +1734,43 @@ function M.full_reset()
   return M
 end
 
----@return table raw_data Raw coverage data for debugging and analysis
--- Get raw coverage data for debugging and analysis
+--- Get raw coverage data for debugging and analysis.
+--- This function returns the underlying coverage data in a minimally processed format,
+--- making it suitable for debugging, custom analysis, or integration with external tools.
+--- The data includes detailed information about files, executed lines, covered lines,
+--- functions, blocks, and conditions.
+---
+--- Raw data provides a more detailed view than the report data, exposing the internal
+--- structures and state of the coverage system. Use get_report_data() for higher-level
+--- statistics and reporting.
+---
+--- The structure of the returned data has these key components:
+--- - files: Detailed information about tracked files
+--- - executed_lines: Lines that were executed during the program run
+--- - covered_lines: Lines that were explicitly validated by assertions
+--- - functions: Tracked function definitions and execution status
+--- - blocks: Control flow blocks and their execution status
+--- - conditions: Conditional branches and outcomes
+--- - performance: Performance metrics about the coverage system
+---
+--- @usage
+--- -- Get raw data for custom processing
+--- local raw_data = coverage.get_raw_data()
+--- 
+--- -- Extract specific information
+--- for file_path, file_data in pairs(raw_data.files) do
+---   print(file_path .. ": " .. #(file_data.lines or {}))
+--- end
+--- 
+--- -- Count executed but not covered lines
+--- local executed_not_covered = 0
+--- for key in pairs(raw_data.executed_lines) do
+---   if not raw_data.covered_lines[key] then
+---     executed_not_covered = executed_not_covered + 1
+---   end
+--- end
+---
+--- @return {files: table, executed_lines: table, covered_lines: table, functions: {all: table, executed: table, covered: table}, blocks: {all: table, executed: table, covered: table}, conditions: {all: table, executed: table, true_outcome: table, false_outcome: table, fully_covered: table}, performance: table} raw_data Raw coverage data for debugging and analysis
 function M.get_raw_data()
   local success, result, err = error_handler.try(function()
     -- Get data directly from debug_hook
@@ -1393,8 +1822,44 @@ function M.get_raw_data()
   return result
 end
 
----@return table report_data Coverage report data with statistics calculations
--- Get report data with statistics calculations
+--- Get coverage report data with comprehensive statistics calculations.
+--- This function processes raw coverage data into a structured report format with
+--- summary statistics. The report includes file-level and project-level metrics
+--- for line coverage, function coverage, and block coverage.
+---
+--- The report distinguishes between execution coverage (lines that ran) and
+--- validation coverage (lines that were verified by assertions), providing a more
+--- nuanced view of test quality.
+---
+--- The returned data structure contains:
+--- - files: Per-file coverage information with detailed metrics
+--- - summary: Project-wide aggregated statistics including:
+---   - File coverage: Total files and percentage of files with coverage
+---   - Line coverage: Total executable lines and percentage covered
+---   - Execution coverage: Percentage of lines executed (may be higher than line coverage)
+---   - Function coverage: Total functions and percentage covered
+---   - Block coverage: Total code blocks and percentage covered
+---
+--- @usage
+--- -- Generate a basic coverage report
+--- coverage.start()
+--- run_tests()
+--- coverage.stop()
+--- local report_data = coverage.get_report_data()
+--- print("Line coverage: " .. report_data.summary.line_coverage_percent .. "%")
+--- print("Function coverage: " .. report_data.summary.function_coverage_percent .. "%")
+--- 
+--- -- Check if coverage meets a threshold
+--- if report_data.summary.line_coverage_percent < 80 then
+---   print("Warning: Coverage below 80% threshold")
+--- end
+--- 
+--- -- Process individual file data
+--- for file_path, file_data in pairs(report_data.files) do
+---   print(file_path .. ": " .. file_data.line_coverage_percent .. "%")
+--- end
+---
+--- @return {files: table, summary: {total_files: number, covered_files: number, file_coverage_percent: number, total_lines: number, covered_lines: number, executed_lines: number, line_coverage_percent: number, execution_coverage_percent: number, total_functions: number, covered_functions: number, function_coverage_percent: number, total_blocks: number, covered_blocks: number, block_coverage_percent: number, performance: table}} report_data Coverage report data with statistics
 function M.get_report_data()
   local success, result, err = error_handler.try(function()
     -- Get data from debug_hook
@@ -1708,11 +2173,35 @@ function M.get_report_data()
   return result
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number to check
----@return boolean executed Whether the line has been executed
--- Check if a line has been executed
--- This is a key function for the execution vs. coverage distinction
+--- Check if a specific line has been executed during the program run.
+--- This function verifies if a line in a given file has been executed at least once.
+--- Execution tracking records every time a line runs, regardless of whether it was
+--- explicitly validated by a test assertion.
+---
+--- This is distinct from was_line_covered(), which checks if a line was explicitly
+--- validated by assertions. The distinction is important for test quality measurement:
+--- - Executed lines (tracked by this function) represent code that ran
+--- - Covered lines (tracked by was_line_covered) represent code that was validated
+---
+--- A high-quality test suite should aim to have coverage close to execution numbers,
+--- meaning most executed code was also validated.
+---
+--- @usage
+--- -- Check if a specific line was executed
+--- if coverage.was_line_executed("/path/to/file.lua", 42) then
+---   print("Line 42 was executed")
+--- end
+--- 
+--- -- Compare execution vs coverage
+--- local executed = coverage.was_line_executed(file_path, line_num)
+--- local covered = coverage.was_line_covered(file_path, line_num)
+--- if executed and not covered then
+---   print("Line was executed but not validated by tests")
+--- end
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number to check
+--- @return boolean executed Whether the line has been executed
 function M.was_line_executed(file_path, line_num)
   -- Return false if coverage is not active
   if not active or not config.enabled then
@@ -1731,11 +2220,45 @@ function M.was_line_executed(file_path, line_num)
   return debug_hook.was_line_executed(normalized_path, line_num)
 end
 
----@param file_path string The absolute path to the file
----@param line_num number The line number to check
----@return boolean covered Whether the line has been covered (validated by tests)
--- Check if a line has been covered (validated by tests)
--- This is a key function for the execution vs. coverage distinction
+--- Check if a specific line has been covered by test assertions.
+--- This function verifies if a line in a given file has been explicitly validated
+--- by test assertions. Coverage tracking is more stringent than execution tracking,
+--- as it only counts lines that were specifically verified through assertions.
+---
+--- The distinction between execution and coverage is fundamental to the Firmo
+--- testing philosophy:
+--- - Execution shows what code ran during tests
+--- - Coverage shows what code was explicitly validated
+---
+--- This function returns true only if the line was marked as covered through
+--- mark_line_covered(), which typically happens as a result of assertions or
+--- explicit validation.
+---
+--- @usage
+--- -- Check if a specific line was covered by assertions
+--- if coverage.was_line_covered("/path/to/file.lua", 42) then
+---   print("Line 42 was validated by tests")
+--- end
+--- 
+--- -- Calculate the percentage of executed lines that were also covered
+--- local executed_and_covered = 0
+--- local executed_count = 0
+--- for line_num = 1, 100 do
+---   if coverage.was_line_executed(file_path, line_num) then
+---     executed_count = executed_count + 1
+---     if coverage.was_line_covered(file_path, line_num) then
+---       executed_and_covered = executed_and_covered + 1
+---     end
+---   end
+--- end
+--- local validation_percentage = executed_count > 0 
+---   and (executed_and_covered / executed_count) * 100 
+---   or 0
+--- print("Validation percentage: " .. validation_percentage .. "%")
+---
+--- @param file_path string The absolute path to the file
+--- @param line_num number The line number to check
+--- @return boolean covered Whether the line has been covered (validated by tests)
 function M.was_line_covered(file_path, line_num)
   -- Return false if coverage is not active
   if not active or not config.enabled then
@@ -1754,10 +2277,30 @@ function M.was_line_covered(file_path, line_num)
   return debug_hook.was_line_covered(normalized_path, line_num)
 end
 
----@param level? number Stack level to use for getting caller info (default: 2)
----@return boolean success Whether the current line was marked as covered
--- Mark the current line as covered by extracting caller information
--- This is convenient for assertions to automatically mark their caller lines as covered
+--- Mark the current line as covered by automatically detecting the caller location.
+--- This function is a convenience wrapper that automatically determines the current
+--- source file and line number and marks it as covered. It's particularly useful in
+--- assertion libraries to automatically mark the assertion call site as covered.
+---
+--- The level parameter allows controlling which stack frame to use, which is helpful
+--- when this function is called through multiple layers of function calls.
+---
+--- @usage
+--- -- Mark the current line as covered (using default level)
+--- coverage.mark_current_line_covered()
+--- 
+--- -- Use in an assertion function to mark the assertion call site
+--- function assert_equals(a, b)
+---   if a == b then
+---     coverage.mark_current_line_covered(3) -- Use level 3 to mark the caller of assert_equals
+---     return true
+---   else
+---     error("Values not equal: " .. tostring(a) .. " ~= " .. tostring(b))
+---   end
+--- end
+---
+--- @param level? number Stack level to use for getting caller info (default: 2)
+--- @return boolean success Whether the current line was marked as covered
 function M.mark_current_line_covered(level)
   -- Return false if coverage is not active
   if not active or not config.enabled then

@@ -19,8 +19,26 @@
 ---@field get_active_files fun(): table<string, boolean> Get list of active files
 ---@field get_performance_metrics fun(): {hook_calls: number, hook_execution_time: number, hook_errors: number, last_call_time: number, average_call_time: number, max_call_time: number, line_events: number, call_events: number, return_events: number} Get performance metrics
 ---@field reset fun() Reset all coverage data
+---@field visualize_line_classification fun(file_path: string): table|nil, string? Visualize line classification for debugging
 
--- Core debug hook implementation
+--- Firmo coverage debug hook module
+--- This module implements the core debug hook and data management functionality for the coverage
+--- system. It uses Lua's debug hooks to track line execution, function calls, and code blocks
+--- during program execution.
+---
+--- Key features:
+--- - Line execution tracking with Lua's debug hook
+--- - Distinction between execution and validation coverage
+--- - Function and block tracking
+--- - Performance metrics collection
+--- - File tracking with include/exclude patterns
+--- - Integration with static analysis
+---
+--- The debug hook module serves as the foundation for the coverage system, providing the
+--- fundamental tracking mechanisms that other coverage components build upon.
+---
+--- @author Firmo Team
+--- @version 1.0.0
 local M = {}
 local fs = require("lib.tools.filesystem")
 local logging = require("lib.tools.logging")
@@ -73,9 +91,35 @@ local performance_metrics = {
 -- Create a logger for this module
 local logger = logging.get_logger("CoverageHook")
 
----@param file_path string Path to the file to check
----@return boolean Should the file be tracked by the coverage system
--- Should we track this file?
+--- Determine if a file should be tracked by the coverage system.
+--- This function checks if a given file should be included in coverage tracking
+--- based on configured include/exclude patterns and other rules. The decision is
+--- cached for improved performance on subsequent checks for the same file.
+---
+--- The function applies these rules in order:
+--- 1. Files already in the tracking cache use the cached decision
+--- 2. Example files are tracked based on configuration
+--- 3. Files matching exclude patterns are not tracked
+--- 4. Files matching include patterns are tracked
+--- 5. Files in configured source directories are tracked
+---
+--- @usage
+--- -- Check if a file should be tracked
+--- local should_track = debug_hook.should_track_file("/path/to/file.lua")
+--- 
+--- -- Use in a filter function
+--- local function filter_files(files)
+---   local tracked_files = {}
+---   for _, file_path in ipairs(files) do
+---     if debug_hook.should_track_file(file_path) then
+---       table.insert(tracked_files, file_path)
+---     end
+---   end
+---   return tracked_files
+--- end
+---
+--- @param file_path string Path to the file to check
+--- @return boolean Should the file be tracked by the coverage system
 function M.should_track_file(file_path)
   -- Safely normalize file path
   local normalized_path, err = error_handler.safe_io_operation(
@@ -270,7 +314,22 @@ end
 ---@return boolean is_executable Whether the line is executable
 ---@private
 -- Check if a line is executable in a file - delegated to static_analyzer
-local function is_line_executable(file_path, line)
+-- Enhanced function to check if a line is executable with detailed context
+-- @param file_path string Path to the file
+-- @param line number Line number to check
+-- @param options? table Optional settings {use_enhanced_classification?: boolean, track_multiline_context?: boolean}
+-- @return boolean is_executable Whether the line is executable
+-- @return table? context Additional context information about the classification
+local function is_line_executable(file_path, line, options)
+  -- Apply default options
+  options = options or {}
+  if options.use_enhanced_classification == nil then
+    options.use_enhanced_classification = true -- Default to enhanced classification
+  end
+  if options.track_multiline_context == nil then
+    options.track_multiline_context = true -- Default to tracking multiline context
+  end
+
   -- Ensure static_analyzer is loaded
   if not static_analyzer then
     static_analyzer = require("lib.coverage.static_analyzer")
@@ -281,11 +340,18 @@ local function is_line_executable(file_path, line)
   local file_data = coverage_data.files[normalized_path]
   
   if file_data and file_data.code_map then
-    -- Use existing static analysis data
-    local is_exec = static_analyzer.is_line_executable(file_data.code_map, line)
+    -- Use existing static analysis data with enhanced options
+    local is_exec, context = static_analyzer.is_line_executable(file_data.code_map, line, options)
     
-    -- Verbose output for specific test files
-    if config.verbose and file_path:match("examples/minimal_coverage.lua") and logger.is_verbose_enabled() then
+    -- Store classification context in file data if requested
+    if options.track_multiline_context and context then
+      file_data.line_classification = file_data.line_classification or {}
+      file_data.line_classification[line] = context
+    end
+    
+    -- Verbose output for specific test files or when debug is enabled
+    if (config.verbose and file_path:match("examples/minimal_coverage.lua") and logger.is_verbose_enabled()) or 
+       (config.debug and logger.is_debug_enabled()) then
       local line_type = "unknown"
       if file_data.code_map.lines and file_data.code_map.lines[line] then
         line_type = file_data.code_map.lines[line].type or "unknown"
@@ -296,36 +362,95 @@ local function is_line_executable(file_path, line)
         line = line,
         executable = is_exec,
         type = line_type,
+        context = context and context.content_type or "unknown",
         source = "static_analyzer.is_line_executable"
       })
     end
     
-    return is_exec
+    return is_exec, context
   end
   
   -- If we don't have a code map but we have the source text, try to obtain one
-  -- via the static analyzer on-demand
+  -- via the static analyzer on-demand with enhanced features
   if file_data and file_data.source_text and not file_data.code_map_attempted then
     file_data.code_map_attempted = true -- Mark that we've tried to get a code map
     
-    -- Try to parse the source and get a code map
-    local ast, code_map = static_analyzer.parse_content(file_data.source_text, file_path)
+    -- Try to parse the source and get a code map with enhanced options
+    local ast, code_map, _, parsing_context = static_analyzer.parse_content(
+      file_data.source_text, 
+      file_path,
+      {
+        track_multiline_constructs = options.track_multiline_context,
+        enhanced_comment_detection = options.use_enhanced_classification
+      }
+    )
+    
     if ast and code_map then
       file_data.code_map = code_map
       file_data.ast = ast
+      file_data.parsing_context = parsing_context
       
-      -- Now that we have a code map, we can check if the line is executable
-      return static_analyzer.is_line_executable(code_map, line)
+      -- Get executable lines map with enhanced detection
+      file_data.executable_lines = static_analyzer.get_executable_lines(code_map, {
+        use_enhanced_detection = options.use_enhanced_classification
+      })
+      
+      -- Now that we have a code map, we can check if the line is executable with enhanced options
+      return static_analyzer.is_line_executable(code_map, line, options)
     end
   end
   
-  -- If we can't generate a code map, ask static_analyzer for a simple line classification
-  return static_analyzer.classify_line_simple(file_data and file_data.source[line], config)
+  -- If we can't generate a code map, use the enhanced classify_line_simple_with_context
+  if options.use_enhanced_classification then
+    local source_line = file_data and file_data.source and file_data.source[line]
+    local line_type, context = static_analyzer.classify_line_simple_with_context(file_path, line, source_line, options)
+    
+    -- Store classification context in file data if requested
+    if options.track_multiline_context and file_data then
+      file_data.line_classification = file_data.line_classification or {}
+      file_data.line_classification[line] = context
+    end
+    
+    local is_executable = (
+      line_type == static_analyzer.LINE_TYPES.EXECUTABLE or
+      line_type == static_analyzer.LINE_TYPES.FUNCTION or
+      line_type == static_analyzer.LINE_TYPES.BRANCH
+    )
+    
+    return is_executable, context
+  else
+    -- Fallback to original simple classification without context
+    return static_analyzer.classify_line_simple(file_data and file_data.source[line], config)
+  end
 end
 
----@param event string The debug event type ('line', 'call', 'return', etc.)
----@param line number The line number where the event occurred
--- Enhanced debug hook function with performance tracking and robust execution vs. coverage distinction
+--- Main debug hook function for capturing code execution.
+--- This function is registered with Lua's debug.sethook() and is called for line, call,
+--- and return events during program execution. It tracks which lines of code are executed, 
+--- which functions are called, and collects coverage data.
+---
+--- The debug hook is the primary mechanism for execution tracking in the coverage system.
+--- It handles:
+--- - Filtering files based on include/exclude patterns
+--- - Recording line execution
+--- - Tracking function calls and returns
+--- - Collecting performance metrics
+--- - Preventing recursive hook calls
+--- - Special handling for coverage module files
+---
+--- This function is designed to be as lightweight as possible while still collecting
+--- comprehensive coverage data. It includes safeguards against recursion and performance
+--- monitoring.
+---
+--- @usage
+--- -- Register the debug hook with Lua's debug system
+--- debug.sethook(debug_hook.debug_hook, "clr")  -- Track calls, lines, and returns
+--- 
+--- -- Register with limited scope
+--- debug.sethook(debug_hook.debug_hook, "l")    -- Track only lines
+---
+--- @param event string The debug event type ('line', 'call', 'return', etc.)
+--- @param line number The line number where the event occurred
 function M.debug_hook(event, line)
   -- Record start time for performance monitoring
   local start_time
@@ -716,6 +841,38 @@ end
 ---@return boolean|nil success True if configuration was successful, nil if failed
 ---@return table|nil error Error object if configuration failed
 -- Set configuration
+--- Configure the debug hook module with new settings.
+--- This function sets configuration options for the debug hook system, controlling
+--- which files are tracked, how they're tracked, and other behavioral settings.
+--- It validates the provided configuration and resets any cached file tracking
+--- decisions.
+---
+--- Configuration options include:
+--- - exclude: Patterns for files to exclude from tracking
+--- - include: Patterns for files to include in tracking
+--- - source_dirs: Directories containing source files to track
+--- - should_track_example_files: Whether to track files in examples directory
+---
+--- When configuration changes, the module immediately applies the new settings.
+--- Any previously cached file tracking decisions are cleared.
+---
+--- @usage
+--- -- Configure with basic options
+--- debug_hook.set_config({
+---   exclude = {"vendor/.*", "test/.*"},
+---   include = {"src/.*", "lib/.*"},
+---   source_dirs = {"src", "lib"}
+--- })
+--- 
+--- -- Enable tracking of example files
+--- debug_hook.set_config({
+---   should_track_example_files = true,
+---   source_dirs = {"src", "lib", "examples"}
+--- })
+---
+--- @param new_config {exclude?: string[], include?: string[], source_dirs?: string[], should_track_example_files?: boolean} Configuration options
+--- @return boolean|nil success True if configuration was applied successfully, nil on error
+--- @return table|nil error Error information if configuration failed
 function M.set_config(new_config)
   -- Validate config parameter
   if new_config == nil then
@@ -1605,6 +1762,42 @@ end
 -- Track a line execution from instrumentation
 -- This function is a critical part of the robust tracking approach
 -- It provides a reliable way to track line execution that doesn't depend on debug.sethook()
+--- Track a line's execution with optional coverage marking.
+--- This function records that a specific line in a file has been executed and optionally
+--- marks it as covered (validated by assertions). It's the primary tracking function used
+--- by the coverage system for both execution and coverage tracking.
+---
+--- The function handles:
+--- - Recording that a line was executed
+--- - Optionally marking the line as covered (validated by assertions)
+--- - Marking the line as executable if specified
+--- - Updating global tracking data structures
+---
+--- The options parameter allows specifying:
+--- - is_executable: Whether the line is considered executable code
+--- - is_covered: Whether the line is considered covered by assertions
+--- - operation: A string identifying the operation for logging/debugging
+---
+--- @usage
+--- -- Track simple line execution
+--- debug_hook.track_line("/path/to/file.lua", 42)
+--- 
+--- -- Track line and mark as covered (validated)
+--- debug_hook.track_line("/path/to/file.lua", 42, {
+---   is_executable = true,
+---   is_covered = true
+--- })
+--- 
+--- -- Track with operation name for debugging
+--- debug_hook.track_line("/path/to/file.lua", 42, {
+---   operation = "assertion_tracking"
+--- })
+---
+--- @param file_path string The path to the file containing the line
+--- @param line_num number The line number to track
+--- @param options? {is_executable?: boolean, is_covered?: boolean, operation?: string} Optional tracking options
+--- @return boolean|nil success True if tracking was successful, nil on error
+--- @return table|nil error Error information if tracking failed
 function M.track_line(file_path, line_num, options)
   -- Validate parameters
   if file_path == nil then
@@ -1711,27 +1904,45 @@ function M.track_line(file_path, line_num, options)
     
     -- Determine if this line is executable - use the most accurate method available
     local is_executable = true
+    local classification_context = nil
     
     -- Method 1: Use provided executability flag if available (most reliable)
     if options and options.is_executable ~= nil then
       is_executable = options.is_executable
-    -- Method 2: Use static analysis if available
-    elseif static_analyzer and coverage_data.files[normalized_path].code_map then
-      is_executable = static_analyzer.is_line_executable(coverage_data.files[normalized_path].code_map, line_num)
-    -- Method 3: Use simple classification as fallback
+    -- Method 2: Use enhanced classification with our improved is_line_executable function
     else
-      -- Load static analyzer if not loaded
-      if not static_analyzer then
-        static_analyzer = require("lib.coverage.static_analyzer")
+      -- Prepare classification options
+      local classification_options = {
+        use_enhanced_classification = options and options.use_enhanced_classification ~= false or true,
+        track_multiline_context = options and options.track_multiline_context ~= false or true
+      }
+      
+      -- Call our enhanced is_line_executable with options
+      is_executable, classification_context = is_line_executable(
+        file_path, 
+        line_num, 
+        classification_options
+      )
+      
+      -- Store line classification context if available
+      if classification_context and coverage_data.files[normalized_path] then
+        coverage_data.files[normalized_path].line_classification = 
+          coverage_data.files[normalized_path].line_classification or {}
+        
+        coverage_data.files[normalized_path].line_classification[line_num] = classification_context
       end
       
-      -- Use full file classification method rather than just looking at a single line
-      local line_type = static_analyzer.classify_line_simple(normalized_path, line_num)
-      is_executable = (
-        line_type == static_analyzer.LINE_TYPES.EXECUTABLE or
-        line_type == static_analyzer.LINE_TYPES.FUNCTION or
-        line_type == static_analyzer.LINE_TYPES.BRANCH
-      )
+      -- Debug output for classification if requested
+      if config.debug and logger.is_debug_enabled() and classification_context then
+        logger.debug("Line classification from track_line", {
+          file = normalized_path:match("([^/]+)$") or normalized_path,
+          line = line_num,
+          is_executable = is_executable,
+          content_type = classification_context.content_type or "unknown",
+          reasons = table.concat(classification_context.reasons or {}, ", "),
+          from_debug_hook = options and options.from_debug_hook or false
+        })
+      end
     end
     
     -- Store executable state
@@ -2303,6 +2514,99 @@ function M.reset()
   })
   
   return M
+end
+
+--- Visualize line classification for a file
+--- This function creates a detailed visualization of line classification for debugging purposes.
+--- It shows execution status, coverage status, and classification details for each line.
+---
+--- @param file_path string Path to the file to visualize
+--- @return table|nil lines Array of line data records or nil if file not tracked
+--- @return string|nil error Error message if visualization failed
+function M.visualize_line_classification(file_path)
+  -- Validate file path
+  if not file_path or type(file_path) ~= "string" then
+    return nil, "File path must be a string"
+  end
+  
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Check if file is being tracked
+  if not coverage_data.files[normalized_path] then
+    return nil, "File is not being tracked"
+  end
+  
+  local file_data = coverage_data.files[normalized_path]
+  local lines = {}
+  
+  -- Ensure static_analyzer is loaded
+  if not static_analyzer then
+    static_analyzer = require("lib.coverage.static_analyzer")
+  end
+  
+  -- Process each line in the file
+  for i = 1, file_data.line_count do
+    local is_executed = file_data._executed_lines[i] or false
+    local is_covered = file_data.lines[i] or false
+    local is_executable = file_data.executable_lines[i] or false
+    
+    -- Get detailed classification information
+    local line_type = "unknown"
+    local classification = {}
+    
+    -- Try to get line type from various sources
+    if file_data.line_classification and file_data.line_classification[i] then
+      -- Use stored classification from enhanced tracking
+      classification = file_data.line_classification[i]
+      if classification.content_type then
+        line_type = classification.content_type
+      end
+    elseif file_data.code_map and file_data.code_map.lines and file_data.code_map.lines[i] then
+      -- Use code map line type if available
+      line_type = file_data.code_map.lines[i].type or "unknown"
+    elseif file_data.code_map and file_data.code_map.line_types and file_data.code_map.line_types[i] then
+      -- Fallback to code map line types
+      line_type = file_data.code_map.line_types[i]
+    end
+    
+    -- Get the source line text
+    local source = file_data.source[i] or ""
+    
+    -- Determine coverage status
+    local coverage_status = "not_executable"
+    if is_executable then
+      if is_covered then
+        coverage_status = "covered"
+      elseif is_executed then
+        coverage_status = "executed_not_covered"
+      else
+        coverage_status = "executable_not_executed"
+      end
+    end
+    
+    -- Collect all data for this line
+    table.insert(lines, {
+      line_num = i,
+      source = source,
+      executed = is_executed,
+      covered = is_covered,
+      executable = is_executable,
+      type = line_type,
+      classification = classification,
+      coverage_status = coverage_status,
+      -- Add additional info for debugging
+      execution_count = file_data._execution_counts and file_data._execution_counts[i] or 0,
+      in_multiline_comment = file_data.parsing_context and 
+                             file_data.parsing_context.multiline_comments and 
+                             file_data.parsing_context.multiline_comments[i] or false,
+      in_multiline_string = file_data.parsing_context and 
+                            file_data.parsing_context.multiline_strings and 
+                            file_data.parsing_context.multiline_strings[i] and
+                            file_data.parsing_context.multiline_strings[i].in_string or false
+    })
+  end
+  
+  return lines
 end
 
 ---@return table metrics Performance metrics for the debug hook

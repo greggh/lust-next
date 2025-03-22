@@ -1,13 +1,24 @@
 -- Comprehensive example of Firmo's assertion functionality
+---@type Firmo
 local firmo = require("firmo")
+---@type TestHelperModule
 local test_helper = require("lib.tools.test_helper")
+---@type ErrorHandlerModule
 local error_handler = require("lib.tools.error_handler")
 
 -- Extract the testing functions we need
+---@type fun(description: string, callback: function) describe Test suite container function
+---@type fun(description: string, options: table|nil, callback: function) it Test case function with optional parameters
+---@type fun(value: any) expect Assertion generator function
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+---@type fun(callback: function) before Setup function that runs before each test
+---@type fun(callback: function) after Teardown function that runs after each test
 local before, after = firmo.before, firmo.after
 
 -- Helper function to organize a test series
+---@param name string Name of the assertion group
+---@param assertions table[] Array of assertion objects with desc and test properties
+---@return nil
 local function test_assertion_group(name, assertions)
   describe(name, function()
     for _, assertion in ipairs(assertions) do

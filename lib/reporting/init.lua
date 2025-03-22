@@ -1,5 +1,23 @@
+--- Reporting module for firmo test framework
+--- Centralized module for all report generation and file output
+---
+--- Features:
+--- - Unified interface for generating coverage, quality, and test results reports
+--- - Support for multiple output formats (HTML, JSON, XML, CSV, TAP, etc.)
+--- - Pluggable formatter system with customizable themes and options
+--- - File saving with appropriate error handling and validation
+--- - Integration with central configuration system
+--- - Automatic directory creation and path management
+--- - Validation of report data and formatted output
+---
+--- This module handles the entire reporting pipeline from raw data to formatted output files,
+--- including validation, formatting, and file I/O operations.
+---
+--- @version 0.4.0
+--- @author Firmo Team
+
 ---@class reporting
----@field configure fun(options?: table): reporting Configure the reporting module
+---@field configure fun(options?: table): reporting Configure the reporting module with custom options
 ---@field get_config fun(): table Get the current configuration
 ---@field register_formatter fun(format: string, formatter: table): reporting Register a custom formatter
 ---@field get_formatter fun(format: string): table|nil Get a formatter by name
@@ -7,10 +25,26 @@
 ---@field get_report_path fun(type: string, format: string, options?: table): string Get the path for a report file
 ---@field load_formatter fun(format: string): table|nil Load a formatter module
 ---@field run_formatter fun(formatter: table, data: table, options?: table): string|nil Generate report output with a formatter
--- firmo reporting module
--- Centralized module for all report generation and file output
+---@field format_coverage fun(coverage_data: table, format?: string): string|table Format coverage data into the specified format
+---@field format_quality fun(quality_data: table, format?: string): string|table Format quality data into the specified format
+---@field format_results fun(results_data: table, format?: string): string|table Format test results data into the specified format
+---@field save_coverage_report fun(file_path: string, coverage_data: table, format: string, options?: table): boolean|nil, table? Save a coverage report to a file
+---@field save_quality_report fun(file_path: string, quality_data: table, format: string): boolean|nil, table? Save a quality report to a file
+---@field save_results_report fun(file_path: string, results_data: table, format: string): boolean|nil, table? Save a test results report to a file
+---@field auto_save_reports fun(coverage_data: table, quality_data: table, results_data: table, options?: table|string): table Generate and save all reports to default locations
+---@field validate_coverage_data fun(coverage_data: table): boolean, table? Validate coverage data structure
+---@field validate_report_format fun(formatted_data: string|table, format: string): boolean, string? Validate formatted report
+---@field validate_report fun(coverage_data: table, formatted_output?: string|table, format?: string): table Run comprehensive validation of report
+---@field write_file fun(file_path: string, content: string|table): boolean|nil, table? Write content to a file
+---@field reset fun(): reporting Reset the module to default configuration
+---@field full_reset fun(): reporting Reset both local and central configuration
+---@field debug_config fun(): table Show current configuration for debugging
+---@field _VERSION string Module version identifier
 
 local M = {}
+
+-- Module version
+M._VERSION = "0.4.0"
 
 -- Import modules
 local fs = require("lib.tools.filesystem")

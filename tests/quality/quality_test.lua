@@ -1,14 +1,47 @@
--- Tests for the firmo quality module
+--[[
+Tests for the Firmo Quality Validation Module
+
+This comprehensive test suite verifies the quality validation system that ensures
+tests meet defined quality standards across multiple levels:
+
+Level 1 (Basic): Simple existence tests with minimal assertions
+Level 2 (Structured): Multiple assertion types with basic structure
+Level 3 (Comprehensive): Error handling, edge cases, and setup/teardown
+Level 4 (Advanced): Specialized assertions and thorough testing
+Level 5 (Complete): Full coverage of all test scenarios and assertion types
+
+The tests verify:
+- Quality level requirements enforcement
+- Assertion tracking and categorization
+- Test file analysis and scoring
+- Quality report generation
+- Level-appropriate test template creation
+- Integration with the main test framework
+]]
+---@type Firmo
 local firmo = require("firmo")
+---@type fun(description: string, callback: function) describe Test suite container function
+---@type fun(description: string, options: table|nil, callback: function) it Test case function with optional parameters
+---@type fun(value: any) expect Assertion generator function
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+---@type fun(callback: function) before Setup function that runs before each test
+---@type fun(callback: function) after Teardown function that runs after each test
 local before, after = firmo.before, firmo.after
+---@type FilesystemModule
 local fs = require("lib.tools.filesystem")
+---@type CentralConfigModule
 local central_config = require("lib.core.central_config")
+---@type TestHelperModule
 local test_helper = require("lib.tools.test_helper")
+---@type ErrorHandlerModule
 local error_handler = require("lib.tools.error_handler")
 
 -- Initialize logger with error handling
-local logging, logger
+---@type LoggingModule?
+local logging
+---@type LoggerInterface?
+local logger
+---@return LoggerInterface? logger The logger instance or nil if not loaded
 local function try_load_logger()
   if not logger then
     local logger_init_success, result = pcall(function()
@@ -44,6 +77,10 @@ end
 local log = try_load_logger()
 
 -- Helper function to create a test file with different quality levels with error handling
+---@param filename string Name of the test file to create
+---@param quality_level number Quality level (1-5) for the test file
+---@return boolean success Whether the file was successfully created
+---@return string|table path_or_error Path to the created file or error object
 local function create_test_file(filename, quality_level)
   -- Validate input parameters with error handling
   if not filename or filename == "" then
@@ -69,7 +106,19 @@ local function create_test_file(filename, quality_level)
   -- Create the content based on quality level
   local content = "-- Test file for quality level " .. quality_level .. "\n"
   content = content .. "local firmo = require('firmo')\n"
-  content = content .. "local describe, it, expect = firmo.describe, firmo.it, firmo.expect\n\n"
+  content = content .. "local describe, it, expect = firmo.describe, firmo.it, firmo.expect\n"
+  
+  -- Add before/after for level 3+
+  if quality_level >= 3 then
+    content = content .. "local before, after = firmo.before, firmo.after\n"
+  end
+  
+  -- Add tags for level 5
+  if quality_level >= 5 then
+    content = content .. "local tags = firmo.tags\n"
+  end
+  
+  content = content .. "\n"
   
   content = content .. "describe('Sample Test Suite', function()\n"
   
@@ -115,7 +164,7 @@ local function create_test_file(filename, quality_level)
     content = content .. "  describe('Edge Cases', function()\n"
     content = content .. "    it('should handle nil values', function()\n"
     content = content .. "      expect(nil).to.be.falsy()\n"
-    content = content .. "      expect(function() return nil end).not.to.raise()\n"
+    content = content .. "      expect(function() return nil end).to_not.raise()\n"
     content = content .. "    end)\n"
     content = content .. "    it('should handle empty strings', function()\n"
     content = content .. "      expect('').to.be.a('string')\n"
@@ -158,30 +207,85 @@ local function create_test_file(filename, quality_level)
   content = content .. "end)\n\n"
   content = content .. "return true\n"
   
-  -- Write the file with error handling
-  local success, err = test_helper.with_error_capture(function()
-    return fs.write_file(filename, content)
-  end)()
+  -- Try to load the temp_file module for proper temporary file creation
+  local temp_file
+  local temp_file_loaded, temp_file_module = pcall(require, "lib.tools.temp_file")
   
-  if not success then
+  if temp_file_loaded and temp_file_module then
+    temp_file = temp_file_module
+    
+    -- Use the temp_file module to create a temporary file with our content
+    local file_path, create_err = temp_file.create_with_content(content, "lua")
+    
+    if not file_path then
+      if log then
+        log.error("Failed to create temporary test file", {
+          filename = filename,
+          error = tostring(create_err)
+        })
+      end
+      return false, create_err
+    end
+    
     if log then
-      log.error("Failed to write test file", {
-        filename = filename,
-        quality_level = quality_level,
-        error = tostring(err)
+      log.debug("Created temporary test file", {
+        requested_name = filename,
+        actual_path = file_path,
+        quality_level = quality_level
       })
     end
-    return false, err
+    
+    -- Return the actual path of the temp file
+    return true, file_path
+  else
+    -- Fallback to using the filesystem module directly if temp_file is not available
+    -- But prefer to create in tests/quality directory instead of root
+    local target_dir = "tests/quality"
+    local target_path = fs.join_paths(target_dir, filename)
+    
+    -- Ensure the target directory exists
+    local dir_exists, dir_err = test_helper.with_error_capture(function()
+      return fs.ensure_directory_exists(target_dir)
+    end)()
+    
+    if not dir_exists then
+      if log then
+        log.warn("Could not ensure quality test directory exists", {
+          directory = target_dir,
+          error = tostring(dir_err)
+        })
+      end
+      -- Fall back to using the filename directly (in current directory)
+    else
+      -- Use the target path in the quality directory
+      filename = target_path
+    end
+    
+    -- Write the file with error handling
+    local success, err = test_helper.with_error_capture(function()
+      return fs.write_file(filename, content)
+    end)()
+    
+    if not success then
+      if log then
+        log.error("Failed to write test file", {
+          filename = filename,
+          quality_level = quality_level,
+          error = tostring(err)
+        })
+      end
+      return false, err
+    end
+    
+    if log then
+      log.debug("Successfully created test file", {
+        filename = filename,
+        quality_level = quality_level
+      })
+    end
+    
+    return true, filename
   end
-  
-  if log then
-    log.debug("Successfully created test file", {
-      filename = filename,
-      quality_level = quality_level
-    })
-  end
-  
-  return true
 end
 
 -- Test for the quality module
@@ -189,81 +293,56 @@ describe("Quality Module", function()
   -- Test files with different quality levels
   local test_files = {}
   
-  -- Create test files before running tests
+  -- Find existing test files in the tests/quality directory
   before(function()
     if log then
-      log.debug("Creating test files", {
-        file_count = 5,
-        quality_levels = "1-5"
+      log.debug("Finding test files in tests/quality directory", {
+        pattern = "level_%d_test.lua"
       })
     end
     
+    -- Find test files in tests/quality directory
     for i = 1, 5 do
-      local filename = "quality_level_" .. i .. "_test.lua"
+      local file_path = fs.join_paths("tests/quality", "level_" .. i .. "_test.lua")
       
-      -- Create file with error handling
-      local success, err = test_helper.with_error_capture(function()
-        return create_test_file(filename, i)
+      -- Check if the file exists
+      local file_exists, file_err = test_helper.with_error_capture(function()
+        return fs.file_exists(file_path)
       end)()
       
-      if success then
-        table.insert(test_files, filename)
+      if file_exists then
+        table.insert(test_files, file_path)
         
         if log then
-          log.debug("Created test file", {
-            filename = filename,
+          log.debug("Found test file", {
+            file_path = file_path,
             quality_level = i
           })
         end
       else
         if log then
-          log.error("Failed to create test file", {
-            filename = filename,
+          log.warn("Could not find test file", {
+            file_path = file_path,
             quality_level = i,
-            error = tostring(err)
+            error = file_err and tostring(file_err) or "File not found"
           })
         end
-        
-        -- Don't fail the test setup, but log the error
-        print("Warning: Failed to create test file " .. filename .. ": " .. tostring(err))
       end
     end
     
     -- Ensure we have at least one test file
-    expect(#test_files).to.be_greater_than(0, "Failed to create any test files")
+    expect(#test_files).to.be_greater_than(0, "Failed to find any quality level test files")
   end)
   
-  -- Clean up test files after tests
+  -- No need to clean up the test files since they're part of the repository
   after(function()
     if log then
-      log.debug("Cleaning up test files", {
+      log.debug("Test complete - no cleanup needed for permanent test files", {
         file_count = #test_files
       })
     end
     
-    for _, filename in ipairs(test_files) do
-      -- Remove file with error handling
-      local success, err = pcall(function()
-        return os.remove(filename)
-      end)
-      
-      if not success then
-        if log then
-          log.warn("Failed to remove test file", {
-            filename = filename,
-            error = tostring(err)
-          })
-        end
-      else
-        if log then
-          log.debug("Removed test file", {
-            filename = filename
-          })
-        end
-      end
-    end
-    
-    -- Clear the list
+    -- Just reset the test files array
     test_files = {}
   end)
   
@@ -316,7 +395,9 @@ describe("Quality Module", function()
     
     -- Check each quality level
     for _, file in ipairs(test_files) do
-      local level = tonumber(file:match("quality_level_(%d)_test.lua"))
+      -- Check for level_X_test.lua pattern for files in tests/quality directory
+      local level = tonumber(file:match("level_(%d)_test.lua"))
+      
       if level then
         -- Verify file exists before testing
         local file_exists, file_exists_error = test_helper.with_error_capture(function()

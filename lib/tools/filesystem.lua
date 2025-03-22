@@ -1,21 +1,103 @@
 --[[
-filesystem.lua - Platform-independent filesystem operations
-
-A comprehensive, standalone filesystem module for Lua with no external dependencies.
-This module provides a consistent interface for file and directory operations across
-all platforms that support Lua.
-
-Usage:
-    local fs = require("lib.tools.filesystem")
-    local content = fs.read_file("path/to/file.txt")
-    fs.write_file("path/to/output.txt", "Hello, world!")
-
-Design principles:
-- Complete independence: No imports from other modules
-- Generic interface: All functions usable in any Lua project
-- Minimal dependencies: Only relies on Lua standard library
-- Platform neutral: Works identically on all platforms
+    Filesystem - Platform-independent file and directory operations module
+    
+    A comprehensive, standalone filesystem module for Lua with minimal dependencies.
+    This module provides a consistent, cross-platform interface for file and directory
+    operations with robust error handling, path manipulation capabilities, and discovery
+    functions.
+    
+    Features:
+    - File operations: read, write, append, copy, move, delete
+    - Directory operations: create, delete, list, scan recursively
+    - Path manipulation: join, normalize, get components
+    - File discovery: pattern matching, glob support, recursive search
+    - File metadata: size, timestamps, existence checks
+    - Error handling: consistent nil/error return pattern
+    - Platform independence: works on Windows, macOS, Linux
+    
+    Design principles:
+    - Complete independence: Minimal imports from other modules
+    - Generic interface: All functions usable in any Lua project
+    - Minimal dependencies: Only relies on Lua standard library
+    - Platform neutral: Works identically on all platforms
+    - Comprehensive error handling: All functions return nil/error pairs on failure
+    - Cross-version compatibility: Works with Lua 5.1+ and LuaJIT
+    
+    @module filesystem
+    @author Firmo Team
+    @license MIT
+    @copyright 2023-2025
+    @version 0.2.5
 ]]
+
+--- Filesystem module for cross-platform file and directory operations
+--- 
+--- Provides a comprehensive set of file operations with proper error handling:
+--- - File operations: reading, writing, appending, copying, moving, and deleting files
+--- - Directory operations: creating, listing, scanning, and recursive removal
+--- - Path manipulation: joining, normalizing, extracting components
+--- - File discovery: pattern matching, glob support, recursive search  
+--- - File metadata: size, timestamps, existence checks
+--- - Platform independence: consistent behavior across Windows, macOS, and Linux
+---
+--- All functions follow a consistent error handling pattern:
+--- - Success case: return result
+--- - Failure case: return nil, error_message
+---
+--- @class filesystem
+--- @field _VERSION string Module version
+--- @field read_file fun(file_path: string): string|nil, string? Read a file's entire contents as a string
+--- @field write_file fun(file_path: string, content: string): boolean|nil, string? Write a string to a file, creating parent directories if needed
+--- @field append_file fun(file_path: string, content: string): boolean|nil, string? Append a string to an existing file
+--- @field file_exists fun(file_path: string): boolean Check if a file exists and is readable
+--- @field directory_exists fun(dir_path: string): boolean Check if a directory exists and is accessible
+--- @field create_directory fun(dir_path: string): boolean|nil, string? Create a directory (and parent directories if needed)
+--- @field ensure_directory_exists fun(dir_path: string): boolean|nil, string? Create a directory if it doesn't exist
+--- @field remove_directory fun(dir_path: string, recursive?: boolean): boolean|nil, string? Remove a directory, with optional recursive deletion
+--- @field delete_directory fun(dir_path: string, recursive?: boolean): boolean|nil, string? Alias for remove_directory 
+--- @field remove_file fun(file_path: string): boolean|nil, string? Remove a file
+--- @field delete_file fun(file_path: string): boolean|nil, string? Alias for remove_file
+--- @field get_directory_contents fun(dir_path: string): table|nil, string? Get all items in a directory
+--- @field get_directory_items fun(dir_path: string, include_hidden?: boolean): table<number, string>|nil, string? Get items in a directory
+--- @field list_files fun(dir_path: string, include_hidden?: boolean): string[]|nil, string? List files in a directory (non-recursive)
+--- @field list_files_recursive fun(dir_path: string, include_hidden?: boolean): string[]|nil, string? List files recursively in a directory and its subdirectories
+--- @field list_directories fun(dir_path: string, include_hidden?: boolean): table<number, string>|nil, string? List directories in a directory
+--- @field get_file_info fun(file_path: string): {size: number, modified: number, type: string, is_directory: boolean, is_file: boolean, is_link: boolean, permissions: string}|nil, string? Get detailed information about a file
+--- @field get_file_size fun(file_path: string): number|nil, string? Get the size of a file in bytes
+--- @field get_file_modified_time fun(file_path: string): number|nil, string? Get the last modified time of a file
+--- @field get_modified_time fun(file_path: string): number|nil, string? Alias for get_file_modified_time
+--- @field get_creation_time fun(file_path: string): number|nil, string? Get the creation time of a file (when available)
+--- @field copy_file fun(source_path: string, dest_path: string, overwrite?: boolean): boolean|nil, string? Copy a file from source to destination
+--- @field move_file fun(source_path: string, dest_path: string, overwrite?: boolean): boolean|nil, string? Move a file from source to destination
+--- @field rename fun(old_path: string, new_path: string): boolean|nil, string? Rename a file or directory
+--- @field normalize_path fun(path: string): string|nil Normalize a path (remove .., ., duplicate separators)
+--- @field join_paths fun(...: string): string|nil, string? Join multiple path components
+--- @field get_directory_name fun(file_path: string): string|nil Get the directory part of a path
+--- @field get_directory fun(file_path: string): string|nil Alias for get_directory_name
+--- @field get_file_name fun(file_path: string): string|nil, string? Get the filename part of a path
+--- @field get_filename fun(file_path: string): string|nil, string? Alias for get_file_name
+--- @field get_extension fun(file_path: string): string|nil, string? Get the extension of a file without the dot
+--- @field get_absolute_path fun(path: string): string|nil, string? Convert relative path to absolute path
+--- @field get_relative_path fun(path: string, base: string): string|nil Convert absolute path to relative path from base
+--- @field get_current_directory fun(): string|nil, string? Get the current working directory
+--- @field set_current_directory fun(dir_path: string): boolean|nil, string? Set the current working directory
+--- @field get_temp_directory fun(): string Get the system's temporary directory
+--- @field create_temp_file fun(prefix?: string, suffix?: string): string|nil, string? Create a temporary file
+--- @field create_temp_directory fun(prefix?: string): string|nil, string? Create a temporary directory
+--- @field glob fun(pattern: string, base_dir?: string): table<number, string>|nil, string? Find files matching a glob pattern
+--- @field glob_to_pattern fun(glob: string): string|nil Convert a glob pattern to a Lua pattern
+--- @field matches_pattern fun(path: string, pattern: string): boolean|nil, string? Check if a path matches a pattern
+--- @field find_files fun(dir_path: string, pattern: string, recursive?: boolean): table<number, string>|nil, string? Find files matching a pattern
+--- @field find_directories fun(dir_path: string, pattern: string, recursive?: boolean): table<number, string>|nil, string? Find directories matching a pattern
+--- @field discover_files fun(directories: table, patterns: table, exclude_patterns: table): table|nil, string? Advanced file discovery with include/exclude patterns
+--- @field scan_directory fun(path: string, recursive: boolean): table Scan a directory for files
+--- @field find_matches fun(files: table, pattern: string): table Filter a list of files by pattern
+--- @field is_file fun(path: string): boolean Check if a path is a file
+--- @field is_directory fun(path: string): boolean Check if a path is a directory
+--- @field is_absolute_path fun(path: string): boolean Check if a path is absolute
+---
+--- @version 0.2.5
+--- @author Firmo Team
 
 ---@class filesystem
 ---@field _VERSION string Module version
@@ -56,52 +138,44 @@ Design principles:
 -- Import error_handler for proper error handling
 local error_handler = require("lib.tools.error_handler")
 
----@class fs
----@field read_file fun(path: string): string|nil, string|nil
----@field write_file fun(path: string, content: string): boolean|nil, string|nil
----@field append_file fun(path: string, content: string): boolean|nil, string|nil
----@field copy_file fun(source: string, destination: string): boolean|nil, string|nil
----@field move_file fun(source: string, destination: string): boolean|nil, string|nil
----@field delete_file fun(path: string): boolean|nil, string|nil
----@field create_directory fun(path: string): boolean|nil, string|nil
----@field ensure_directory_exists fun(path: string): boolean|nil, string|nil
----@field delete_directory fun(path: string, recursive: boolean): boolean|nil, string|nil
----@field get_directory_contents fun(path: string): table|nil, string|nil
----@field normalize_path fun(path: string): string|nil
----@field join_paths fun(...: string): string|nil, string|nil
----@field get_directory_name fun(path: string): string|nil
----@field get_file_name fun(path: string): string|nil, string|nil
----@field get_extension fun(path: string): string|nil, string|nil
----@field get_absolute_path fun(path: string): string|nil, string|nil
----@field get_relative_path fun(path: string, base: string): string|nil
----@field glob_to_pattern fun(glob: string): string|nil
----@field matches_pattern fun(path: string, pattern: string): boolean|nil, string|nil
----@field discover_files fun(directories: table, patterns: table, exclude_patterns: table): table|nil, string|nil
----@field scan_directory fun(path: string, recursive: boolean): table
----@field find_matches fun(files: table, pattern: string): table
----@field file_exists fun(path: string): boolean
----@field directory_exists fun(path: string): boolean
----@field get_file_size fun(path: string): number|nil, string|nil
----@field get_modified_time fun(path: string): number|nil, string|nil
----@field get_creation_time fun(path: string): number|nil, string|nil
----@field is_file fun(path: string): boolean
----@field is_directory fun(path: string): boolean
+-- Implementation of the filesystem module
+-- This local table will hold all the filesystem functions and be returned at the end of the file
+-- All JSDoc annotations are provided in the class definition at the top of the file
 local fs = {}
 
+-- Module version
+fs._VERSION = "0.2.5"
+
 -- Internal utility functions
----@return boolean
+
+--- Detect if running on Windows operating system
+--- This function checks the Lua environment to determine if the code
+--- is running on Windows by examining the path separator character
+--- in package.config, which is OS-specific.
+---
+--- @private
+--- @return boolean True if running on Windows, false otherwise
 local function is_windows()
     return package.config:sub(1,1) == '\\'
 end
 
----@type string
+--- Platform-specific path separator character
+--- @private
+--- @type string
 local path_separator = is_windows() and '\\' or '/'
 
----@generic T
----@param action fun(...): T
----@param ... any Additional arguments to pass to the action function
----@return T|nil result The result of the action function or nil on error
----@return string|nil error An error message if the action failed
+--- Safely execute an I/O operation with error handling
+--- This utility function wraps I/O operations in a pcall to catch errors,
+--- provides consistent error handling, and filters out common permission
+--- denied errors to avoid flooding logs. All filesystem module functions
+--- should use this wrapper for consistent error handling.
+---
+--- @private
+--- @generic T
+--- @param action fun(...): T The I/O operation function to execute safely
+--- @param ... any Additional arguments to pass to the action function
+--- @return T|nil result The result of the action function or nil on error
+--- @return string|nil error An error message if the action failed
 local function safe_io_action(action, ...)
     local status, result, err = pcall(action, ...)
     if not status then
@@ -125,10 +199,24 @@ end
 
 -- Core File Operations
 
---- Read file contents with error handling
----@param path string Path to the file to read
----@return string|nil content File contents or nil if an error occurred
----@return string|nil error Error message if reading failed
+--- Read a file's entire contents as a string
+--- This function reads the entire contents of the specified file and returns it as a string.
+--- It handles error checking and proper file closing even in error cases.
+---
+--- @param path string Path to the file to read
+--- @return string|nil content File contents or nil if an error occurred
+--- @return string|nil error Error message if reading failed
+---
+--- @usage
+--- -- Read a configuration file
+--- local content, err = fs.read_file("/path/to/config.json")
+--- if not content then
+---   print("Error reading file: " .. (err or "unknown error"))
+---   return
+--- end
+--- 
+--- -- Process the content
+--- local config = json.decode(content)
 function fs.read_file(path)
     return safe_io_action(function(file_path)
         local file, err = io.open(file_path, "r")
@@ -140,11 +228,25 @@ function fs.read_file(path)
     end, path)
 end
 
---- Write content to file
----@param path string Path to the file to write
----@param content string Content to write to the file
----@return boolean|nil success True if write was successful, nil on error
----@return string|nil error Error message if writing failed
+--- Write string content to a file, creating it if it doesn't exist
+--- This function writes a string to the specified file, creating any necessary
+--- parent directories automatically. If the file already exists, it will be overwritten.
+---
+--- @param path string Path to the file to write
+--- @param content string Content to write to the file
+--- @return boolean|nil success True if write was successful, nil on error
+--- @return string|nil error Error message if writing failed
+---
+--- @usage
+--- -- Write a configuration file
+--- local success, err = fs.write_file("/path/to/config.json", json.encode(config_data))
+--- if not success then
+---   print("Error writing file: " .. (err or "unknown error"))
+---   return
+--- end
+--- 
+--- -- Create a new file in a directory that might not exist yet
+--- fs.write_file("/new/directory/structure/file.txt", "This will create all needed directories")
 function fs.write_file(path, content)
     return safe_io_action(function(file_path, data)
         -- Validate file path
@@ -173,11 +275,25 @@ function fs.write_file(path, content)
     end, path, content)
 end
 
---- Append content to file
----@param path string Path to the file to append to
----@param content string Content to append to the file
----@return boolean|nil success True if append was successful, nil on error
----@return string|nil error Error message if appending failed
+--- Append string content to the end of a file
+--- This function appends a string to the end of the specified file. If the file
+--- doesn't exist, it will be created along with any necessary parent directories.
+---
+--- @param path string Path to the file to append to
+--- @param content string Content to append to the file
+--- @return boolean|nil success True if append was successful, nil on error
+--- @return string|nil error Error message if appending failed
+---
+--- @usage
+--- -- Append a line to a log file
+--- local success, err = fs.append_file("/var/log/myapp.log", "INFO [2023-12-31]: Application started\n")
+--- if not success then
+---   print("Error appending to log: " .. (err or "unknown error"))
+---   return
+--- end
+--- 
+--- -- Collect data over time
+--- fs.append_file("data_collection.csv", new_data_point .. "\n")
 function fs.append_file(path, content)
     return safe_io_action(function(file_path, data)
         -- Ensure parent directory exists
@@ -196,11 +312,27 @@ function fs.append_file(path, content)
     end, path, content)
 end
 
---- Copy file with verification
----@param source string Path to the source file
----@param destination string Path to the destination file
----@return boolean|nil success True if copy was successful, nil on error
----@return string|nil error Error message if copying failed
+--- Copy a file from source to destination path
+--- This function copies a file from one location to another, creating any
+--- necessary parent directories for the destination. It verifies that the
+--- source file exists and that the copy operation is successful by checking
+--- content integrity.
+---
+--- @param source string Path to the source file
+--- @param destination string Path to the destination file
+--- @return boolean|nil success True if copy was successful, nil on error
+--- @return string|nil error Error message if copying failed
+---
+--- @usage
+--- -- Copy a configuration file to a backup location
+--- local success, err = fs.copy_file("/etc/app/config.json", "/etc/app/backups/config.json.bak")
+--- if not success then
+---   print("Backup failed: " .. (err or "unknown error"))
+---   return
+--- end
+---
+--- -- Copy a template file to a new user's directory
+--- fs.copy_file("/templates/default_profile.json", "/users/new_user/profile.json")
 function fs.copy_file(source, destination)
     return safe_io_action(function(src, dst)
         if not fs.file_exists(src) then
@@ -223,11 +355,27 @@ function fs.copy_file(source, destination)
     end, source, destination)
 end
 
---- Move/rename file
----@param source string Path to the source file
----@param destination string Path to the destination file
----@return boolean|nil success True if move was successful, nil on error
----@return string|nil error Error message if moving failed
+--- Move or rename a file from source to destination path
+--- This function moves a file from one location to another. It first attempts 
+--- to use the efficient os.rename operation, but if that fails (e.g., when moving
+--- across filesystems), it falls back to a copy-and-delete approach. Any necessary
+--- parent directories for the destination will be created automatically.
+---
+--- @param source string Path to the source file
+--- @param destination string Path to the destination file
+--- @return boolean|nil success True if move was successful, nil on error
+--- @return string|nil error Error message if moving failed
+---
+--- @usage
+--- -- Move a temporary file to its final location
+--- local success, err = fs.move_file("/tmp/uploaded_file.dat", "/data/processed/file001.dat")
+--- if not success then
+---   print("Failed to move file: " .. (err or "unknown error"))
+---   return
+--- end
+---
+--- -- Rename a file in the same directory
+--- fs.move_file("old_name.txt", "new_name.txt")
 function fs.move_file(source, destination)
     return safe_io_action(function(src, dst)
         if not fs.file_exists(src) then
@@ -261,10 +409,26 @@ function fs.move_file(source, destination)
     end, source, destination)
 end
 
---- Delete file with error checking
----@param path string Path to the file to delete
----@return boolean|nil success True if deletion was successful, nil on error
----@return string|nil error Error message if deletion failed
+--- Delete a file with error checking
+--- This function deletes the specified file from the filesystem. If the file
+--- doesn't exist, the operation is considered successful. The function provides
+--- proper error handling for permissions and other common deletion issues.
+---
+--- @param path string Path to the file to delete
+--- @return boolean|nil success True if deletion was successful, nil on error
+--- @return string|nil error Error message if deletion failed
+---
+--- @usage
+--- -- Delete a temporary file
+--- local success, err = fs.delete_file("/tmp/temp_data.txt")
+--- if not success then
+---   print("Failed to delete file: " .. (err or "unknown error"))
+--- end
+---
+--- -- Clean up after processing
+--- if process_complete then
+---   fs.delete_file(temp_file_path)
+--- end
 function fs.delete_file(path)
     return safe_io_action(function(file_path)
         if not fs.file_exists(file_path) then
@@ -282,10 +446,25 @@ end
 
 -- Directory Operations
 
---- Create directory with recursive support
----@param path string Path to the directory to create
----@return boolean|nil success True if creation was successful, nil on error
----@return string|nil error Error message if creation failed
+--- Create a directory with recursive parent directory creation
+--- This function creates a directory at the specified path. If parent directories
+--- in the path don't exist, they will be created automatically. This function
+--- handles validation, normalization, and platform-specific directory creation.
+---
+--- @param path string Path to the directory to create
+--- @return boolean|nil success True if creation was successful, nil on error
+--- @return string|nil error Error message if creation failed
+---
+--- @usage
+--- -- Create a nested directory structure
+--- local success, err = fs.create_directory("/data/application/logs/daily")
+--- if not success then
+---   print("Failed to create directory: " .. (err or "unknown error"))
+---   return
+--- end
+---
+--- -- Create a directory for user data
+--- fs.create_directory(home_dir .. "/app_data/user_profiles")
 function fs.create_directory(path)
     return safe_io_action(function(dir_path)
         -- Validate path
@@ -338,10 +517,27 @@ function fs.create_directory(path)
     end, path)
 end
 
---- Create directory if needed
----@param path string Path to ensure exists
----@return boolean|nil success True if directory exists or was created, nil on error
----@return string|nil error Error message if creation failed
+--- Ensure a directory exists, creating it if necessary
+--- This is a convenience function that checks if a directory exists and creates
+--- it if it doesn't. It's useful for ensuring that a directory is available before
+--- performing operations that require it.
+---
+--- @param path string Path to ensure exists
+--- @return boolean|nil success True if directory exists or was created, nil on error
+--- @return string|nil error Error message if creation failed
+---
+--- @usage
+--- -- Make sure a data directory exists before writing files
+--- local success, err = fs.ensure_directory_exists("/var/data/app_logs")
+--- if not success then
+---   print("Cannot access or create log directory: " .. (err or "unknown error"))
+---   return
+--- end
+---
+--- -- Write file only if the directory exists or can be created
+--- if fs.ensure_directory_exists(output_dir) then
+---   fs.write_file(output_dir .. "/output.txt", "Content")
+--- end
 function fs.ensure_directory_exists(path)
     -- Validate path
     if not path or path == "" then
@@ -354,11 +550,25 @@ function fs.ensure_directory_exists(path)
     return fs.create_directory(path)
 end
 
---- Delete directory
----@param path string Path to the directory to delete
----@param recursive boolean If true, recursively delete contents
----@return boolean|nil success True if deletion was successful, nil on error
----@return string|nil error Error message if deletion failed
+--- Delete a directory, with optional recursive deletion
+--- This function removes a directory from the filesystem. If recursive is true,
+--- the directory and all its contents (files and subdirectories) will be deleted.
+--- If recursive is false, the directory must be empty for deletion to succeed.
+---
+--- @param path string Path to the directory to delete
+--- @param recursive boolean If true, recursively delete contents
+--- @return boolean|nil success True if deletion was successful, nil on error
+--- @return string|nil error Error message if deletion failed
+---
+--- @usage
+--- -- Safely remove an empty directory
+--- local success, err = fs.delete_directory("/tmp/empty_dir", false)
+--- if not success then
+---   print("Failed to delete directory: " .. (err or "unknown error"))
+--- end
+---
+--- -- Recursively delete a directory and all its contents
+--- fs.delete_directory("/tmp/build_artifacts", true)
 function fs.delete_directory(path, recursive)
     return safe_io_action(function(dir_path, recurse)
         if not fs.directory_exists(dir_path) then
@@ -401,10 +611,32 @@ function fs.delete_directory(path, recursive)
     end, path, recursive)
 end
 
---- List directory contents
----@param path string Path to the directory to list
----@return table|nil files List of file names in the directory or nil on error
----@return string|nil error Error message if listing failed
+--- List the contents of a directory (files and subdirectories)
+--- This function returns a list of all items (files and subdirectories) in the
+--- specified directory. It uses platform-specific commands to get the listing
+--- and handles errors appropriately.
+---
+--- @param path string Path to the directory to list
+--- @return table|nil files List of file and directory names or nil on error
+--- @return string|nil error Error message if listing failed
+---
+--- @usage
+--- -- Get all items in a directory
+--- local items, err = fs.get_directory_contents("/home/user/documents")
+--- if not items then
+---   print("Failed to list directory: " .. (err or "unknown error"))
+---   return
+--- end
+---
+--- -- Process each item in the directory
+--- for _, item_name in ipairs(items) do
+---   local full_path = fs.join_paths("/home/user/documents", item_name)
+---   if fs.is_file(full_path) then
+---     print("File: " .. item_name)
+---   else
+---     print("Directory: " .. item_name)
+---   end
+--- end
 function fs.get_directory_contents(path)
     return safe_io_action(function(dir_path)
         if not fs.directory_exists(dir_path) then
@@ -437,9 +669,26 @@ end
 
 -- Path Manipulation
 
---- Standardize path separators
----@param path string Path to normalize
----@return string|nil normalized Path with standardized separators or nil if path is nil
+--- Normalize a path for cross-platform consistency
+--- This function standardizes path separators, removes duplicates, handles
+--- trailing slashes, and makes paths consistent across different operating systems.
+--- It converts Windows backslashes to forward slashes for consistent handling.
+---
+--- @param path string Path to normalize
+--- @return string|nil normalized Path with standardized separators or nil if path is nil
+---
+--- @usage
+--- -- Normalize a Windows path
+--- local path = fs.normalize_path("C:\\Users\\name\\Documents\\file.txt")
+--- -- Result: "C:/Users/name/Documents/file.txt"
+---
+--- -- Normalize path with duplicate slashes
+--- local path = fs.normalize_path("/var//log///apache2/")
+--- -- Result: "/var/log/apache2"
+---
+--- -- Paths with single root slash are preserved
+--- local root = fs.normalize_path("/")
+--- -- Result: "/"
 function fs.normalize_path(path)
     if not path then return nil end
     
@@ -457,10 +706,27 @@ function fs.normalize_path(path)
     return result
 end
 
---- Join path components
----@vararg string Path components to join
----@return string|nil joined_path Joined path or nil on error
----@return string|nil error Error message if joining failed
+--- Join multiple path components into a single path
+--- This function combines multiple path segments into a single, normalized path.
+--- It handles path separators intelligently, avoiding duplicate slashes and
+--- correctly managing absolute and relative path components.
+---
+--- @vararg string Path components to join
+--- @return string|nil joined_path Joined path or nil on error
+--- @return string|nil error Error message if joining failed
+---
+--- @usage
+--- -- Join directory and filename
+--- local file_path = fs.join_paths("/home/user", "documents", "report.pdf")
+--- -- Result: "/home/user/documents/report.pdf"
+---
+--- -- Join with a trailing slash in first component
+--- local path = fs.join_paths("/var/log/", "apache2", "error.log")
+--- -- Result: "/var/log/apache2/error.log"
+---
+--- -- Handle absolute paths in later components
+--- local path = fs.join_paths("/usr", "/local/bin")
+--- -- Result: "/usr/local/bin" (leading slash in second component is removed)
 function fs.join_paths(...)
     local args = {...}
     if #args == 0 then return "" end
@@ -495,9 +761,30 @@ function fs.join_paths(...)
     end
 end
 
---- Extract directory part from a path
----@param path string Path to process
----@return string|nil directory_name Directory component of path or nil if path is nil
+--- Extract the directory part from a path
+--- This function extracts the directory component from a file path. It handles
+--- various special cases like root directories, trailing slashes, and paths
+--- without directory components.
+---
+--- @param path string Path to process
+--- @return string|nil directory_name Directory component of path or nil if path is nil
+---
+--- @usage
+--- -- Get directory from a file path
+--- local dir = fs.get_directory_name("/home/user/documents/report.pdf")
+--- -- Result: "/home/user/documents"
+---
+--- -- Handle trailing slashes
+--- local dir = fs.get_directory_name("/var/log/")
+--- -- Result: "/var/log"
+---
+--- -- Handle root directory
+--- local dir = fs.get_directory_name("/")
+--- -- Result: "/"
+---
+--- -- Handle paths without directory component
+--- local dir = fs.get_directory_name("filename.txt")
+--- -- Result: "."  (current directory)
 function fs.get_directory_name(path)
     if not path then return nil end
     
@@ -534,10 +821,27 @@ function fs.get_directory_name(path)
     return last_slash
 end
 
---- Extract file name from a path
----@param path string Path to process
----@return string|nil filename File name component of path or nil on error
----@return string|nil error Error message if extraction failed
+--- Extract the file name from a path
+--- This function extracts just the file name component from a path, excluding
+--- any directory components. It handles special cases like paths with trailing
+--- slashes and empty paths.
+---
+--- @param path string Path to process
+--- @return string|nil filename File name component of path or nil on error
+--- @return string|nil error Error message if extraction failed
+---
+--- @usage
+--- -- Get filename from a path
+--- local name = fs.get_file_name("/home/user/documents/report.pdf")
+--- -- Result: "report.pdf"
+---
+--- -- Handle paths with trailing slashes (typically directories)
+--- local name = fs.get_file_name("/var/log/")
+--- -- Result: "" (empty string because this is a directory)
+---
+--- -- Handle paths without directory component
+--- local name = fs.get_file_name("filename.txt")
+--- -- Result: "filename.txt"
 function fs.get_file_name(path)
     if not path then return nil end
     
@@ -575,10 +879,27 @@ function fs.get_file_name(path)
     end
 end
 
---- Get file extension from a path
----@param path string Path to process
----@return string|nil extension Extension of the file (without the dot), or empty string if none, nil on error
----@return string|nil error Error message if extraction failed
+--- Extract the file extension from a path
+--- This function extracts just the extension part of a filename (the part after the
+--- last dot). It returns the extension without the leading dot. If the file has no
+--- extension, an empty string is returned.
+---
+--- @param path string Path to process
+--- @return string|nil extension Extension of the file (without the dot), or empty string if none, nil on error
+--- @return string|nil error Error message if extraction failed
+---
+--- @usage
+--- -- Get the extension from a file path
+--- local ext = fs.get_extension("/home/user/documents/report.pdf")
+--- -- Result: "pdf"
+---
+--- -- Handle files without extensions
+--- local ext = fs.get_extension("/etc/hosts")
+--- -- Result: "" (empty string)
+---
+--- -- Handle files with multiple dots
+--- local ext = fs.get_extension("archive.tar.gz")
+--- -- Result: "gz" (only the last part is considered the extension)
 function fs.get_extension(path)
     if not path then return nil end
     
@@ -608,10 +929,27 @@ function fs.get_extension(path)
     end
 end
 
---- Convert to absolute path
----@param path string Path to convert
----@return string|nil absolute_path Absolute path or nil on error
----@return string|nil error Error message if conversion failed
+--- Convert a relative path to an absolute path
+--- This function takes a relative path and converts it to an absolute path based
+--- on the current working directory. If the path is already absolute, it is simply
+--- normalized and returned.
+---
+--- @param path string Path to convert
+--- @return string|nil absolute_path Absolute path or nil on error
+--- @return string|nil error Error message if conversion failed
+---
+--- @usage
+--- -- Convert a relative path to absolute
+--- local abs_path = fs.get_absolute_path("src/main.lua")
+--- -- Result might be: "/home/user/project/src/main.lua"
+---
+--- -- Already absolute paths are normalized
+--- local abs_path = fs.get_absolute_path("/var/log")
+--- -- Result: "/var/log"
+---
+--- -- Windows drive letters are recognized as absolute
+--- local abs_path = fs.get_absolute_path("C:\\Windows\\System32")
+--- -- Result: "C:/Windows/System32"
 function fs.get_absolute_path(path)
     if not path then return nil end
     
@@ -637,10 +975,27 @@ function fs.get_absolute_path(path)
     end
 end
 
---- Convert to relative path
----@param path string Path to convert
----@param base string Base path to make relative to
----@return string|nil relative_path Path relative to base or nil if path or base is nil
+--- Convert an absolute path to a path relative to a base directory
+--- This function computes a relative path from a base directory to a target path.
+--- It finds the common prefix between the paths and replaces the non-common parts
+--- with the appropriate "../" sequences.
+---
+--- @param path string Path to convert
+--- @param base string Base path to make relative to
+--- @return string|nil relative_path Path relative to base or nil if path or base is nil
+---
+--- @usage
+--- -- Get a path relative to a base directory
+--- local rel_path = fs.get_relative_path("/home/user/projects/app/src/main.lua", "/home/user/projects")
+--- -- Result: "app/src/main.lua"
+---
+--- -- Path that requires going up directories
+--- local rel_path = fs.get_relative_path("/home/user/projects/app/config", "/home/user/projects/app/src")
+--- -- Result: "../config"
+---
+--- -- Same directory case
+--- local rel_path = fs.get_relative_path("/home/user/projects", "/home/user/projects")
+--- -- Result: "." (current directory)
 function fs.get_relative_path(path, base)
     if not path or not base then return nil end
     
@@ -699,9 +1054,27 @@ end
 
 -- File Discovery
 
---- Convert glob pattern to Lua pattern
----@param glob string Glob pattern to convert
----@return string|nil pattern Lua pattern equivalent or nil if glob is nil
+--- Convert a glob pattern to a Lua pattern for matching
+--- This function converts shell-style glob patterns like "*.lua" or "src/**/*.js"
+--- to Lua pattern strings that can be used with string.match() and similar functions.
+--- It supports standard glob features including * (any characters), ? (single character),
+--- and ** (recursive directory matching).
+---
+--- @param glob string Glob pattern to convert
+--- @return string|nil pattern Lua pattern equivalent or nil if glob is nil
+---
+--- @usage
+--- -- Convert simple file extension glob
+--- local pattern = fs.glob_to_pattern("*.lua")
+--- -- Result: "^.+%.lua$"
+---
+--- -- Convert pattern with ? wildcard
+--- local pattern = fs.glob_to_pattern("file?.txt")
+--- -- This will match file1.txt, fileA.txt, etc.
+---
+--- -- Convert pattern with ** (recursive) wildcard
+--- local pattern = fs.glob_to_pattern("src/**/*.js")
+--- -- This will match any .js file in src or any subdirectory
 function fs.glob_to_pattern(glob)
     if not glob then return nil end
     
@@ -736,11 +1109,29 @@ function fs.glob_to_pattern(glob)
     return pattern
 end
 
---- Test if path matches pattern
----@param path string Path to test
----@param pattern string Glob pattern to match against
----@return boolean|nil matches True if path matches pattern, nil on error
----@return string|nil error Error message if matching failed
+--- Test if a path matches a glob pattern
+--- This function checks if a given path matches a specified glob pattern.
+--- It handles both simple exact matching and complex glob patterns with
+--- wildcards. This is used for file filtering and discovery operations.
+---
+--- @param path string Path to test
+--- @param pattern string Glob pattern to match against
+--- @return boolean|nil matches True if path matches pattern, nil on error
+--- @return string|nil error Error message if matching failed
+---
+--- @usage
+--- -- Check if a file matches an extension pattern
+--- if fs.matches_pattern("script.lua", "*.lua") then
+---   print("Lua file detected")
+--- end
+---
+--- -- Check if a path matches a complex pattern
+--- if fs.matches_pattern("src/components/Button.jsx", "src/**/*.jsx") then
+---   print("React component file detected")
+--- end
+---
+--- -- Simple exact matching still works
+--- fs.matches_pattern("LICENSE", "LICENSE") -- returns true
 function fs.matches_pattern(path, pattern)
     if not path or not pattern then return false end
     
@@ -780,12 +1171,34 @@ function fs.matches_pattern(path, pattern)
     end
 end
 
---- Find files by glob pattern
----@param directories table List of directories to search in
----@param patterns? table List of patterns to match
----@param exclude_patterns? table List of patterns to exclude
----@return table|nil matches List of matching file paths or nil on error
----@return string|nil error Error message if discovery failed
+--- Find files matching patterns in specified directories
+--- This advanced function performs recursive file discovery across multiple directories,
+--- applying include and exclude patterns to filter the results. It handles circular
+--- symlinks and provides a comprehensive file discovery mechanism.
+---
+--- @param directories table List of root directories to search in
+--- @param patterns? table List of glob patterns to include (default: {"*"})
+--- @param exclude_patterns? table List of glob patterns to exclude
+--- @return table|nil matches List of matching file paths or nil on error
+--- @return string|nil error Error message if discovery failed
+---
+--- @usage
+--- -- Find all Lua files in the current project
+--- local lua_files = fs.discover_files({"/home/user/project"}, {"*.lua"})
+---
+--- -- Find specific file types while excluding test files
+--- local src_files = fs.discover_files(
+---   {"/home/user/project/src", "/home/user/project/lib"},
+---   {"*.lua", "*.c", "*.h"},
+---   {"*test*", "*_spec.lua"}
+--- )
+---
+--- -- Use with include/exclude patterns to find specific files
+--- local config_files = fs.discover_files(
+---   {"/etc", "/home/user/.config"},
+---   {"*.json", "*.yml", "*.conf"},
+---   {"*backup*", "*~"}
+--- )
 function fs.discover_files(directories, patterns, exclude_patterns)
     if not directories or #directories == 0 then return {} end
     
@@ -877,10 +1290,25 @@ function fs.discover_files(directories, patterns, exclude_patterns)
     end
 end
 
---- List all files in directory
----@param path string Directory path to scan
----@param recursive boolean Whether to scan recursively
----@return table files List of file paths
+--- Scan a directory for files with optional recursive behavior
+--- This function scans a directory and returns a flat list of all files it contains.
+--- If the recursive parameter is true, it will scan all subdirectories as well.
+--- This function safely handles circular symlinks and permission issues.
+---
+--- @param path string Directory path to scan
+--- @param recursive boolean Whether to scan recursively into subdirectories
+--- @return table files List of absolute file paths found in the directory
+---
+--- @usage
+--- -- Get all files in the current directory (non-recursive)
+--- local files = fs.scan_directory("/home/user/docs", false)
+--- for _, file_path in ipairs(files) do
+---   print("Found file: " .. file_path)
+--- end
+---
+--- -- Recursively scan a project directory
+--- local all_files = fs.scan_directory("/path/to/project", true)
+--- print("Project contains " .. #all_files .. " files")
 function fs.scan_directory(path, recursive)
     if not path then return {} end
     if not fs.directory_exists(path) then return {} end
@@ -920,10 +1348,29 @@ function fs.scan_directory(path, recursive)
     return results
 end
 
---- Filter files matching pattern
----@param files table List of file paths to filter
----@param pattern string Pattern to match against
----@return table matches List of matching file paths
+--- Filter a list of files based on a pattern
+--- This function takes a list of file paths and returns only those that match
+--- the specified pattern. It supports both file extension patterns (*.lua) and
+--- more complex glob patterns. The matching is performed on the filename only,
+--- not the full path, making it easy to filter by file types or naming conventions.
+---
+--- @param files table List of file paths to filter
+--- @param pattern string Pattern to match against (glob pattern or Lua pattern)
+--- @return table matches List of matching file paths
+---
+--- @usage
+--- -- Find all Lua files from a directory scan
+--- local all_files = fs.scan_directory("/path/to/project", true)
+--- local lua_files = fs.find_matches(all_files, "*.lua")
+--- 
+--- -- Filter files by a specific naming pattern
+--- local all_files = fs.scan_directory("/path/to/project", true)
+--- local test_files = fs.find_matches(all_files, "*_test.lua")
+---
+--- -- Chain operations to find specific files
+--- local all_files = fs.scan_directory("/path/to/project", true)
+--- local config_files = fs.find_matches(all_files, "*.json")
+--- local user_configs = fs.find_matches(config_files, "user_*")
 function fs.find_matches(files, pattern)
     if not files or not pattern then return {} end
     
@@ -949,9 +1396,29 @@ end
 
 -- Information Functions
 
---- Check if file exists
----@param path string Path to check
----@return boolean exists True if file exists
+--- Check if a file exists and is accessible
+--- This function verifies that the specified path exists as a readable file.
+--- It attempts to open the file for reading, which confirms both existence
+--- and read permissions. This is useful for validating file paths before
+--- performing operations on them.
+---
+--- @param path string Path to the file to check
+--- @return boolean exists True if the file exists and is readable
+---
+--- @usage
+--- -- Check before reading a configuration file
+--- if fs.file_exists("/etc/app/config.json") then
+---   local content = fs.read_file("/etc/app/config.json")
+--- else
+---   print("Configuration file not found")
+--- end
+---
+--- -- Use with error handling pattern
+--- local success, err = some_function()
+--- if not success and fs.file_exists(backup_file_path) then
+---   -- Restore from backup
+---   fs.copy_file(backup_file_path, original_file_path)
+--- end
 function fs.file_exists(path)
     if not path then return false end
     
@@ -963,9 +1430,27 @@ function fs.file_exists(path)
     return false
 end
 
---- Check if directory exists
----@param path string Path to check
----@return boolean exists True if directory exists
+--- Check if a directory exists and is accessible
+--- This function verifies that the specified path exists as an accessible directory.
+--- It uses platform-specific commands to ensure accurate results on both Windows
+--- and Unix-like systems. The function properly handles special cases like root
+--- directories and paths with trailing slashes.
+---
+--- @param path string Path to the directory to check
+--- @return boolean exists True if the directory exists and is accessible
+---
+--- @usage
+--- -- Check before saving files to a directory
+--- if fs.directory_exists("/var/app/data") then
+---   fs.write_file("/var/app/data/output.txt", "Content")
+--- else
+---   print("Data directory not found")
+--- end
+---
+--- -- Conditionally create a directory if it doesn't exist
+--- if not fs.directory_exists(log_dir) then
+---   fs.create_directory(log_dir)
+--- end
 function fs.directory_exists(path)
     if not path or path == "" then return false end
     
@@ -995,10 +1480,29 @@ function fs.directory_exists(path)
     end
 end
 
---- Get file size in bytes
----@param path string Path to file
----@return number|nil size File size in bytes or nil on error
----@return string|nil error Error message if getting size failed
+--- Get the size of a file in bytes
+--- This function retrieves the size of a file in bytes. It works by opening the file,
+--- seeking to the end to determine its size, and then closing it. The function
+--- includes proper error checking and validation to handle various edge cases.
+---
+--- @param path string Path to the file to check
+--- @return number|nil size File size in bytes or nil on error
+--- @return string|nil error Error message if getting the size failed
+---
+--- @usage
+--- -- Check file size before processing
+--- local size, err = fs.get_file_size("/path/to/data.bin")
+--- if not size then
+---   print("Error getting file size: " .. (err or "unknown error"))
+---   return
+--- end
+---
+--- -- Determine if a file exceeds a size limit
+--- local max_size = 10 * 1024 * 1024 -- 10 MB
+--- local size = fs.get_file_size(file_path)
+--- if size and size > max_size then
+---   print("File too large: " .. (size / 1024 / 1024) .. " MB")
+--- end
 function fs.get_file_size(path)
     if not fs.file_exists(path) then
         return nil, "File does not exist: " .. (path or "nil")
@@ -1015,10 +1519,33 @@ function fs.get_file_size(path)
     return size
 end
 
---- Get last modified timestamp
----@param path string Path to file
----@return number|nil timestamp Modification time or nil on error
----@return string|nil error Error message if getting time failed
+--- Get the last modified timestamp of a file or directory
+--- This function retrieves the last modification time of a file or directory as a 
+--- Unix timestamp (seconds since epoch). It uses platform-specific commands to
+--- ensure accurate results on both Windows and Unix-like systems. The function
+--- properly validates that the path exists before attempting to get its timestamp.
+---
+--- @param path string Path to the file or directory
+--- @return number|nil timestamp Modification time as Unix timestamp or nil on error
+--- @return string|nil error Error message if getting the time failed
+---
+--- @usage
+--- -- Check when a file was last modified
+--- local timestamp, err = fs.get_modified_time("/path/to/config.json")
+--- if not timestamp then
+---   print("Error getting modification time: " .. (err or "unknown error"))
+---   return
+--- end
+--- local date_string = os.date("%Y-%m-%d %H:%M:%S", timestamp)
+--- print("File was last modified: " .. date_string)
+---
+--- -- Determine if a file is older than a certain time
+--- local now = os.time()
+--- local mod_time = fs.get_modified_time(file_path)
+--- local one_day = 24 * 60 * 60 -- Seconds in a day
+--- if mod_time and (now - mod_time) > one_day then
+---   print("File is more than one day old")
+--- end
 function fs.get_modified_time(path)
     if not path then return nil, "No path provided" end
     if not (fs.file_exists(path) or fs.directory_exists(path)) then
@@ -1054,10 +1581,33 @@ function fs.get_modified_time(path)
     return timestamp
 end
 
---- Get creation timestamp
----@param path string Path to file
----@return number|nil timestamp Creation time or nil on error
----@return string|nil error Error message if getting time failed
+--- Get the creation timestamp of a file or directory
+--- This function retrieves the creation time of a file or directory as a Unix
+--- timestamp (seconds since epoch). It uses platform-specific commands to retrieve
+--- this information, with special handling for Unix-like systems where creation time
+--- might not be available (falls back to modification time in that case).
+---
+--- @param path string Path to the file or directory
+--- @return number|nil timestamp Creation time as Unix timestamp or nil on error
+--- @return string|nil error Error message if getting the time failed
+---
+--- @usage
+--- -- Get and display a file's creation date
+--- local timestamp, err = fs.get_creation_time("/path/to/document.pdf")
+--- if not timestamp then
+---   print("Error getting creation time: " .. (err or "unknown error"))
+---   return
+--- end
+--- local date_string = os.date("%Y-%m-%d", timestamp)
+--- print("File was created on: " .. date_string)
+---
+--- -- Determine if a file was created recently
+--- local now = os.time()
+--- local creation_time = fs.get_creation_time(file_path)
+--- local one_week = 7 * 24 * 60 * 60 -- Seconds in a week
+--- if creation_time and (now - creation_time) < one_week then
+---   print("File was created within the last week")
+--- end
 function fs.get_creation_time(path)
     if not path then return nil, "No path provided" end
     if not (fs.file_exists(path) or fs.directory_exists(path)) then
@@ -1093,29 +1643,96 @@ function fs.get_creation_time(path)
     return timestamp
 end
 
---- Check if path is a file
----@param path string Path to check
----@return boolean is_file True if path is a file
+--- Check if a path refers to a file (not a directory)
+--- This function checks if the specified path exists and is a file (not a directory).
+--- It combines checks from file_exists and directory_exists to determine the
+--- correct file type. This is useful when you need to specifically identify files
+--- versus directories.
+---
+--- @param path string Path to check
+--- @return boolean is_file True if the path exists and is a file
+---
+--- @usage
+--- -- Get all items in a directory and process files only
+--- local items = fs.get_directory_contents("/path/to/dir")
+--- for _, item_name in ipairs(items) do
+---   local full_path = fs.join_paths("/path/to/dir", item_name)
+---   if fs.is_file(full_path) then
+---     process_file(full_path)
+---   end
+--- end
+---
+--- -- Check a path's type before performing an operation
+--- if fs.is_file(path) then
+---   local content = fs.read_file(path)
+--- else
+---   print("Not a file: " .. path)
+--- end
 function fs.is_file(path)
     if not path then return false end
     if fs.directory_exists(path) then return false end
     return fs.file_exists(path)
 end
 
---- Check if path is a directory
----@param path string Path to check
----@return boolean is_directory True if path is a directory
+--- Check if a path refers to a directory (not a file)
+--- This function checks if the specified path exists and is a directory (not a file).
+--- It combines checks from file_exists and directory_exists to determine the
+--- correct file type. This is useful when you need to specifically identify directories
+--- versus files.
+---
+--- @param path string Path to check
+--- @return boolean is_directory True if the path exists and is a directory
+---
+--- @usage
+--- -- Get all items in a directory and process subdirectories only
+--- local items = fs.get_directory_contents("/path/to/dir")
+--- for _, item_name in ipairs(items) do
+---   local full_path = fs.join_paths("/path/to/dir", item_name)
+---   if fs.is_directory(full_path) then
+---     process_subdirectory(full_path)
+---   end
+--- end
+---
+--- -- Recursively process only directories
+--- if fs.is_directory(path) then
+---   for _, subdir in ipairs(fs.list_directories(path)) do
+---     process_directory(subdir)
+---   end
+--- end
 function fs.is_directory(path)
     if not path then return false end
     if fs.file_exists(path) and not fs.directory_exists(path) then return false end
     return fs.directory_exists(path)
 end
 
---- List files in a directory (non-recursive)
----@param dir_path string Directory path to list
----@param include_hidden? boolean Whether to include hidden files (default: false)
----@return string[]|nil files List of file paths or nil on error
----@return string|nil error Error message if listing failed
+--- List all files in a directory (non-recursive)
+--- This function returns a list of all files (not directories) in the specified directory.
+--- By default, it excludes hidden files (those starting with a dot), but they can be
+--- included by setting the include_hidden parameter to true. This function uses
+--- platform-specific commands for optimal performance on both Windows and Unix-like systems.
+---
+--- @param dir_path string Directory path to list files from
+--- @param include_hidden? boolean Whether to include hidden files (default: false)
+--- @return string[]|nil files List of absolute file paths or nil on error
+--- @return string|nil error Error message if listing failed
+---
+--- @usage
+--- -- Get all Lua files in a directory
+--- local files, err = fs.list_files("/path/to/project/src")
+--- if not files then
+---   print("Error listing files: " .. (err or "unknown error"))
+---   return
+--- end
+--- 
+--- for _, file_path in ipairs(files) do
+---   if fs.get_extension(file_path) == "lua" then
+---     process_lua_file(file_path)
+---   end
+--- end
+---
+--- -- Include hidden files in listing
+--- local all_files = fs.list_files("/home/user", true)
+--- print("Total files (including hidden): " .. #all_files)
 function fs.list_files(dir_path, include_hidden)
     if not dir_path then return nil, "No directory path provided" end
     if not fs.directory_exists(dir_path) then
@@ -1165,11 +1782,37 @@ function fs.list_files(dir_path, include_hidden)
     return files
 end
 
---- List files recursively in a directory and its subdirectories
----@param dir_path string Directory path to search
----@param include_hidden? boolean Whether to include hidden files and directories (default: false)
----@return string[]|nil files List of file paths or nil on error
----@return string|nil error Error message if listing failed
+--- List files recursively in a directory and all its subdirectories
+--- This function returns a flat list of all files (not directories) found in the
+--- specified directory and all of its subdirectories, traversing the directory tree 
+--- recursively. By default, it excludes hidden files and directories (those starting with 
+--- a dot), but they can be included by setting the include_hidden parameter to true.
+--- The function safely handles circular symlinks to prevent infinite recursion.
+---
+--- @param dir_path string Root directory path to start recursive search from
+--- @param include_hidden? boolean Whether to include hidden files and directories (default: false)
+--- @return string[]|nil files List of absolute file paths or nil on error
+--- @return string|nil error Error message if listing failed
+---
+--- @usage
+--- -- Get all files in a project, including subdirectories
+--- local all_files, err = fs.list_files_recursive("/path/to/project")
+--- if not all_files then
+---   print("Error listing files: " .. (err or "unknown error"))
+---   return
+--- end
+--- print("Total files in project: " .. #all_files)
+---
+--- -- Find specific file types recursively
+--- local all_files = fs.list_files_recursive("/path/to/project")
+--- local image_files = {}
+--- for _, file_path in ipairs(all_files) do
+---   local ext = fs.get_extension(file_path)
+---   if ext == "jpg" or ext == "png" or ext == "gif" then
+---     table.insert(image_files, file_path)
+---   end
+--- end
+--- print("Found " .. #image_files .. " image files")
 function fs.list_files_recursive(dir_path, include_hidden)
     if not dir_path then return nil, "No directory path provided" end
     if not fs.directory_exists(dir_path) then

@@ -1,32 +1,46 @@
 ---@class TempFileModule
----@field _VERSION string Module version
----@field create_temp_file fun(extension?: string): string|nil, table? Create a temporary file with optional extension
----@field create_with_content fun(content: string, extension?: string): string|nil, table? Create a temporary file with content
----@field create_temp_directory fun(): string|nil, table? Create a temporary directory
----@field get_temp_dir fun(): string Get the temporary directory path
----@field register_file fun(file_path: string): boolean Register a file for cleanup
----@field register_directory fun(dir_path: string): boolean Register a directory for cleanup 
----@field remove fun(file_path: string): boolean, string? Remove a temporary file
----@field remove_directory fun(dir_path: string): boolean, string? Remove a temporary directory
----@field with_temp_file fun(content: string, callback: fun(temp_path: string): any, extension?: string): any|nil, table? Create and use a temporary file with automatic cleanup
----@field with_temp_directory fun(callback: fun(dir_path: string): any): any|nil, table? Create and use a temporary directory with automatic cleanup
----@field cleanup_test_context fun(context?: string): boolean, table[] Clean up files from current test context
----@field cleanup_all fun(): boolean, table[], table Clean up all registered temporary files
----@field get_stats fun(): {registered_files: number, registered_directories: number, cleanup_errors: number, contexts: table<string, number>, orphaned_files: number} Get statistics about temporary files
----@field set_current_test_context fun(context: table|string): nil Set the current test context
----@field clear_current_test_context fun(): nil Clear the current test context
----@field configure fun(options: {temp_dir?: string, force_cleanup?: boolean, file_prefix?: string, auto_register?: boolean, cleanup_on_exit?: boolean}): TempFileModule Configure temp file behavior
----@field set_temp_dir fun(dir_path: string): boolean, string? Set the temporary directory path
----@field get_registered_files fun(): table<string, {context: string, created: number, size: number}> Get list of all registered temporary files
----@field get_registered_directories fun(): table<string, {context: string, created: number}> Get list of all registered temporary directories
----@field create_nested_directory fun(path: string): string|nil, table? Create a nested directory structure in the temp directory
----@field is_registered fun(path: string): boolean Check if a file or directory is registered
----@field get_context_for_file fun(file_path: string): string|nil Get the context a file was registered with
---[[
-Utility for working with temporary files.
+---@field _VERSION string Module version (following semantic versioning)
+---@field create_temp_file fun(extension?: string): string|nil, table? Create a temporary file with optional extension (.txt by default)
+---@field create_with_content fun(content: string, extension?: string): string|nil, table? Create a temporary file with specified content and register for automatic cleanup
+---@field create_temp_directory fun(): string|nil, table? Create a temporary directory and register for automatic cleanup
+---@field get_temp_dir fun(): string Get the base temporary directory path used by the module
+---@field register_file fun(file_path: string, context?: string|table): boolean Register an existing file for automatic cleanup with optional context
+---@field register_directory fun(dir_path: string, context?: string|table): boolean Register an existing directory for automatic cleanup with optional context
+---@field remove fun(file_path: string): boolean, string? Safely remove a temporary file with proper error handling
+---@field remove_directory fun(dir_path: string, recursive?: boolean): boolean, string? Safely remove a temporary directory with proper error handling
+---@field with_temp_file fun(content: string, callback: fun(temp_path: string): any, extension?: string): any|nil, table? Create and use a temporary file with automatic cleanup after callback finishes
+---@field with_temp_directory fun(callback: fun(dir_path: string): any): any|nil, table? Create and use a temporary directory with automatic cleanup after callback finishes
+---@field cleanup_test_context fun(context?: string|table): boolean, table[] Clean up files and directories associated with a specific test context
+---@field cleanup_all fun(): boolean, table[], table Clean up all registered temporary files and directories with detailed statistics
+---@field get_stats fun(): {registered_files: number, registered_directories: number, cleanup_errors: number, contexts: table<string, number>, orphaned_files: number, total_size: number, oldest_file_age: number} Get comprehensive statistics about temporary file management
+---@field set_current_test_context fun(context: table|string): boolean Set the current test context for automatic registration
+---@field clear_current_test_context fun(): boolean Clear the current test context after tests complete
+---@field configure fun(options: {temp_dir?: string, force_cleanup?: boolean, file_prefix?: string, auto_register?: boolean, cleanup_on_exit?: boolean, track_orphans?: boolean, cleanup_delay?: number}): TempFileModule Configure temp file behavior with various options
+---@field set_temp_dir fun(dir_path: string): boolean, string? Set a custom temporary directory path (must be writable)
+---@field get_registered_files fun(): table<string, {context: string, created: number, size: number, accessed: number, modified: number}> Get detailed information about all registered temporary files
+---@field get_registered_directories fun(): table<string, {context: string, created: number, file_count: number, total_size: number}> Get detailed information about all registered temporary directories
+---@field create_nested_directory fun(path: string): string|nil, table? Create a nested directory structure within the temp directory
+---@field is_registered fun(path: string): boolean Check if a file or directory is registered for cleanup
+---@field get_context_for_file fun(file_path: string): string|nil Get the context a specific file was registered with
+---@field get_current_test_context fun(): string|table|nil Get the current test context being used for file registration
+---@field copy_to_temp fun(source_path: string, extension?: string): string|nil, table? Copy an existing file to a temporary location
+---@field create_temp_files fun(count: number, content?: string, extension?: string): table|nil, table? Create multiple temporary files at once
+---@field find_orphans fun(): table Find orphaned temporary files not properly registered or cleaned
 
-This module provides functions for creating and managing temporary files during tests,
-with automatic cleanup when tests complete.
+--[[
+Temporary File Management Utility
+
+This module provides comprehensive functions for creating and managing temporary files and directories
+during tests, with automatic tracking, registration, and cleanup when tests complete. The system
+integrates with the test runner to ensure proper cleanup based on test context.
+
+Features:
+- Automatic cleanup of files when tests complete
+- Context-aware file tracking by test
+- Safe directory and file creation/removal
+- Detailed statistics and orphan detection
+- Configurable cleanup policies
+- Integration with test frameworks
 ]]
 
 local M = {}
@@ -34,8 +48,10 @@ local M = {}
 local fs = require("lib.tools.filesystem")
 local error_handler = require("lib.tools.error_handler")
 
+---@type Logging
 -- Load logging module directly - this is required
 local logging = require("lib.tools.logging")
+---@type Logger
 local logger = logging.get_logger("temp_file")
 
 -- Global registry of temporary files by test context

@@ -15,8 +15,34 @@
 ---@field assert fun(condition: any, message: string, category?: string, context?: table): boolean Assert a condition
 ---@field safe_io_operation fun(func: function, file_path: string, context?: table, transform_result?: function): any, any? Safely execute an I/O operation
 ---@field rethrow fun(err: table|string, context?: table): nil Rethrow an error with proper error level
--- Error handling module for firmo
--- Provides standardized error handling, validation, and error reporting functions
+--[[
+    Structured Error Handling Module for the Firmo Framework
+    
+    This module provides a comprehensive error handling system with standardized 
+    error objects, contextual information, and integrated logging. It's designed 
+    to create consistent, informative error handling throughout the codebase.
+    
+    Features:
+    - Structured error objects with categories, severity, and context
+    - Specialized error creators for common error types (validation, IO, runtime)
+    - Protected function execution with try/catch pattern
+    - Safe IO operation wrappers with detailed error reporting
+    - Error logging integration with configurable verbosity
+    - Test-aware error handling with suppression capabilities
+    - Stack trace capture and formatting
+    - Error assertion mechanism with clean syntax
+    - Error rethrowing with context preservation
+    
+    The module serves as the foundation for error handling across the Firmo
+    framework, ensuring that errors are consistently created, propagated,
+    and reported with appropriate context information.
+    
+    @module error_handler
+    @author Firmo Team
+    @license MIT
+    @copyright 2023-2025
+    @version 1.0.0
+]]
 local M = {}
 
 -- Simple forward declarations for functions used before they're defined
@@ -486,11 +512,37 @@ end
 -- Compatibility function for table unpacking (works with both Lua 5.1 and 5.2+)
 local unpack_table = table.unpack or unpack
 
---- Safely call a function and catch any errors
----@param func function The function to call safely
----@param ... any Arguments to pass to the function
----@return boolean success Whether the function call succeeded
----@return any ... The function's return values or an error object if failed
+--- Safely call a function and catch any errors (try/catch pattern)
+--- Executes a function in protected mode with proper error handling. This is the
+--- primary error handling pattern throughout the Firmo framework, providing a
+--- clean try/catch pattern with standardized error objects.
+---
+--- @param func function The function to execute safely
+--- @param ... any Arguments to pass to the function
+--- @return boolean success Whether the function execution succeeded
+--- @return any result The function's return value(s) if successful, or an error object if failed
+--- @return any additional_results Additional return values from the function (if successful)
+---
+--- @usage
+--- -- Basic usage:
+--- local success, result, err = error_handler.try(function()
+---   return potentially_failing_function()
+--- end)
+---
+--- if not success then
+---   -- Handle error (result contains the error object)
+---   print("Error:", result.message)
+---   return nil, result
+--- else
+---   -- Use the result
+---   return result
+--- end
+---
+--- -- With arguments:
+--- local success, result = error_handler.try(function(a, b)
+---   return a + b
+--- end, 5, 10)
+--- -- result will be 15 if successful
 function M.try(func, ...)
   local result = { pcall(func, ...) }
   local success = table.remove(result, 1)
@@ -515,9 +567,23 @@ function M.try(func, ...)
 end
 
 --- Create a validation error object
----@param message string The error message
----@param context? table Additional context for the error
----@return table The validation error object
+--- Creates a standardized error object for validation failures, such as
+--- invalid parameters, missing required values, or type mismatches.
+--- Validation errors are automatically recognized by the test system and
+--- can be suppressed in test environments that expect them.
+---
+--- @param message string The human-readable error message
+--- @param context? table Additional context information (key-value pairs)
+--- @return table The structured validation error object
+---
+--- @usage
+--- -- Basic validation error
+--- if type(filename) ~= "string" then
+---   return nil, error_handler.validation_error(
+---     "Filename must be a string", 
+---     {parameter_name = "filename", provided_type = type(filename)}
+---   )
+--- end
 function M.validation_error(message, context)
   return create_error(message, M.CATEGORY.VALIDATION, M.SEVERITY.ERROR, context)
 end
@@ -585,12 +651,38 @@ function M.test_expected_error(message, context, cause)
 end
 
 --- Safely execute an I/O operation with proper error handling
----@param operation function The I/O operation to execute
----@param file_path string The file path being operated on
----@param context? table Additional context for the error
----@param transform_result? function Optional function to transform the result
----@return any|nil result The result of the operation or nil on error
----@return table|nil error_obj The error object on failure
+--- Wraps file system operations with standardized error handling, automatically
+--- adding the file path to error context and creating detailed I/O error objects.
+--- This is the preferred way to perform any file operations throughout the framework.
+---
+--- @param operation function The I/O operation function to execute (must return result, err pattern)
+--- @param file_path string The file path being operated on
+--- @param context? table Additional context information for error reporting
+--- @param transform_result? fun(result:any):any Optional function to transform the success result
+--- @return any|nil result The result of the operation or nil on error
+--- @return table|nil error_obj The structured error object on failure
+---
+--- @usage
+--- -- Read a file safely
+--- local content, err = error_handler.safe_io_operation(
+---   function() return fs.read_file("config.json") end,
+---   "config.json",
+---   {operation = "read_config"}
+--- )
+--- 
+--- if not content then
+---   -- Handle error
+---   print("Failed to read config: " .. err.message)
+---   return nil, err
+--- end
+--- 
+--- -- With result transformation
+--- local data, err = error_handler.safe_io_operation(
+---   function() return fs.read_file("config.json") end,
+---   "config.json",
+---   {operation = "parse_config"},
+---   function(content) return json.decode(content) end
+--- )
 function M.safe_io_operation(operation, file_path, context, transform_result)
   transform_result = transform_result or function(result)
     return result

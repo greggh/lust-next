@@ -1,9 +1,29 @@
--- stub.lua - Function stubbing implementation for firmo
+--[[
+    stub.lua - Function stubbing implementation for the Firmo testing framework
+    
+    This module provides robust function stubbing capabilities for test isolation and behavior verification.
+    Stubs replace real functions with test doubles that have pre-programmed behavior.
+    
+    Features:
+    - Create standalone stub functions that return specified values
+    - Replace object methods with stubs that can be restored later
+    - Configure stubs to throw errors for testing error handling
+    - Return values in sequence to simulate changing behavior over time
+    - Advanced sequence control with cycling and exhaustion handling
+    - Integration with the spy system for call tracking and verification
+    - Automatic restoration of original methods
+    
+    @module stub
+    @author Firmo Team
+    @license MIT
+    @copyright 2023-2025
+]]
 
 ---@class stub_module
 ---@field _VERSION string Module version
----@field new fun(value_or_fn?: any): stub_object Create a new stub function that returns a specified value
----@field create fun(implementation?: function): stub_object Create a new stub with a custom implementation
+---@field new fun(value_or_fn?: any): stub_object Create a new stub function that returns a specified value or uses custom implementation
+---@field on fun(obj: table, method_name: string, return_value_or_implementation: any): stub_object Replace an object's method with a stub
+---@field create fun(implementation?: function): stub_object Create a new stub with a custom implementation (alias for new)
 ---@field sequence fun(values: table): stub_object Create a stub that returns values in sequence
 ---@field from_spy fun(spy_obj: table): stub_object Create a stub from an existing spy object
 ---@field is_stub fun(obj: any): boolean Check if an object is a stub
@@ -18,9 +38,16 @@
 ---@field returns_function fun(fn: function): stub_object Configure stub to execute a custom function
 ---@field returns_args fun(index?: number): stub_object Configure stub to return the arguments it receives
 ---@field throws fun(error_or_message: string|table): stub_object Configure stub to throw an error
----@field returns_sequence fun(values: table): stub_object Configure stub to return values from a sequence
+---@field returns_in_sequence fun(values: table): stub_object Configure stub to return values from a sequence
+---@field cycle_sequence fun(enable?: boolean): stub_object Configure whether sequence cycles when exhausted
+---@field when_exhausted fun(behavior: string, custom_value?: any): stub_object Configure sequence exhaustion behavior
+---@field reset_sequence fun(): stub_object Reset sequence to the beginning
 ---@field returns_async fun(value: any, delay?: number): stub_object Configure stub to return a value asynchronously
 ---@field set_sequence_behavior fun(options: {cycles?: boolean, exhausted_behavior?: string, exhausted_value?: any}): stub_object Configure sequence behavior
+---@field restore fun(): void Restore the original method (for stubs created with stub.on)
+---@field target table|nil The object that contains the stubbed method
+---@field name string|nil Name of the method being stubbed
+---@field original function|nil Original method implementation before stubbing
 ---@field _is_firmo_stub boolean Flag indicating this is a stub object
 ---@field _sequence_values table|nil Values to return in sequence
 ---@field _sequence_index number Current index in the sequence
@@ -46,9 +73,14 @@ local stub = {
 ---@param implementation function The original implementation function
 ---@param sequence_table table|nil Table of values to return in sequence
 ---@return function sequence_implementation Function that implements sequence behavior
--- Helper function to add sequential return values implementation
--- Creates a function that returns values from sequence_table one by one
--- Handles cycling, exhaustion behavior, and function values in the sequence
+--- Helper function to add sequential return values implementation
+--- Creates a function that returns values from sequence_table one by one.
+--- This sophisticated sequence handler provides:
+--- - Returns values from the sequence in order
+--- - Configurable cycling behavior (restart from beginning when exhausted)
+--- - Custom exhaustion behavior (nil, fallback to original, custom value)
+--- - Support for function values in the sequence (called with arguments)
+--- - Error handling and detailed logging
 local function add_sequence_methods(stub_obj, implementation, sequence_table)
   logger.debug("Setting up sequence methods for stub", {
     sequence_length = sequence_table and #sequence_table or 0
@@ -140,10 +172,26 @@ local function add_sequence_methods(stub_obj, implementation, sequence_table)
   return sequence_implementation
 end
 
----@param return_value_or_implementation any Value to return when stub is called, or function to use as implementation
----@return stub_object stub A new stub function object
--- Create a standalone stub function that returns a specified value
--- or uses a custom implementation if a function is provided
+--- Create a standalone stub function that returns a specified value or uses a custom implementation
+--- This is the primary function for creating stubs that aren't attached to existing objects.
+--- The created stub inherits all spy functionality and adds stub-specific methods.
+---
+--- @param return_value_or_implementation any Value to return when stub is called, or function to use as implementation
+--- @return stub_object stub A new stub function object that can be called like a normal function
+--- 
+--- @usage
+--- -- Create a stub that returns a fixed value
+--- local my_stub = stub.new("fixed value")
+--- 
+--- -- Create a stub with custom implementation
+--- local custom_stub = stub.new(function(arg1, arg2)
+---   return arg1 * arg2
+--- end)
+--- 
+--- -- Configure further with chaining
+--- local advanced_stub = stub.new()
+---   :returns_in_sequence({1, 2, 3})
+---   :cycle_sequence(true)
 function stub.new(return_value_or_implementation)
   logger.debug("Creating new stub", {
     value_type = type(return_value_or_implementation)
@@ -166,6 +214,12 @@ function stub.new(return_value_or_implementation)
   logger.debug("Created stub object based on spy")
   
   -- Add stub-specific methods
+  
+  --- Configure the stub to return a specific fixed value
+  --- Creates a new stub that returns the specified value regardless of arguments
+  --- 
+  --- @param value any The value to return when the stub is called
+  --- @return stub_object A new stub configured to return the specified value
   function stub_obj:returns(value)
     logger.debug("Creating stub that returns fixed value", {
       value_type = type(value)
@@ -188,6 +242,12 @@ function stub.new(return_value_or_implementation)
     return new_stub
   end
   
+  --- Configure the stub to throw an error when called
+  --- Creates a new stub that throws the specified error message or object
+  --- Used for testing error handling code paths
+  ---
+  --- @param error_message string|table The error message or error object to throw
+  --- @return stub_object A new stub configured to throw the specified error
   function stub_obj:throws(error_message)
     logger.debug("Creating stub that throws error", {
       error_message = error_message
@@ -210,7 +270,27 @@ function stub.new(return_value_or_implementation)
     return new_stub
   end
   
-  -- Add method for sequential return values
+  --- Configure the stub to return values from a sequence in order
+  --- Creates a new stub that returns each value from the provided table in sequence,
+  --- one value per call. Useful for simulating changing behavior over time.
+  ---
+  --- @param values table An array of values to return in sequence
+  --- @return stub_object A new stub configured with sequence behavior
+  --- 
+  --- @usage
+  --- -- Create a stub that returns values in sequence
+  --- local seq_stub = stub.new():returns_in_sequence({"first", "second", "third"})
+  --- 
+  --- -- By default, returns nil after the sequence is exhausted
+  --- print(seq_stub()) -- "first"
+  --- print(seq_stub()) -- "second"
+  --- print(seq_stub()) -- "third"
+  --- print(seq_stub()) -- nil (sequence exhausted)
+  --- 
+  --- -- Can be combined with other sequence options:
+  --- local cycling_stub = stub.new()
+  ---   :returns_in_sequence({1, 2, 3})
+  ---   :cycle_sequence(true)
   function stub_obj:returns_in_sequence(values)
     logger.debug("Creating stub with sequence of return values", {
       is_table = type(values) == "table",
@@ -249,14 +329,39 @@ function stub.new(return_value_or_implementation)
     return new_stub
   end
   
-  -- Add method to enable cycling through sequence values
+  --- Configure whether the sequence of return values should cycle
+  --- When enabled, after the last value in the sequence is returned,
+  --- the stub will start again from the first value. When disabled,
+  --- the exhausted behavior determines what happens when the sequence ends.
+  ---
+  --- @param enable boolean Whether to enable cycling (defaults to true)
+  --- @return stub_object The same stub object for method chaining
   function stub_obj:cycle_sequence(enable)
     if enable == nil then enable = true end
     self._sequence_cycles = enable
     return self
   end
   
-  -- Add method to specify behavior when sequence is exhausted
+  --- Specify behavior when a sequence is exhausted (no more values to return)
+  --- Controls what the stub returns after all sequence values have been used
+  --- and cycling is disabled. Three options are available:
+  --- - "nil": Return nil (default behavior)
+  --- - "fallback": Use the original implementation
+  --- - "custom": Return a custom value
+  ---
+  --- @param behavior string The behavior when sequence is exhausted: "nil", "fallback", or "custom"
+  --- @param custom_value any The value to return when behavior is "custom"
+  --- @return stub_object The same stub object for method chaining
+  --- 
+  --- @usage
+  --- -- Return nil when sequence is exhausted (default)
+  --- stub:when_exhausted("nil")
+  --- 
+  --- -- Fall back to original implementation
+  --- stub:when_exhausted("fallback")
+  --- 
+  --- -- Return a custom value
+  --- stub:when_exhausted("custom", "sequence complete")
   function stub_obj:when_exhausted(behavior, custom_value)
     if behavior == "nil" then
       self._sequence_exhausted_behavior = "nil"
@@ -272,7 +377,11 @@ function stub.new(return_value_or_implementation)
     return self
   end
   
-  -- Add method to reset sequence to the beginning
+  --- Reset sequence to the beginning
+  --- Sets the sequence index back to 1, so the next call will return
+  --- the first value in the sequence again.
+  ---
+  --- @return stub_object The same stub object for method chaining
   function stub_obj:reset_sequence()
     logger.debug("Resetting stub sequence to beginning")
     self._sequence_index = 1
@@ -282,7 +391,30 @@ function stub.new(return_value_or_implementation)
   return stub_obj
 end
 
--- Create a stub for an object method
+--- Create a stub for an object method, replacing the original method temporarily
+--- This function replaces a method on an object with a stub that tracks calls and provides
+--- pre-programmed behavior. The original method is preserved and can be restored later.
+---
+--- @param obj table The object containing the method to stub
+--- @param method_name string The name of the method to stub
+--- @param return_value_or_implementation any Value to return when stub is called, or function to use as implementation
+--- @return stub_object stub A stub object that tracks calls and controls method behavior
+---
+--- @usage
+--- -- Replace a method with a stub that returns 42
+--- local my_obj = { calculate = function() return 10 end }
+--- local calc_stub = stub.on(my_obj, "calculate", 42)
+--- 
+--- -- Replace with custom implementation
+--- stub.on(logger, "warn", function(msg) print("STUBBED: " .. msg) end)
+--- 
+--- -- Create a stub that throws an error
+--- local error_stub = stub.on(file_system, "read", function() 
+---   error("Simulated IO error") 
+--- end)
+--- 
+--- -- Restore the original method
+--- calc_stub:restore()
 function stub.on(obj, method_name, return_value_or_implementation)
   logger.debug("Creating stub on object method", {
     obj_type = type(obj),
@@ -328,6 +460,13 @@ function stub.on(obj, method_name, return_value_or_implementation)
   stub_obj.original = original_fn
   
   -- Add restore method
+  
+  --- Restore the original method that was replaced by the stub
+  --- This undoes the stubbing, replacing the stub with the original method
+  --- implementation that existed before stubbing. After restoration, calling
+  --- the method will execute the original behavior.
+  ---
+  --- @return nil
   function stub_obj:restore()
     logger.debug("Restoring original method", {
       target_type = type(self.target),
@@ -343,12 +482,24 @@ function stub.on(obj, method_name, return_value_or_implementation)
   end
   
   -- Add stub-specific methods
+  
+  --- Configure the stub to return a specific fixed value
+  --- Creates a new stub that returns the specified value regardless of arguments
+  --- 
+  --- @param value any The value to return when the stub is called
+  --- @return stub_object A new stub configured to return the specified value
   function stub_obj:returns(value)
     -- Create a new stub
     local new_stub = stub.on(obj, method_name, function() return value end)
     return new_stub
   end
   
+  --- Configure the stub to throw an error when called
+  --- Creates a new stub that throws the specified error message or object
+  --- Uses structured error objects with TEST_EXPECTED category when error_handler is available
+  ---
+  --- @param error_message string|table The error message or error object to throw
+  --- @return stub_object A new stub configured to throw the specified error
   function stub_obj:throws(error_message)
     -- Create a new stub using structured error objects with TEST_EXPECTED category
     local new_stub = stub.on(obj, method_name, function() 
@@ -368,7 +519,12 @@ function stub.on(obj, method_name, return_value_or_implementation)
     return new_stub
   end
   
-  -- Add method for sequential return values
+  --- Configure the stub to return values from a sequence in order
+  --- Creates a new stub that returns each value from the provided table in sequence,
+  --- one value per call. Useful for simulating changing behavior over time.
+  ---
+  --- @param values table An array of values to return in sequence
+  --- @return stub_object A new stub configured with sequence behavior
   function stub_obj:returns_in_sequence(values)
     if type(values) ~= "table" then
       error("returns_in_sequence requires a table of values")
@@ -390,14 +546,29 @@ function stub.on(obj, method_name, return_value_or_implementation)
     return new_stub
   end
   
-  -- Add method to enable cycling through sequence values
+  --- Configure whether the sequence of return values should cycle
+  --- When enabled, after the last value in the sequence is returned,
+  --- the stub will start again from the first value. When disabled,
+  --- the exhausted behavior determines what happens when the sequence ends.
+  ---
+  --- @param enable boolean Whether to enable cycling (defaults to true)
+  --- @return stub_object The same stub object for method chaining
   function stub_obj:cycle_sequence(enable)
     if enable == nil then enable = true end
     self._sequence_cycles = enable
     return self
   end
   
-  -- Add method to specify behavior when sequence is exhausted
+  --- Specify behavior when a sequence is exhausted (no more values to return)
+  --- Controls what the stub returns after all sequence values have been used
+  --- and cycling is disabled. Three options are available:
+  --- - "nil": Return nil (default behavior)
+  --- - "fallback": Use the original implementation
+  --- - "custom": Return a custom value
+  ---
+  --- @param behavior string The behavior when sequence is exhausted: "nil", "fallback", or "custom"
+  --- @param custom_value any The value to return when behavior is "custom"
+  --- @return stub_object The same stub object for method chaining
   function stub_obj:when_exhausted(behavior, custom_value)
     if behavior == "nil" then
       self._sequence_exhausted_behavior = "nil"
@@ -413,7 +584,11 @@ function stub.on(obj, method_name, return_value_or_implementation)
     return self
   end
   
-  -- Add method to reset sequence to the beginning
+  --- Reset sequence to the beginning
+  --- Sets the sequence index back to 1, so the next call will return
+  --- the first value in the sequence again.
+  ---
+  --- @return stub_object The same stub object for method chaining
   function stub_obj:reset_sequence()
     self._sequence_index = 1
     return self

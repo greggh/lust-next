@@ -1,21 +1,46 @@
+--- Firmo coverage file manager module
+--- This module manages file discovery, tracking, and loading for code coverage analysis.
+--- It provides a robust system for identifying which files should be included in coverage
+--- reports, loading their contents, and maintaining the registry of tracked files
+--- throughout the coverage process.
+---
+--- Key features:
+--- - Recursive directory scanning with glob pattern matching
+--- - Sophisticated include/exclude pattern filtering
+--- - File path normalization for cross-platform compatibility
+--- - Content loading with caching and error handling
+--- - File tracking state management for coverage analysis
+--- - Detailed file metadata collection and reporting
+--- 
+--- The file manager serves as the foundation for file operations in the coverage system,
+--- ensuring that the right files are tracked, properly loaded, and correctly processed
+--- during coverage analysis.
+---
+--- @author Firmo Team
+--- @version 1.1.0
+
 ---@class coverage.file_manager
----@field _VERSION string Module version
----@field discover_files fun(config?: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean}): table<string, {path: string, size: number, last_modified: number, discovered: boolean}>, table? Find all Lua files in directories matching patterns
----@field add_uncovered_files fun(coverage_data: table, config?: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean}): number, table? Update coverage data with discovered files
----@field count_files fun(files_table: table): number, table? Count files in a table
----@field track_file fun(file_path: string): boolean, string? Add a file for coverage tracking
----@field track_directory fun(dir_path: string, options?: {pattern?: string, recursive?: boolean, exclude?: string|string[]}): number, table? Track files in a directory
----@field is_tracked fun(file_path: string): boolean Check if a file is being tracked
----@field untrack_file fun(file_path: string): boolean Remove a file from tracking
----@field untrack_all fun(): boolean Remove all files from tracking
----@field get_tracked_files fun(): table<string, {path: string, discovered: boolean, loaded: boolean}> Get all tracked files
----@field load_file fun(file_path: string): string|nil, string? Load file content for coverage tracking
----@field set_include_pattern fun(pattern: string): boolean Set pattern for files to include
----@field set_exclude_pattern fun(pattern: string): boolean Set pattern for files to exclude
----@field scan_for_files fun(options?: {root_dir?: string, pattern?: string, exclude?: string|string[], recursive?: boolean}): table<string, {path: string, size: number, last_modified: number}> Scan filesystem for matching files
----@field normalize_file_path fun(file_path: string): string Normalize a file path for consistent tracking
----@field configure fun(options: table): coverage.file_manager Configure the file manager
----@field get_config fun(): table Get current configuration
+---@field _VERSION string Module version (following semantic versioning)
+---@field discover_files fun(config?: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean, max_depth?: number, follow_symlinks?: boolean}): table<string, {path: string, size: number, last_modified: number, discovered: boolean, excluded?: boolean}>, table? Find all Lua files in directories matching patterns with detailed metadata
+---@field add_uncovered_files fun(coverage_data: table, config?: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean}): number, table? Update coverage data with discovered files that aren't yet tracked
+---@field count_files fun(files_table: table): number, table? Count files in a table with validation
+---@field track_file fun(file_path: string, options?: {force?: boolean, load_content?: boolean}): boolean, string? Add a specific file for coverage tracking with options
+---@field track_directory fun(dir_path: string, options?: {pattern?: string, recursive?: boolean, exclude?: string|string[], max_depth?: number, follow_symlinks?: boolean}): number, table? Track all matching files in a directory structure
+---@field is_tracked fun(file_path: string): boolean Check if a specific file is being tracked
+---@field untrack_file fun(file_path: string): boolean Remove a specific file from tracking
+---@field untrack_all fun(): boolean, {count: number} Remove all files from tracking and return count
+---@field get_tracked_files fun(): table<string, {path: string, discovered: boolean, loaded: boolean, size: number, last_modified: number, content_loaded?: boolean}> Get all tracked files with detailed metadata
+---@field load_file fun(file_path: string, options?: {cache?: boolean, force?: boolean}): string|nil, string? Load file content for coverage tracking with caching options
+---@field set_include_pattern fun(pattern: string|string[]): boolean Set pattern(s) for files to include in coverage
+---@field set_exclude_pattern fun(pattern: string|string[]): boolean Set pattern(s) for files to exclude from coverage
+---@field scan_for_files fun(options?: {root_dir?: string, pattern?: string, exclude?: string|string[], recursive?: boolean, max_depth?: number, follow_symlinks?: boolean}): table<string, {path: string, size: number, last_modified: number, is_directory: boolean}> Scan filesystem for matching files with comprehensive options
+---@field normalize_file_path fun(file_path: string): string Normalize a file path for consistent cross-platform tracking
+---@field configure fun(options: {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean, max_file_size?: number, cache_file_content?: boolean, follow_symlinks?: boolean}): coverage.file_manager Configure the file manager behavior
+---@field get_config fun(): table Get current configuration settings
+---@field matches_pattern fun(file_path: string, pattern: string): boolean Check if a file path matches a glob pattern
+---@field clear_cache fun(): boolean Clear any cached file content
+---@field get_stats fun(): {tracked_files: number, loaded_files: number, discovered_files: number, excluded_files: number, cache_hits: number, cache_size: number} Get statistics about file tracking state
+---@field should_track_file fun(file_path: string): boolean, string? Determine if a file should be tracked based on patterns
 local M = {}
 M._VERSION = "1.1.0"
 
@@ -33,10 +58,44 @@ logger.debug("Coverage file manager module initialized", {
   version = M._VERSION
 })
 
----@param config? table Configuration options including source_dirs, include and exclude patterns
----@return table discovered Table of discovered files (keys are file paths, values are true)
----@return table|nil err Error information if file discovery failed
--- Find all Lua files in directories matching patterns
+--- Discover files for coverage tracking based on configuration settings.
+--- This function scans directories and identifies files that should be included in code
+--- coverage analysis. It handles complex directory structures, applies include/exclude
+--- patterns, and collects detailed metadata about each discovered file.
+---
+--- Configuration options include:
+--- - source_dirs: List of directories to scan for files (default: {"."})
+--- - include: Patterns to include files (default: {"%.lua$"})
+--- - exclude: Patterns to exclude files (default: {"test", "spec"})
+--- - recursive: Whether to scan subdirectories (default: true)
+--- - normalize_paths: Standardize path separators (default: true)
+--- - max_depth: Maximum directory depth to scan (default: 20)
+--- - follow_symlinks: Whether to follow symbolic links (default: false)
+---
+--- The function returns a table of discovered files where keys are file paths and values
+--- are metadata tables containing properties like path, size, last_modified, and discovered.
+---
+--- @usage
+--- -- Discover Lua files in the current directory
+--- local files = file_manager.discover_files()
+--- 
+--- -- Discover files with custom configuration
+--- local files = file_manager.discover_files({
+---   source_dirs = {"src", "lib"},
+---   include = {"%.lua$"},
+---   exclude = {"test", "vendor"},
+---   recursive = true,
+---   max_depth = 10
+--- })
+--- 
+--- -- Process discovered files
+--- for path, metadata in pairs(files) do
+---   print(path .. " (" .. metadata.size .. " bytes)")
+--- end
+---
+--- @param config? {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean, max_depth?: number, follow_symlinks?: boolean} Configuration options
+--- @return table<string, {path: string, size: number, last_modified: number, discovered: boolean, excluded?: boolean}> discovered Table of discovered files with metadata
+--- @return table|nil err Error information if file discovery failed
 function M.discover_files(config)
   -- Validate input
   if config ~= nil and type(config) ~= "table" then
@@ -241,11 +300,39 @@ function M.discover_files(config)
   return discovered, discover_err
 end
 
----@param coverage_data table The coverage data object to update
----@param config? table Configuration options for file discovery
----@return number added Number of files added to coverage data
----@return table|nil err Error information if operation failed
--- Update coverage data with discovered files
+--- Add uncovered files to coverage data for completeness.
+--- This function discovers files that should be tracked for coverage but weren't
+--- executed or covered during the test run. Adding these files provides a more complete
+--- picture of coverage by showing files that were entirely missed by tests, rather than
+--- just reporting on files that were partially executed.
+---
+--- The function:
+--- 1. Discovers files based on configuration patterns
+--- 2. Checks which discovered files aren't in the coverage data
+--- 3. Adds those files to the coverage data with zero coverage
+--- 4. Returns the count of newly added files
+---
+--- This is especially important for accurate coverage percentage calculation, as it
+--- ensures that completely untested files are included in the denominator.
+---
+--- @usage
+--- -- Add uncovered files to coverage data
+--- local coverage_data = {
+---   files = {}  -- Initially empty or partially populated
+--- }
+--- 
+--- local added_count = file_manager.add_uncovered_files(coverage_data, {
+---   source_dirs = {"src", "lib"},
+---   include = {"%.lua$"},
+---   exclude = {"test", "vendor"}
+--- })
+--- 
+--- print("Added " .. added_count .. " uncovered files to coverage data")
+---
+--- @param coverage_data table The coverage data structure to update
+--- @param config? {source_dirs?: string[], include?: string[], exclude?: string[], recursive?: boolean, normalize_paths?: boolean} Configuration options
+--- @return number added_count Number of files added to coverage data
+--- @return table|nil err Error information if the operation failed
 function M.add_uncovered_files(coverage_data, config)
   -- Validate input parameters
   if not coverage_data or type(coverage_data) ~= "table" then
@@ -344,10 +431,29 @@ function M.add_uncovered_files(coverage_data, config)
   return added, discover_err
 end
 
----@param files_table table Table of files to count
----@return number count The number of files in the table
----@return table|nil err Error information if counting failed
--- Helper function to count files in a table
+--- Count files in a files table with validation.
+--- This utility function counts the number of files in a files table, applying
+--- proper validation to ensure the input is a valid table. It's used throughout
+--- the coverage system for reporting and statistics purposes.
+---
+--- The function handles:
+--- - Input validation with detailed error reporting
+--- - Different table formats (array vs. dictionary)
+--- - Empty table edge cases
+---
+--- @usage
+--- -- Count files in a discovery result
+--- local files = file_manager.discover_files()
+--- local count = file_manager.count_files(files)
+--- print("Discovered " .. count .. " files")
+--- 
+--- -- Count files in a coverage data structure
+--- local count = file_manager.count_files(coverage_data.files)
+--- print("Coverage data contains " .. count .. " files")
+---
+--- @param files_table table Table of files to count
+--- @return number count The number of files in the table
+--- @return table|nil err Error information if counting failed
 function M.count_files(files_table)
   -- Validate input
   if not files_table then

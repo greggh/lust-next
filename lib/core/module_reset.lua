@@ -1,26 +1,39 @@
--- Module reset functionality for firmo
--- Provides better isolation between test files by cleaning up module state
+--[[
+Module Reset Functionality for Firmo
 
+Provides enhanced test isolation by managing Lua's module cache (package.loaded).
+This allows cleaning up module state between test runs for better isolation,
+preventing test pollution, and identifying memory usage patterns.
+
+Core functionality includes:
+- Module state tracking and restoration
+- Selective module reset by name or pattern
+- Protection of critical modules from reset
+- Memory usage analysis per module
+- Integration with firmo's test lifecycle
+]]
+
+---@type ErrorHandler
 local error_handler = require("lib.tools.error_handler")
 
 ---@class module_reset
----@field _VERSION string Version number
----@field initial_state table|nil Original state of package.loaded
----@field protected_modules table Modules that should never be reset
----@field protect fun(modules: string|string[]) Configure modules that should be protected
----@field count_protected_modules fun(): number Count protected modules
----@field snapshot fun(): table Take a snapshot of the current module state
----@field init fun(): module_reset Initialize the module system
----@field reset_all fun(options?: table): number Reset modules to initial state
----@field reset_pattern fun(pattern: string, options?: table): number Reset specific modules by pattern
----@field get_loaded_modules fun(): string[] Get list of currently loaded modules
----@field get_memory_usage fun(): table Get memory usage information
----@field analyze_memory_usage fun(options?: table): table[] Calculate memory usage per module
----@field is_protected fun(module_name: string): boolean Check if a module is protected
----@field add_protected_module fun(module_name: string): boolean Add a module to the protected list
----@field register_with_firmo fun(firmo: table): table Register the module with firmo
----@field configure fun(options: table): table Configure isolation options for firmo
----@field firmo table|nil Reference to the firmo instance
+---@field _VERSION string Version number following semantic versioning
+---@field initial_state table<string, boolean>|nil Original snapshot of package.loaded on initialization
+---@field protected_modules table<string, boolean> Registry of modules that should never be reset
+---@field firmo table|nil Reference to the firmo instance for integration
+---@field protect fun(modules: string|string[]): module_reset Add modules to the protected list to prevent resetting
+---@field count_protected_modules fun(): number Count the number of protected modules in the registry
+---@field snapshot fun(): table<string, boolean>, number Take a snapshot of the current module state and return count
+---@field init fun(): module_reset Initialize the module tracking system and capture initial state
+---@field reset_all fun(options?: {verbose?: boolean, force?: boolean}): number Reset all non-protected modules to initial state
+---@field reset_pattern fun(pattern: string, options?: {verbose?: boolean}): number Reset modules matching a Lua pattern string
+---@field get_loaded_modules fun(): string[] Get list of currently loaded, non-protected modules
+---@field get_memory_usage fun(): {current: number, count: number} Get current memory usage in kilobytes
+---@field analyze_memory_usage fun(options?: {track_level?: string}): {name: string, memory: number}[] Calculate approximate memory usage per module
+---@field is_protected fun(module_name: string): boolean Check if a specific module is protected from reset
+---@field add_protected_module fun(module_name: string): boolean Add a single module to the protected list
+---@field register_with_firmo fun(firmo: table): table Register this module with firmo and enhance firmo.reset()
+---@field configure fun(options: {reset_modules?: boolean, verbose?: boolean, track_memory?: boolean}): table Configure isolation options for test runs
 
 local module_reset = {}
 module_reset._VERSION = "1.2.0"

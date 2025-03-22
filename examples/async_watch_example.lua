@@ -2,6 +2,7 @@
 -- Run with: lua test.lua --watch examples/async_watch_example.lua
 
 -- Add paths for proper module loading
+---@type string script_path Path to the directory containing this script
 local script_path = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
 package.path = script_path
   .. "../?.lua;"
@@ -12,11 +13,18 @@ package.path = script_path
   .. package.path
 
 -- Load firmo with async support
+---@type Firmo
 local firmo = require("firmo")
+---@type fun(description: string, callback: function) describe Test suite container function
+---@type fun(description: string, options: table|nil, callback: function) it Test case function with optional parameters
+---@type fun(value: any) expect Assertion generator function
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
+---@type fun(description: string, timeout: number?, callback: function) it_async Asynchronous test case function
 local it_async = firmo.it_async
 ---@diagnostic disable-next-line: unused-local
+---@type fun(callback: function): function async Function to wrap a function for asynchronous execution
 local async = firmo.async
+---@type fun(ms: number): nil await Function to pause execution for a specified number of milliseconds
 local await = firmo.await
 local wait_until = firmo.wait_until
 

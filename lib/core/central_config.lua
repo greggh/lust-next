@@ -1,5 +1,18 @@
--- Centralized configuration module for firmo
--- Provides a global configuration store with standardized access patterns
+--- Centralized configuration module for firmo
+--- Provides a global configuration store with standardized access patterns
+---
+--- Features:
+--- - Hierarchical configuration with dot-notation paths (module.setting.subsetting)
+--- - Schema validation for type safety and consistency
+--- - Change listeners with hierarchical notification
+--- - Default values with automatic application
+--- - File-based persistence with load/save capabilities
+--- - Clean serialization of Lua tables for readable config files
+--- - Comprehensive error handling with detailed context
+--- - Lazy loading of dependencies to avoid circular references
+---
+--- @version 0.3.0
+--- @author Firmo Team
 
 -- Directly require error_handler to ensure it's always available
 local error_handler = require("lib.tools.error_handler")
@@ -21,8 +34,12 @@ local error_handler = require("lib.tools.error_handler")
 ---@field merge fun(target: table, source: table): table Merges two tables
 ---@field DEFAULT_CONFIG_PATH string The default configuration file path
 ---@field ERROR_TYPES table Error type constants mapping to error_handler categories
+---@field _VERSION string Module version identifier
 -- Module table
 local M = {}
+
+-- Module version
+M._VERSION = "0.3.0"
 
 -- Configuration storage
 local config = {
@@ -248,11 +265,37 @@ local function deep_equals(a, b)
   return true
 end
 
----@param path? string The path to get the value at (dot-separated, e.g. 'module.setting')
----@param default? any Value to return if path doesn't exist
----@return any value The value at the path or the default
----@return table|nil error Error if any occurred
--- Get a value at a specific path
+--- Gets a configuration value from the specified path
+--- This function retrieves a value from the central configuration store using a 
+--- dot-separated path notation. It returns a copy of the value to prevent direct
+--- modification of configuration data. If the path doesn't exist, it returns either
+--- the provided default value or an error object.
+---
+--- @param path? string The path to get the value at (dot-separated, e.g. 'module.setting')
+--- @param default? any Value to return if path doesn't exist
+--- @return any value The value at the path or the default
+--- @return table|nil error Error if any occurred
+---
+--- @usage
+--- -- Get a simple setting with default value
+--- local logging_level = central_config.get("logging.level", "info")
+---
+--- -- Get a complex configuration object 
+--- local database_config = central_config.get("database")
+--- if database_config then
+---   db.connect(database_config.host, database_config.port)
+--- end
+---
+--- -- Get full configuration
+--- local full_config = central_config.get()
+---
+--- -- With error handling
+--- local cache_settings, err = central_config.get("cache.settings")
+--- if err then
+---   print("Error getting cache settings: " .. err.message)
+---   -- Use defaults
+---   cache_settings = { ttl = 3600, max_size = 1000 }
+--- end
 function M.get(path, default)
   -- Parameter validation
   if path ~= nil and type(path) ~= "string" then
@@ -323,10 +366,41 @@ function M.get(path, default)
   return current
 end
 
----@param path? string The path to set the value at (dot-separated, e.g. 'module.setting')
----@param value any The value to set
----@return central_config The module instance for chaining
--- Set a value at a specific path
+--- Sets a configuration value at the specified path
+--- This function stores a value in the configuration system at the specified path,
+--- automatically creating any required parent tables. When setting table values,
+--- it makes a deep copy to prevent unintended modification by reference. The function
+--- also notifies any change listeners if the value changes. The function supports
+--- method chaining by returning the module instance.
+---
+--- @param path? string The path to set the value at (dot-separated, e.g. 'module.setting')
+--- @param value any The value to store at the specified path
+--- @return central_config The module instance for chaining
+---
+--- @usage
+--- -- Set a simple value
+--- central_config.set("logging.level", "debug")
+---
+--- -- Set a nested value
+--- central_config.set("database.connection", {
+---   host = "localhost", 
+---   port = 5432,
+---   username = "app_user",
+---   password = "secret"
+--- })
+---
+--- -- Set the entire configuration at once
+--- central_config.set({
+---   logging = { level = "info", format = "json" },
+---   app = { name = "MyApp", version = "1.0.0" },
+---   paths = { data = "/var/data", temp = "/tmp/myapp" }
+--- })
+---
+--- -- Method chaining
+--- central_config
+---   .set("cache.ttl", 3600)
+---   .set("cache.max_size", 1024)
+---   .set("cache.storage", "memory")
 function M.set(path, value)
   -- Parameter validation
   if path ~= nil and type(path) ~= "string" then
@@ -423,10 +497,41 @@ function M.set(path, value)
   return M
 end
 
----@param path string The path to delete the value at (dot-separated, e.g. 'module.setting')
----@return boolean success Whether the delete was successful
----@return table|nil error Error if any occurred
--- Delete a value at a specific path
+--- Deletes a configuration value at the specified path
+--- This function removes a value from the configuration system at the specified path.
+--- It performs path validation and traversal to find the target value, verifies its
+--- existence, and properly notifies listeners of the change. The function returns
+--- a boolean indicating success or failure and an optional error object with details.
+---
+--- @param path string The path to delete the value at (dot-separated, e.g. 'module.setting')
+--- @return boolean success Whether the delete was successful
+--- @return table|nil error Error if any occurred
+---
+--- @usage
+--- -- Delete a configuration value
+--- local success, err = central_config.delete("logging.debug_mode")
+--- if not success then
+---   print("Failed to delete config: " .. (err and err.message or "unknown error"))
+--- end
+---
+--- -- Safely delete nested configuration
+--- if central_config.get("database.replica") then
+---   central_config.delete("database.replica.host")
+---   central_config.delete("database.replica.port")
+--- end
+---
+--- -- Delete with error handling
+--- local function safe_delete(path)
+---   local success, err = central_config.delete(path)
+---   if not success then
+---     if err and err.message:match("path not found") then
+---       -- Silently ignore if path doesn't exist
+---       return true
+---     end
+---     return false, err
+---   end
+---   return true
+--- end
 function M.delete(path)
   -- Parameter validation
   if path == nil or type(path) ~= "string" then
@@ -530,10 +635,40 @@ function M.delete(path)
   return false, err
 end
 
----@param path? string The path to listen for changes on (nil for all changes)
----@param callback fun(path: string, old_value: any, new_value: any) Function to call when value changes
----@return central_config The module instance for chaining
--- Register change listener
+--- Registers a callback to be notified when configuration values change
+--- This function adds a listener that will be called whenever a specific configuration
+--- path or any of its children changes. You can register listeners for specific paths
+--- or for the entire configuration tree (by using nil or "" as the path). Callbacks
+--- receive the changed path, the old value, and the new value as parameters.
+---
+--- @param path? string The path to listen for changes on (nil for all changes)
+--- @param callback fun(path: string, old_value: any, new_value: any) Function to call when value changes
+--- @return central_config The module instance for chaining
+---
+--- @usage
+--- -- Listen for changes to a specific setting
+--- central_config.on_change("logging.level", function(path, old_value, new_value)
+---   print("Logging level changed from " .. old_value .. " to " .. new_value)
+---   log_system.set_level(new_value)
+--- end)
+---
+--- -- Listen for changes to an entire module's configuration
+--- central_config.on_change("database", function(path, old_value, new_value)
+---   -- Reconnect to database if configuration changes
+---   if path:match("database.connection") then
+---     db.reconnect(central_config.get("database.connection"))
+---   end
+--- end)
+---
+--- -- Listen for all configuration changes
+--- central_config.on_change(nil, function(path, old_value, new_value)
+---   print("Config changed: " .. path)
+---   
+---   -- Trigger cache invalidation on core settings changes
+---   if path:match("^cache%.") then
+---     cache_system.invalidate(path)
+---   end
+--- end)
 function M.on_change(path, callback)
   -- Parameter validation
   if path ~= nil and type(path) ~= "string" then
@@ -567,10 +702,26 @@ function M.on_change(path, callback)
   return M
 end
 
----@param path string The path that changed
----@param old_value any The previous value
----@param new_value any The new value
--- Notify change listeners
+--- Notifies change listeners about a configuration change
+--- This internal function is called whenever a configuration value changes. It notifies
+--- all applicable listeners, including those registered for the exact path, parent paths,
+--- and root path. The function handles errors in listeners safely, ensuring configuration
+--- system stability even if callbacks throw errors.
+---
+--- @param path string The path that changed
+--- @param old_value any The previous value
+--- @param new_value any The new value
+---
+--- @usage
+--- -- Typically called internally by set() and delete()
+--- -- Example of manual notification:
+--- local old_value = central_config.get("app.version")
+--- -- External process changed version file
+--- local new_version = read_version_from_file()
+--- central_config.set("app.version", new_version)
+--- 
+--- -- In rare cases, manually notify if bypass setter:
+--- -- central_config.notify_change("app.version", old_value, new_version)
 function M.notify_change(path, old_value, new_value)
   -- Parameter validation
   if path == nil or type(path) ~= "string" then
@@ -692,11 +843,59 @@ function M.notify_change(path, old_value, new_value)
   end
 end
 
----@param module_name string The name of the module to register
----@param schema? table Schema definition for validation
----@param defaults? table Default values for the module
----@return central_config The module instance for chaining
--- Register a module's configuration schema and defaults
+--- Registers a module with the configuration system
+--- This function registers a module's configuration schema and default values with
+--- the central configuration system. The schema is used for validation, and defaults
+--- are applied if corresponding values don't already exist. This function enables
+--- modules to define their configuration requirements in a structured way.
+---
+--- @param module_name string The name of the module to register
+--- @param schema? table Schema definition for validation
+--- @param defaults? table Default values for the module
+--- @return central_config The module instance for chaining
+---
+--- @usage
+--- -- Register a module with schema and defaults
+--- central_config.register_module("logging", {
+---   -- Schema definition
+---   required_fields = {"level", "format"},
+---   field_types = {
+---     level = "string",
+---     format = "string",
+---     file = "string",
+---     rotate = "boolean",
+---     max_size = "number"
+---   },
+---   field_values = {
+---     level = {"debug", "info", "warn", "error"},
+---     format = {"text", "json", "pretty"}
+---   }
+--- }, {
+---   -- Default values
+---   level = "info",
+---   format = "text",
+---   rotate = false,
+---   max_size = 10485760 -- 10MB
+--- })
+---
+--- -- Register just defaults (no schema validation)
+--- central_config.register_module("http_client", nil, {
+---   timeout = 30,
+---   max_retries = 3,
+---   retry_delay = 1000
+--- })
+---
+--- -- Register schema without defaults
+--- central_config.register_module("database", {
+---   required_fields = {"host", "port", "username", "password"},
+---   field_types = {
+---     host = "string",
+---     port = "number",
+---     username = "string",
+---     password = "string",
+---     pool_size = "number"
+---   }
+--- })
 function M.register_module(module_name, schema, defaults)
   -- Parameter validation
   if type(module_name) ~= "string" then
@@ -815,10 +1014,47 @@ function M.register_module(module_name, schema, defaults)
   return M
 end
 
----@param module_name? string The name of the module to validate (nil for all)
----@return boolean valid Whether the configuration is valid
----@return table|nil error Error if validation failed
--- Validate configuration against registered schemas
+--- Validates configuration against registered schemas
+--- This function performs comprehensive validation of configuration values against
+--- their registered schemas. It can validate a specific module or all modules with
+--- registered schemas. The validation includes type checking, required fields verification,
+--- range validation, pattern matching, enum value validation, and custom validator functions.
+---
+--- @param module_name? string The name of the module to validate (nil for all)
+--- @return boolean valid Whether the configuration is valid
+--- @return table|nil error Error if validation failed, with details on validation errors
+---
+--- @usage
+--- -- Validate a specific module's configuration
+--- local valid, err = central_config.validate("database")
+--- if not valid then
+---   print("Database configuration is invalid:")
+---   for _, field_err in ipairs(err.context.errors) do
+---     print("  - " .. field_err.field .. ": " .. field_err.message)
+---   end
+---   -- Use defaults or prompt for configuration
+--- end
+---
+--- -- Validate all registered modules
+--- local valid, err = central_config.validate()
+--- if not valid then
+---   print("Configuration validation failed:")
+---   for module_name, module_errors in pairs(err.context.modules) do
+---     print("Module: " .. module_name)
+---     for _, field_err in ipairs(module_errors) do
+---       print("  - " .. field_err.field .. ": " .. field_err.message)
+---     end
+---   end
+--- end
+---
+--- -- Validate before saving configuration
+--- local function save_if_valid(path)
+---   if central_config.validate() then
+---     return central_config.save_to_file(path)
+---   else
+---     return false, "Configuration validation failed"
+---   end
+--- end
 function M.validate(module_name)
   -- Parameter validation
   if module_name ~= nil and type(module_name) ~= "string" then
@@ -1090,10 +1326,41 @@ function M.validate(module_name)
   end
 end
 
----@param path? string The path to the configuration file
----@return table|nil config The loaded configuration or nil if failed
----@return table|nil error Error if any occurred
--- Load configuration from a file
+--- Loads configuration from a file and merges it with existing configuration
+--- This function loads configuration data from a Lua file and merges it with the
+--- current configuration. The file is expected to return a table containing
+--- configuration data. If the file doesn't exist, it's not considered an error
+--- (the function simply logs the case and continues with existing configuration).
+---
+--- @param path? string The path to the configuration file (defaults to DEFAULT_CONFIG_PATH)
+--- @return table|nil config The loaded configuration or nil if failed
+--- @return table|nil error Error if any occurred
+---
+--- @usage
+--- -- Load from default configuration path
+--- local config, err = central_config.load_from_file()
+--- if not config then
+---   if err.message:match("not found") then
+---     print("No configuration file found, using defaults")
+---   else
+---     print("Error loading configuration: " .. err.message)
+---   end
+--- end
+---
+--- -- Load from custom path
+--- local config, err = central_config.load_from_file("/etc/myapp/config.lua")
+--- if config then
+---   print("Configuration loaded successfully")
+--- end
+---
+--- -- Load with validation
+--- local config, err = central_config.load_from_file()
+--- if config then
+---   local valid, validate_err = central_config.validate()
+---   if not valid then
+---     print("Loaded config is invalid: " .. validate_err.message)
+---   end
+--- end
 function M.load_from_file(path)
   -- Parameter validation
   if path ~= nil and type(path) ~= "string" then
@@ -1220,10 +1487,41 @@ function M.load_from_file(path)
   return user_config
 end
 
----@param path? string The path to save the configuration to
----@return boolean success Whether the save was successful
----@return table|nil error Error if any occurred
--- Save current configuration to a file
+--- Saves the current configuration to a file
+--- This function serializes the current configuration state to a Lua file that can
+--- later be loaded with load_from_file(). The configuration is saved as a Lua table
+--- with sorted keys for readability and consistency. The function creates any parent
+--- directories needed and handles filesystem errors properly.
+---
+--- @param path? string The path to save the configuration to (defaults to DEFAULT_CONFIG_PATH)
+--- @return boolean success Whether the save was successful
+--- @return table|nil error Error if any occurred
+---
+--- @usage
+--- -- Save to default configuration file
+--- local success, err = central_config.save_to_file()
+--- if not success then
+---   print("Failed to save configuration: " .. err.message)
+--- end
+---
+--- -- Save to a specific path
+--- local success, err = central_config.save_to_file("/etc/myapp/config.lua")
+--- if success then
+---   print("Configuration saved to " .. path)
+--- end
+---
+--- -- Save with validation check
+--- if central_config.validate() then
+---   central_config.save_to_file()
+--- else
+---   print("Cannot save: configuration is invalid")
+--- end
+---
+--- -- Save after making changes
+--- central_config.set("logging.level", "debug")
+---   .set("app.name", "MyApp")
+---   .set("app.version", "1.0.0")
+---   .save_to_file()
 function M.save_to_file(path)
   -- Parameter validation
   if path ~= nil and type(path) ~= "string" then
@@ -1354,9 +1652,32 @@ function M.save_to_file(path)
   return true
 end
 
----@param module_name? string The name of the module to reset (nil for all)
----@return central_config The module instance for chaining
--- Reset configuration to defaults
+--- Resets configuration values to their defaults
+--- This function resets configuration values to their default values as registered
+--- with register_module(). It can reset a specific module's configuration or the
+--- entire configuration system. If no defaults are available for a module, its
+--- configuration will be cleared. The function notifies any listeners of the changes.
+---
+--- @param module_name? string The name of the module to reset (nil for all)
+--- @return central_config The module instance for chaining
+---
+--- @usage
+--- -- Reset a specific module's configuration
+--- central_config.reset("logging")
+---
+--- -- Reset after changing settings temporarily
+--- local original_level = central_config.get("logging.level")
+--- central_config.set("logging.level", "debug")
+--- -- Do some debug operations...
+--- central_config.reset("logging") -- Restore defaults including original level
+---
+--- -- Reset the entire configuration system
+--- central_config.reset()
+---
+--- -- Reset as part of a chain of operations
+--- central_config.reset("database")
+---   .set("database.timeout", 60)
+---   .set("database.retries", 3)
 function M.reset(module_name)
   -- Parameter validation
   if module_name ~= nil and type(module_name) ~= "string" then
@@ -1427,9 +1748,43 @@ function M.reset(module_name)
   return M
 end
 
----@param options table Table of options from CLI or other source
----@return central_config The module instance for chaining
--- Configure from options table (typically from CLI)
+--- Configures the system from command-line or program options
+--- This function applies configuration values from a table of options, typically coming from 
+--- command-line arguments or program initialization parameters. It only processes options
+--- that follow the "module.setting" dot notation format, ignoring other entries. The function
+--- safely applies each valid option, logging warnings for any options that fail to apply.
+---
+--- @param options table Table of options from CLI or other source
+--- @return central_config The module instance for chaining
+---
+--- @usage
+--- -- Configure from command-line arguments
+--- local opts = {
+---   ["logging.level"] = "debug",
+---   ["coverage.enabled"] = true,
+---   ["reporting.format"] = "junit",
+---   non_config_option = "value" -- This will be ignored (no dot)
+--- }
+--- central_config.configure_from_options(opts)
+---
+--- -- Configure from parsed CLI options
+--- local function parse_cli()
+---   local options = {}
+---   for i = 1, #arg do
+---     local key, value = arg[i]:match("^%-%-([%w%.]+)=(.+)$")
+---     if key and key:find("%.") then
+---       -- Convert value types
+---       if value == "true" then value = true
+---       elseif value == "false" then value = false
+---       elseif tonumber(value) then value = tonumber(value)
+---       end
+---       options[key] = value
+---     end
+---   end
+---   return options
+--- end
+---
+--- central_config.configure_from_options(parse_cli())
 function M.configure_from_options(options)
   -- Parameter validation
   if options == nil then
@@ -1469,9 +1824,47 @@ function M.configure_from_options(options)
   return M
 end
 
----@param global_config table Global configuration table to apply
----@return central_config The module instance for chaining
--- Configure from global config
+--- Configures the system from a global configuration object
+--- This function merges a complete configuration object into the current configuration.
+--- Unlike configure_from_options() which handles individual key-value pairs, this function
+--- takes a complete, potentially nested configuration structure and merges it with the
+--- existing configuration. This is useful for initializing configuration from a predefined
+--- state or applying configuration presets.
+---
+--- @param global_config table Global configuration table to apply
+--- @return central_config The module instance for chaining
+---
+--- @usage
+--- -- Configure from a predefined configuration structure
+--- local default_config = {
+---   logging = {
+---     level = "info",
+---     format = "text",
+---     file = nil
+---   },
+---   coverage = {
+---     enabled = true,
+---     include = {"src/**/*.lua"},
+---     exclude = {"test/**/*.lua"}
+---   },
+---   testing = {
+---     timeout = 5000,
+---     parallel = false
+---   }
+--- }
+--- central_config.configure_from_config(default_config)
+---
+--- -- Load a configuration preset and apply it
+--- local function load_preset(preset_name)
+---   local presets = {
+---     development = { logging = { level = "debug" }, coverage = { enabled = true } },
+---     production = { logging = { level = "error" }, coverage = { enabled = false } },
+---     testing = { logging = { level = "info" }, coverage = { enabled = true } }
+---   }
+---   return presets[preset_name] or {}
+--- end
+---
+--- central_config.configure_from_config(load_preset("development"))
 function M.configure_from_config(global_config)
   -- Parameter validation
   if global_config == nil then
@@ -1505,8 +1898,33 @@ function M.configure_from_config(global_config)
 end
 
 -- Export public interface with error handling wrappers
----@param obj any Object to serialize (deep copy)
----@return any Serialized (deep-copied) object
+
+--- Creates a deep copy of an object
+--- This function creates a complete deep copy of the provided object, ensuring that 
+--- modifications to the returned object don't affect the original. It's particularly 
+--- useful for tables, where it recursively copies all nested tables. For non-table
+--- values, it simply returns the value itself. This function is safe to use with any
+--- value type and handles nil values appropriately.
+---
+--- @param obj any Object to serialize (deep copy)
+--- @return any Serialized (deep-copied) object
+---
+--- @usage
+--- -- Deep copy a configuration table
+--- local original_config = {
+---   logging = { level = "info", format = "json" },
+---   cache = { enabled = true, ttl = 3600 }
+--- }
+--- local config_copy = central_config.serialize(original_config)
+--- 
+--- -- Modify the copy without affecting the original
+--- config_copy.logging.level = "debug"
+--- print(original_config.logging.level) -- Still "info"
+---
+--- -- Safe to use with any value type
+--- local str_copy = central_config.serialize("hello") -- Returns "hello"
+--- local num_copy = central_config.serialize(42) -- Returns 42
+--- local nil_copy = central_config.serialize(nil) -- Returns nil
 M.serialize = function(obj)
   local result = deep_copy(obj)
   if type(result) ~= "table" and obj ~= nil then
@@ -1517,9 +1935,44 @@ M.serialize = function(obj)
   return result
 end
 
----@param target table Target table to merge into
----@param source table Source table to merge from
----@return table Merged result
+--- Deeply merges two tables together
+--- This function recursively merges the source table into the target table. For overlapping 
+--- keys that contain tables in both source and target, it performs a deep merge. For other 
+--- value types or when a key exists only in one table, the source value takes precedence.
+--- If an error occurs during merging, the function logs the error and returns the original
+--- target table unmodified.
+---
+--- @param target table Target table to merge into
+--- @param source table Source table to merge from
+--- @return table Merged result
+---
+--- @usage
+--- -- Merge configuration tables
+--- local base_config = {
+---   logging = { level = "info", format = "text" },
+---   timeouts = { connection = 30, request = 10 }
+--- }
+--- 
+--- local overrides = {
+---   logging = { level = "debug" }, -- Only override the level
+---   database = { host = "localhost", port = 5432 } -- Add new section
+--- }
+--- 
+--- local merged = central_config.merge(base_config, overrides)
+--- -- Result:
+--- -- {
+--- --   logging = { level = "debug", format = "text" },
+--- --   timeouts = { connection = 30, request = 10 },
+--- --   database = { host = "localhost", port = 5432 }
+--- -- }
+---
+--- -- Merge with error handling
+--- local function safe_merge(target, source)
+---   if type(target) ~= "table" or type(source) ~= "table" then
+---     return central_config.serialize(source or target)
+---   end
+---   return central_config.merge(target, source)
+--- end
 M.merge = function(target, source)
   local result, err = deep_merge(target, source)
   if err then
@@ -1533,9 +1986,14 @@ M.merge = function(target, source)
   return result
 end
 
----@private
----@return central_config Initialized module
--- Module initialization with error handling
+--- Module initialization function
+--- This private function initializes the central configuration module, setting up
+--- its default configuration and registering it with itself. It uses error handling
+--- to ensure the module is always returned, even if initialization fails, preventing
+--- application crashes. This function is called automatically when the module is required.
+---
+--- @private
+--- @return central_config Initialized module
 local function init()
   -- Initialize with proper error handling
   local success, err = error_handler.try(function()

@@ -1,38 +1,70 @@
 #!/usr/bin/env lua
 --[[
-  reporting_filesystem_test.lua - Tests for the integration of reporting and filesystem modules
+Reporting and Filesystem Integration Tests
+
+This test suite verifies the integration between the reporting system and filesystem
+operations, focusing on:
+
+1. Directory Creation and Management
+   - Creation of nested directory structures for reports
+   - Handling of permissions and path validation
+   - Recovery from filesystem errors
+
+2. File Operations
+   - Writing various content types (string, tables) to files
+   - Proper encoding and format conversion
+   - Error handling for invalid paths or content
+
+3. Report Generation
+   - Automatic report directory creation
+   - Multi-format report generation (JSON, HTML, etc.)
+   - Template-based file naming and organization
+
+The tests use the temp_file module for proper temporary file management and cleanup.
 ]]
 
 -- Add the project directory to the module path
 package.path = package.path .. ";./?.lua;./?/init.lua"
 
 -- Load firmo
+---@type Firmo
 local firmo = require("firmo")
+---@type fun(description: string, callback: function) Test suite container function
+---@type fun(description: string, options: table|nil, callback: function) Test case function with optional parameters
+---@type fun(value: any) Assertion generator function
+---@type fun(callback: function) Setup function that runs before each test
+---@type fun(callback: function) Teardown function that runs after each test
 local describe, it, expect, before, after =
   firmo.describe, firmo.it, firmo.expect, firmo.before, firmo.after
 
 -- Load modules needed for testing
+---@type ReportingModule
 local reporting = require("lib.reporting")
+---@type FilesystemModule
 local fs = require("lib.tools.filesystem")
+---@type TestHelperModule
 local test_helper = require("lib.tools.test_helper")
+---@type ErrorHandlerModule
 local error_handler = require("lib.tools.error_handler")
+---@type TempFileModule
+local temp_file = require("lib.tools.temp_file")
 
 -- Test data
-local test_dir = "./test-reports-tmp"
-local test_file = test_dir .. "/test-report.txt"
+local test_dir
+local test_file
 local test_content = "This is test content for file operations"
 
 describe("Reporting Module with Filesystem Integration", function()
   -- Setup and teardown
   before(function()
-    -- Create test directory
-    fs.ensure_directory_exists(test_dir)
+    -- Create test directory using temp_file
+    local dir_path, err = temp_file.create_temp_directory()
+    expect(err).to_not.exist("Failed to create temp directory: " .. tostring(err))
+    test_dir = dir_path
+    test_file = test_dir .. "/test-report.txt"
   end)
   
-  after(function()
-    -- Clean up test directory
-    fs.delete_directory(test_dir, true)
-  end)
+  -- No need for after function as temp_file module will clean up automatically
   
   describe("write_file function", function()
     it("creates directories as needed", function()

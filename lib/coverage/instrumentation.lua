@@ -1,30 +1,75 @@
--- NOTE (2025-03-12): Table constructor handling has been enhanced.
--- Environment variable (_ENV) handling improved to work in both Lua 5.1 and 5.2+ environments.
--- Key fixes implemented:
--- 1. Fixed caching mechanism to prevent stale code reuse in tests
--- 2. Improved table constructor instrumentation with proper tracking
--- 3. Enhanced environment variable handling with _ENV = _G pattern
--- 4. Added comprehensive error handling for code not loading properly
+--- Firmo coverage instrumentation module
+--- This module provides code instrumentation capabilities for the coverage system,
+--- transforming Lua source code by inserting coverage tracking calls. It operates
+--- at the source level, analyzing and modifying code to report execution data while
+--- preserving the original behavior and line numbers.
+---
+--- Key features:
+--- - Source-level code transformation for coverage tracking
+--- - Runtime loader hooks for automatic instrumentation
+--- - Sourcemap generation for accurate error reporting
+--- - Caching system for performance optimization
+--- - Multiple instrumentation strategies for different scenarios
+--- - Support for both function and block tracking
+--- - Cross-version Lua compatibility (5.1, 5.2+, LuaJIT)
+---
+--- The instrumentation approach provides more thorough coverage tracking than the
+--- debug hook approach, as it can track every line of code execution including those
+--- that might be missed by debug hooks. It also enables more precise tracking of
+--- function calls and control flow blocks.
+---
+--- The module uses a sophisticated source transformation system that carefully analyzes
+--- Lua code and inserts tracking calls at strategic points without breaking the original
+--- code semantics. It handles complex Lua constructs like multiline statements, table
+--- constructors, and function definitions with special care to ensure correct syntax.
+---
+--- Instrumentation process:
+--- 1. Source code is parsed to identify executable lines, functions, and blocks
+--- 2. Code is transformed by inserting tracking calls before executable lines
+--- 3. Special handling is applied to different code constructs (if/then, loops, functions)
+--- 4. Sourcemaps are generated to map between original and instrumented line numbers
+--- 5. Loader functions are hooked to automatically instrument code as it's loaded
+---
+--- Performance considerations:
+--- - A caching system prevents redundant instrumentation of the same files
+--- - Large files can be handled with a fallback to the debug hook approach
+--- - File filtering prevents instrumentation of the coverage module itself
+--- - Static imports option can reduce runtime overhead for instrumented code
+---
+--- Recent enhancements:
+--- - Fixed caching mechanism to prevent stale code reuse in tests
+--- - Improved table constructor instrumentation with proper tracking
+--- - Enhanced environment variable handling with _ENV = _G pattern support
+--- - Added comprehensive error handling for code loading issues
+--- - Improved sourcemap generation for accurate error reporting
+---
+--- @module coverage.instrumentation
+--- @author Firmo Team
+--- @version 1.2.0
 
 ---@class coverage.instrumentation
----@field _VERSION string Module version
----@field set_config fun(new_config: {use_static_analysis?: boolean, track_function_calls?: boolean, track_blocks?: boolean, preserve_line_numbers?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, sourcemap_enabled?: boolean, include_coverage_module?: boolean, allow_fallback?: boolean, use_static_imports?: boolean}): coverage.instrumentation Set configuration options for instrumentation
+---@field _VERSION string Module version (following semantic versioning)
+---@field set_config fun(new_config: {use_static_analysis?: boolean, track_function_calls?: boolean, track_blocks?: boolean, preserve_line_numbers?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, sourcemap_enabled?: boolean, include_coverage_module?: boolean, allow_fallback?: boolean, use_static_imports?: boolean}): coverage.instrumentation Set configuration options for instrumentation behavior
 ---@field get_config fun(): {use_static_analysis: boolean, track_function_calls: boolean, track_blocks: boolean, preserve_line_numbers: boolean, max_file_size: number, cache_instrumented_files: boolean, sourcemap_enabled: boolean, include_coverage_module: boolean, allow_fallback: boolean, use_static_imports: boolean} Get current configuration settings
----@field set_instrumentation_predicate fun(predicate_fn: fun(file_path: string): boolean): boolean Set predicate function to determine if a file should be instrumented
----@field set_module_load_callback fun(callback_fn: fun(module_name: string, module_result: any, module_path: string): boolean): boolean Set callback for module loading events
----@field set_debug_hook_fallback fun(callback_fn: fun(file_path: string, source: string): boolean): boolean Set fallback function for large files that can't be instrumented
----@field hook_loaders fun(): boolean Hook Lua's built-in loaders (load, loadfile, dofile)
----@field unhook_loaders fun(): boolean Unhook Lua's built-in loaders
----@field instrument_require fun(): boolean Instrument Lua's require function
+---@field set_instrumentation_predicate fun(predicate_fn: fun(file_path: string): boolean): boolean Set custom predicate function to determine if a file should be instrumented
+---@field set_module_load_callback fun(callback_fn: fun(module_name: string, module_result: any, module_path: string): boolean): boolean Set callback for module loading events to track module usage
+---@field set_debug_hook_fallback fun(callback_fn: fun(file_path: string, source: string): boolean): boolean Set fallback function for large files that can't be fully instrumented
+---@field hook_loaders fun(): boolean Hook Lua's built-in code loaders (load, loadfile, dofile) to instrument code at load time
+---@field unhook_loaders fun(): boolean Unhook Lua's built-in loaders and restore original behavior
+---@field instrument_require fun(): boolean Instrument Lua's require function to track module loading
 ---@field uninstrument_require fun(): boolean Restore Lua's original require function
----@field instrument_file fun(file_path: string, options?: {allow_fallback?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, force?: boolean, use_static_imports?: boolean}): string|nil, table? Instrument a file with coverage tracking
----@field instrument_code fun(source: string, options?: {file_path?: string, ast?: table, debug_mode?: boolean, track_functions?: boolean, track_blocks?: boolean, use_static_imports?: boolean}): string|nil, table? Instrument Lua source code with coverage tracking
----@field get_sourcemap fun(file_path: string): {original_lines: table<number, {instrumented_line: number, has_tracking: boolean}>, instrumented_lines: table<number, {type: string, original_line: number}>, file_path: string}|nil, table? Get sourcemap for a file to translate between original and instrumented code
+---@field instrument_file fun(file_path: string, options?: {allow_fallback?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, force?: boolean, use_static_imports?: boolean}): string|nil, table? Instrument a specific file with coverage tracking, reading from filesystem
+---@field instrument_code fun(source: string, options?: {file_path?: string, ast?: table, debug_mode?: boolean, track_functions?: boolean, track_blocks?: boolean, use_static_imports?: boolean}): string|nil, table? Instrument Lua source code with coverage tracking, with options for function and block tracking
+---@field get_sourcemap fun(file_path: string): {original_lines: table<number, {instrumented_line: number, has_tracking: boolean}>, instrumented_lines: table<number, {type: string, original_line: number}>, file_path: string}|nil, table? Get sourcemap for translating between original and instrumented code lines
 ---@field translate_error fun(err: string|table): string|table|nil Transform error messages using sourcemap to reference original line numbers
----@field get_stats fun(): {cache_size: number, enabled: boolean, config: table} Get statistics about instrumentation cache and configuration
----@field clear_cache fun(): boolean Clear the instrumentation cache
----@field create_isolated_environment fun(): table Create an isolated environment to prevent infinite recursion
----@field create_isolated_test_environment fun(test_module_path: string): table Create an isolated boundary-aware testing environment
+---@field get_stats fun(): {cache_size: number, enabled: boolean, config: table, instrumented_files: number, instrumented_lines: number, sourcemaps: number, cache_hits: number, predicate_rejections: number} Get detailed statistics about instrumentation cache and configuration
+---@field clear_cache fun(): boolean Clear the instrumentation cache to force fresh instrumentation
+---@field create_isolated_environment fun(): table Create an isolated environment to prevent infinite recursion in coverage tracking
+---@field create_isolated_test_environment fun(test_module_path: string): table Create an isolated boundary-aware testing environment with selective instrumentation
+---@field is_function_boundary fun(line: string): boolean Check if a line represents a function boundary (function declaration/end)
+---@field is_instrumentable fun(source: string): boolean Check if source code can be instrumented reliably
+---@field get_cached_instrumentation fun(file_path: string): string|nil Get previously instrumented code from cache if available
+---@field generate_sourcemap fun(original_source: string, instrumented_source: string, file_path: string): table|nil Generate detailed sourcemap for error reporting and debugging
 local M = {}
 M._VERSION = "1.2.0"
 
@@ -62,9 +107,35 @@ logger.debug("Coverage instrumentation module initialized", {
   version = M._VERSION
 })
 
----@param new_config table Configuration options for the instrumentation module
----@return coverage.instrumentation The instrumentation module (for method chaining)
--- Set configuration
+--- Sets configuration options for the instrumentation module behavior.
+---
+--- This function allows customizing how the instrumentation module transforms code
+--- and tracks coverage. Multiple options can be set at once to configure the system
+--- for different needs.
+---
+--- @param new_config table Configuration options for the instrumentation module
+--- @return coverage.instrumentation The instrumentation module (for method chaining)
+---
+--- @usage
+--- -- Basic configuration with default options
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- instrumentation.set_config({
+---   track_function_calls = true,  -- Track function entry points
+---   track_blocks = true,          -- Track code blocks (if/else, loops)
+---   preserve_line_numbers = true  -- Keep original line numbers in errors
+--- })
+---
+--- -- Advanced configuration for high-performance environments
+--- instrumentation.set_config({
+---   use_static_analysis = true,    -- Use detailed code structure analysis
+---   cache_instrumented_files = true, -- Cache results for better performance
+---   max_file_size = 500000,         -- Skip very large files (in bytes)
+---   use_static_imports = true,      -- Use static imports for better performance
+---   allow_fallback = true           -- Allow fallback to debug hook for large files
+--- })
+---
+--- @error
+--- - VALIDATION_ERROR: If new_config is not a table
 function M.set_config(new_config)
   -- Validate input
   if type(new_config) ~= "table" then
@@ -94,7 +165,22 @@ function M.set_config(new_config)
 end
 
 ---@return table config Current configuration of the instrumentation module
--- Get current configuration
+--- Returns the current configuration settings for the instrumentation module.
+---
+--- @return table The current configuration settings
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- local config = instrumentation.get_config()
+--- 
+--- print("Function tracking enabled:", config.track_function_calls)
+--- print("Block tracking enabled:", config.track_blocks)
+--- print("Maximum file size:", config.max_file_size, "bytes")
+---
+--- -- Check specific settings
+--- if config.use_static_imports then
+---   print("Using optimized static imports for tracking")
+--- end
 function M.get_config()
   return config
 end
@@ -102,7 +188,15 @@ end
 ---@private
 ---@return coverage.static_analyzer|nil static_analyzer Initialized static analyzer or nil if initialization failed
 ---@return table|nil error Error information if initialization failed
--- Initialize static analyzer if needed
+--- Initializes the static analyzer module for enhanced code analysis.
+---
+--- This internal function lazily loads the static analyzer module when needed and
+--- configures it for use with the instrumentation system. The static analyzer
+--- provides detailed code structure information to guide the instrumentation process.
+---
+--- @private
+--- @return coverage.static_analyzer|nil static_analyzer Initialized static analyzer or nil if initialization failed
+--- @return table|nil error Error information if initialization failed
 local function init_static_analyzer()
   local success, result, err = error_handler.try(function()
     if not static_analyzer and config.use_static_analysis then
@@ -253,7 +347,34 @@ end
 ---@param file_path string Path to the file
 ---@return table|nil sourcemap Sourcemap for the file or nil if not found/error
 ---@return table|nil error Error object if operation failed
--- Get the sourcemap for a file
+--- Retrieves the sourcemap for a specific file from the sourcemap cache.
+---
+--- The sourcemap provides a bidirectional mapping between original source code
+--- lines and their instrumented counterparts, essential for accurate error reporting
+--- and debugging instrumented code.
+---
+--- @param file_path string Path to the file
+--- @return table|nil sourcemap Sourcemap for the file or nil if not found/error
+--- @return table|nil error Error object if operation failed
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- After instrumenting a file
+--- local instrumented_code = instrumentation.instrument_file("/path/to/file.lua")
+--- 
+--- -- Get the sourcemap for translating error line numbers
+--- local sourcemap = instrumentation.get_sourcemap("/path/to/file.lua")
+--- if sourcemap then
+---   -- Access mappings
+---   for orig_line, mapping in pairs(sourcemap.original_lines) do
+---     print(string.format("Original line %d maps to instrumented line %d", 
+---           orig_line, mapping.instrumented_line))
+---   end
+--- end
+---
+--- @error
+--- - VALIDATION_ERROR: If file_path is nil
 function M.get_sourcemap(file_path)
   if not file_path then
     local err = error_handler.validation_error(
@@ -267,17 +388,30 @@ function M.get_sourcemap(file_path)
   return sourcemap_cache[file_path]
 end
 
----@private
----@param line string Line of code to instrument
----@param file_path string Path to the source file
----@param line_num number Line number in the source file
----@param is_executable boolean Whether the line contains executable code
----@param block_info? {id: string, type: string} Optional block metadata if the line is part of a code block
----@return string|nil instrumented_line Instrumented line or nil if instrumentation failed
----@return table|nil error Error object if instrumentation failed
--- Apply instrumentation to a line based on its type (control structures, functions, etc.)
--- Handles different line types (if/then, while/do, function definitions, table constructors)
--- and adds appropriate coverage tracking calls for each type
+--- Applies instrumentation to a single line of code based on its type and context.
+---
+--- This internal function is the core of the instrumentation system, responsible for
+--- transforming individual lines of Lua code to include coverage tracking calls.
+--- It handles different code structures (control flow, functions, tables) in specialized
+--- ways to preserve correct syntax and semantics.
+---
+--- The function applies different instrumentation strategies depending on the line type:
+--- - if/then statements: Adds tracking after the 'then' keyword
+--- - for/while loops: Adds tracking after the 'do' keyword
+--- - function declarations: Adds tracking on the next line inside the function body
+--- - block statements (do/repeat): Adds tracking on the next line inside the block
+--- - block endings (end/until/else): Adds tracking after the keyword
+--- - table constructors: Special handling to preserve table syntax
+--- - other executable lines: Adds tracking before the line
+---
+--- @private
+--- @param line string Line of code to instrument
+--- @param file_path string Path to the source file
+--- @param line_num number Line number in the source file
+--- @param is_executable boolean Whether the line contains executable code
+--- @param block_info? {id: string, type: string} Optional block metadata if the line is part of a code block
+--- @return string|nil instrumented_line Instrumented line or nil if instrumentation failed
+--- @return table|nil error Error object if instrumentation failed
 local function instrument_line(line, file_path, line_num, is_executable, block_info)
   -- Validate input
   if not line or not file_path or not line_num then
@@ -461,11 +595,46 @@ local function instrument_line(line, file_path, line_num, is_executable, block_i
   )
 end
 
----@param file_path string Path to the Lua file to instrument
----@param options? table Optional configuration: allow_fallback, max_file_size, cache_instrumented_files
----@return string|nil instrumented_code Instrumented source code or nil if instrumentation failed
----@return table|nil error Error object if instrumentation failed
--- Instrument a Lua source file by adding coverage tracking with static analysis
+--- Instruments a Lua source file by adding coverage tracking calls.
+---
+--- This function reads a file from the filesystem, analyzes its structure using static
+--- analysis (if enabled), and transforms the code by adding coverage tracking calls at
+--- strategic points. The instrumented code preserves the original behavior while
+--- providing detailed coverage data when executed.
+---
+--- Key features:
+--- - Caching system for improved performance on repeated instrumentations
+--- - Size limits with fallback options for very large files
+--- - Special handling for coverage module files to prevent recursion
+--- - Integration with static analysis for precise line classification
+--- - Sourcemap generation for error reporting with original line numbers
+---
+--- @param file_path string Path to the Lua file to instrument
+--- @param options? table Optional configuration: allow_fallback, max_file_size, cache_instrumented_files, force
+--- @return string|nil instrumented_code Instrumented source code or nil if instrumentation failed
+--- @return table|nil error Error object if instrumentation failed
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- Basic usage
+--- local instrumented_code = instrumentation.instrument_file("/path/to/file.lua")
+--- 
+--- -- With custom options
+--- local code, err = instrumentation.instrument_file("/path/to/large_file.lua", {
+---   max_file_size = 2000000,  -- Allow larger files (2MB)
+---   allow_fallback = true,     -- Use debug hook for very large files
+---   force = true               -- Force re-instrumentation (ignore cache)
+--- })
+---
+--- if not code then
+---   print("Instrumentation failed:", err.message)
+--- end
+---
+--- @error
+--- - VALIDATION_ERROR: If file_path is nil or invalid
+--- - IO_ERROR: If the file doesn't exist or can't be read
+--- - VALIDATION_ERROR: If the file is too large for instrumentation (when allow_fallback=false)
 function M.instrument_file(file_path, options)
   options = options or {}
 
@@ -1683,8 +1852,42 @@ local function should_instrument_module(module_name, module_path)
   return true
 end
 
----@return coverage.instrumentation The instrumentation module (for method chaining)
--- Replace a require call to use our instrumented version
+--- Instruments Lua's require function to automatically instrument modules as they're loaded.
+---
+--- This function replaces the global require function with a custom version that
+--- instruments modules just-in-time as they are loaded. This ensures comprehensive
+--- coverage tracking without requiring manual instrumentation of every file.
+---
+--- The instrumented require function performs these key steps:
+--- 1. Intercepts module loading requests
+--- 2. Determines if the module should be instrumented (checking exclusion lists)
+--- 3. Locates the module's source file on disk
+--- 4. Instruments the file with coverage tracking
+--- 5. Loads and executes the instrumented version
+--- 6. Properly caches the result in package.loaded
+---
+--- The function includes safety mechanisms to:
+--- - Prevent infinite recursion when modules require each other
+--- - Avoid double instrumentation of the same module
+--- - Handle errors during instrumentation with fallback to original require
+--- - Create isolated environments to prevent instrumentation contamination
+---
+--- @return coverage.instrumentation The instrumentation module (for method chaining)
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- Instrument require to automatically track all loaded modules
+--- instrumentation.instrument_require()
+--- 
+--- -- Now any require calls will be intercepted and modules instrumented
+--- local my_module = require("my_module")  -- Will be instrumented automatically
+---
+--- -- The original require behavior is preserved, just with added instrumentation
+--- local json = require("json")  -- Standard libraries also get instrumented
+---
+--- @error
+--- - RUNTIME_ERROR: If the require function could not be instrumented
 function M.instrument_require()
   logger.debug("Instrumenting require function", {
     operation = "instrument_require"
@@ -1934,9 +2137,48 @@ function M.instrument_require()
   return M
 end
 
--- Override Lua's built-in loaders to use instrumented code
----@return boolean|nil success True if loaders were successfully hooked, nil if failed
----@return table|nil error Error object if hooking failed
+--- Hooks Lua's built-in code loading functions to automatically instrument executed code.
+---
+--- This function replaces Lua's native code loading functions (loadfile, dofile, load)
+--- with custom versions that automatically instrument code before execution. This ensures
+--- coverage tracking for code loaded through any method, not just require().
+---
+--- The function hooks these core loading functions:
+--- - loadfile: For loading Lua code from files
+--- - dofile: For loading and executing Lua files
+--- - load: For loading Lua code from strings (in Lua 5.2+)
+---
+--- Each hooked function:
+--- 1. Intercepts the loading request
+--- 2. Checks if the file/code should be instrumented (using the predicate function)
+--- 3. Instruments the code with coverage tracking
+--- 4. Passes the instrumented code to the original loader function
+---
+--- @return boolean|nil success True if loaders were successfully hooked, nil if failed
+--- @return table|nil error Error object if hooking failed
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- Set up a predicate to control which files get instrumented
+--- instrumentation.set_instrumentation_predicate(function(file_path)
+---   -- Only instrument files in our project directory
+---   return file_path:match("/myproject/")
+--- end)
+--- 
+--- -- Hook all standard Lua loaders
+--- instrumentation.hook_loaders()
+--- 
+--- -- Now any code loaded will be automatically instrumented
+--- local f = loadfile("script.lua")  -- Will be instrumented if it matches predicate
+--- dofile("data_processor.lua")      -- Will be instrumented if it matches predicate
+--- 
+--- -- String loading is also instrumented (when the chunk_name looks like a file)
+--- local code = "return 'Hello, World!'"
+--- local fn = load(code, "@/myproject/virtual.lua")  -- Will be instrumented
+---
+--- @error
+--- - RUNTIME_ERROR: If loader functions couldn't be successfully hooked
 function M.hook_loaders()
   logger.debug("Hooking Lua loaders", {
     operation = "hook_loaders"
@@ -2114,8 +2356,8 @@ function M.hook_loaders()
 end
 
 ---@param callback function Function to call when a module is loaded
----@return coverage.instrumentation The instrumentation module (for method chaining)
--- Set the module load callback
+---@return coverage.instrumentation The instrumentation module (for method chaining) 
+--- Sets a callback function to be called whenever a module is loaded through instrumented require
 function M.set_module_load_callback(callback)
   logger.debug("Setting module load callback", {
     has_callback = callback ~= nil
@@ -2144,7 +2386,7 @@ end
 
 ---@param callback function Function to use as fallback for large files
 ---@return coverage.instrumentation The instrumentation module (for method chaining)
--- Set the debug hook fallback registration function
+--- Sets a fallback function for handling large files that exceed size limits for instrumentation
 function M.set_debug_hook_fallback(callback)
   logger.debug("Setting debug hook fallback callback", {
     has_callback = callback ~= nil
@@ -2171,9 +2413,49 @@ function M.set_debug_hook_fallback(callback)
   return M
 end
 
----@param predicate function Function that determines if a file should be instrumented
----@return coverage.instrumentation The instrumentation module (for method chaining)
--- Set the instrumentation predicate
+--- Sets a custom predicate function to determine which files should be instrumented.
+---
+--- This function allows you to customize the instrumentation behavior by providing
+--- a function that decides which files should be instrumented. The predicate function
+--- receives the file path and returns true if the file should be instrumented, or
+--- false if it should be skipped.
+---
+--- Using a predicate function helps you:
+--- - Limit instrumentation to your project files only
+--- - Exclude test files or third-party libraries
+--- - Implement custom logic for which files to include in coverage
+--- - Improve performance by skipping unnecessary instrumentation
+---
+--- @param predicate function Function that determines if a file should be instrumented
+--- @return coverage.instrumentation The instrumentation module (for method chaining)
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- Simple predicate that instruments only project files
+--- instrumentation.set_instrumentation_predicate(function(file_path)
+---   -- Only instrument files in our project directory
+---   return file_path:match("/myproject/")
+--- end)
+---
+--- -- More complex predicate with multiple conditions
+--- instrumentation.set_instrumentation_predicate(function(file_path)
+---   -- Skip test files
+---   if file_path:match("/tests/") then
+---     return false
+---   end
+---   
+---   -- Skip vendor libraries
+---   if file_path:match("/vendor/") then
+---     return false
+---   end
+---   
+---   -- Only instrument Lua files in our src directory
+---   return file_path:match("/src/.*%.lua$")
+--- end)
+---
+--- @error
+--- - VALIDATION_ERROR: If predicate is not a function
 function M.set_instrumentation_predicate(predicate)
   logger.debug("Setting instrumentation predicate", {
     has_predicate = predicate ~= nil
@@ -2200,9 +2482,40 @@ function M.set_instrumentation_predicate(predicate)
   return M
 end
 
----@param err string|table Error object or error message to translate
----@return string|table translated_error Error with line numbers corrected using sourcemap
--- Handle runtime errors with sourcemap
+--- Translates error line numbers from instrumented code back to original source locations.
+---
+--- When instrumented code throws an error, the error message references line numbers
+--- in the instrumented code, not the original source. This function uses the sourcemap
+--- to translate those line numbers back to the original source file, making error
+--- messages more meaningful to developers.
+---
+--- The function looks for file:line patterns in error messages and maps the line
+--- numbers using the sourcemap data that was generated during instrumentation.
+---
+--- @param err string|table Error object or error message to translate
+--- @return string|table translated_error Error with line numbers corrected using sourcemap
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- Instrument code with sourcemap generation enabled
+--- instrumentation.set_config({sourcemap_enabled = true})
+--- local instrumented_code = instrumentation.instrument_file("/path/to/file.lua")
+--- 
+--- -- Execute the instrumented code and capture errors
+--- local success, result_or_err = pcall(function()
+---   local f = load(instrumented_code, "@/path/to/file.lua")
+---   return f()
+--- end)
+--- 
+--- if not success then
+---   -- Translate the error to reference original source lines
+---   local translated_err = instrumentation.translate_error(result_or_err)
+---   print("Error occurred: " .. translated_err)
+--- end
+---
+--- @error
+--- - VALIDATION_ERROR: If err parameter is nil
 function M.translate_error(err)
   if not err then
     local validation_err = error_handler.validation_error(
@@ -2264,7 +2577,7 @@ end
 
 ---@return table|nil stats Instrumentation statistics or nil if retrieval failed
 ---@return table|nil error Error object if retrieval failed
--- Get statistics about instrumentation
+--- Get statistics about instrumentation cache and configuration
 function M.get_stats()
   local success, result, err = error_handler.try(function()
     -- Count cached items
@@ -2298,9 +2611,39 @@ function M.get_stats()
   return result
 end
 
----@return boolean success True if loaders were successfully unhooked
----@return table|nil error Error object if unhooking failed
--- Unhook Lua's built-in loaders to restore original behavior
+--- Unhooks Lua's built-in code loading functions to restore original behavior.
+---
+--- This function reverses the effects of hook_loaders() by restoring Lua's native
+--- code loading functions to their original state. This effectively disables automatic
+--- instrumentation of loaded code.
+---
+--- The function restores these core loading functions:
+--- - loadfile: Restored to native implementation
+--- - dofile: Restored to native implementation
+--- - load: Restored to native implementation (in Lua 5.2+)
+---
+--- @return boolean success True if loaders were successfully unhooked
+--- @return table|nil error Error object if unhooking failed
+---
+--- @usage
+--- local instrumentation = require("lib.coverage.instrumentation")
+--- 
+--- -- Hook the loaders first
+--- instrumentation.hook_loaders()
+--- 
+--- -- Do some work with instrumented code loading
+--- -- ...
+--- 
+--- -- When finished with coverage collection, unhook the loaders
+--- -- to restore original performance
+--- instrumentation.unhook_loaders()
+--- 
+--- -- Now code loading functions are back to their original implementations
+--- local f = loadfile("script.lua")  -- Uses original Lua loadfile
+--- dofile("config.lua")             -- Uses original Lua dofile
+---
+--- @error
+--- - RUNTIME_ERROR: If loader functions couldn't be successfully unhooked
 function M.unhook_loaders()
   logger.debug("Unhooking Lua loaders", {
     operation = "unhook_loaders"

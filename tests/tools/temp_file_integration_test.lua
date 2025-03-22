@@ -1,4 +1,24 @@
--- Tests for temp_file_integration.lua module
+--[[
+Tests for the temp_file_integration module
+
+This test suite verifies the proper functioning of the temp_file_integration module,
+which provides automatic management of temporary files created during tests. The tests
+verify:
+
+1. Initialization and integration with the firmo test framework
+2. Test context tracking during test execution
+3. Automatic cleanup of temporary files between tests
+4. Complex directory cleanup
+5. Error resilience and cleanup after test failures
+6. Manual cleanup operations
+
+Key components tested:
+- temp_file_integration.initialize() - Setup of integration with firmo
+- temp_file_integration.patch_firmo() - Framework patching for context tracking
+- temp_file_integration.cleanup_all() - Manual cleanup operations
+- Automatic context tracking during test execution
+- Cross-test verification of cleanup operations
+]]
 
 -- Load dependencies first
 local firmo_import = require("firmo") -- use a different name to avoid conflicts
