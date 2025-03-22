@@ -49,13 +49,20 @@ The coverage module repair project has made progress in several areas:
 
 2. **Debug Hook Enhancements** (Reopened)
    - [✓] Fix error handling and validation issues
-   - [ ] Fix data collection and representation issues
-   - [ ] Resolve inconsistencies between execution and coverage
+   - [✓] Fix data collection and representation issues
+   - [✓] Resolve inconsistencies between execution and coverage
    - [ ] Fix performance monitoring issues
    - [✓] Investigate and fix instrumentation errors (attempt to call nil value)
        - Fixed issue with `static_analyzer.parse_content()` by using `generate_code_map()` function
        - Added missing `unhook_loaders()` function to properly clean up instrumentation hooks
-      - Discovered: Error occurs during static_analyzer initialization
+       - Discovered: Error occurs during static_analyzer initialization
+   - [✓] Enhance debug hook and static analyzer integration
+       - Added classify_line_simple_with_context function for detailed classification
+       - Updated track_line function with better static analyzer integration
+       - Implemented context storage for line classification
+       - Created debug visualization tool for line classification
+       - Added enhanced multiline construct tracking
+       - See detailed implementation in `enhanced_line_classification_summary.md`
 
 3. **Testing**
    - [✓] Fix and update test suite for static analyzer
@@ -65,6 +72,7 @@ The coverage module repair project has made progress in several areas:
       - Added tests for memory usage and malformed code handling
       - Enhanced block_boundary_test.lua with robust error handling and invalid syntax tests
       - Updated condition_expression_test.lua with improved error handling for API calls
+      - Created enhanced_line_classification_test.lua for new integration features
    - [✓] Implement test error suppression system
       - Added expect_error flag to tests that intentionally trigger errors
       - Used test_helper.with_error_capture() to handle expected errors
@@ -75,16 +83,25 @@ The coverage module repair project has made progress in several areas:
       - Enhanced execution_vs_coverage_test.lua with proper error handling
       - Added defensive error handling to line coverage verification
       - Improved file and temp resource management with graceful cleanup
+      - Added testing for enhanced line classification with context tracking
+      - Implemented visualization tests for line classification debugging
    - [ ] Fix test summary inconsistencies
 
 ### Phase 3: Coverage Data Accuracy & Reporting (Reopened)
 
 1. **Coverage Data Accuracy** (Reopened)
-   - [ ] Fix underlying coverage data tracking for execution vs. coverage
-   - [ ] Correct debug hook's processing of line execution events
+   - [✓] Fix underlying coverage data tracking for execution vs. coverage
+      - Improved context tracking in debug hook's track_line function 
+      - Enhanced line classification with detailed context information
+   - [✓] Correct debug hook's processing of line execution events
+      - Enhanced track_line to store classification context
+      - Improved is_line_executable to use context-aware classification
    - [ ] Fix metadata handling for source code in reports
    - [ ] Ensure consistent behavior across all file types
-   - [ ] Fix static analyzer classification of multiline comments and non-executable code
+   - [✓] Fix static analyzer classification of multiline comments and non-executable code
+      - Added enhanced line classification with context tracking
+      - Improved multiline comment and string detection
+      - Added visualization tools for debugging line classification
 
 2. **HTML Formatter Enhancements**
    - [✓] Add hover tooltips for execution count display
@@ -92,6 +109,13 @@ The coverage module repair project has made progress in several areas:
    - [✓] Add distinct visual styles for the four coverage states
    - [✓] Implement filtering capabilities in HTML reports
    - [✓] Fix source code display in HTML reports
+   - [✓] Add enhanced line classification display in HTML reports
+      - Added tooltips showing classification details (content type and reasons)
+      - Added visual styling for different line types (comments, strings, code)
+      - Added interactive display of classification information on click
+      - Created classification legend explaining different line types
+      - Added support for multiline construct highlighting
+      - See detailed implementation in `html_formatter_enhancement_implementation.md`
    - [ ] Enhance coverage source view with better navigation
    - [ ] Modernize HTML reports with Tailwind CSS and Alpine.js for improved UI/UX
 

@@ -14,10 +14,13 @@
 -- Including syntax highlighting, interactive elements, and responsive design
 local M = {}
 
+---@type Logging
 local logging = require("lib.tools.logging")
+---@type ErrorHandler
 local error_handler = require("lib.tools.error_handler")
 
 -- Create a logger for this module
+---@type Logger
 local logger = logging.get_logger("Reporting:HTML")
 
 -- Configure module logging
@@ -44,6 +47,10 @@ logging.configure_from_config("Reporting:HTML")
 ---@field custom_footer? string Optional custom footer HTML
 ---@field asset_base_path string|nil Base path for assets
 ---@field include_legend boolean Whether to include a coverage legend
+---@field show_classification_details boolean Whether to show detailed classification information
+---@field classification_tooltip_style string Style for classification tooltips ("hover", "click", or "both")
+---@field highlight_multiline_constructs boolean Whether to highlight multiline constructs
+---@field show_classification_reasons boolean Whether to show reasons for line classification
 
 -- Default formatter configuration
 ---@type HTMLFormatterConfig
@@ -53,7 +60,11 @@ local DEFAULT_CONFIG = {
   collapsible_sections = true,
   highlight_syntax = true,
   asset_base_path = nil,
-  include_legend = true
+  include_legend = true,
+  show_classification_details = true,
+  classification_tooltip_style = "hover",
+  highlight_multiline_constructs = true,
+  show_classification_reasons = true
 }
 
 ---@private
@@ -167,7 +178,7 @@ end
 ---@param execution_count number|nil Number of times the line was executed
 ---@return string html_line HTML representation of the source line with coverage information
 -- Format a single line of source code with coverage highlighting
-local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed, execution_count)
+local function format_source_line(line_num, content, is_covered, is_executable, blocks, conditions, is_executed, execution_count, classification_data)
   -- Validate parameters
   if not line_num then
     local err = error_handler.validation_error(
@@ -516,12 +527,68 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
     end
   end
   
+  -- Get formatter configuration
+  local config = get_config()
+  
+  -- Process classification data if available and enabled in config
+  if classification_data and config.show_classification_details then
+    local classification_info = ""
+    
+    -- Add content type info
+    if classification_data.content_type then
+      classification_info = classification_info .. "Content type: " .. classification_data.content_type
+    end
+    
+    -- Add classification reasons if available and enabled
+    if classification_data.reasons and config.show_classification_reasons and #classification_data.reasons > 0 then
+      if classification_info ~= "" then
+        classification_info = classification_info .. "; "
+      end
+      classification_info = classification_info .. "Reasons: " .. table.concat(classification_data.reasons, ", ")
+    end
+    
+    -- Add classification data to tooltip if we have info to show
+    if classification_info ~= "" then
+      if tooltip_data:match("title=") then
+        -- Add to existing tooltip
+        tooltip_data = tooltip_data:gsub('title="(.-)"', function(existing)
+          return string.format('title="%s; %s"', existing, classification_info)
+        end)
+      else
+        -- Create new tooltip
+        tooltip_data = string.format(' title="%s"', classification_info)
+      end
+    end
+    
+    -- Add CSS classes for content types
+    if classification_data.content_type then
+      local content_class = "content-" .. classification_data.content_type:gsub("[%s%-]", "-"):lower()
+      class = class .. " " .. content_class
+    end
+    
+    -- Add data attributes for script-based interactions
+    if classification_data.content_type then
+      block_info = block_info .. ' data-content-type="' .. classification_data.content_type .. '"'
+    end
+    if classification_data.reasons and #classification_data.reasons > 0 then
+      block_info = block_info .. ' data-classification-reasons="' .. table.concat(classification_data.reasons, ";") .. '"'
+    end
+    
+    -- Add additional data attributes
+    if classification_data.in_comment then
+      block_info = block_info .. ' data-in-comment="true"'
+    end
+    if classification_data.in_string then
+      block_info = block_info .. ' data-in-string="true"'
+    end
+  end
+  
   local html = string.format(
-    '<div class="line %s"%s%s>' ..
+    '<div class="line %s"%s%s id="line-%d">' ..
     '<span class="line-number">%d</span>' ..
     '<span class="line-content">%s</span>' ..
     '</div>',
-    class, block_info, tooltip_data, line_num, escape_html(content)
+    class, block_info, tooltip_data, line_num, line_num, escape_html(content)
   )
   return html
 end
@@ -530,7 +597,11 @@ end
 ---@return string legend_html HTML for the coverage legend
 -- Create a legend for the coverage report
 local function create_coverage_legend()
-  return [[
+  -- Get formatter configuration to check if enhanced classification is enabled
+  local config = get_config()
+  local show_classification = config.show_classification_details
+  
+  local legend_html = [[
   <div class="coverage-legend">
     <h3>Coverage Legend</h3>
     <div class="legend-section">
@@ -620,15 +691,92 @@ local function create_coverage_legend()
         </tr>
       </table>
     </div>
-    
+  ]]
+  
+  -- Add enhanced classification legend if enabled
+  if show_classification then
+    legend_html = legend_html .. [[
+    <div class="legend-section">
+      <h4>Line Classification</h4>
+      <table class="legend-table">
+        <tr>
+          <td class="legend-sample content-code"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Code Line:</span> Executable code
+            <div class="legend-note">Regular executable Lua code</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample content-comment"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Comment:</span> Single-line comment
+            <div class="legend-note">Comment lines starting with --</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample content-multiline-comment"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Multiline Comment:</span> Part of a multiline comment
+            <div class="legend-note">Lines inside --[[ ]] comments</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample content-string"></td>
+          <td class="legend-desc">
+            <span class="legend-title">String:</span> String literal content
+            <div class="legend-note">Content of string literals</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample content-multiline-string"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Multiline String:</span> Part of a multiline string
+            <div class="legend-note">Lines inside [[ ]] string literals</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample content-control-flow"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Control Flow:</span> Control flow statement
+            <div class="legend-note">if, else, elseif, for, while statements</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample content-function-declaration"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Function Declaration:</span> Function header line
+            <div class="legend-note">Lines containing function declarations</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    ]]
+  end
+  
+  -- Add tooltip section
+  legend_html = legend_html .. [[
     <div class="legend-section">
       <h4>Tooltips</h4>
       <p class="legend-tip">Hover over lines to see execution counts and additional information</p>
       <p class="legend-tip">Block boundaries show block type (if, for, while, function) on hover</p>
       <p class="legend-tip">Execution counts show how many times each line or block executed</p>
+  ]]
+  
+  -- Add classification tooltip info if enabled
+  if show_classification then
+    legend_html = legend_html .. [[
+      <p class="legend-tip">Line classification details are available in tooltips to help understand line types</p>
+      <p class="legend-tip">Classification reasons show why a line is classified as executable or non-executable</p>
+    ]]
+  end
+  
+  -- Close all divs
+  legend_html = legend_html .. [[
     </div>
   </div>
   ]]
+  
+  return legend_html
 end
 
 ---@param coverage_data table|nil Coverage data from the coverage module
@@ -1155,6 +1303,111 @@ function M.format_coverage(coverage_data)
       background-color: #2a2a2a;
     }
     
+    /* Line classification styling */
+    .line.content-code {
+      /* Default style for executable code lines */
+    }
+    
+    .line.content-comment {
+      font-style: italic;
+      color: var(--syntax-comment);
+    }
+    
+    .line.content-multiline-comment {
+      font-style: italic;
+      color: var(--syntax-comment);
+      background-color: rgba(128, 128, 128, 0.05);
+    }
+    
+    .line.content-string {
+      color: var(--syntax-string);
+    }
+    
+    .line.content-multiline-string {
+      color: var(--syntax-string);
+      background-color: rgba(0, 128, 0, 0.05);
+    }
+    
+    .line.content-control-flow {
+      font-weight: bold;
+    }
+    
+    .line.content-function-declaration {
+      font-style: italic;
+      font-weight: bold;
+    }
+    
+    /* Dark theme variations */
+    [data-theme="dark"] .line.content-comment,
+    [data-theme="dark"] .line.content-multiline-comment {
+      opacity: 0.8;
+    }
+    
+    [data-theme="dark"] .line.content-multiline-comment {
+      background-color: rgba(128, 128, 128, 0.1);
+    }
+    
+    [data-theme="dark"] .line.content-multiline-string {
+      background-color: rgba(0, 128, 0, 0.1);
+    }
+    
+    /* Classification modal styling */
+    .classification-modal {
+      position: fixed;
+      z-index: 1000;
+      background-color: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      max-width: 500px;
+    }
+    
+    [data-theme="dark"] .classification-modal {
+      background-color: #333;
+      color: #eee;
+      border: 1px solid #555;
+    }
+    
+    .modal-content {
+      padding: 15px;
+      position: relative;
+    }
+    
+    .close-button {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      font-size: 20px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    [data-theme="dark"] .close-button {
+      color: #ccc;
+    }
+    
+    .classification-details h4 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    
+    [data-theme="dark"] .classification-details h4 {
+      color: #eee;
+    }
+    
+    .classification-details p {
+      margin: 8px 0;
+    }
+    
+    .classification-details ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+    
+    .classification-details li {
+      margin-bottom: 4px;
+    }
+    
     /* Block highlighting - enhanced styling */
     .line.block-start { 
       border-top: 2px solid var(--block-start-color); 
@@ -1615,9 +1868,116 @@ function M.format_coverage(coverage_data)
         });
       }
     }
+    
+    // Enhanced classification information display
+    function showClassificationDetails(lineId) {
+      const lineElement = document.getElementById(lineId);
+      if (!lineElement) return;
+      
+      // Get classification data from data attributes
+      const contentType = lineElement.getAttribute('data-content-type');
+      const reasons = lineElement.getAttribute('data-classification-reasons');
+      const inComment = lineElement.getAttribute('data-in-comment') === 'true';
+      const inString = lineElement.getAttribute('data-in-string') === 'true';
+      
+      // Build modal content
+      let detailsHtml = '<div class="classification-details">';
+      detailsHtml += '<h4>Line Classification Details</h4>';
+      
+      if (contentType) {
+        detailsHtml += `<p><strong>Content Type:</strong> ${contentType}</p>`;
+      }
+      
+      if (inComment) {
+        detailsHtml += '<p><strong>In Multiline Comment:</strong> Yes</p>';
+      }
+      
+      if (inString) {
+        detailsHtml += '<p><strong>In Multiline String:</strong> Yes</p>';
+      }
+      
+      if (reasons) {
+        const reasonsList = reasons.split(';').map(r => `<li>${r}</li>`).join('');
+        detailsHtml += `<p><strong>Classification Reasons:</strong></p><ul>${reasonsList}</ul>`;
+      }
+      
+      detailsHtml += '</div>';
+      
+      // Show modal with details
+      showDetailsModal(detailsHtml, lineElement);
+    }
+    
+    // Helper function to show modal
+    function showDetailsModal(content, anchorElement) {
+      // Remove any existing modal
+      const existingModal = document.querySelector('.classification-modal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+      
+      // Create modal
+      const modal = document.createElement('div');
+      modal.className = 'classification-modal';
+      modal.innerHTML = `
+        <div class="modal-content">
+          <span class="close-button" onclick="this.parentElement.parentElement.remove()">&times;</span>
+          ${content}
+        </div>
+      `;
+      
+      // Position modal relative to anchor element if provided
+      if (anchorElement) {
+        const rect = anchorElement.getBoundingClientRect();
+        modal.style.position = 'absolute';
+        modal.style.top = `${window.scrollY + rect.bottom + 10}px`;
+        modal.style.left = `${rect.left}px`;
+      }
+      
+      // Add modal to document
+      document.body.appendChild(modal);
+      
+      // Add click event to close modal when clicking outside
+      setTimeout(() => {
+        document.addEventListener('click', function closeModal(e) {
+          if (!modal.contains(e.target) && e.target !== anchorElement) {
+            modal.remove();
+            document.removeEventListener('click', closeModal);
+          }
+        });
+      }, 100);
+    }
+    
+    // Add click event listeners for classification details on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize formatter configuration from data attributes
+      window.formatterConfig = {
+        showClassificationDetails: document.body.getAttribute('data-show-classification-details') === 'true',
+        classificationTooltipStyle: document.body.getAttribute('data-classification-tooltip-style') || 'hover',
+        highlightMultilineConstructs: document.body.getAttribute('data-highlight-multiline-constructs') === 'true',
+        showClassificationReasons: document.body.getAttribute('data-show-classification-reasons') === 'true'
+      };
+      
+      // Add click handlers for showing classification details
+      if (window.formatterConfig.showClassificationDetails) {
+        document.querySelectorAll('.line[data-content-type]').forEach(line => {
+          line.addEventListener('click', function(e) {
+            // Only trigger if classification tooltips are enabled and not clicking on line number
+            if (e.target.classList.contains('line-number')) return;
+            
+            if (window.formatterConfig.classificationTooltipStyle === 'click' || 
+                window.formatterConfig.classificationTooltipStyle === 'both') {
+              showClassificationDetails(this.id);
+            }
+          });
+        });
+      }
+    });
   </script>
 </head>
-<body>
+<body data-show-classification-details="]] .. tostring(config.show_classification_details or false) .. [[" 
+        data-classification-tooltip-style="]] .. (config.classification_tooltip_style or "hover") .. [[" 
+        data-highlight-multiline-constructs="]] .. tostring(config.highlight_multiline_constructs or false) .. [[" 
+        data-show-classification-reasons="]] .. tostring(config.show_classification_reasons or false) .. [[">
   <div class="container">
     <h1>Firmo Coverage Report</h1>
     
@@ -1893,7 +2253,21 @@ function M.format_coverage(coverage_data)
           -- Get execution count if available
           local execution_count = original_file_data._execution_counts and original_file_data._execution_counts[i] or nil
           
-          html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line, nil, is_executed, execution_count)
+          -- Get classification data if available
+          local classification_data = nil
+          -- Check if line classification information is available
+          if original_file_data.line_classification and 
+             original_file_data.line_classification[i] then
+            classification_data = original_file_data.line_classification[i]
+          elseif original_file_data.lines and 
+                 original_file_data.lines[i] and
+                 type(original_file_data.lines[i]) == "table" and
+                 original_file_data.lines[i].classification then
+            -- Alternative structure where classification is in the lines table
+            classification_data = original_file_data.lines[i].classification
+          end
+          
+          html = html .. format_source_line(i, line_content, is_covered, is_executable, blocks_for_line, nil, is_executed, execution_count, classification_data)
         end
         
         html = html .. '</div>'
