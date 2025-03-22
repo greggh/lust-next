@@ -130,6 +130,8 @@ The coverage module repair project has made progress in several areas:
    - [✓] Replace deprecated `table.getn` with `#` operator throughout codebase
    - [✓] Standardize unpacking with `local unpack_table = table.unpack or unpack`
    - [✓] Fix the `module_reset_loaded` variable in performance_benchmark_example.lua
+   - [✓] Add comprehensive JSDoc-style annotations across all files
+   - [✓] Ensure consistent annotation style following project guidelines
 
 2. **Diagnostic Handling**
    - [ ] Review all `@diagnostic disable-next-line: need-check-nil` instances
@@ -144,7 +146,13 @@ The coverage module repair project has made progress in several areas:
 
 4. **Content Cleanup**
    - [ ] Audit examples directory for relevance and accuracy
-   - [ ] Review/relocate test files in scripts directory
+   - [✓] Review/relocate test files in scripts directory
+      - Relocated check_syntax.lua from tools/ to scripts/ directory
+      - Removed redundant tools/ directory from root
+      - Added proper JSDoc-style annotations to check_syntax.lua
+      - Improved code analysis to correctly handle comments and string literals
+      - Added sophisticated detection of table syntax to reduce false positives
+      - Fixed block balance detection to correctly analyze code structure
    - [✓] Ensure temporary files use /tmp directory
       - Implemented comprehensive temporary file management system
       - Added automatic tracking and cleanup of all temporary resources
