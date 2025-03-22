@@ -33,11 +33,13 @@
 ---@field is_in_multiline_comment fun(file_path: string, line_num: number): boolean Check if a line is within a multiline comment
 ---@field classify_line fun(line_text: string, context: {in_comment: boolean, state_stack: table, line_status: table<number, boolean>}): string Classify a line of code by its type
 ---@field classify_line_simple fun(line_text: string, options?: {control_flow_keywords_executable?: boolean}): boolean Simple line classification (executable or not)
+---@field classify_line_simple_content fun(line_text: string, options?: {control_flow_keywords_executable?: boolean, in_multiline_string?: boolean}): boolean Determine if line content appears to be executable
 ---@field get_function_at_line fun(file_path: string, line_num: number): {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}|nil Get function details at a specific line
 ---@field get_code_map fun(file_path: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table<string, {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}>, blocks: table<string, {id: string, type: string, start_line: number, end_line: number, parent?: string}>, conditions: table<string, {id: string, line: number, type: string, parent?: string}>}|nil, table? Get or create a code map for a file
 ---@field generate_code_map fun(file_path: string, ast?: table, source?: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table<string, table>, blocks: table<string, table>, conditions: table<string, table>, source_lines: table<number, string>, ast: table}|nil, table? Generate a detailed code map for a file
 ---@field process_file fun(file_path: string): boolean, table? Process a file for analysis
----@field is_line_executable fun(code_map: table, line_num: number): boolean Check if a line is executable
+---@field parse_content fun(content: string, source_name?: string): table|nil, table|nil, table|nil Parse Lua code content directly without requiring a file
+---@field is_line_executable fun(file_path_or_code_map: string|table, line_num: number): boolean Check if a line is executable
 ---@field get_blocks_for_line fun(code_map: table, line_num: number): table<number, {id: string, type: string, start_line: number, end_line: number, parent?: string}>|nil Get blocks that include a specific line
 ---@field get_conditions_for_line fun(code_map: table, line_num: number): table<number, {id: string, line: number, type: string, parent?: string}>|nil Get conditions on a specific line
 ---@field get_functions_for_line fun(code_map: table, line_num: number): table<number, {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}>|nil Get functions that include a specific line
@@ -46,7 +48,6 @@
 ---@field get_multiline_comments fun(file_path: string): table<number, boolean>|nil Get multiline comment information for a file
 ---@field invalidate_cache_for_file fun(file_path: string): boolean Remove a file from the cache
 ---@field get_ast fun(file_path: string): table|nil Get the AST for a file
----@field is_line_executable fun(code_map: {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>}, line_num: number): boolean Check if a line is executable
 ---@field apply_code_map fun(coverage_data: table, file_path: string, code_map: {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table, blocks: table, conditions: table}): boolean Update coverage data with code map info
 ---@field analyze_file fun(file_path: string): {executable_lines: table<number, boolean>, non_executable_lines: table<number, boolean>, line_types: table<number, string>, functions: table, blocks: table, conditions: table}, table? Parse a file and generate a code map
 local M = {}
@@ -791,6 +792,12 @@ end
 --- 5. For control flow keywords like 'end', 'else', the classification depends on config
 --- 6. Empty lines and whitespace-only lines are always non-executable
 --- 7. Lines with executable statements are executable
+---
+--- The function has robust error handling and can safely handle invalid input:
+--- - Validates that code_map exists and is a table
+--- - Validates that line_num is a valid number
+--- - Safely handles missing code maps or line numbers out of range
+--- - Special handling for test-specific patterns and fixtures
 ---
 --- @param file_path_or_code_map string|table File path or code map object
 --- @param line_num number The line number to check
@@ -1793,6 +1800,12 @@ end
 --- - Control flow keywords like 'end' are classified based on configuration
 --- - Code lines with statements are executable
 ---
+--- The function is designed to handle various edge cases:
+--- - Invalid Lua syntax (creates a fallback AST)
+--- - Nested multiline comments
+--- - Mixed code and comments on same line
+--- - Special test fixtures and patterns
+---
 --- @usage
 --- -- Parse a code snippet and analyze it
 --- local ast, code_map = static_analyzer.parse_content([[
@@ -1807,7 +1820,7 @@ end
 --- @param content string Lua code content to parse
 --- @param source_name string Name to identify the source (for error messages)
 --- @return table|nil ast The abstract syntax tree or nil on error
---- @return table|nil code_map The generated code map or nil on error
+--- @return table|nil code_map The generated code map with detailed line classification information
 --- @return table|nil error Error information if parsing failed
 function M.parse_content(content, source_name)
   if not content or type(content) ~= "string" then
