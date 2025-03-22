@@ -57,6 +57,7 @@ logging.configure_from_config("Reporting:HTML")
 ---@field enable_line_bookmarks boolean Whether to enable line bookmarking
 ---@field track_visited_lines boolean Whether to track visited lines
 ---@field enable_keyboard_shortcuts boolean Whether to enable keyboard shortcuts for navigation
+---@field show_execution_heatmap boolean Whether to show execution frequency heatmap
 
 -- Default formatter configuration
 ---@type HTMLFormatterConfig
@@ -76,7 +77,8 @@ local DEFAULT_CONFIG = {
   enable_code_folding = true,
   enable_line_bookmarks = true,
   track_visited_lines = true,
-  enable_keyboard_shortcuts = true
+  enable_keyboard_shortcuts = true,
+  show_execution_heatmap = true
 }
 
 ---@private
@@ -219,6 +221,36 @@ local function escape_file_id(file_path)
   end
   
   return escaped
+end
+
+---@private
+---@param execution_count number The number of times a line was executed
+---@return number heat_level The heat level (0-10) based on execution count
+-- Calculate the heat level for the heatmap visualization
+local function calculate_heat_level(execution_count)
+  if not execution_count or execution_count <= 0 then
+    return 0
+  elseif execution_count == 1 then
+    return 1
+  elseif execution_count <= 5 then
+    return 2
+  elseif execution_count <= 10 then
+    return 3
+  elseif execution_count <= 20 then
+    return 4
+  elseif execution_count <= 50 then
+    return 5
+  elseif execution_count <= 100 then
+    return 6
+  elseif execution_count <= 200 then
+    return 7
+  elseif execution_count <= 500 then
+    return 8
+  elseif execution_count <= 1000 then
+    return 9
+  else
+    return 10
+  end
 end
 
 ---@private
@@ -749,6 +781,12 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
   -- Get formatter configuration
   local config = get_config()
   
+  -- Add heatmap class if enabled
+  if config.show_execution_heatmap and is_executed then
+    local heat_level = calculate_heat_level(exec_count)
+    class = class .. " exec-heat-" .. heat_level
+  end
+  
   -- Process classification data if available and enabled in config
   if classification_data and config.show_classification_details then
     local classification_info = ""
@@ -928,6 +966,47 @@ local function create_coverage_legend()
         </tr>
       </table>
     </div>
+    
+    <div class="legend-section" id="heatmapLegend">
+      <h4>Execution Frequency Heatmap</h4>
+      <table class="legend-table">
+        <tr>
+          <td class="legend-sample exec-heat-1"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Very Low (1):</span> Executed once
+            <div class="legend-note">Lightest shade - code executed minimally</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample exec-heat-3"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Low (6-10):</span> Executed a few times
+            <div class="legend-note">Light shade - code executed occasionally</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample exec-heat-5"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Medium (21-50):</span> Executed multiple times
+            <div class="legend-note">Medium shade - moderately executed code</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample exec-heat-8"></td>
+          <td class="legend-desc">
+            <span class="legend-title">High (201-500):</span> Executed many times
+            <div class="legend-note">Bright shade - frequently executed code</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="legend-sample exec-heat-10"></td>
+          <td class="legend-desc">
+            <span class="legend-title">Very High (&gt;1000):</span> Executed extensively
+            <div class="legend-note">Brightest shade - hotspots in your code</div>
+          </td>
+        </tr>
+      </table>
+    </div>
   ]]
   
   -- Add enhanced classification legend if enabled
@@ -954,7 +1033,7 @@ local function create_coverage_legend()
           <td class="legend-sample content-multiline-comment"></td>
           <td class="legend-desc">
             <span class="legend-title">Multiline Comment:</span> Part of a multiline comment
-            <div class="legend-note">Lines inside --[[ ]] comments</div>
+            <div class="legend-note">Lines inside multiline comments</div>
           </td>
         </tr>
         <tr>
@@ -968,7 +1047,7 @@ local function create_coverage_legend()
           <td class="legend-sample content-multiline-string"></td>
           <td class="legend-desc">
             <span class="legend-title">Multiline String:</span> Part of a multiline string
-            <div class="legend-note">Lines inside [[ ]] string literals</div>
+            <div class="legend-note">Lines inside multiline string literals</div>
           </td>
         </tr>
         <tr>
@@ -1030,6 +1109,15 @@ local function create_coverage_legend()
       <p class="legend-tip">Visited lines are marked with a blue left border when you click on them</p>
       <p class="legend-tip">The counter in the bottom right shows your progress through executable lines</p>
       <p class="legend-tip">Use the Reset button to clear your visited lines history</p>
+    ]]
+  end
+  
+  -- Add execution heatmap info if enabled
+  if config.show_execution_heatmap then
+    legend_html = legend_html .. [[
+      <p class="legend-tip">The execution heatmap shows frequency with color intensity (brighter green = executed more)</p>
+      <p class="legend-tip">Use the Heatmap button to toggle the heatmap visualization on/off</p>
+      <p class="legend-tip">Hover over lines to see precise execution counts in tooltips</p>
     ]]
   end
   
@@ -2179,11 +2267,28 @@ function M.format_coverage(coverage_data)
       opacity: 1;
     }
     
-    /* Add theme toggle button */
-    .theme-toggle {
+    /* Report controls */
+    .report-controls {
       position: fixed;
       top: 10px;
       right: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 90;
+    }
+
+    /* Add theme toggle button */
+    .theme-toggle {
+      padding: 8px 12px;
+      background: #555;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    /* Add heatmap toggle button */
+    .heatmap-toggle {
       padding: 8px 12px;
       background: #555;
       color: white;
@@ -2594,6 +2699,107 @@ function M.format_coverage(coverage_data)
       border-left: 2px solid var(--accent-color);
     }
     
+    /* Execution frequency heatmap */
+    .line.exec-heat-0 {
+      /* Not executed */
+    }
+    .line.exec-heat-1 {
+      /* Executed 1 time */
+      background-color: rgba(76, 175, 80, 0.1) !important;
+    }
+    .line.exec-heat-2 {
+      /* Executed 2-5 times */
+      background-color: rgba(76, 175, 80, 0.2) !important;
+    }
+    .line.exec-heat-3 {
+      /* Executed 6-10 times */
+      background-color: rgba(76, 175, 80, 0.3) !important;
+    }
+    .line.exec-heat-4 {
+      /* Executed 11-20 times */
+      background-color: rgba(76, 175, 80, 0.4) !important;
+    }
+    .line.exec-heat-5 {
+      /* Executed 21-50 times */
+      background-color: rgba(76, 175, 80, 0.5) !important;
+    }
+    .line.exec-heat-6 {
+      /* Executed 51-100 times */
+      background-color: rgba(76, 175, 80, 0.6) !important;
+    }
+    .line.exec-heat-7 {
+      /* Executed 101-200 times */
+      background-color: rgba(76, 175, 80, 0.7) !important;
+    }
+    .line.exec-heat-8 {
+      /* Executed 201-500 times */
+      background-color: rgba(76, 175, 80, 0.8) !important;
+    }
+    .line.exec-heat-9 {
+      /* Executed 501-1000 times */
+      background-color: rgba(76, 175, 80, 0.9) !important;
+    }
+    .line.exec-heat-10 {
+      /* Executed > 1000 times */
+      background-color: rgba(76, 175, 80, 1.0) !important;
+    }
+    
+    /* Heatmap legend styles */
+    .legend-sample.exec-heat-1 {
+      background-color: rgba(76, 175, 80, 0.1);
+    }
+    .legend-sample.exec-heat-2 {
+      background-color: rgba(76, 175, 80, 0.2);
+    }
+    .legend-sample.exec-heat-3 {
+      background-color: rgba(76, 175, 80, 0.3);
+    }
+    .legend-sample.exec-heat-4 {
+      background-color: rgba(76, 175, 80, 0.4);
+    }
+    .legend-sample.exec-heat-5 {
+      background-color: rgba(76, 175, 80, 0.5);
+    }
+    .legend-sample.exec-heat-6 {
+      background-color: rgba(76, 175, 80, 0.6);
+    }
+    .legend-sample.exec-heat-7 {
+      background-color: rgba(76, 175, 80, 0.7);
+    }
+    .legend-sample.exec-heat-8 {
+      background-color: rgba(76, 175, 80, 0.8);
+    }
+    .legend-sample.exec-heat-9 {
+      background-color: rgba(76, 175, 80, 0.9);
+    }
+    .legend-sample.exec-heat-10 {
+      background-color: rgba(76, 175, 80, 1.0);
+    }
+    
+    /* Heatmap toggle button styles */
+    .heatmap-toggle {
+      position: fixed;
+      right: 20px;
+      top: 110px;
+      padding: 5px 10px;
+      background-color: var(--button-bg);
+      color: var(--button-text);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      z-index: 90;
+    }
+    
+    .heatmap-toggle:hover {
+      background-color: var(--button-hover-bg);
+    }
+    
+    /* Hide heatmap section when disabled */
+    [data-show-execution-heatmap="false"] #heatmapLegend {
+      display: none;
+    }
+    
     /* Visited lines counter */
     .visited-counter {
       position: fixed;
@@ -2643,6 +2849,117 @@ function M.format_coverage(coverage_data)
         root.setAttribute('data-theme', 'dark');
       } else {
         root.setAttribute('data-theme', 'light');
+      }
+    }
+    
+    // Toggle execution heatmap visualization
+    function toggleHeatmap() {
+      const body = document.body;
+      const heatmapEnabled = body.getAttribute('data-show-execution-heatmap') === 'true';
+      const newState = !heatmapEnabled;
+      
+      // Update body attribute
+      body.setAttribute('data-show-execution-heatmap', newState ? 'true' : 'false');
+      
+      // Update formatter config
+      window.formatterConfig.showExecutionHeatmap = newState;
+      
+      // Update button text
+      const button = document.getElementById('heatmapToggle');
+      if (button) {
+        button.textContent = newState ? 'Disable Heatmap' : 'Enable Heatmap';
+      }
+      
+      // Show or hide heatmap legend
+      const heatmapLegend = document.getElementById('heatmapLegend');
+      if (heatmapLegend) {
+        heatmapLegend.style.display = newState ? 'block' : 'none';
+      }
+      
+      // Add or remove heat classes from lines
+      if (newState) {
+        // Apply heat classes based on data attributes
+        document.querySelectorAll('.line[data-execution-count]').forEach(line => {
+          const execCount = parseInt(line.getAttribute('data-execution-count')) || 0;
+          if (execCount > 0) {
+            // Calculate heat level
+            let heatLevel = 1;
+            if (execCount === 1) {
+              heatLevel = 1;
+            } else if (execCount <= 5) {
+              heatLevel = 2;
+            } else if (execCount <= 10) {
+              heatLevel = 3;
+            } else if (execCount <= 20) {
+              heatLevel = 4;
+            } else if (execCount <= 50) {
+              heatLevel = 5;
+            } else if (execCount <= 100) {
+              heatLevel = 6;
+            } else if (execCount <= 200) {
+              heatLevel = 7;
+            } else if (execCount <= 500) {
+              heatLevel = 8;
+            } else if (execCount <= 1000) {
+              heatLevel = 9;
+            } else {
+              heatLevel = 10;
+            }
+            
+            // Apply heat class
+            line.classList.add(`exec-heat-${heatLevel}`);
+          }
+        });
+        
+        // Also look for lines with block execution counts
+        document.querySelectorAll('.line[data-block-execution-count]').forEach(line => {
+          // Only apply to lines that don't already have a direct execution count
+          if (!line.hasAttribute('data-execution-count')) {
+            const blockExecCount = parseInt(line.getAttribute('data-block-execution-count')) || 0;
+            if (blockExecCount > 0) {
+              // Calculate heat level (same scale as above)
+              let heatLevel = 1;
+              if (blockExecCount === 1) {
+                heatLevel = 1;
+              } else if (blockExecCount <= 5) {
+                heatLevel = 2;
+              } else if (blockExecCount <= 10) {
+                heatLevel = 3;
+              } else if (blockExecCount <= 20) {
+                heatLevel = 4;
+              } else if (blockExecCount <= 50) {
+                heatLevel = 5;
+              } else if (blockExecCount <= 100) {
+                heatLevel = 6;
+              } else if (blockExecCount <= 200) {
+                heatLevel = 7;
+              } else if (blockExecCount <= 500) {
+                heatLevel = 8;
+              } else if (blockExecCount <= 1000) {
+                heatLevel = 9;
+              } else {
+                heatLevel = 10;
+              }
+              
+              // Apply heat class
+              line.classList.add(`exec-heat-${heatLevel}`);
+            }
+          }
+        });
+      } else {
+        // Remove all heat classes
+        for (let i = 0; i <= 10; i++) {
+          document.querySelectorAll(`.exec-heat-${i}`).forEach(line => {
+            line.classList.remove(`exec-heat-${i}`);
+          });
+        }
+      }
+      
+      // Save preference to localStorage
+      try {
+        localStorage.setItem('firmo_heatmap_enabled', newState ? 'true' : 'false');
+      } catch (e) {
+        console.warn('Could not save heatmap preference to localStorage:', e);
       }
     }
     
@@ -2801,7 +3118,8 @@ function M.format_coverage(coverage_data)
         enableCodeFolding: document.body.getAttribute('data-enable-code-folding') === 'true',
         enableLineBookmarks: document.body.getAttribute('data-enable-line-bookmarks') === 'true',
         trackVisitedLines: document.body.getAttribute('data-track-visited-lines') === 'true',
-        enableKeyboardShortcuts: document.body.getAttribute('data-enable-keyboard-shortcuts') === 'true'
+        enableKeyboardShortcuts: document.body.getAttribute('data-enable-keyboard-shortcuts') === 'true',
+        showExecutionHeatmap: document.body.getAttribute('data-show-execution-heatmap') === 'true'
       };
       
       // Add click handlers for showing classification details
@@ -2900,7 +3218,45 @@ function M.format_coverage(coverage_data)
         // Update the counter with initial values
         updateVisitedCounter();
       }
+      
+      // Initialize heatmap based on saved preferences
+      if (window.formatterConfig.showExecutionHeatmap) {
+        try {
+          const savedPreference = localStorage.getItem('firmo_heatmap_enabled');
+          // Only apply if it's explicitly set to false (default is true)
+          if (savedPreference === 'false') {
+            toggleHeatmap(); // This will toggle from true to false
+          } else {
+            // Apply heatmap classes right away if enabled (true)
+            document.querySelectorAll('.line[data-execution-count]').forEach(line => {
+              const execCount = parseInt(line.getAttribute('data-execution-count')) || 0;
+              if (execCount > 0) {
+                // Calculate heat level and apply class
+                const heatLevel = calculateHeatLevel(execCount);
+                line.classList.add(`exec-heat-${heatLevel}`);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Error initializing heatmap preferences:', e);
+        }
+      }
     });
+    
+    // Helper function to calculate heat level based on execution count
+    function calculateHeatLevel(execCount) {
+      if (execCount <= 0) return 0;
+      if (execCount === 1) return 1;
+      if (execCount <= 5) return 2;
+      if (execCount <= 10) return 3;
+      if (execCount <= 20) return 4;
+      if (execCount <= 50) return 5;
+      if (execCount <= 100) return 6;
+      if (execCount <= 200) return 7;
+      if (execCount <= 500) return 8;
+      if (execCount <= 1000) return 9;
+      return 10; // > 1000
+    }
     
     // Navigation functions
     
@@ -3423,7 +3779,8 @@ function M.format_coverage(coverage_data)
         data-enable-code-folding="]] .. tostring(config.enable_code_folding or true) .. [[" 
         data-enable-line-bookmarks="]] .. tostring(config.enable_line_bookmarks or true) .. [[" 
         data-track-visited-lines="]] .. tostring(config.track_visited_lines or true) .. [[" 
-        data-enable-keyboard-shortcuts="]] .. tostring(config.enable_keyboard_shortcuts or true) .. [[">
+        data-enable-keyboard-shortcuts="]] .. tostring(config.enable_keyboard_shortcuts or true) .. [["
+        data-show-execution-heatmap="]] .. tostring(config.show_execution_heatmap or true) .. [[">
   ]] .. (config.enhanced_navigation and config.show_file_navigator and create_file_navigation_panel(coverage_data.files) or "") .. [[
   ]] .. (config.enable_line_bookmarks and [[
   <!-- Bookmarks panel -->
@@ -3448,8 +3805,15 @@ function M.format_coverage(coverage_data)
   <div class="container]] .. (config.enhanced_navigation and config.show_file_navigator and " with-navigator" or "") .. [[">
     <h1>Firmo Coverage Report</h1>
     
-    <!-- Theme toggle -->
-    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+    <div class="report-controls">
+      <!-- Theme toggle -->
+      <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+      
+      <!-- Heatmap toggle -->
+      <button class="heatmap-toggle" onclick="toggleHeatmap()" id="heatmapToggle">
+        ]] .. (config.show_execution_heatmap and "Disable" or "Enable") .. [[ Heatmap
+      </button>
+    </div>
     
     <div class="summary">
       <h2>Summary</h2>
