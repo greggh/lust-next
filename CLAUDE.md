@@ -686,10 +686,13 @@ tests/
 - Test Quality Validation: `env -C /home/gregg/Projects/lua-library/firmo lua test.lua --quality --quality-level=2 tests/quality_test.lua`
 - Clean Orphaned Temp Files: `env -C /home/gregg/Projects/lua-library/firmo lua scripts/cleanup_temp_files.lua`
 - Clean Orphaned Temp Files (Dry Run): `env -C /home/gregg/Projects/lua-library/firmo lua scripts/cleanup_temp_files.lua --dry-run`
+- Check Lua Syntax: `env -C /home/gregg/Projects/lua-library/firmo lua scripts/check_syntax.lua <file_path>` 
+- Find Print Statements: `env -C /home/gregg/Projects/lua-library/firmo lua scripts/find_print_statements.lua lib/`
 
 ## Project Structure
 
 - `/lib`: Modular codebase with logical subdirectories
+  - `/lib/assertion.lua`: Standalone assertion module
   - `/lib/core`: Core utilities (type checking, fix_expect, version)
   - `/lib/async`: Asynchronous testing functionality
   - `/lib/coverage`: Code coverage tracking
@@ -697,12 +700,22 @@ tests/
   - `/lib/reporting`: Test reporting system
     - `/lib/reporting/formatters`: Individual formatter implementations
   - `/lib/tools`: Utilities (codefix, watcher, interactive CLI, markdown)
+    - `/lib/tools/logging`: Structured logging system
+    - `/lib/tools/parser`: Lua code parsing utilities
+    - `/lib/tools/vendor`: Third-party dependencies
   - `/lib/mocking`: Mocking system (spy, stub, mock)
 - `/tests`: Test files for framework functionality
+  - `/tests/core`: Core module tests
+  - `/tests/coverage`: Coverage system tests
+  - `/tests/quality`: Quality validation tests
+  - `/tests/reporting`: Reporting system tests
+  - `/tests/tools`: Utility module tests
+  - `/tests/error_handling`: Error handling tests
 - `/examples`: Example scripts demonstrating usage
-- `/scripts`: Utility scripts for running tests
+- `/scripts`: Development and maintenance utility scripts
+- `/docs`: Documentation files
 - `firmo.lua`: Main framework file
-- `run_all_tests.lua`: Improved test runner for proper test state isolation
+- `test.lua`: Unified test runner
 
 ## Coverage Module Architecture
 
@@ -855,12 +868,19 @@ Our current priorities in order:
    - Perfect block boundary identification
    - Fix data flow between components
 
-5. **JSDoc Type Annotation Maintenance**
-   - Maintain comprehensive JSDoc-style type annotations across all files
-   - Update annotations when modifying existing functions
-   - Add annotations to any new functionality or files
-   - Ensure consistent annotation style following our guidelines
-   - Use annotations to improve type checking and IDE integration
+5. **✓ JSDoc Type Annotation Maintenance** *(Completed)*
+   - ✓ Added comprehensive JSDoc-style type annotations across all files
+   - ✓ Updated annotations for modified functions
+   - ✓ Added annotations to new functionality and files
+   - ✓ Ensured consistent annotation style following our guidelines
+   - ✓ Used annotations to improve type checking and IDE integration
+
+6. **Code Quality and Repository Organization**
+   - Continue to improve code organization and structure
+   - Remove redundant or deprecated code
+   - Consolidate similar functionality
+   - Ensure consistent naming conventions and style
+   - Enhance utility scripts for development workflow
 
 ## Future Enhancements
 
