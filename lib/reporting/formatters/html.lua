@@ -813,12 +813,19 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
     end
   end
   
+  -- Add bookmark button if enabled
+  local bookmark_button = ""
+  if config.enable_line_bookmarks then
+    bookmark_button = string.format('<span class="bookmark-button" data-line="%d" onclick="toggleBookmark(%d, event)" title="Bookmark this line">☆</span>', 
+                                  line_num, line_num)
+  end
+  
   local html = string.format(
     '<div class="line %s"%s%s id="line-%d">' ..
     '<span class="line-number">%d</span>' ..
-    '%s<span class="line-content">%s</span>' ..
+    '%s%s<span class="line-content">%s</span>' ..
     '</div>',
-    class, block_info, tooltip_data, line_num, line_num, fold_control, escape_html(content)
+    class, block_info, tooltip_data, line_num, line_num, bookmark_button, fold_control, escape_html(content)
   )
   return html
 end
@@ -1005,6 +1012,15 @@ local function create_coverage_legend()
     legend_html = legend_html .. [[
       <p class="legend-tip">Code blocks can be folded by clicking the ▼ icons at the start of blocks</p>
       <p class="legend-tip">Press Space key while hovering a block to fold/unfold with keyboard</p>
+    ]]
+  end
+  
+  -- Add bookmarks info if enabled
+  if config.enable_line_bookmarks then
+    legend_html = legend_html .. [[
+      <p class="legend-tip">Bookmark lines by clicking the ☆ icon next to each line number</p>
+      <p class="legend-tip">Press B key while hovering a line to add/remove bookmark with keyboard</p>
+      <p class="legend-tip">Use the Bookmarks button to view and navigate between bookmarks</p>
     ]]
   end
   
@@ -2423,6 +2439,146 @@ function M.format_coverage(coverage_data)
     .line.foldable:hover {
       background-color: var(--hover-bg);
     }
+    
+    /* Bookmark styles */
+    .bookmark-button {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+      text-align: center;
+      cursor: pointer;
+      margin-right: 5px;
+      color: var(--text-muted);
+      font-size: 14px;
+      opacity: 0.3;
+      transition: opacity 0.2s ease, color 0.2s ease;
+    }
+    
+    .line:hover .bookmark-button {
+      opacity: 0.7;
+    }
+    
+    .bookmark-button:hover {
+      opacity: 1;
+      color: var(--accent-color);
+    }
+    
+    .bookmark-button.bookmarked {
+      opacity: 1;
+      color: gold;
+      text-shadow: 0 0 3px rgba(255, 215, 0, 0.5);
+    }
+    
+    .line.bookmarked {
+      border-right: 3px solid gold;
+    }
+    
+    /* Bookmarks panel */
+    .bookmarks-panel {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      width: 300px;
+      background-color: var(--section-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      z-index: 100;
+      overflow: hidden;
+      display: none;
+    }
+    
+    .bookmarks-panel.visible {
+      display: block;
+    }
+    
+    .bookmarks-panel .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background-color: var(--header-bg);
+      color: var(--header-text);
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .bookmarks-panel .panel-content {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .bookmarks-panel .bookmark-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .bookmarks-panel .bookmark-item:hover {
+      background-color: var(--highlight-bg);
+    }
+    
+    .bookmarks-panel .bookmark-info {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .bookmarks-panel .bookmark-line {
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    
+    .bookmarks-panel .bookmark-content {
+      color: var(--text-muted);
+    }
+    
+    .bookmarks-panel .bookmark-remove {
+      margin-left: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      opacity: 0.5;
+    }
+    
+    .bookmarks-panel .bookmark-remove:hover {
+      opacity: 1;
+      color: var(--error-color);
+    }
+    
+    .bookmarks-panel .no-bookmarks {
+      padding: 15px;
+      text-align: center;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    
+    .bookmarks-toggle {
+      position: fixed;
+      right: 20px;
+      top: 70px;
+      padding: 5px 10px;
+      background-color: var(--button-bg);
+      color: var(--button-text);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      z-index: 90;
+    }
+    
+    .bookmarks-toggle:hover {
+      background-color: var(--button-hover-bg);
+    }
+    
+    /* Dark theme bookmarks */
+    [data-theme="dark"] .bookmark-button.bookmarked {
+      color: gold;
+      text-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+    }
   </style>
   
   <script>
@@ -2653,6 +2809,28 @@ function M.format_coverage(coverage_data)
           });
         }
       }
+      
+      // Initialize bookmarks if enabled
+      if (window.formatterConfig.enableLineBookmarks) {
+        // Load bookmarks from localStorage if available
+        loadBookmarks();
+        
+        // Add keyboard shortcut for bookmarking (B key when on a line)
+        if (window.formatterConfig.enableKeyboardShortcuts) {
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'b' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+              const hoveredLine = document.querySelector('.line:hover');
+              if (hoveredLine) {
+                e.preventDefault();
+                const lineNumber = parseInt(hoveredLine.id.replace('line-', ''));
+                if (lineNumber) {
+                  toggleBookmark(lineNumber);
+                }
+              }
+            }
+          });
+        }
+      }
     });
     
     // Navigation functions
@@ -2847,8 +3025,178 @@ function M.format_coverage(coverage_data)
           searchInput.value = '';
           filterFiles();
         }
+        
+        // Close bookmarks panel if open
+        const bookmarksPanel = document.getElementById('bookmarksPanel');
+        if (bookmarksPanel && bookmarksPanel.classList.contains('visible')) {
+          toggleBookmarksPanel();
+        }
+      } else if (e.ctrlKey && e.key === 'b') {
+        // Ctrl+B: Toggle bookmarks panel
+        e.preventDefault();
+        if (window.formatterConfig.enableLineBookmarks) {
+          toggleBookmarksPanel();
+        }
       }
     });
+    
+    // Bookmark management functions
+    
+    // Store all bookmarks
+    window.bookmarks = {};
+    
+    // Toggle a bookmark for a line
+    function toggleBookmark(lineNumber, event) {
+      if (event) {
+        event.stopPropagation(); // Prevent other click handlers
+      }
+      
+      // Get the current active file
+      const activeFile = document.querySelector('.file-container.active');
+      if (!activeFile) return;
+      
+      const fileId = activeFile.id;
+      const lineElement = document.getElementById(`line-${lineNumber}`);
+      if (!lineElement) return;
+      
+      // Bookmark structure: {fileId: {lineNumber: {content, lineNumber}}}
+      if (!window.bookmarks[fileId]) {
+        window.bookmarks[fileId] = {};
+      }
+      
+      const bookmarkButton = lineElement.querySelector('.bookmark-button');
+      
+      if (window.bookmarks[fileId][lineNumber]) {
+        // Remove bookmark
+        delete window.bookmarks[fileId][lineNumber];
+        lineElement.classList.remove('bookmarked');
+        if (bookmarkButton) {
+          bookmarkButton.classList.remove('bookmarked');
+          bookmarkButton.textContent = '☆';
+          bookmarkButton.title = 'Bookmark this line';
+        }
+      } else {
+        // Add bookmark
+        const content = lineElement.querySelector('.line-content').textContent.trim();
+        window.bookmarks[fileId][lineNumber] = {
+          content: content,
+          lineNumber: lineNumber,
+          fileId: fileId
+        };
+        
+        lineElement.classList.add('bookmarked');
+        if (bookmarkButton) {
+          bookmarkButton.classList.add('bookmarked');
+          bookmarkButton.textContent = '★';
+          bookmarkButton.title = 'Remove bookmark';
+        }
+      }
+      
+      // Save bookmarks to localStorage
+      saveBookmarks();
+      
+      // Update bookmarks panel
+      updateBookmarksPanel();
+    }
+    
+    // Save bookmarks to localStorage
+    function saveBookmarks() {
+      try {
+        localStorage.setItem('coverage_bookmarks', JSON.stringify(window.bookmarks));
+      } catch (e) {
+        console.error('Failed to save bookmarks:', e);
+      }
+    }
+    
+    // Load bookmarks from localStorage
+    function loadBookmarks() {
+      try {
+        const savedBookmarks = localStorage.getItem('coverage_bookmarks');
+        if (savedBookmarks) {
+          window.bookmarks = JSON.parse(savedBookmarks);
+          
+          // Apply bookmarks to visible elements
+          for (const fileId in window.bookmarks) {
+            for (const lineNumber in window.bookmarks[fileId]) {
+              const lineElement = document.getElementById(`line-${lineNumber}`);
+              if (lineElement) {
+                lineElement.classList.add('bookmarked');
+                const bookmarkButton = lineElement.querySelector('.bookmark-button');
+                if (bookmarkButton) {
+                  bookmarkButton.classList.add('bookmarked');
+                  bookmarkButton.textContent = '★';
+                  bookmarkButton.title = 'Remove bookmark';
+                }
+              }
+            }
+          }
+          
+          // Update bookmarks panel
+          updateBookmarksPanel();
+        }
+      } catch (e) {
+        console.error('Failed to load bookmarks:', e);
+      }
+    }
+    
+    // Update the bookmarks panel with current bookmarks
+    function updateBookmarksPanel() {
+      const bookmarksList = document.getElementById('bookmarksList');
+      if (!bookmarksList) return;
+      
+      // Clear current list
+      bookmarksList.innerHTML = '';
+      
+      // Check if we have any bookmarks
+      let bookmarkCount = 0;
+      
+      // Generate bookmark items
+      for (const fileId in window.bookmarks) {
+        for (const lineNumber in window.bookmarks[fileId]) {
+          bookmarkCount++;
+          const bookmark = window.bookmarks[fileId][lineNumber];
+          const listItem = document.createElement('div');
+          listItem.className = 'bookmark-item';
+          listItem.innerHTML = `
+            <div class="bookmark-info">
+              <span class="bookmark-line">Line ${bookmark.lineNumber}:</span>
+              <span class="bookmark-content">${bookmark.content}</span>
+            </div>
+            <span class="bookmark-remove" title="Remove bookmark" onclick="toggleBookmark(${bookmark.lineNumber}, event)">×</span>
+          `;
+          
+          // Add click handler to navigate to the line
+          listItem.addEventListener('click', function(e) {
+            if (e.target.classList.contains('bookmark-remove')) return;
+            const fileContainer = document.getElementById(fileId);
+            if (fileContainer) {
+              showFile(fileId);
+              scrollToLine(fileId, bookmark.lineNumber);
+            }
+          });
+          
+          bookmarksList.appendChild(listItem);
+        }
+      }
+      
+      // Show "no bookmarks" message if none
+      if (bookmarkCount === 0) {
+        bookmarksList.innerHTML = '<div class="no-bookmarks">No bookmarks yet</div>';
+      }
+    }
+    
+    // Toggle the bookmarks panel
+    function toggleBookmarksPanel() {
+      const panel = document.getElementById('bookmarksPanel');
+      if (panel) {
+        panel.classList.toggle('visible');
+        
+        // Update the panel content
+        if (panel.classList.contains('visible')) {
+          updateBookmarksPanel();
+        }
+      }
+    }
     
     // Initialize file navigation on page load
     document.addEventListener('DOMContentLoaded', function() {
@@ -2877,6 +3225,19 @@ function M.format_coverage(coverage_data)
         data-track-visited-lines="]] .. tostring(config.track_visited_lines or true) .. [[" 
         data-enable-keyboard-shortcuts="]] .. tostring(config.enable_keyboard_shortcuts or true) .. [[">
   ]] .. (config.enhanced_navigation and config.show_file_navigator and create_file_navigation_panel(coverage_data.files) or "") .. [[
+  ]] .. (config.enable_line_bookmarks and [[
+  <!-- Bookmarks panel -->
+  <div class="bookmarks-panel" id="bookmarksPanel">
+    <div class="panel-header">
+      <h3>Bookmarks</h3>
+      <button class="close-button" onclick="toggleBookmarksPanel()">×</button>
+    </div>
+    <div class="panel-content" id="bookmarksList">
+      <div class="no-bookmarks">No bookmarks yet</div>
+    </div>
+  </div>
+  <button class="bookmarks-toggle" onclick="toggleBookmarksPanel()" title="View bookmarks">Bookmarks</button>
+  ]] or "") .. [[
   <div class="container]] .. (config.enhanced_navigation and config.show_file_navigator and " with-navigator" or "") .. [[">
     <h1>Firmo Coverage Report</h1>
     
