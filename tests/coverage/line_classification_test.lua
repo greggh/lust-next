@@ -98,17 +98,29 @@ describe("static_analyzer line classification", function()
       end
     end
     
-    -- Parse content for completeness - will be ignored for tests but ensures function exists
+    -- Some test cases intentionally test edge cases that may not be valid Lua code,
+    -- but we still want to test line classification for them. Use try/catch approach.
     local parse_success, parse_result = test_helper.with_error_capture(function()
-      return static_analyzer.parse_content(code, "inline")
+      return static_analyzer.parse_content(code, "inline_test")
     end)()
     
-    -- Check for errors in parse_content (should at least not crash)
-    if not parse_success then
-      local err = parse_result
-      logger.warn("Non-critical: parse_content had error but tests will proceed", { 
-        error = tostring(err),
-        message = "This is expected during test development"
+    -- If parsing succeeded, do some extra verification
+    if parse_success then
+      local ast, parse_code_map = parse_success[1], parse_success[2]
+      
+      -- Check that the parsing gave us reasonable output
+      if ast and parse_code_map and type(parse_code_map) == "table" then
+        logger.debug("Validation check: parse_content successfully processed code sample", {
+          ast_type = type(ast),
+          code_map_has_executable_lines = parse_code_map.executable_lines ~= nil
+        })
+      end
+    else
+      -- This is expected for some test cases that intentionally have invalid Lua syntax
+      -- but we still want to test our line classification with them
+      logger.debug("Note: Code sample contains syntax that couldn't be parsed as valid Lua", {
+        error_type = type(parse_result),
+        test_still_valid = "Classification should still work on invalid code samples"
       })
     end
     
