@@ -202,3 +202,65 @@ Key files and functions:
    - More efficient comment tracking algorithm
    - Optimized block relationship management
    - Better memory usage for large codebases
+
+## Execution Count Enhancement Plan
+
+Based on our recent investigation, the following plan addresses execution count tracking issues:
+
+### Current Issues Identified
+
+1. **Debug Hook Not Registering Execution Counts**: While the code includes proper logic for incrementing execution counts, the Lua debug hook mechanism (`debug.sethook`) is not reliably triggering line events for all executed lines.
+
+2. **Path Normalization Inconsistencies**: File paths are normalized inconsistently, leading to data retrieval failures between storage and lookup.
+
+3. **Explicit vs. Automatic Tracking**: Explicitly calling `debug_hook.track_line()` correctly updates execution counts, but automatic tracking through debug hooks doesn't work reliably.
+
+### Short-Term Solutions
+
+1. **Explicit Tracking for Key Lines**:
+   - Add direct `track_line` calls in critical code sections
+   - Document this approach as a workaround until debug hook issues are resolved
+
+2. **Enhanced Path Normalization**:
+   - Improve `dump_execution_data` to handle multiple path formats
+   - Standardize path handling throughout the system
+   - Add better debugging for path resolution issues
+
+3. **HTML Formatter Improvements**:
+   - Enhance execution count display in HTML reports
+   - Add heat map visualization based on execution frequency
+   - Ensure proper data access for execution counts
+
+### Long-Term Solutions
+
+1. **Code Instrumentation Approach**:
+   - Consider switching from debug hooks to code instrumentation
+   - Insert `track_line` calls directly in source code
+   - Create source maps for instrumented code
+
+2. **Hybrid Tracking System**:
+   - Use debug hooks for basic coverage
+   - Use instrumentation for precise execution counting
+   - Combine data from both approaches
+
+3. **Better Diagnostic Tools**:
+   - Create specialized tools for troubleshooting execution count issues
+   - Add validation tests for execution count accuracy
+   - Implement more detailed logging of the tracking system
+
+### Implementation Tasks
+
+1. **Essential Fixes**:
+   - Ensure `_execution_counts` is properly initialized for each file
+   - Improve path normalization across all components
+   - Fix data transfer between debug_hook and report generation
+
+2. **HTML Formatter Enhancements**:
+   - Add execution count information to tooltips
+   - Implement heat map visualization for execution frequency
+   - Add interactive features for execution analysis
+
+3. **Validation Tests**:
+   - Create test suite specifically for execution count verification
+   - Add tests for path normalization edge cases
+   - Implement automatic validation of report data

@@ -1,7 +1,7 @@
 ---@class coverage
 ---@field _VERSION string Module version
 ---@field config table Configuration settings for coverage
----@field init fun(options?: {enabled?: boolean, use_instrumentation?: boolean, instrument_on_load?: boolean, include_patterns?: string[], exclude_patterns?: string[], debugger_enabled?: boolean, report_format?: string, track_blocks?: boolean, track_functions?: boolean, use_static_analysis?: boolean, source_dirs?: string[], threshold?: number, pre_analyze_files?: boolean}): coverage|nil, table? Initialize the coverage module with options
+---@field init fun(options?: {enabled?: boolean, use_instrumentation?: boolean, instrument_on_load?: boolean, include_patterns?: string[], exclude_patterns?: string[], debugger_enabled?: boolean, report_format?: string, track_blocks?: boolean, track_functions?: boolean, use_static_analysis?: boolean, source_dirs?: string[], threshold?: number, pre_analyze_files?: boolean, should_track_example_files?: boolean}): coverage|nil, table? Initialize the coverage module with options
 ---@field start fun(options?: {use_instrumentation?: boolean, instrument_on_load?: boolean, track_blocks?: boolean, track_functions?: boolean, max_file_size?: number, cache_instrumented_files?: boolean, sourcemap_enabled?: boolean}): coverage|nil, table? Start coverage collection
 ---@field stop fun(): coverage Stop coverage collection
 ---@field reset fun(): coverage Reset coverage data
@@ -75,7 +75,8 @@ local config = {
   use_static_analysis = true,
   source_dirs = {".", "lib"},
   threshold = 90,
-  pre_analyze_files = false
+  pre_analyze_files = false,
+  should_track_example_files = true -- Enable tracking of example files by default
 }
 
 -- Expose config via the module
@@ -208,8 +209,10 @@ end
 ---@return table|nil error Error information if tracking failed
 -- Directly track a file (helper for tests)
 function M.track_file(file_path)
-  if not active or not config.enabled then
-    logger.debug("Coverage not active or disabled, ignoring track_file", {
+  -- Even if coverage isn't active yet, we should still normalize the path and initialize 
+  -- so when coverage becomes active, all files are ready
+  if not config.enabled then
+    logger.debug("Coverage disabled, ignoring track_file", {
       file_path = file_path
     })
     return false
@@ -220,6 +223,19 @@ function M.track_file(file_path)
   if not normalized_path then
     logger.error("Invalid file path for tracking: " .. error_handler.format_error(err))
     return false, err
+  end
+  
+  -- Initialize the file in the debug hook first, which creates necessary structures
+  local init_success, init_err = error_handler.try(function()
+    if not debug_hook.has_file(normalized_path) then
+      return debug_hook.initialize_file(normalized_path)
+    end
+    return true
+  end)
+  
+  if not init_success then
+    logger.error("Failed to initialize file for tracking: " .. error_handler.format_error(init_err))
+    return false, init_err
   end
   
   -- Explicitly mark this file as active for reporting
@@ -1447,7 +1463,8 @@ function M.start(options)
     
     -- Set debug hook with error handling
     local success, err = error_handler.try(function()
-      debug.sethook(debug_hook.debug_hook, "cl")
+      debug.sethook(debug_hook.debug_hook, "clr")
+    print("DEBUG: Debug hook registered with 'clr' mode - Should track all line executions")
       return true
     end)
     
@@ -1905,6 +1922,7 @@ function M.get_report_data()
         source = file_data.source_text or "",
         lines = {},
         executed_lines = file_data._executed_lines or {}, -- Add executed lines tracking
+        execution_counts = file_data._execution_counts or {}, -- Add execution counts
         functions = file_data.functions or {},
         blocks = file_data.blocks or {},
         total_lines = 0,
@@ -2143,6 +2161,44 @@ function M.get_report_data()
         or 0,
       performance = debug_hook.get_performance_metrics and debug_hook.get_performance_metrics() or {}
     }
+    
+    -- Add original files for use by formatters
+    report_data.original_files = {}
+    for file_path, file_data in pairs(data.files or {}) do
+      if report_data.files[file_path] then
+        report_data.original_files[file_path] = file_data
+        
+        -- Fix execution count inconsistencies
+        if file_data._execution_counts then
+          -- Ensure all executed lines have an execution count
+          for line_num, is_executed in pairs(file_data._executed_lines or {}) do
+            if is_executed and (not file_data._execution_counts[line_num] or 
+                                file_data._execution_counts[line_num] == 0) then
+              logger.warn("Line marked as executed but has no execution count - fixing", {
+                file = file_path,
+                line = line_num
+              })
+              file_data._execution_counts[line_num] = 1  -- Default to 1 execution
+            end
+          end
+          
+          -- Ensure all lines with execution counts are marked as executed
+          for line_num, count in pairs(file_data._execution_counts) do
+            if count > 0 and not (file_data._executed_lines and file_data._executed_lines[line_num]) then
+              logger.warn("Line has execution count but not marked as executed - fixing", {
+                file = file_path,
+                line = line_num,
+                count = count
+              })
+              if not file_data._executed_lines then
+                file_data._executed_lines = {}
+              end
+              file_data._executed_lines[line_num] = true
+            end
+          end
+        end
+      end
+    end
     
     return report_data
   end)

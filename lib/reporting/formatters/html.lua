@@ -469,14 +469,57 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
     })
   end
   
+  -- Log classification details for debugging
+  if classification_data then
+    logger.debug("Classification data for line", {
+      line_num = line_num,
+      content = content and content:sub(1, 30) or "nil",
+      is_executable = is_executable,
+      is_executed = is_executed,
+      is_covered = is_covered,
+      exec_count = exec_count,
+      in_comment = classification_data.in_comment,
+      content_type = classification_data.content_type,
+      reasons = classification_data.reasons and table.concat(classification_data.reasons, ", ") or "none"
+    })
+  end
+  
+  -- Extra check for execution counts - if we have an execution count > 0, 
+  -- but is_executed is false, something is wrong - fix it
+  if exec_count > 0 and not is_executed then
+    logger.warn("Execution count > 0 but is_executed is false, fixing inconsistency", {
+      line_num = line_num,
+      exec_count = exec_count
+    })
+    is_executed = true
+  end
+  
+  -- Multiline comment override - classification_data provides the most accurate 
+  -- information about multiline comments
+  local is_multiline_comment = false
+  if classification_data and (
+     (classification_data.in_comment == true) or
+     (classification_data.content_type == "comment") or
+     (classification_data.reasons and table.concat(classification_data.reasons, " "):match("multiline"))
+  ) then
+    is_multiline_comment = true
+    is_executable = false
+    logger.debug("Overriding executability due to comment detection", {
+      line_num = line_num,
+      content_preview = content and content:sub(1, 30) or "nil"
+    })
+  end
+  
   -- Determine line classification using error handling
   local classify_success, classification_result = error_handler.try(function()
-    if is_executable == false then
+    -- First priority: comments are always non-executable
+    if is_multiline_comment or is_executable == false then
       -- Non-executable line (comments, blank lines, etc.)
       return {
         class = "non-executable",
         tooltip = ' title="Non-executable line: Comment, blank line, or syntax element"'
       }
+    -- Second priority: fully covered lines
     elseif is_covered and is_executable then
       -- Fully covered (executed and validated)
       return {
@@ -484,6 +527,7 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         tooltip = string.format(' data-execution-count="%d" title="✓ Covered: Executed %d times and validated by tests"', 
                               exec_count, exec_count)
       }
+    -- Third priority: executed but not covered
     elseif is_executed and is_executable then
       -- Executed but not properly covered by tests
       -- Log diagnostic information
@@ -498,6 +542,7 @@ local function format_source_line(line_num, content, is_covered, is_executable, 
         tooltip = string.format(' data-execution-count="%d" title="⚠ Execution without validation: Line executed %d times but not properly validated by tests. Add assertions to validate this code."', 
                            exec_count, exec_count)
       }
+    -- Fourth priority: not executed
     else
       -- Executable but not executed at all
       return {
@@ -1433,9 +1478,9 @@ function M.format_coverage(coverage_data)
       --covered-highlight: #4CAF50;      /* Brighter green for executed lines */
       --covered-border: #388e3c;         /* Dark green border for emphasis */
       
-      --executed-not-covered-bg: #fff59d; /* Light amber/yellow for executed but not covered */
-      --executed-not-covered-highlight: #fdd835; /* Brighter amber/yellow */
-      --executed-not-covered-border: #fbc02d; /* Darker amber/yellow border */
+      --executed-not-covered-bg: #ffecb3; /* Light amber/yellow for executed but not covered */
+      --executed-not-covered-highlight: #ffc107; /* Brighter amber/yellow */
+      --executed-not-covered-border: #ff8f00; /* Darker amber/orange border */
       
       --uncovered-bg: #ffcdd2;           /* Light red for uncovered code */
       --uncovered-highlight: #e57373;    /* Brighter red for highlighting */
@@ -1489,9 +1534,9 @@ function M.format_coverage(coverage_data)
       --covered-highlight: #4CAF50;      /* Brighter green for emphasis */
       --covered-border: #81c784;         /* Lighter green border for contrast */
       
-      --executed-not-covered-bg: #f9a825; /* Darker amber for dark theme */
-      --executed-not-covered-highlight: #fdd835; /* Brighter amber/yellow */
-      --executed-not-covered-border: #fff176; /* Lighter yellow border for contrast */
+      --executed-not-covered-bg: #ff9800; /* Darker amber/orange for dark theme */
+      --executed-not-covered-highlight: #ffb74d; /* Brighter amber/yellow */
+      --executed-not-covered-border: #ffe082; /* Lighter yellow border for contrast */
       
       --uncovered-bg: #b71c1c;           /* Darker red for dark theme */
       --uncovered-highlight: #e57373;    /* Lighter red for highlighting */
@@ -1593,6 +1638,16 @@ function M.format_coverage(coverage_data)
       background-color: var(--executed-not-covered-bg);
       border-left: 3px solid var(--executed-not-covered-border);
       color: var(--text-color);
+      position: relative;
+    }
+    
+    /* Add warning indicator for executed-not-covered lines */
+    .line.executed-not-covered::before {
+      content: "⚠";
+      position: absolute;
+      right: 5px;
+      font-size: 14px;
+      opacity: 0.7;
     }
     
     /* Apply highlight effect on hover for executed-not-covered lines */

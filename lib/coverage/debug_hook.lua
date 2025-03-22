@@ -141,9 +141,18 @@ function M.should_track_file(file_path)
     return tracked_files[normalized_path]
   end
   
-  -- Special case for example files (always track them)
-  if config.should_track_example_files and normalized_path:match("/examples/") then
+  -- Special case for example files - more robust pattern detection 
+  if config.should_track_example_files and 
+     (normalized_path:match("[/\\]examples[/\\]") or -- Path contains /examples/ or \examples\
+      normalized_path:match("^examples[/\\]") or    -- Path starts with examples/ or examples\
+      normalized_path:match("[/\\]example[/\\]") or -- Path contains /example/ or \example\
+      normalized_path:match("^example[/\\]"))       -- Path starts with example/ or example\
+  then
     tracked_files[normalized_path] = true
+    logger.debug("Tracking example file", {
+      file_path = normalized_path,
+      operation = "should_track_file.example_files"
+    })
     return true
   end
   
@@ -278,6 +287,7 @@ function M.initialize_file(file_path, options)
   coverage_data.files[normalized_path] = {
     lines = options.lines or {},                      -- Lines validated by tests (covered)
     _executed_lines = options._executed_lines or {},  -- All executed lines (execution tracking)
+    _execution_counts = options._execution_counts or {}, -- Execution counts for each line
     functions = options.functions or {},              -- Function execution tracking
     line_count = line_count,
     source = source_lines,
@@ -604,9 +614,10 @@ function M.debug_hook(event, line)
   local success, result, err = error_handler.try(function()
     if event == "line" then
       local info = debug.getinfo(2, "S")
+      
+      -- Don't return early, just skip this line if we don't have source info
       if not info or not info.source or info.source:sub(1, 1) ~= "@" then
-        processing_hook = false
-        return
+        return true -- Return successfully but don't process this line
       end
       
       local file_path = info.source:sub(2)  -- Remove @ prefix
@@ -1675,10 +1686,11 @@ end
 ---@param line_num number Line number where the block starts
 ---@param block_id string Unique identifier for the block
 ---@param block_type string Type of the block (e.g., "if", "for", "while", etc.)
+---@param parent_id? string Optional parent block identifier for nested blocks
 ---@return boolean|nil success True if block tracking was successful, nil if failed
 ---@return table|nil error Error object if tracking failed
--- Track block execution for instrumentation
-function M.track_block(file_path, line_num, block_id, block_type)
+-- Track block execution for instrumentation with enhanced nested block support
+function M.track_block(file_path, line_num, block_id, block_type, parent_id)
   -- Validate parameters
   if file_path == nil then
     return nil, error_handler.validation_error(
@@ -1736,6 +1748,13 @@ function M.track_block(file_path, line_num, block_id, block_type)
     )
   end
   
+  if parent_id ~= nil and type(parent_id) ~= "string" then
+    return nil, error_handler.validation_error(
+      "parent_id must be a string or nil",
+      {operation = "track_block", provided_type = type(parent_id)}
+    )
+  end
+  
   local normalized_path = fs.normalize_path(file_path)
   
   -- Initialize file if needed
@@ -1752,21 +1771,28 @@ function M.track_block(file_path, line_num, block_id, block_type)
         file_data.logical_chunks = {}
       end
       
-      -- Create or update block data
+      -- Create or update block data with unique key that includes parent info
       local block_key = block_id .. "_" .. line_num
-      file_data.logical_chunks[block_key] = file_data.logical_chunks[block_key] or {
+      local existing_block = file_data.logical_chunks[block_key]
+      
+      file_data.logical_chunks[block_key] = existing_block or {
         id = block_key,
         type = block_type or "Block",
         start_line = line_num,
         end_line = line_num,
+        parent_id = parent_id,
         executed = false,
-        execution_count = 0
+        execution_count = 0,
+        children = {},
+        branches = {}
       }
       
+      local block_data = file_data.logical_chunks[block_key]
+      
       -- Increment execution count
-      file_data.logical_chunks[block_key].execution_count = 
-        (file_data.logical_chunks[block_key].execution_count or 0) + 1
-      file_data.logical_chunks[block_key].executed = true
+      block_data.execution_count = (block_data.execution_count or 0) + 1
+      block_data.executed = true
+      block_data.last_executed = os.time()
       
       -- Also track the declaration line
       M.set_line_executed(file_path, line_num, true)
@@ -1775,8 +1801,40 @@ function M.track_block(file_path, line_num, block_id, block_type)
       -- Mark line as executable
       M.set_line_executable(file_path, line_num, true)
       
-      -- Update global tracking
-      coverage_data.blocks[normalized_path .. ":" .. block_key] = true
+      -- Update global tracking for both execution and coverage
+      -- Track in 'executed' section always
+      coverage_data.blocks.executed[normalized_path .. ":" .. block_key] = true
+      
+      -- Also mark as 'covered' when appropriate (for now, we mark executed blocks as covered)
+      -- In the future, we'll have a separate mark_block_covered function similar to mark_line_covered
+      coverage_data.blocks.covered[normalized_path .. ":" .. block_key] = true
+      
+      -- Update parent-child relationship
+      if parent_id and file_data.logical_chunks[parent_id] then
+        local parent_block = file_data.logical_chunks[parent_id]
+        parent_block.children = parent_block.children or {}
+        
+        -- Add this block as a child if not already present
+        local already_child = false
+        for _, child_id in ipairs(parent_block.children) do
+          if child_id == block_key then
+            already_child = true
+            break
+          end
+        end
+        
+        if not already_child then
+          table.insert(parent_block.children, block_key)
+        end
+        
+        -- Also update parent's execution status
+        parent_block.executed = true
+        parent_block.execution_count = (parent_block.execution_count or 0) + 1
+        
+        -- Update tracking for parent too
+        coverage_data.blocks.executed[normalized_path .. ":" .. parent_id] = true
+        coverage_data.blocks.covered[normalized_path .. ":" .. parent_id] = true
+      end
       
       -- Verbose logging
       if config.verbose and logger.is_verbose_enabled() then
@@ -1785,7 +1843,8 @@ function M.track_block(file_path, line_num, block_id, block_type)
           line_num = line_num,
           block_id = block_id,
           block_type = block_type or "Block",
-          executions = file_data.logical_chunks[block_key].execution_count
+          parent_id = parent_id or "none",
+          executions = block_data.execution_count
         })
       end
     end
@@ -1799,6 +1858,7 @@ function M.track_block(file_path, line_num, block_id, block_type)
       line_num = line_num,
       block_id = block_id,
       block_type = block_type or "Block",
+      parent_id = parent_id or "none",
       error = err and err.message or "unknown error"
     })
     return nil, err
@@ -1820,6 +1880,130 @@ function M.was_line_covered(file_path, line_num)
   -- Get covered lines for this file (these are validated by test assertions)
   local covered_lines = M.get_file_covered_lines(file_path)
   return covered_lines and covered_lines[line_num] == true
+end
+
+---@param file_path string Path to the file containing the block
+---@param block_id string Unique identifier for the block
+---@return boolean|nil success True if block was marked as covered, nil if failed
+---@return table|nil error Error object if marking failed
+-- Mark a block as covered by test assertions
+function M.mark_block_covered(file_path, block_id)
+  -- Validate parameters
+  if file_path == nil then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "mark_block_covered", provided_type = "nil"}
+    )
+  end
+  
+  if type(file_path) ~= "string" then
+    return nil, error_handler.validation_error(
+      "file_path must be a string",
+      {operation = "mark_block_covered", provided_type = type(file_path)}
+    )
+  end
+  
+  if block_id == nil then
+    return nil, error_handler.validation_error(
+      "block_id must be a string",
+      {operation = "mark_block_covered", provided_type = "nil"}
+    )
+  end
+  
+  if type(block_id) ~= "string" then
+    return nil, error_handler.validation_error(
+      "block_id must be a string",
+      {operation = "mark_block_covered", provided_type = type(block_id)}
+    )
+  end
+  
+  -- Normalize the file path for consistency
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Check if file is already in the coverage data
+  if not coverage_data.files[normalized_path] then
+    M.initialize_file(file_path)
+    return nil, error_handler.not_found_error(
+      "Block not found",
+      {file_path = normalized_path, block_id = block_id, operation = "mark_block_covered"}
+    )
+  end
+  
+  -- Update with proper error handling
+  local success, err = error_handler.try(function()
+    local file_data = coverage_data.files[normalized_path]
+    if file_data and file_data.logical_chunks and file_data.logical_chunks[block_id] then
+      local block_data = file_data.logical_chunks[block_id]
+      
+      -- Mark block as covered and executed
+      block_data.covered = true
+      block_data.executed = true
+      
+      -- Add timestamp of when it was covered
+      block_data.last_covered = os.time()
+      
+      -- Update global tracking
+      coverage_data.blocks.covered[normalized_path .. ":" .. block_id] = true
+      coverage_data.blocks.executed[normalized_path .. ":" .. block_id] = true
+      
+      -- Also mark all parent blocks as covered/executed
+      if block_data.parent_id and file_data.logical_chunks[block_data.parent_id] then
+        M.mark_block_covered(file_path, block_data.parent_id)
+      end
+      
+      -- Verbose logging if enabled
+      if config.verbose and logger.is_verbose_enabled() then
+        logger.verbose("Block marked as covered", {
+          file_path = normalized_path,
+          block_id = block_id,
+          block_type = block_data.type,
+          operation = "mark_block_covered"
+        })
+      end
+      
+      return true
+    else
+      return nil, error_handler.not_found_error(
+        "Block not found",
+        {file_path = normalized_path, block_id = block_id, operation = "mark_block_covered"}
+      )
+    end
+  end)
+  
+  if not success then
+    logger.debug("Failed to mark block as covered", {
+      file_path = normalized_path,
+      block_id = block_id,
+      error = err and err.message or "unknown error",
+      operation = "mark_block_covered"
+    })
+    return nil, err
+  end
+  
+  return true
+end
+
+---@param file_path string Path to the file
+---@param block_id string Unique identifier for the block
+---@return boolean was_covered Whether the block was covered by test assertions
+-- Check if a specific block was covered (validated by assertions)
+function M.was_block_covered(file_path, block_id)
+  -- Normalize path for consistent lookup
+  local normalized_path = file_path and fs.normalize_path(file_path)
+  
+  -- Quick validation
+  if not normalized_path or not block_id or not coverage_data.files[normalized_path] then
+    return false
+  end
+  
+  -- Check if the block exists and is marked as covered
+  local file_data = coverage_data.files[normalized_path]
+  if not file_data or not file_data.logical_chunks then
+    return false
+  end
+  
+  local block_data = file_data.logical_chunks[block_id]
+  return block_data and block_data.covered == true
 end
 
 ---@param file_path string Path to the file
@@ -1856,6 +2040,19 @@ function M.mark_line_covered(file_path, line_num)
   if not coverage_data.files[normalized_path]._executed_lines[line_num] then
     coverage_data.files[normalized_path]._executed_lines[line_num] = true
     coverage_data.executed_lines[line_key] = true
+  end
+  
+  -- Find any blocks that contain this line and mark them as covered too
+  local file_data = coverage_data.files[normalized_path]
+  if file_data.logical_chunks then
+    for block_id, block_data in pairs(file_data.logical_chunks) do
+      -- Check if this line is within the block boundaries
+      if block_data.start_line and block_data.end_line and 
+         line_num >= block_data.start_line and line_num <= block_data.end_line then
+        -- Mark this block as covered
+        M.mark_block_covered(file_path, block_id)
+      end
+    end
   end
   
   -- Verbose logging
@@ -2014,18 +2211,38 @@ function M.track_line(file_path, line_num, options)
     coverage_data.files[normalized_path].executable_lines = coverage_data.files[normalized_path].executable_lines or {}
     
     -- Always mark this line as executed - reliable execution tracking
+    if not coverage_data.files[normalized_path]._executed_lines then
+        coverage_data.files[normalized_path]._executed_lines = {}
+    end
     coverage_data.files[normalized_path]._executed_lines[line_num] = true
     
     -- Track in global executed lines table
     local line_key = normalized_path .. ":" .. line_num
     coverage_data.executed_lines[line_key] = true
     
-    -- Additional execution information
-    if options and options.execution_count then
-      -- Track execution count if provided
-      coverage_data.files[normalized_path]._execution_counts = coverage_data.files[normalized_path]._execution_counts or {}
-      coverage_data.files[normalized_path]._execution_counts[line_num] = 
-        (coverage_data.files[normalized_path]._execution_counts[line_num] or 0) + 1
+    -- Initialize execution counts table if needed
+    if not coverage_data.files[normalized_path]._execution_counts then
+        coverage_data.files[normalized_path]._execution_counts = {}
+    end
+    
+    -- Always increment execution count for this line, regardless of options
+    local current_count = coverage_data.files[normalized_path]._execution_counts[line_num] or 0
+    coverage_data.files[normalized_path]._execution_counts[line_num] = current_count + 1
+    
+    -- Debug logging to confirm execution counts are being updated
+    -- IMPORTANT: Always log execution count updates to help diagnose issues
+    if logger then
+        logger.info("Updated execution count", {
+            file_path = normalized_path,
+            line_num = line_num,
+            previous_count = current_count,
+            new_count = coverage_data.files[normalized_path]._execution_counts[line_num],
+            operation = "track_line",
+            from_debug_hook = options and options.from_debug_hook or false
+        })
+    else
+        print(string.format("TRACK_LINE: Updated execution count for %s line %d: %d -> %d", 
+            normalized_path, line_num, current_count, current_count + 1))
     end
     
     -- Determine if this line is executable - use the most accurate method available
@@ -2112,7 +2329,7 @@ function M.track_line(file_path, line_num, options)
     if file_data and file_data.source and file_data.source[line_num] then
       local line_content = file_data.source[line_num]
       
-      -- Check if we have identified multiline comment state from multiple sources
+      -- Enhanced multiline comment detection
       -- This is a critical check to ensure multiline comments are never marked as executable
       local in_multiline_comment = false
       
@@ -2120,25 +2337,121 @@ function M.track_line(file_path, line_num, options)
       if file_data.multiline_context and file_data.multiline_context.line_status and 
          file_data.multiline_context.line_status[line_num] then
         in_multiline_comment = true
+        logger.debug("Multiline comment detected via line_status context", {
+          file = file_path,
+          line = line_num,
+          detected_by = "multiline_context.line_status"
+        })
       end
       
       -- Check 2: Classification context from current call
       if classification_context and classification_context.in_comment then
         in_multiline_comment = true
+        logger.debug("Multiline comment detected via classification context", {
+          file = file_path,
+          line = line_num,
+          detected_by = "classification_context.in_comment"
+        })
       end
       
       -- Check 3: Persistent state from previous calls
       if file_data.in_multiline_comment then
         in_multiline_comment = true
+        logger.debug("Multiline comment detected via persistent state", {
+          file = file_path,
+          line = line_num,
+          detected_by = "file_data.in_multiline_comment"
+        })
       end
       
-      -- Check 4: Direct line content check for comment start/mid
-      -- Direct check for comment pattern
-      if line_content:match("^%s*%-%-") then 
+      -- Check 4: Advanced pattern matching
+      -- Various multiline comment start patterns
+      if line_content:match("^%s*%-%-%[%[") or        -- Standard --[[ format
+         line_content:match("^%s*%-%-%[=+%[") then    -- Handle --[=[ and --[==[ etc.
+        -- Store in file state for future lines
+        file_data.in_multiline_comment = true
         in_multiline_comment = true
+        logger.debug("Multiline comment start detected", {
+          file = file_path,
+          line = line_num,
+          content = line_content:sub(1, 20),
+          detected_by = "start_pattern_match"
+        })
       end
       
-      -- Check if this is a line within a multiline comment
+      -- Different multiline comment end patterns
+      local in_end_pattern = false
+      if file_data.in_multiline_comment then
+        -- Handle various closing patterns ]]
+        if line_content:match("%]%]") then
+          in_end_pattern = true
+        end
+        
+        -- Handle levels of = in closing: ]=], ]==], etc.
+        for i = 1, 10 do  -- Support up to 10 = signs
+          local equals = string.rep("=", i)
+          local pattern = "%]" .. equals .. "%]"
+          if line_content:match(pattern) then
+            in_end_pattern = true
+            break
+          end
+        end
+        
+        if in_end_pattern then
+          -- Find position of end pattern
+          local comment_end = nil
+          local patterns = {"%]%]", "%]=%]", "%]===%]", "%]====%]"}
+          for _, pattern in ipairs(patterns) do
+            local pos = line_content:find(pattern)
+            if pos and (not comment_end or pos < comment_end) then
+              comment_end = pos
+            end
+          end
+          
+          -- If not found with complex pattern, fallback to simple ]]
+          if not comment_end then
+            comment_end = line_content:find("%]%]")
+          end
+          
+          -- Process what comes after the end marker
+          if comment_end then
+            local after_comment = line_content:sub(comment_end + 2)
+            
+            -- If nothing but whitespace or another comment after tag, mark entire line as comment
+            if after_comment:match("^%s*$") or after_comment:match("^%s*%-%-") then
+              in_multiline_comment = true
+              -- End of multiline comment for next line
+              file_data.in_multiline_comment = false
+              logger.debug("Multiline comment end detected - entire line is comment", {
+                file = file_path,
+                line = line_num,
+                detected_by = "end_pattern_match"
+              })
+            else
+              -- Line contains code after comment end - partial comment line
+              in_multiline_comment = true  -- Current line is still a comment
+              file_data.in_multiline_comment = false  -- But next line isn't
+              logger.debug("Multiline comment end with code after - partial comment line", {
+                file = file_path,
+                line = line_num,
+                detected_by = "partial_end_pattern_match"
+              })
+            end
+          end
+        end
+      end
+      
+      -- Check 5: Direct check for single line comment start
+      if line_content:match("^%s*%-%-") and not line_content:match("^%s*%-%-%[") then 
+        in_multiline_comment = true
+        logger.debug("Single line comment detected", {
+          file = file_path,
+          line = line_num,
+          detected_by = "single_line_comment_pattern"
+        })
+      end
+      
+      -- Ensure multiline comments are NEVER executable
       if in_multiline_comment then
         is_executable = false
         if classification_context then
@@ -2165,11 +2478,12 @@ function M.track_line(file_path, line_num, options)
         end
       end
       
-      -- Check for actual code that should be executable
-      -- Verify this is a line that contains code (not just whitespace and not a comment)
-      if not line_content:match("^%s*$") and not line_content:match("^%s*%-%-") then
-        -- If we found code (not a comment), it should be executable
-        if not in_multiline_comment then
+      -- Only check for executable code if we're not in a multiline comment
+      if not in_multiline_comment then
+        -- Check for actual code that should be executable
+        -- Verify this is a line that contains code (not just whitespace and not a comment)
+        if not line_content:match("^%s*$") and not line_content:match("^%s*%-%-") then
+          -- If we found code (not a comment), it should be executable
           is_executable = true
           if classification_context then
             classification_context.content_type = "code"
@@ -2179,19 +2493,19 @@ function M.track_line(file_path, line_num, options)
             end
           end
         end
-      end
-      
-      -- Check for Lua variable declarations and function definitions
-      -- These are definite signs of executable code
-      if line_content:match("^%s*local%s+%w+") or
-         line_content:match("^%s*function%s") or
-         line_content:match("^%s*local%s+function") then
-        is_executable = true
-        if classification_context then
-          classification_context.content_type = "code"
-          classification_context.in_comment = false
-          if classification_context.reasons then
-            table.insert(classification_context.reasons, "executable_declaration_or_definition")
+        
+        -- Check for Lua variable declarations and function definitions
+        -- These are definite signs of executable code
+        if line_content:match("^%s*local%s+%w+") or
+           line_content:match("^%s*function%s") or
+           line_content:match("^%s*local%s+function") then
+          is_executable = true
+          if classification_context then
+            classification_context.content_type = "code"
+            classification_context.in_comment = false
+            if classification_context.reasons then
+              table.insert(classification_context.reasons, "executable_declaration_or_definition")
+            end
           end
         end
       end
@@ -2876,6 +3190,178 @@ function M.get_performance_metrics()
     last_call_time = performance_metrics.last_call_time,
     error_count = performance_metrics.hook_errors
   }
+end
+
+---@param file_path string Path to the file to dump execution data for (optional, dumps all files if not provided)
+---@return table execution_data Raw execution count data for all tracked files or specific file
+-- Diagnostic function for debugging execution count issues
+function M.dump_execution_data(file_path)
+  local result = {}
+  
+  -- DEBUGGING: Print out all files in coverage_data for diagnosis
+  print("DEBUG: Files in coverage_data at dump_execution_data call:")
+  local file_count = 0
+  for path, _ in pairs(coverage_data.files or {}) do
+    file_count = file_count + 1
+    print("  " .. file_count .. ". " .. path)
+  end
+  
+  if file_count == 0 then
+    print("  No files found in coverage_data!")
+  end
+  
+  -- If file path provided, dump only that file
+  if file_path then
+    -- Try all normalization approaches to find the file
+    local all_paths = {}
+    table.insert(all_paths, file_path)  -- Original path
+    
+    -- Standard normalization
+    local normalized_path = fs.normalize_path(file_path)
+    if normalized_path ~= file_path then
+      table.insert(all_paths, normalized_path)
+    end
+    
+    -- Additional normalization attempts
+    local alt_path = file_path:gsub("//", "/"):gsub("\\", "/")
+    if alt_path ~= file_path and alt_path ~= normalized_path then
+      table.insert(all_paths, alt_path)
+    end
+    
+    -- Try absolute/relative variants
+    if file_path:sub(1, 1) ~= "/" then
+      local cwd = os.getenv("PWD") or "."
+      local abs_path = cwd .. "/" .. file_path
+      -- Check if path already exists in the array
+      local exists = false
+      for _, p in ipairs(all_paths) do
+        if p == abs_path then
+          exists = true
+          break
+        end
+      end
+      
+      if not exists then
+        table.insert(all_paths, abs_path)
+      end
+      
+      -- Try normalized version of absolute path
+      local norm_abs_path = fs.normalize_path(abs_path)
+      -- Check if path already exists in the array
+      exists = false
+      for _, p in ipairs(all_paths) do
+        if p == norm_abs_path then
+          exists = true
+          break
+        end
+      end
+      
+      if norm_abs_path ~= abs_path and not exists then
+        table.insert(all_paths, norm_abs_path)
+      end
+    end
+    
+    -- Look for file using all possible paths
+    local found = false
+    print("DEBUG: Trying paths for " .. file_path .. ":")
+    for i, try_path in ipairs(all_paths) do
+      print("  " .. i .. ". " .. try_path .. " - " .. 
+            (coverage_data.files[try_path] and "FOUND" or "not found"))
+            
+      if coverage_data.files[try_path] then
+        result[try_path] = {
+          _execution_counts = coverage_data.files[try_path]._execution_counts or {},
+          _executed_lines = coverage_data.files[try_path]._executed_lines or {},
+          executable_lines = coverage_data.files[try_path].executable_lines or {},
+          lines = coverage_data.files[try_path].lines or {},
+          normalized_path = try_path,
+          original_path = file_path,
+          path_match = try_path == file_path,
+          found_by = "direct_match"
+        }
+        found = true
+        break
+      end
+    end
+    
+    -- Try partial matching if direct match failed
+    if not found then
+      -- Try secondary normalization approach to diagnose path issues
+      -- Find by original source path using pattern matching
+      for path, file_data in pairs(coverage_data.files) do
+        -- Check if either path ends with the other (handling relative vs absolute paths)
+        local escaped_path = file_path:gsub("%-", "%%-"):gsub("%(", "%%("):gsub("%)", "%%)"):gsub("%.", "%%.")
+        local escaped_indexed_path = path:gsub("%-", "%%-"):gsub("%(", "%%("):gsub("%)", "%%)"):gsub("%.", "%%.")
+        
+        if path:match(escaped_path .. "$") or file_path:match(escaped_indexed_path .. "$") then
+          result[path] = {
+            _execution_counts = file_data._execution_counts or {},
+            _executed_lines = file_data._executed_lines or {},
+            executable_lines = file_data.executable_lines or {},
+            lines = file_data.lines or {},
+            normalized_path = path,
+            original_path = file_path,
+            path_match = false,
+            found_by = "partial_match"
+          }
+          found = true
+          break
+        end
+      end
+    end
+    
+    -- Show error and list available files if not found
+    if not found then
+      result.error = "File not found in coverage data: " .. file_path
+      result.attempted_paths = all_paths
+      result.available_files = {}
+      
+      -- Add list of all available files to help debugging
+      for path, _ in pairs(coverage_data.files) do
+        table.insert(result.available_files, path)
+      end
+      
+      -- Add some debugging info about coverage data contents
+      result.coverage_data_stats = {
+        total_files = 0,
+        file_samples = {}
+      }
+      
+      -- Count files and grab a sample
+      local sample_count = 0
+      for path, _ in pairs(coverage_data.files) do
+        result.coverage_data_stats.total_files = result.coverage_data_stats.total_files + 1
+        if sample_count < 3 then
+          table.insert(result.coverage_data_stats.file_samples, path)
+          sample_count = sample_count + 1
+        end
+      end
+    end
+  else
+    -- Dump execution data for all files
+    for path, file_data in pairs(coverage_data.files) do
+      -- Ensure we deep copy the tables to prevent modifications
+      local execution_counts = {}
+      for line, count in pairs(file_data._execution_counts or {}) do
+        execution_counts[line] = count
+      end
+      
+      local executed_lines = {}
+      for line, executed in pairs(file_data._executed_lines or {}) do
+        executed_lines[line] = executed
+      end
+      
+      result[path] = {
+        _execution_counts = execution_counts,
+        _executed_lines = executed_lines,
+        executable_lines = file_data.executable_lines or {},
+        lines = file_data.lines or {},
+        normalized_path = path
+      }
+    end
+  end
+  
+  return result
 end
 
 return M
