@@ -698,9 +698,64 @@ function fs.normalize_path(path)
     -- Remove duplicate slashes
     result = string.gsub(result, "//+", "/")
     
-    -- Handle trailing slash - remove it unless it's the root directory
-    if result:sub(-1) == "/" and #result > 1 then
-        result = result:sub(1, -2)
+    -- Detect Windows drive letter or UNC path
+    local has_drive_letter = result:match("^%a:") ~= nil
+    local is_unc_path = result:match("^//[^/]") ~= nil
+    
+    -- Process special path components (. and ..)
+    local parts = {}
+    for part in result:gmatch("[^/]+") do
+        if part == "." then
+            -- Skip "." components (current directory)
+        elseif part == ".." then
+            -- Handle ".." components (go up one level)
+            if #parts > 0 and parts[#parts] ~= ".." then
+                -- Don't remove drive letter on Windows paths
+                if not (has_drive_letter and #parts == 1) then
+                    table.remove(parts) -- Remove last part to go up one level
+                end
+            else
+                table.insert(parts, part) -- Keep ".." for relative paths
+            end
+        else
+            table.insert(parts, part)
+        end
+    end
+    
+    -- Reconstruct the path
+    result = table.concat(parts, "/")
+    
+    -- Handle Windows drive letters (C:/ etc.)
+    if has_drive_letter and path:sub(2, 2) == ":" then
+        if result ~= "" and result:sub(1, 2) ~= (path:sub(1, 1) .. ":") then
+            result = path:sub(1, 2) .. "/" .. result
+        elseif result == "" then
+            result = path:sub(1, 2) .. "/"
+        end
+    end
+    
+    -- Preserve root slash if original path started with /
+    if path:sub(1, 1) == "/" then
+        result = "/" .. result
+    end
+    
+    -- Preserve UNC path format
+    if is_unc_path then
+        result = "//" .. result:gsub("^/", "")
+    end
+    
+    -- Handle special case: path was just "/" or reduced to "" after processing
+    if result == "" then
+        if path:sub(1, 1) == "/" then
+            return "/"
+        else
+            return "."
+        end
+    end
+    
+    -- Handle trailing slash - preserve only if original had it
+    if path:sub(-1) == "/" and #result > 1 then
+        result = result .. "/"
     end
     
     return result
@@ -1873,6 +1928,122 @@ function fs.list_files_recursive(dir_path, include_hidden)
     scan(dir_path)
     
     return results
+end
+
+--- Detect the project root directory
+--- This function attempts to find the root directory of a project by looking for
+--- common project marker files like .git, package.json, etc. from the current directory
+--- upwards. It's useful for making file operations relative to the project root.
+---
+--- @param start_dir? string The directory to start searching from (defaults to current directory)
+--- @param markers? table List of marker files/directories to look for (defaults to common ones)
+--- @return string|nil root_dir The detected project root directory or nil if not found
+--- @return string|nil error Error message if an error occurred
+---
+--- @usage
+--- -- Detect project root from current directory
+--- local root_dir = fs.detect_project_root()
+--- if root_dir then
+---   print("Project root: " .. root_dir)
+--- end
+---
+--- -- Detect project root from a specific directory with custom markers
+--- local root_dir = fs.detect_project_root("/path/to/start", {".project", "Makefile"})
+function fs.detect_project_root(start_dir, markers)
+    -- Default to current directory if not specified
+    start_dir = start_dir or fs.get_current_directory()
+    if not start_dir then
+        return nil, "Failed to get current directory"
+    end
+    
+    -- Common project root markers
+    markers = markers or {
+        ".git",         -- Git repositories
+        "package.json", -- Node.js projects
+        "Cargo.toml",   -- Rust projects
+        "setup.py",     -- Python projects
+        "pom.xml",      -- Maven projects
+        "build.gradle", -- Gradle projects
+        ".svn",         -- SVN repositories
+        "Gemfile",      -- Ruby projects
+        "composer.json", -- PHP projects
+        "Makefile",     -- Make-based projects
+        "CMakeLists.txt", -- CMake projects
+        ".hg",          -- Mercurial repositories
+        "LICENSE",      -- Common in project roots
+        "README.md",    -- Common in project roots
+        ".project",     -- Eclipse projects
+        "firmo.lua"     -- Firmo projects
+    }
+    
+    -- Normalize start directory
+    local dir = fs.normalize_path(start_dir)
+    
+    -- Search upwards from start_dir
+    while dir and dir ~= "" do
+        -- Check for each marker
+        for _, marker in ipairs(markers) do
+            local marker_path = fs.join_paths(dir, marker)
+            if fs.file_exists(marker_path) or fs.directory_exists(marker_path) then
+                return dir
+            end
+        end
+        
+        -- Move up to parent directory
+        local parent_dir = fs.get_directory_name(dir)
+        
+        -- Break if we can't go higher or we're at the root
+        if not parent_dir or parent_dir == dir or parent_dir == "" then
+            break
+        end
+        
+        dir = parent_dir
+    end
+    
+    -- If we didn't find a project root, return the starting directory
+    return start_dir
+end
+
+--- Get the current working directory
+---@return string|nil current_dir The current working directory or nil on error
+---@return string|nil error Error message if operation failed
+function fs.get_current_directory()
+    local success, result, err = error_handler.try(function()
+        if lfs then
+            return lfs.currentdir()
+        else
+            -- Fallback method if lfs is not available
+            local handle, err
+            if is_windows() then
+                handle, err = io.popen("cd")
+            else
+                handle, err = io.popen("pwd")
+            end
+            
+            if not handle then
+                return nil, "Failed to execute current directory command: " .. (err or "unknown error")
+            end
+            
+            local current_dir = handle:read("*l")
+            handle:close()
+            
+            if not current_dir or current_dir == "" then
+                return nil, "Failed to get current directory output"
+            end
+            
+            return current_dir
+        end
+    end)
+    
+    if not success then
+        return nil, "Error getting current directory: " .. tostring(result)
+    end
+    
+    if err then
+        return nil, err
+    end
+    
+    return result
 end
 
 return fs

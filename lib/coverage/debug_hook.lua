@@ -45,6 +45,7 @@ local logging = require("lib.tools.logging")
 -- Error handler is a required module for proper error handling throughout the codebase
 local error_handler = require("lib.tools.error_handler")
 local static_analyzer -- Lazily loaded when used
+local test_file_detector -- Lazily loaded when needed
 local config = {}
 local tracked_files = {}
 local active_files = {} -- Keep track of files that should be included in reporting
@@ -121,6 +122,12 @@ local logger = logging.get_logger("CoverageHook")
 --- @param file_path string Path to the file to check
 --- @return boolean Should the file be tracked by the coverage system
 function M.should_track_file(file_path)
+  -- Add more verbose debug output for tracking decisions
+  logger.debug("Checking if file should be tracked", {
+    file_path = file_path,
+    operation = "should_track_file.entry"
+  })
+  
   -- Safely normalize file path
   local normalized_path, err = error_handler.safe_io_operation(
     function() return fs.normalize_path(file_path) end,
@@ -138,7 +145,67 @@ function M.should_track_file(file_path)
   
   -- Quick lookup for already-decided files
   if tracked_files[normalized_path] ~= nil then
+    logger.debug("Using cached tracking decision", {
+      file_path = normalized_path,
+      decision = tracked_files[normalized_path],
+      operation = "should_track_file.cache_hit"
+    })
     return tracked_files[normalized_path]
+  end
+  
+  -- Load test file detector if needed
+  if not test_file_detector and config.dynamic_test_detection then
+    local success, detector = pcall(require, "lib.coverage.is_test_file")
+    if success then
+      test_file_detector = detector
+    end
+  end
+  
+  -- If test_file_detector is available, use it to check if this is a framework file
+  if test_file_detector and config.user_code_only then
+    if test_file_detector.is_framework_file(normalized_path) then
+      -- Only track framework files if explicitly configured to do so
+      if not config.include_framework_files then
+        tracked_files[normalized_path] = false
+        logger.debug("Not tracking framework file", {
+          file_path = normalized_path,
+          operation = "should_track_file.framework_file"
+        })
+        return false
+      end
+    end
+  end
+  
+  -- Check if this is a test file (if test_file_detector is available)
+  if test_file_detector and config.dynamic_test_detection then
+    -- First check by path patterns without loading content (faster)
+    if test_file_detector.is_test_file(normalized_path) then
+      -- Only track test files if explicitly configured to do so
+      if not config.include_test_files then
+        tracked_files[normalized_path] = false
+        logger.debug("Not tracking test file (by path)", {
+          file_path = normalized_path,
+          operation = "should_track_file.test_file"
+        })
+        return false
+      end
+    end
+    
+    -- If we have file content available, do a more thorough check
+    local file_data = coverage_data.files[normalized_path]
+    if file_data and file_data.source_text and config.dynamic_test_detection then
+      if test_file_detector.is_test_file(normalized_path, file_data.source_text) then
+        -- Only track test files if explicitly configured to do so
+        if not config.include_test_files then
+          tracked_files[normalized_path] = false
+          logger.debug("Not tracking test file (by content)", {
+            file_path = normalized_path,
+            operation = "should_track_file.test_file_content"
+          })
+          return false
+        end
+      end
+    end
   end
   
   -- Special case for example files - more robust pattern detection 
@@ -173,6 +240,11 @@ function M.should_track_file(file_path)
     
     if matches then
       tracked_files[normalized_path] = false
+      logger.debug("Excluding file based on pattern", {
+        file_path = normalized_path,
+        pattern = pattern,
+        operation = "should_track_file.exclude_match"
+      })
       return false
     end
     
@@ -191,9 +263,10 @@ function M.should_track_file(file_path)
         pattern = pattern,
         operation = "should_track_file.include"
       })
-      tracked_files[normalized_path] = false
-      return false
+      goto continue_invalid
     end
+    
+    ::continue_invalid::
   end
   
   -- Apply include patterns with error handling
@@ -213,25 +286,61 @@ function M.should_track_file(file_path)
     
     if matches then
       tracked_files[normalized_path] = true
+      logger.debug("Including file based on pattern", {
+        file_path = normalized_path,
+        pattern = pattern,
+        operation = "should_track_file.include_match"
+      })
       return true
     end
     
     ::continue_include::
   end
   
-  -- Check source directories
+  -- Check source directories - this is crucial for dynamic project structures
   for _, dir in ipairs(config.source_dirs or {"."}) do
     local normalized_dir = fs.normalize_path(dir)
+    
+    -- Handle relative paths properly by making them absolute if needed
+    if normalized_dir:sub(1, 1) ~= "/" and normalized_dir:match("^%a:") == nil then
+      -- It's a relative path, make it absolute based on current directory
+      local current_dir = fs.get_current_directory()
+      normalized_dir = fs.normalize_path(fs.join_paths(current_dir, normalized_dir))
+    end
+    
+    -- Check if file is in this source directory
     if normalized_path:sub(1, #normalized_dir) == normalized_dir then
       tracked_files[normalized_path] = true
+      logger.debug("Including file based on source directory", {
+        file_path = normalized_path,
+        source_dir = normalized_dir,
+        operation = "should_track_file.source_dir_match"
+      })
       return true
     end
   end
   
-  
   -- Default decision based on file extension
   local is_lua = normalized_path:match("%.lua$") ~= nil
   tracked_files[normalized_path] = is_lua
+  
+  -- Log final decision for debugging
+  logger.debug("Track file decision", {
+    file_path = normalized_path,
+    decision = is_lua,
+    reason = "file_extension_check",
+    operation = "should_track_file.decision",
+    config_info = {
+      has_include = config.include ~= nil,
+      include_count = config.include and (type(config.include) == "table" and #config.include or 0) or 0,
+      has_include_patterns = config.include_patterns ~= nil,
+      include_patterns_count = config.include_patterns and (type(config.include_patterns) == "table" and #config.include_patterns or 0) or 0,
+      should_track_example_files = config.should_track_example_files == true,
+      dynamic_test_detection = config.dynamic_test_detection == true,
+      include_test_files = config.include_test_files == true
+    }
+  })
+  
   return is_lua
 end
 
@@ -623,16 +732,40 @@ function M.debug_hook(event, line)
       local file_path = info.source:sub(2)  -- Remove @ prefix
       
       -- Identify coverage module files and test files for special handling
-      local is_coverage_file = file_path:find("lib/coverage", 1, true) or 
-                              file_path:find("lib/tools/parser", 1, true) or
-                              file_path:find("lib/tools/vendor", 1, true)
-                              
-      -- Identify test files for special handling
-      local is_test_file = file_path:match("_test%.lua$") or 
-                           file_path:match("_spec%.lua$") or
-                           file_path:match("/tests/") or
-                           file_path:match("/test/") or
-                           file_path:match("test_.*%.lua$")
+      local is_framework_file
+      local is_test_file
+      
+      -- Load test file detector if needed
+      if not test_file_detector and config.dynamic_test_detection then
+        local success, detector = pcall(require, "lib.coverage.is_test_file")
+        if success then
+          test_file_detector = detector
+        end
+      end
+      
+      -- Use detector if available, otherwise fall back to simple pattern matching
+      if test_file_detector then
+        -- First check if this is a framework file (part of firmo's code)
+        is_framework_file = test_file_detector.is_framework_file(file_path)
+        
+        -- Then check if it's a test file
+        is_test_file = test_file_detector.is_test_file(file_path)
+      else
+        -- Simple pattern matching as fallback
+        is_framework_file = file_path:find("lib/coverage", 1, true) or 
+                           file_path:find("lib/tools/parser", 1, true) or
+                           file_path:find("lib/tools/vendor", 1, true)
+        
+        -- Basic test file detection
+        is_test_file = file_path:match("_test%.lua$") or 
+                       file_path:match("_spec%.lua$") or
+                       file_path:match("/tests/") or
+                       file_path:match("/test/") or
+                       file_path:match("test_.*%.lua$")
+      end
+      
+      -- For framework files, consider them as coverage files for tracking purposes
+      local is_coverage_file = is_framework_file
       
       -- Special handling for coverage module and test files
       if is_coverage_file then
@@ -754,6 +887,41 @@ function M.debug_hook(event, line)
           is_covered = is_covered,        -- Whether this line should be marked as covered
           from_debug_hook = true          -- Track source of tracking for debugging
         })
+        
+        -- Direct data structure update as a fallback to ensure tracking works
+        -- This is a direct track to ensure lines get recorded reliably
+        -- Direct manipulation of data structures as an additional safety measure
+        local normalized_path = fs.normalize_path(file_path)
+        if coverage_data.files[normalized_path] then
+          -- Ensure data structures exist
+          coverage_data.files[normalized_path]._executed_lines = 
+            coverage_data.files[normalized_path]._executed_lines or {}
+          
+          coverage_data.files[normalized_path]._execution_counts = 
+            coverage_data.files[normalized_path]._execution_counts or {}
+            
+          -- Mark as executed
+          coverage_data.files[normalized_path]._executed_lines[line] = true
+          
+          -- Increment execution count
+          local current_count = coverage_data.files[normalized_path]._execution_counts[line] or 0
+          coverage_data.files[normalized_path]._execution_counts[line] = current_count + 1
+          
+          -- Track in global executed lines table
+          local line_key = normalized_path .. ":" .. line
+          coverage_data.executed_lines[line_key] = true
+          
+          -- Debug logging for critical files
+          if file_path:match("/examples/") or file_path:find("debug_hook_test") then
+            logger.debug("Direct line execution tracking", {
+              file = normalized_path:match("([^/]+)$") or normalized_path,
+              line = line,
+              execution_count = coverage_data.files[normalized_path]._execution_counts[line],
+              is_executable = is_executable,
+              is_covered = is_covered
+            })
+          end
+        end
         
         -- Verbose output for execution tracking
         if config.verbose and is_debug_file and logger.is_verbose_enabled() then
@@ -1017,9 +1185,20 @@ function M.set_config(new_config)
     )
   end
   
-  -- Set configuration
-  config = new_config
-  tracked_files = {}  -- Reset cached decisions
+  -- Don't completely replace configuration, merge it
+  for k, v in pairs(new_config) do
+    config[k] = v
+  end
+  
+  -- Set preserve_file_structure by default if not set
+  if new_config.preserve_file_structure == nil then
+    config.preserve_file_structure = true
+  end
+  
+  -- Reset cached tracking decisions only if this was requested
+  if new_config.reset_tracking_cache then
+    tracked_files = {}
+  end
   
   -- Configure module logging level
   logging.configure_from_config("CoverageHook")
@@ -1039,6 +1218,128 @@ end
 -- Get active files list
 function M.get_active_files()
   return active_files
+end
+
+--- Fix block relationships to ensure proper parent-child connections
+--- This function analyzes the current block data and fixes any inconsistencies in
+--- parent-child relationships. It's useful to call this before generating reports
+--- to ensure that all block relationships are properly established.
+---
+--- @return table relationship_stats Statistics about relationships fixed
+function M.fix_block_relationships()
+  local stats = {
+    files_processed = 0,
+    blocks_processed = 0,
+    relationships_fixed = 0,
+    pending_relationships_resolved = 0,
+    orphaned_blocks = 0
+  }
+  
+  -- Process each file in coverage data
+  for file_path, file_data in pairs(coverage_data.files or {}) do
+    if file_data and file_data.logical_chunks then
+      stats.files_processed = stats.files_processed + 1
+      
+      -- First pass: collect all blocks and identify orphans
+      local blocks = {}
+      local orphans = {}
+      
+      for block_id, block_data in pairs(file_data.logical_chunks) do
+        stats.blocks_processed = stats.blocks_processed + 1
+        blocks[block_id] = block_data
+        
+        -- Check if this block has a parent reference but parent doesn't exist
+        if block_data.parent_id and 
+           not file_data.logical_chunks[block_data.parent_id] then
+          orphans[block_id] = block_data.parent_id
+          stats.orphaned_blocks = stats.orphaned_blocks + 1
+        end
+      end
+      
+      -- Second pass: check and fix parent-child relationships
+      for block_id, block_data in pairs(blocks) do
+        -- Initialize children array if not present
+        if not block_data.children then
+          block_data.children = {}
+        end
+        
+        -- If this block has a parent, ensure the parent has this as a child
+        if block_data.parent_id and blocks[block_data.parent_id] then
+          local parent = blocks[block_data.parent_id]
+          
+          -- Initialize parent's children array if not present
+          if not parent.children then
+            parent.children = {}
+          end
+          
+          -- Check if this block is already in parent's children
+          local found = false
+          for _, child_id in ipairs(parent.children) do
+            if child_id == block_id then
+              found = true
+              break
+            end
+          end
+          
+          -- Add child to parent if not already there
+          if not found then
+            table.insert(parent.children, block_id)
+            stats.relationships_fixed = stats.relationships_fixed + 1
+            
+            logger.debug("Fixed parent-child relationship", {
+              file_path = file_path,
+              parent_id = block_data.parent_id,
+              child_id = block_id,
+              operation = "fix_block_relationships"
+            })
+          end
+        end
+      end
+      
+      -- Process pending child relationships if any
+      if file_data._pending_child_blocks then
+        for parent_id, children in pairs(file_data._pending_child_blocks) do
+          -- Only process if the parent exists now
+          if blocks[parent_id] then
+            local parent = blocks[parent_id]
+            parent.children = parent.children or {}
+            
+            -- Add each pending child that exists
+            for _, child_id in ipairs(children) do
+              if blocks[child_id] then
+                -- Check if already in children
+                local found = false
+                for _, existing_child in ipairs(parent.children) do
+                  if existing_child == child_id then
+                    found = true
+                    break
+                  end
+                end
+                
+                -- Add if not found
+                if not found then
+                  table.insert(parent.children, child_id)
+                  stats.pending_relationships_resolved = stats.pending_relationships_resolved + 1
+                  
+                  logger.debug("Resolved pending parent-child relationship", {
+                    file_path = file_path,
+                    parent_id = parent_id,
+                    child_id = child_id,
+                    operation = "fix_block_relationships.pending"
+                  })
+                end
+              end
+            end
+          end
+        end
+        
+        -- Clear pending block relationships after processing
+        file_data._pending_child_blocks = {}
+      end
+    end
+  end
+  
+  return stats
 end
 
 ---@return table files Table of all tracked files and their data
@@ -1522,7 +1823,23 @@ end
 ---@return table block_data The block data that was added
 -- Add a new block to the coverage data
 function M.add_block(file_path, block_id, block_data)
-  local normalized_path = fs.normalize_path(file_path)
+  -- Use safe_io_operation for more robust path normalization with error handling
+  local normalized_path, normalize_err = error_handler.safe_io_operation(
+    function() return fs.normalize_path(file_path) end,
+    file_path,
+    {operation = "add_block.normalize_path"}
+  )
+  
+  if not normalized_path then
+    logger.debug("Failed to normalize path for block addition", {
+      file_path = file_path,
+      error = error_handler.format_error(normalize_err),
+      operation = "add_block",
+      block_id = block_id,
+      fallback_behavior = "using original path"
+    })
+    normalized_path = file_path -- Fallback to original path
+  end
   
   -- Initialize file data if needed
   if not coverage_data.files[normalized_path] then
@@ -1534,12 +1851,151 @@ function M.add_block(file_path, block_id, block_data)
     coverage_data.files[normalized_path].logical_chunks = {}
   end
   
+  -- Comprehensive parent-child relationship handling with bidirectional consistency
+  if block_data.parent_id and block_data.parent_id ~= "root" then
+    local parent_block = coverage_data.files[normalized_path].logical_chunks[block_data.parent_id]
+    
+    if parent_block then
+      -- Ensure parent has children array
+      parent_block.children = parent_block.children or {}
+      
+      -- Check if this block is already a child
+      local already_child = false
+      for _, child_id in ipairs(parent_block.children) do
+        if child_id == block_id then
+          already_child = true
+          break
+        end
+      end
+      
+      -- Add as child if not already present
+      if not already_child then
+        table.insert(parent_block.children, block_id)
+        
+        -- Log parent-child relationship for debugging
+        if config.debug and logger.is_debug_enabled() then
+          logger.debug("Added parent-child relationship", {
+            file_path = normalized_path,
+            parent_id = block_data.parent_id,
+            child_id = block_id,
+            parent_type = parent_block.type,
+            child_type = block_data.type
+          })
+        end
+      end
+      
+      -- Ensure block also knows its parent
+      block_data.parent_id = parent_block.id
+    else
+      -- Parent doesn't exist yet - could be added later
+      -- Track this relationship for deferred processing
+      if not coverage_data.files[normalized_path]._pending_child_blocks then
+        coverage_data.files[normalized_path]._pending_child_blocks = {}
+      end
+      
+      -- Store pending relationship
+      if not coverage_data.files[normalized_path]._pending_child_blocks[block_data.parent_id] then
+        coverage_data.files[normalized_path]._pending_child_blocks[block_data.parent_id] = {}
+      end
+      
+      -- Check if already pending
+      local already_pending = false
+      for _, pending_id in ipairs(coverage_data.files[normalized_path]._pending_child_blocks[block_data.parent_id]) do
+        if pending_id == block_id then
+          already_pending = true
+          break
+        end
+      end
+      
+      -- Add to pending list if not already there
+      if not already_pending then
+        table.insert(coverage_data.files[normalized_path]._pending_child_blocks[block_data.parent_id], block_id)
+        
+        if config.debug and logger.is_debug_enabled() then
+          logger.debug("Deferred parent-child relationship", {
+            file_path = normalized_path,
+            parent_id = block_data.parent_id,
+            child_id = block_id,
+            reason = "parent block not yet available"
+          })
+        end
+      end
+    end
+  end
+  
+  -- Ensure we have an empty children array for all blocks even if they don't have children yet
+  block_data.children = block_data.children or {}
+  
   -- Add the block data
   coverage_data.files[normalized_path].logical_chunks[block_id] = block_data
   
-  -- Update global tracking if executed
+  -- Update global tracking
+  local block_key = normalized_path .. ":" .. block_id
+  
+  -- Track in all blocks
+  coverage_data.blocks.all[block_key] = true
+  
+  -- Update execution status tracking
   if block_data.executed then
-    coverage_data.blocks[normalized_path .. ":" .. block_id] = true
+    coverage_data.blocks.executed[block_key] = true
+    
+    -- Also mark as covered when executed
+    coverage_data.blocks.covered[block_key] = true
+  end
+  
+  -- Enhanced resolution of pending parent-child relationships
+  local pending_children = coverage_data.files[normalized_path]._pending_child_blocks 
+    and coverage_data.files[normalized_path]._pending_child_blocks[block_id]
+  
+  if pending_children then
+    -- Process all pending children that were waiting for this parent
+    block_data.children = block_data.children or {}
+    
+    for _, child_id in ipairs(pending_children) do
+      -- Get the child block if it exists
+      local child_block = coverage_data.files[normalized_path].logical_chunks[child_id]
+      
+      -- Add to children array if not already there and child exists
+      if child_block then
+        local already_child = false
+        for _, existing_child_id in ipairs(block_data.children) do
+          if existing_child_id == child_id then
+            already_child = true
+            break
+          end
+        end
+        
+        if not already_child then
+          -- Add child to parent's children array
+          table.insert(block_data.children, child_id)
+          
+          -- Ensure child's parent_id is set correctly (bidirectional consistency)
+          child_block.parent_id = block_id
+          
+          if config.debug and logger.is_debug_enabled() then
+            logger.debug("Resolved deferred parent-child relationship", {
+              file_path = normalized_path,
+              parent_id = block_id,
+              child_id = child_id,
+              parent_type = block_data.type,
+              child_type = child_block.type
+            })
+          end
+        end
+      else
+        -- Child block doesn't exist yet - this is unusual but possible in complex execution paths
+        if config.debug and logger.is_debug_enabled() then
+          logger.debug("Pending child not found during deferred relationship resolution", {
+            file_path = normalized_path,
+            parent_id = block_id,
+            child_id = child_id
+          })
+        end
+      end
+    end
+    
+    -- Clear the pending relationship after processing
+    coverage_data.files[normalized_path]._pending_child_blocks[block_id] = nil
   end
   
   return block_data
@@ -1552,18 +2008,72 @@ end
 function M.was_line_executed(file_path, line_num)
   -- Check if we have data for this file
   if not M.has_file(file_path) then
+    -- Debug output for testing - help diagnose why file is not found
+    if logger.is_debug_enabled() then
+      logger.debug("File not found in was_line_executed", {
+        file_path = file_path,
+        normalized_path = fs.normalize_path(file_path),
+        operation = "was_line_executed",
+        has_function_call = true
+      })
+    end
     return false
   end
   
-  -- Get executed lines for this file
-  local executed_lines = M.get_file_executed_lines(file_path)
-  if executed_lines and executed_lines[line_num] then
+  -- Normalize the path for consistent lookup
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- Get the coverage data directly
+  local coverage_data = M.get_coverage_data()
+  if not coverage_data.files[normalized_path] then
+    -- Debug output for testing - help diagnose why file is not found after normalization
+    if logger.is_debug_enabled() then
+      logger.debug("Normalized file not found in was_line_executed", {
+        file_path = file_path,
+        normalized_path = normalized_path,
+        operation = "was_line_executed",
+        available_files = table.concat(
+          (function()
+            local files = {}
+            for path, _ in pairs(coverage_data.files) do
+              table.insert(files, path:match("([^/]+)$") or path)
+            end
+            return files
+          end)(),
+          ", "
+        )
+      })
+    end
+    return false
+  end
+  
+  -- Direct access to file data is more reliable than going through accessors
+  local file_data = coverage_data.files[normalized_path]
+  
+  -- First check execution counts - most reliable indicator
+  if file_data._execution_counts and file_data._execution_counts[line_num] and 
+     file_data._execution_counts[line_num] > 0 then
     return true
   end
   
-  -- Fall back to covered lines table if _executed_lines doesn't exist or is empty
-  local covered_lines = M.get_file_covered_lines(file_path)
-  return covered_lines and covered_lines[line_num] == true
+  -- Then check executed lines
+  if file_data._executed_lines and file_data._executed_lines[line_num] then
+    return true
+  end
+  
+  -- Fall back to covered lines table if other methods fail
+  -- This maintains backward compatibility with older code
+  if file_data.lines and file_data.lines[line_num] then
+    return true
+  end
+  
+  -- Check global coverage data as a last resort
+  local line_key = normalized_path .. ":" .. line_num
+  if coverage_data.executed_lines and coverage_data.executed_lines[line_key] then
+    return true
+  end
+  
+  return false
 end
 
 ---@param file_path string Path to the file containing the function
@@ -1755,7 +2265,49 @@ function M.track_block(file_path, line_num, block_id, block_type, parent_id)
     )
   end
   
-  local normalized_path = fs.normalize_path(file_path)
+  -- Use safe_io_operation for more robust path normalization with error handling
+  local normalized_path, normalize_err = error_handler.safe_io_operation(
+    function() return fs.normalize_path(file_path) end,
+    file_path,
+    {operation = "track_block.normalize_path"}
+  )
+  
+  if not normalized_path then
+    -- Only show as warning if this isn't a test file path
+    local is_test_file = file_path and file_path:match("/tests/") ~= nil
+    
+    if is_test_file then
+      -- For test files, use debug level to reduce noise
+      logger.debug("Failed to normalize test file path", {
+        file_path = file_path,
+        error = error_handler.format_error(normalize_err),
+        operation = "track_block",
+        fallback_behavior = "using original path"
+      })
+    else
+      -- For non-test files, this could be a real issue
+      logger.warn("Failed to normalize path", {
+        file_path = file_path,
+        error = error_handler.format_error(normalize_err),
+        operation = "track_block",
+        fallback_behavior = "using original path"
+      })
+    end
+    normalized_path = file_path -- Fallback to original path
+  end
+  
+  -- Add debug logging for path normalization to help diagnose issues
+  if config.debug and logger.is_debug_enabled() then
+    logger.debug("Path normalization for block tracking", {
+      original_path = file_path,
+      normalized_path = normalized_path,
+      operation = "track_block.normalize_path",
+      same = (file_path == normalized_path),
+      block_id = block_id,
+      line_num = line_num,
+      timestamp = os.time() -- Add timestamp for debugging sequence issues
+    })
+  end
   
   -- Initialize file if needed
   if not coverage_data.files[normalized_path] then
@@ -1877,9 +2429,28 @@ function M.was_line_covered(file_path, line_num)
     return false
   end
   
-  -- Get covered lines for this file (these are validated by test assertions)
-  local covered_lines = M.get_file_covered_lines(file_path)
-  return covered_lines and covered_lines[line_num] == true
+  -- Normalize the path for consistent lookup
+  local normalized_path = fs.normalize_path(file_path)
+  
+  -- IMPORTANT: A line is only considered covered if it was explicitly marked
+  -- as covered, usually through assertions or explicit coverage markers
+  -- Manual track_line calls with is_covered=false shouldn't be considered covered
+  
+  -- Direct access to file data for more reliable lookup
+  local coverage_data = M.get_coverage_data()
+  local file_data = coverage_data.files[normalized_path]
+  if not file_data then
+    return false
+  end
+  
+  -- For our test, we only want to consider the lines that were explicitly marked as covered
+  -- through mark_line_covered(), not just any executed line
+  
+  -- Get lines marked as covered (these are validated by test assertions)
+  local covered_lines = file_data.lines or {}
+  
+  -- Return true only if the line was explicitly marked as covered
+  return covered_lines[line_num] == true
 end
 
 ---@param file_path string Path to the file containing the block
@@ -2177,7 +2748,13 @@ function M.track_line(file_path, line_num, options)
       options.use_enhanced_classification = true -- Default to enhanced classification
     end
     
-    local normalized_path, err = fs.normalize_path(file_path)
+    -- Use safe_io_operation for more robust path normalization with error handling
+    local normalized_path, normalize_err = error_handler.safe_io_operation(
+      function() return fs.normalize_path(file_path) end,
+      file_path,
+      {operation = "track_line.normalize_path"}
+    )
+    
     if not normalized_path then
       -- Only show as warning if this isn't a test file path
       local is_test_file = file_path and file_path:match("/tests/") ~= nil
@@ -2186,18 +2763,31 @@ function M.track_line(file_path, line_num, options)
         -- For test files, use debug level to reduce noise
         logger.debug("Failed to normalize test file path", {
           file_path = file_path,
-          error = err and err.message or "unknown error",
-          operation = "track_line"
+          error = error_handler.format_error(normalize_err),
+          operation = "track_line",
+          fallback_behavior = "using original path"
         })
       else
         -- For non-test files, this could be a real issue
         logger.warn("Failed to normalize path", {
           file_path = file_path,
-          error = err and err.message or "unknown error",
-          operation = "track_line"
+          error = error_handler.format_error(normalize_err),
+          operation = "track_line",
+          fallback_behavior = "using original path"
         })
       end
       normalized_path = file_path -- Fallback to original path
+    end
+    
+    -- Add debug logging for path normalization to help diagnose issues
+    if config.debug and logger.is_debug_enabled() then
+      logger.debug("Path normalization for tracking", {
+        original_path = file_path,
+        normalized_path = normalized_path,
+        operation = "track_line.normalize_path",
+        same = (file_path == normalized_path),
+        timestamp = os.time() -- Add timestamp for debugging sequence issues
+      })
     end
     
     -- Initialize file data if needed
@@ -2585,7 +3175,22 @@ function M.track_blocks_for_line(file_path, line_num)
     start_time = os.clock()
   end
   
-  local normalized_path = fs.normalize_path(file_path)
+  -- Use safe_io_operation for more robust path normalization with error handling
+  local normalized_path, normalize_err = error_handler.safe_io_operation(
+    function() return fs.normalize_path(file_path) end,
+    file_path,
+    {operation = "track_blocks_for_line.normalize_path"}
+  )
+  
+  if not normalized_path then
+    logger.debug("Failed to normalize path for block tracking", {
+      file_path = file_path,
+      error = error_handler.format_error(normalize_err),
+      operation = "track_blocks_for_line",
+      fallback_behavior = "using original path"
+    })
+    normalized_path = file_path -- Fallback to original path
+  end
   
   -- Skip if we don't have file data or code map
   if not M.has_file(file_path) then
@@ -2635,7 +3240,25 @@ end
 ---@return table|nil block_data Updated block data with execution information
 -- Process a single block's execution with complete metadata
 function M.track_block_execution(file_path, block)
-  local normalized_path = fs.normalize_path(file_path)
+  -- Use safe_io_operation for more robust path normalization with error handling
+  local normalized_path, normalize_err = error_handler.safe_io_operation(
+    function() return fs.normalize_path(file_path) end,
+    file_path,
+    {operation = "track_block_execution.normalize_path"}
+  )
+  
+  if not normalized_path then
+    logger.debug("Failed to normalize path for block execution tracking", {
+      file_path = file_path,
+      error = error_handler.format_error(normalize_err),
+      operation = "track_block_execution",
+      fallback_behavior = "using original path",
+      block_id = block and block.id or "unknown",
+      block_type = block and block.type or "unknown"
+    })
+    normalized_path = file_path -- Fallback to original path
+  end
+  
   local logical_chunks = M.get_file_logical_chunks(file_path)
   
   -- Get or create block record
@@ -2689,9 +3312,11 @@ function M.track_block_execution(file_path, block)
     coverage_data.blocks.covered[block_key] = true
   end
   
-  -- Process parent blocks to ensure proper parent-child relationships
+  -- Enhanced parent-child relationship tracking with robust handling of deep hierarchies
   if block_copy.parent_id and block_copy.parent_id ~= "root" then
     local code_map = M.get_file_code_map(file_path)
+    local parent_tracked = false
+    
     if code_map then
       -- Find the parent block in the code map
       local parent_block
@@ -2705,29 +3330,104 @@ function M.track_block_execution(file_path, block)
       -- If parent found, track its execution too
       if parent_block then
         local parent_data = M.track_block_execution(file_path, parent_block)
+        parent_tracked = true
         
-        -- Verbose logging for parent tracking
-        if parent_data and config.verbose and logger.is_verbose_enabled() then
-          logger.verbose("Tracked parent block", {
-            block_id = parent_data.id,
-            child_id = block_copy.id,
-            file_path = normalized_path,
-            execution_count = parent_data.execution_count
-          })
-        end
-      else
-        -- Get parent from current logical_chunks if not found in code map
-        local parent_chunk = logical_chunks[block_copy.parent_id]
-        if parent_chunk then
-          parent_chunk.executed = true
-          parent_chunk.execution_count = (parent_chunk.execution_count or 0) + 1
-          parent_chunk.last_executed = os.time()
-          M.add_block(file_path, block_copy.parent_id, parent_chunk)
+        -- Ensure bidirectional relationship is properly maintained
+        if parent_data then
+          -- Initialize children array if needed
+          parent_data.children = parent_data.children or {}
           
-          -- Update execution tracking
-          local parent_key = normalized_path .. ":" .. block_copy.parent_id
-          coverage_data.blocks.all[parent_key] = true
-          coverage_data.blocks.executed[parent_key] = true
+          -- Add this block as a child if not already present
+          local already_child = false
+          for _, child_id in ipairs(parent_data.children) do
+            if child_id == block_copy.id then
+              already_child = true
+              break
+            end
+          end
+          
+          -- Add child reference if not already a child
+          if not already_child then
+            table.insert(parent_data.children, block_copy.id)
+            
+            -- Debug logging for new relationship
+            if config.debug and logger.is_debug_enabled() then
+              logger.debug("Added child to parent's children array", {
+                file_path = normalized_path,
+                parent_id = parent_data.id,
+                child_id = block_copy.id,
+                parent_type = parent_data.type,
+                child_type = block_copy.type
+              })
+            end
+          end
+          
+          -- Verbose logging for parent tracking
+          if config.verbose and logger.is_verbose_enabled() then
+            logger.verbose("Tracked parent block", {
+              block_id = parent_data.id,
+              child_id = block_copy.id,
+              file_path = normalized_path,
+              execution_count = parent_data.execution_count,
+              child_count = #parent_data.children
+            })
+          end
+        end
+      end
+    end
+    
+    -- If parent wasn't tracked from code map, try from logical chunks
+    if not parent_tracked then
+      local parent_chunk = logical_chunks[block_copy.parent_id]
+      if parent_chunk then
+        parent_chunk.executed = true
+        parent_chunk.execution_count = (parent_chunk.execution_count or 0) + 1
+        parent_chunk.last_executed = os.time()
+        
+        -- Ensure children array exists
+        parent_chunk.children = parent_chunk.children or {}
+        
+        -- Add this block as a child if not already present
+        local already_child = false
+        for _, child_id in ipairs(parent_chunk.children) do
+          if child_id == block_copy.id then
+            already_child = true
+            break
+          end
+        end
+        
+        -- Add child reference if not already a child
+        if not already_child then
+          table.insert(parent_chunk.children, block_copy.id)
+          
+          -- Debug logging for new relationship from existing parent
+          if config.debug and logger.is_debug_enabled() then
+            logger.debug("Added child to existing parent's children array", {
+              file_path = normalized_path,
+              parent_id = parent_chunk.id,
+              child_id = block_copy.id,
+              parent_type = parent_chunk.type,
+              child_type = block_copy.type
+            })
+          end
+        end
+        
+        -- Update parent in storage
+        M.add_block(file_path, block_copy.parent_id, parent_chunk)
+        
+        -- Update execution tracking
+        local parent_key = normalized_path .. ":" .. block_copy.parent_id
+        coverage_data.blocks.all[parent_key] = true
+        coverage_data.blocks.executed[parent_key] = true
+        parent_tracked = true
+      else
+        -- Parent not found yet, will be handled through deferred relationships in add_block
+        if config.debug and logger.is_debug_enabled() then
+          logger.debug("Parent not found during block execution, will be deferred", {
+            file_path = normalized_path,
+            child_id = block_copy.id,
+            parent_id = block_copy.parent_id
+          })
         end
       end
     end
@@ -2766,7 +3466,22 @@ function M.track_conditions_for_line(file_path, line_num, execution_context)
     start_time = os.clock()
   end
   
-  local normalized_path = fs.normalize_path(file_path)
+  -- Use safe_io_operation for more robust path normalization with error handling
+  local normalized_path, normalize_err = error_handler.safe_io_operation(
+    function() return fs.normalize_path(file_path) end,
+    file_path,
+    {operation = "track_conditions_for_line.normalize_path"}
+  )
+  
+  if not normalized_path then
+    logger.debug("Failed to normalize path for condition tracking", {
+      file_path = file_path,
+      error = error_handler.format_error(normalize_err),
+      operation = "track_conditions_for_line",
+      fallback_behavior = "using original path"
+    })
+    normalized_path = file_path -- Fallback to original path
+  end
   
   -- Skip if we don't have file data or code map
   if not M.has_file(file_path) then
@@ -3034,6 +3749,24 @@ end
 ---@return coverage.debug_hook The reset debug hook module
 -- Reset coverage data with enhanced structure
 function M.reset()
+  -- Store existing files for re-initialization if preserve_structure is set
+  local existing_files = {}
+  if config.preserve_file_structure and coverage_data and coverage_data.files then
+    for file_path, file_data in pairs(coverage_data.files) do
+      -- Preserve file structure but clear execution data
+      existing_files[file_path] = {
+        source_text = file_data.source_text,
+        content = file_data.content,
+        original_path = file_data.original_path,
+        display_path = file_data.display_path,
+        discovered = file_data.discovered,
+        active = file_data.active,
+        line_classification = file_data.line_classification,
+        executable_lines = file_data.executable_lines
+      }
+    end
+  end
+  
   -- Reset coverage data with enhanced structure
   coverage_data = {
     files = {},                   -- File metadata and content
@@ -3059,8 +3792,31 @@ function M.reset()
     }
   }
   
-  -- Reset tracking data
-  tracked_files = {}
+  -- Re-initialize files if preserve structure is enabled
+  if config.preserve_file_structure and next(existing_files) then
+    for file_path, file_data in pairs(existing_files) do
+      coverage_data.files[file_path] = file_data
+      coverage_data.files[file_path]._executed_lines = {}
+      coverage_data.files[file_path]._execution_counts = {}
+      coverage_data.files[file_path].logical_chunks = {}
+      coverage_data.files[file_path]._pending_child_blocks = {}
+      
+      -- Mark file as tracked to avoid re-initialization
+      tracked_files[file_path] = true
+    end
+    
+    logger.debug("Reset coverage data but preserved file structure", {
+      preserved_files = table.getn and table.getn(existing_files) or #existing_files,
+      operation = "reset.preserve_structure"
+    })
+  else
+    -- Reset tracking data completely
+    tracked_files = {}
+    
+    logger.debug("Full coverage data reset", {
+      operation = "reset.full"
+    })
+  end
   
   -- Reset performance metrics
   performance_metrics = {
