@@ -85,6 +85,11 @@ local function should_track_file(file_path)
   -- Normalize the path
   local normalized_path = data_structure.normalize_path(file_path)
   
+  -- Always track test files - this makes debugging coverage easier
+  if normalized_path:match("/tests/") and normalized_path:match("_test%.lua$") then
+    return true
+  end
+  
   -- Get configuration safely
   local config = get_safe_config()
   

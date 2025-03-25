@@ -21,13 +21,13 @@ local data_structure = require("lib.coverage.data_structure")
 local line_classifier = require("lib.coverage.line_classifier")
 
 -- Version
-M._VERSION = "0.1.0"
+M._VERSION = "2.0.0" -- Updated version to reflect full v2 migration
 
 --- Initializes the coverage module with configuration
 ---@param config table Configuration table with include/exclude patterns and other settings
 ---@return boolean success Whether initialization was successful
 function M.init(config)
-  logger.info("Initializing coverage module (v2)")
+  logger.info("Initializing coverage module (version 2.0)")
   
   -- Store configuration in central_config
   if config then

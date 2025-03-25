@@ -124,15 +124,16 @@ h1, h2, h3 {
 }
 
 .covered {
-  background-color: rgba(76, 175, 80, 0.1);
+  background-color: rgba(76, 175, 80, 0.25);
 }
 
 .not-covered {
-  background-color: rgba(244, 67, 54, 0.1);
+  background-color: rgba(244, 67, 54, 0.25);
 }
 
 .not-executable {
   color: #999;
+  background-color: #f9f9f9;
 }
 
 .execution-count {
@@ -891,7 +892,13 @@ local function generate_file_source_html(file_data, file_id)
        line_data.line_type == "blank" then
       line_class = "not-executable"
     else
-      if line_data.executed or line_data.execution_count > 0 then
+      -- Always check execution count first as the most reliable indicator
+      if line_data.execution_count > 0 then
+        line_class = "covered"
+        -- Ensure consistency in line_data properties
+        line_data.executed = true
+        line_data.covered = true
+      elseif line_data.executed or line_data.covered then
         line_class = "covered"
       else
         line_class = "not-covered"
