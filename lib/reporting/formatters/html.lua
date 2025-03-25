@@ -1,539 +1,294 @@
----@class CoverageHtmlFormatter
----@field generate fun(coverage_data: table, output_path: string): boolean, string|nil Generates an HTML coverage report
----@field _VERSION string Version of this module
----@field format_coverage fun(coverage_data: table): string Formats coverage data as HTML
----@field write_coverage_report fun(coverage_data: table, file_path: string): boolean, string|nil Writes coverage data to a file
+---@class HTMLFormatter
+---@field generate fun(coverage_data: table, output_path: string): boolean, string|nil
 local M = {}
 
 -- Dependencies
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
-local fs = require("lib.tools.filesystem")
 local data_structure = require("lib.coverage.data_structure")
+local fs = require("lib.tools.filesystem")
+local central_config = require("lib.core.central_config")
 
 -- Version
-M._VERSION = "0.1.0"
+M._VERSION = "2.0.0"
 
--- CSS styles for the HTML report
-local CSS_STYLES = [[
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  color: #333;
-  margin: 0;
-  padding: 20px;
-}
+-- Include Tailwind CSS via CDN for styling
+local TAILWIND_CSS_CDN = "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
 
-h1, h2, h3 {
-  margin-top: 0;
-}
+-- Include Alpine.js via CDN for interactivity
+local ALPINE_JS_CDN = "https://cdn.jsdelivr.net/npm/alpinejs@3.13.0/dist/cdn.min.js"
 
-.summary {
-  background-color: #f5f5f5;
-  padding: 15px;
-  border-radius: 5px;
-  margin-bottom: 20px;
-}
+-- Include Heroicons via CDN for icons
+local HEROICONS_CDN = "https://cdn.jsdelivr.net/npm/@heroicons/vue@2.0.18/dist/outline.min.js"
 
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.summary-label {
-  font-weight: bold;
-  flex: 1;
-}
-
-.summary-value {
-  flex: 1;
-  text-align: right;
-}
-
-.files {
-  margin-bottom: 20px;
-}
-
-.file-item {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  border-bottom: 1px solid #eee;
-}
-
-.file-name {
-  flex: 3;
-}
-
-.file-coverage {
-  flex: 1;
-  text-align: right;
-}
-
-.progress {
-  background-color: #f5f5f5;
-  border-radius: 3px;
-  height: 20px;
-  margin-left: 10px;
-  margin-right: 10px;
-  flex: 2;
-  overflow: hidden;
-}
-
-.progress-bar {
-  background-color: #4CAF50;
-  height: 100%;
-}
-
-.low {
-  background-color: #F44336;
-}
-
-.medium {
-  background-color: #FF9800;
-}
-
-.high {
-  background-color: #4CAF50;
-}
-
-.source-code {
-  font-family: monospace;
-  white-space: pre;
-  margin-top: 20px;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-}
-
-.line {
-  display: flex;
-}
-
-.line-number {
-  width: 50px;
-  text-align: right;
-  padding-right: 10px;
-  border-right: 1px solid #ddd;
-  color: #999;
-  background-color: #f5f5f5;
-}
-
-.line-content {
-  padding-left: 10px;
-}
-
+-- Additional custom CSS for specific features
+local CUSTOM_CSS = [[
+/* Coverage specific styles */
 .covered {
-  background-color: rgba(76, 175, 80, 0.25);
+  background-color: #dcfce7; /* bg-green-100 */
 }
 
 .not-covered {
-  background-color: rgba(244, 67, 54, 0.25);
+  background-color: #fee2e2; /* bg-red-100 */
 }
 
 .not-executable {
-  color: #999;
-  background-color: #f9f9f9;
+  color: #6b7280; /* text-gray-500 */
+  background-color: #f9fafb; /* bg-gray-50 */
 }
 
 .execution-count {
   display: inline-block;
-  min-width: 30px;
+  width: 3rem; /* w-12 */
   text-align: right;
-  color: #666;
-  padding-right: 10px;
+  padding-right: 0.5rem; /* pr-2 */
+  color: #4b5563; /* text-gray-600 */
 }
 
-.file-summary {
-  background-color: #f5f5f5;
-  padding: 10px;
-  margin-bottom: 20px;
-  border-radius: 3px;
+/* Syntax highlighting */
+.keyword {
+  color: #7e22ce; /* text-purple-700 */
+  font-weight: 500; /* font-medium */
 }
 
-.function-list {
-  margin: 20px 0;
+.string {
+  color: #16a34a; /* text-green-600 */
 }
 
-.functions {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
+.comment {
+  color: #6b7280; /* text-gray-500 */
+  font-style: italic;
 }
 
-.functions th, .functions td {
-  padding: 8px;
-  text-align: left;
-  border-bottom: 1px solid #ddd;
+.number {
+  color: #2563eb; /* text-blue-600 */
 }
 
-.functions th {
-  background-color: #f5f5f5;
-  font-weight: bold;
-  cursor: pointer;
+.function {
+  color: #ca8a04; /* text-yellow-600 */
+  font-weight: 500; /* font-medium */
 }
 
-.functions th:hover {
-  background-color: #e5e5e5;
+/* Function table */
+.function-row {
+  transition-property: background-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 100ms;
 }
 
-.functions th::after {
-  content: "";
-  margin-left: 5px;
+.function-row:hover {
+  background-color: #f9fafb; /* hover:bg-gray-50 */
 }
 
-.functions th.sort-asc::after {
-  content: "▲";
+.function-row.executed {
+  background-color: #f0fdf4; /* bg-green-50 */
 }
 
-.functions th.sort-desc::after {
-  content: "▼";
+.function-row.not-executed {
+  background-color: #fef2f2; /* bg-red-50 */
 }
 
-.functions .executed {
-  color: #4CAF50;
+/* Custom scrollbar for code blocks */
+.source-code pre::-webkit-scrollbar {
+  width: 0.5rem; /* w-2 */
+  height: 0.5rem; /* h-2 */
 }
 
-.functions .not-executed {
-  color: #F44336;
+.source-code pre::-webkit-scrollbar-track {
+  background-color: #f3f4f6; /* bg-gray-100 */
+  border-radius: 0.25rem; /* rounded */
 }
 
-.functions .covered {
-  background-color: rgba(76, 175, 80, 0.1);
+.source-code pre::-webkit-scrollbar-thumb {
+  background-color: #9ca3af; /* bg-gray-400 */
+  border-radius: 0.25rem; /* rounded */
 }
 
-.functions .not-covered {
-  background-color: rgba(244, 67, 54, 0.1);
+.source-code pre::-webkit-scrollbar-thumb:hover {
+  background-color: #6b7280; /* hover:bg-gray-500 */
 }
 
-.function-type-badge {
-  display: inline-block;
-  font-size: 0.8em;
-  padding: 2px 6px;
-  border-radius: 10px;
-  background-color: #e0e0e0;
-  color: #333;
-  margin-left: 5px;
-}
-
-.function-type-global {
-  background-color: #bbdefb;
-  color: #0d47a1;
-}
-
-.function-type-local {
-  background-color: #c8e6c9;
-  color: #1b5e20;
-}
-
-.function-type-method {
-  background-color: #d1c4e9;
-  color: #4527a0;
-}
-
-.function-type-anonymous {
-  background-color: #ffe0b2;
-  color: #e65100;
-}
-
-.function-type-closure {
-  background-color: #f8bbd0;
-  color: #880e4f;
-}
-
-.function-filter {
-  margin: 10px 0;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.function-filter-item {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background-color: #f5f5f5;
-}
-
-.function-filter-item.active {
-  background-color: #e0e0e0;
-  font-weight: bold;
-}
-
-.function-filter-item input {
-  margin-right: 5px;
-}
-
-.function-count {
-  background-color: #f5f5f5;
-  border-radius: 10px;
-  padding: 2px 6px;
-  font-size: 0.8em;
-  margin-left: 5px;
-}
-
-.function-search {
-  margin-bottom: 10px;
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-
-.badge {
-  display: inline-block;
-  font-size: 0.8em;
-  padding: 2px 6px;
-  border-radius: 10px;
-  margin-left: 5px;
-}
-
-.badge-success {
-  background-color: #c8e6c9;
-  color: #1b5e20;
-}
-
-.badge-danger {
-  background-color: #ffcdd2;
-  color: #b71c1c;
-}
-
-.badge-warning {
-  background-color: #ffe0b2;
-  color: #e65100;
-}
-
-.badge-info {
-  background-color: #bbdefb;
-  color: #0d47a1;
-}
-
-/* For JavaScript interaction */
-.function-sort-script {
-  display: none;
+/* Print specific styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-break-inside-avoid {
+    break-inside: avoid;
+  }
+  
+  .print-break-before {
+    break-before: page;
+  }
 }
 ]]
 
---- Generates the HTML summary section
----@param summary table The coverage summary data
----@return string html The HTML code for the summary section
-local function generate_summary_html(summary)
-  -- Calculate color classes for summary bars
-  local line_coverage_class = "low"
-  if summary.line_coverage_percent >= 80 then
-    line_coverage_class = "high"
-  elseif summary.line_coverage_percent >= 50 then
-    line_coverage_class = "medium"
-  end
-  
-  local func_coverage_class = "low"
-  if summary.function_coverage_percent >= 80 then
-    func_coverage_class = "high"
-  elseif summary.function_coverage_percent >= 50 then
-    func_coverage_class = "medium"
-  end
-  
-  local html = [[
-<div class="summary">
-  <h2>Coverage Summary</h2>
-  
-  <!-- Coverage visualization -->
-  <div style="margin-bottom: 20px;">
-    <div style="margin-bottom: 10px;">
-      <strong>Line Coverage: ]] .. summary.line_coverage_percent .. [[%</strong>
-      <div class="progress" style="margin: 5px 0; height: 15px;">
-        <div class="progress-bar ]] .. line_coverage_class .. [[" style="width: ]] .. summary.line_coverage_percent .. [[%;"></div>
-      </div>
-    </div>
+-- Alpine.js components for interactive features
+local ALPINE_COMPONENTS = [[
+// File list filtering component
+window.fileListFilter = function() {
+  return {
+    searchQuery: '',
+    selectedCoverage: 'all',
+    showArchived: false,
     
-    <div style="margin-bottom: 10px;">
-      <strong>Function Coverage: ]] .. summary.function_coverage_percent .. [[%</strong>
-      <div class="progress" style="margin: 5px 0; height: 15px;">
-        <div class="progress-bar ]] .. func_coverage_class .. [[" style="width: ]] .. summary.function_coverage_percent .. [[%;"></div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="summary-row">
-    <span class="summary-label">Total Files:</span>
-    <span class="summary-value">]] .. summary.total_files .. [[</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Covered Files:</span>
-    <span class="summary-value">]] .. summary.covered_files .. " / " .. summary.total_files .. [[ (]] .. summary.file_coverage_percent .. [[%)</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Total Lines:</span>
-    <span class="summary-value">]] .. summary.total_lines .. [[</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Executable Lines:</span>
-    <span class="summary-value">]] .. summary.executable_lines .. [[</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Executed Lines:</span>
-    <span class="summary-value">]] .. summary.executed_lines .. " / " .. summary.executable_lines .. [[ (]] .. summary.execution_coverage_percent .. [[%)</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Covered Lines:</span>
-    <span class="summary-value">]] .. summary.covered_lines .. " / " .. summary.executable_lines .. [[ (]] .. summary.line_coverage_percent .. [[%)</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Total Functions:</span>
-    <span class="summary-value">]] .. summary.total_functions .. [[</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Executed Functions:</span>
-    <span class="summary-value">]] .. summary.executed_functions .. " / " .. summary.total_functions .. [[ (]] .. (summary.total_functions > 0 and math.floor((summary.executed_functions / summary.total_functions) * 100) or 0) .. [[%)</span>
-  </div>
-  <div class="summary-row">
-    <span class="summary-label">Covered Functions:</span>
-    <span class="summary-value">]] .. summary.covered_functions .. " / " .. summary.total_functions .. [[ (]] .. summary.function_coverage_percent .. [[%)</span>
-  </div>
-  
-  <!-- Function type breakdown -->
-  <div style="margin-top: 15px;" id="function-type-breakdown">
-    <h3>Function Types</h3>
-    <div id="function-type-chart" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
-      <!-- This will be populated with JavaScript -->
-    </div>
-  </div>
-</div>
-
-<script>
-// Function to collect and display function type statistics
-(function() {
-  document.addEventListener('DOMContentLoaded', function() {
-    // Count types
-    const typeCounts = {
-      global: 0,
-      local: 0,
-      method: 0,
-      anonymous: 0,
-      closure: 0,
-      total: 0,
-      executed: 0
-    };
-    
-    // Collect stats from all function rows
-    document.querySelectorAll('tr[data-function-type]').forEach(row => {
-      const type = row.dataset.functionType;
-      const executed = row.dataset.executed === 'true';
+    get filteredFiles() {
+      let files = this.files;
       
-      if (typeCounts[type] !== undefined) {
-        typeCounts[type]++;
-        typeCounts.total++;
-        if (executed) typeCounts.executed++;
+      // Filter by search query
+      if (this.searchQuery.trim() !== '') {
+        const query = this.searchQuery.toLowerCase();
+        files = files.filter(file => 
+          file.path.toLowerCase().includes(query)
+        );
       }
-    });
-    
-    // Create chart
-    const chart = document.getElementById('function-type-chart');
-    if (!chart) return;
-    
-    const typeColors = {
-      global: { bg: '#bbdefb', text: '#0d47a1' },
-      local: { bg: '#c8e6c9', text: '#1b5e20' },
-      method: { bg: '#d1c4e9', text: '#4527a0' },
-      anonymous: { bg: '#ffe0b2', text: '#e65100' },
-      closure: { bg: '#f8bbd0', text: '#880e4f' }
-    };
-    
-    // Add a box for each type
-    Object.keys(typeColors).forEach(type => {
-      if (typeCounts[type] > 0) {
-        const box = document.createElement('div');
-        const percent = ((typeCounts[type] / typeCounts.total) * 100).toFixed(1);
-        box.className = 'function-type-box';
-        box.style.padding = '8px 12px';
-        box.style.borderRadius = '4px';
-        box.style.backgroundColor = typeColors[type].bg;
-        box.style.color = typeColors[type].text;
-        box.style.fontWeight = 'bold';
-        box.style.minWidth = '120px';
-        box.innerHTML = `
-          ${type}: <strong>${typeCounts[type]}</strong><br>
-          <small>${percent}% of functions</small>
-        `;
-        chart.appendChild(box);
+      
+      // Filter by coverage level
+      if (this.selectedCoverage !== 'all') {
+        files = files.filter(file => {
+          const coverage = parseFloat(file.coverage);
+          if (this.selectedCoverage === 'high') return coverage >= 80;
+          if (this.selectedCoverage === 'medium') return coverage >= 50 && coverage < 80;
+          if (this.selectedCoverage === 'low') return coverage < 50;
+          return true;
+        });
       }
-    });
-    
-    // Add executed count
-    if (typeCounts.total > 0) {
-      const executedBox = document.createElement('div');
-      const percent = ((typeCounts.executed / typeCounts.total) * 100).toFixed(1);
-      executedBox.className = 'function-type-box';
-      executedBox.style.padding = '8px 12px';
-      executedBox.style.borderRadius = '4px';
-      executedBox.style.backgroundColor = '#dcedc8';
-      executedBox.style.color = '#33691e';
-      executedBox.style.fontWeight = 'bold';
-      executedBox.style.minWidth = '120px';
-      executedBox.innerHTML = `
-        Executed: <strong>${typeCounts.executed}</strong><br>
-        <small>${percent}% of total</small>
-      `;
-      chart.appendChild(executedBox);
+      
+      return files;
     }
-  });
-})();
-</script>
-]]
+  };
+}
 
-  return html
-end
-
---- Generates the HTML file list section
----@param coverage_data table The coverage data
----@return string html The HTML code for the file list section
-local function generate_file_list_html(coverage_data)
-  local html = [[
-<div class="files">
-  <h2>Covered Files</h2>
-]]
-
-  -- Sort files by path
-  local files = {}
-  for path, file_data in pairs(coverage_data.files) do
-    table.insert(files, { path = path, data = file_data })
-  end
-  
-  table.sort(files, function(a, b) return a.path < b.path end)
-  
-  -- Generate file items
-  for _, file in ipairs(files) do
-    local file_data = file.data
-    local path = file.path
-    local coverage_percent = file_data.line_coverage_percent
+// Function list filtering and sorting component
+window.functionList = function() {
+  return {
+    searchQuery: '',
+    typeFilters: [],
+    statusFilter: 'all',
+    sortColumn: 'lines',
+    sortDirection: 'asc',
     
-    local coverage_class = "low"
-    if coverage_percent >= 80 then
-      coverage_class = "high"
-    elseif coverage_percent >= 50 then
-      coverage_class = "medium"
-    end
+    toggleSort(column) {
+      if (this.sortColumn === column) {
+        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        this.sortColumn = column;
+        this.sortDirection = 'asc';
+      }
+    },
     
-    html = html .. [[
-  <div class="file-item">
-    <div class="file-name"><a href="#file-]] .. path:gsub("[^%w]", "-") .. [[">]] .. path .. [[</a></div>
-    <div class="progress">
-      <div class="progress-bar ]] .. coverage_class .. [[" style="width: ]] .. coverage_percent .. [[%;"></div>
-    </div>
-    <div class="file-coverage">]] .. coverage_percent .. [[%</div>
-  </div>
-]]
-  end
-  
-  html = html .. [[
-</div>
-]]
+    getSortedFunctions() {
+      let functions = [...this.functions];
+      
+      // Apply sorting
+      functions.sort((a, b) => {
+        let aValue = a[this.sortColumn];
+        let bValue = b[this.sortColumn];
+        
+        if (this.sortColumn === 'lines') {
+          aValue = parseInt(a.startLine);
+          bValue = parseInt(b.startLine);
+        } else if (this.sortColumn === 'count') {
+          aValue = parseInt(a.executionCount);
+          bValue = parseInt(b.executionCount);
+        }
+        
+        if (aValue < bValue) return this.sortDirection === 'asc' ? -1 : 1;
+        if (aValue > bValue) return this.sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+      
+      return functions;
+    },
+    
+    get filteredFunctions() {
+      let functions = this.getSortedFunctions();
+      
+      // Filter by search query
+      if (this.searchQuery.trim() !== '') {
+        const query = this.searchQuery.toLowerCase();
+        functions = functions.filter(func => 
+          func.name.toLowerCase().includes(query)
+        );
+      }
+      
+      // Filter by type
+      if (this.typeFilters.length > 0) {
+        functions = functions.filter(func => 
+          this.typeFilters.includes(func.type)
+        );
+      }
+      
+      // Filter by execution status
+      if (this.statusFilter !== 'all') {
+        functions = functions.filter(func => {
+          if (this.statusFilter === 'executed') return func.executed;
+          if (this.statusFilter === 'not-executed') return !func.executed;
+          return true;
+        });
+      }
+      
+      return functions;
+    },
+    
+    getSortIcon(column) {
+      if (this.sortColumn !== column) return 'none';
+      return this.sortDirection === 'asc' ? 'asc' : 'desc';
+    }
+  };
+}
 
-  return html
-end
+// Line highlighting component
+window.lineHighlighting = function() {
+  return {
+    init() {
+      // Set up line highlighting
+      const hashId = window.location.hash;
+      if (hashId && hashId.startsWith('#L')) {
+        const lineElem = document.querySelector(hashId);
+        if (lineElem) {
+          lineElem.classList.add('bg-yellow-100');
+          lineElem.scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+      }
+      
+      // Set up line linking
+      document.querySelectorAll('.line-number a').forEach(link => {
+        link.addEventListener('click', (e) => {
+          // Remove existing highlights
+          document.querySelectorAll('.bg-yellow-100').forEach(el => {
+            if (el.classList.contains('line')) {
+              el.classList.remove('bg-yellow-100');
+            }
+          });
+          
+          // Add highlight to clicked line
+          const lineId = link.getAttribute('href');
+          const lineElem = document.querySelector(lineId);
+          if (lineElem) {
+            lineElem.classList.add('bg-yellow-100');
+          }
+        });
+      });
+    }
+  };
+}
+
+// Source code syntax highlighting component
+window.syntaxHighlighting = function() {
+  return {
+    highlightSyntax(code) {
+      // Simple Lua syntax highlighting
+      return code
+        .replace(/\\b(function|local|end|if|then|else|elseif|for|in|do|while|repeat|until|return|break|nil|true|false|and|or|not)\\b/g, '<span class="keyword">$1</span>')
+        .replace(/("[^"]*")/g, '<span class="string">$1</span>')
+        .replace(/(--[^\\n]*)/g, '<span class="comment">$1</span>')
+        .replace(/\\b(\\d+)\\b/g, '<span class="number">$1</span>');
+    }
+  };
+}
+]]
 
 --- Escapes HTML special characters
 ---@param text string The text to escape
@@ -542,316 +297,620 @@ local function escape_html(text)
   return text:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;")
 end
 
+--- Generates the HTML overview section
+---@param coverage_data table The coverage data
+---@return string html The HTML code for the overview section
+local function generate_overview_html(coverage_data)
+  local summary = coverage_data.summary
+  local file_count = summary.total_files
+  local line_coverage = math.floor(summary.line_coverage_percent + 0.5)
+  local function_coverage = math.floor(summary.function_coverage_percent + 0.5)
+  local executed_files = summary.executed_files
+  local executed_lines = summary.executed_lines
+  local total_lines = summary.total_lines
+  local executable_lines = summary.executable_lines
+  local executed_functions = summary.executed_functions
+  local total_functions = summary.total_functions
+  
+  -- Calculate coverage grade
+  local coverage_grade = "F"
+  local coverage_color = "bg-red-500"
+  
+  if line_coverage >= 90 then
+    coverage_grade = "A"
+    coverage_color = "bg-green-500"
+  elseif line_coverage >= 80 then
+    coverage_grade = "B"
+    coverage_color = "bg-green-400"
+  elseif line_coverage >= 70 then
+    coverage_grade = "C"
+    coverage_color = "bg-yellow-400"
+  elseif line_coverage >= 60 then
+    coverage_grade = "D"
+    coverage_color = "bg-yellow-500"
+  elseif line_coverage >= 50 then
+    coverage_grade = "E"
+    coverage_color = "bg-orange-500"
+  end
+  
+  local html = [[
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex items-center justify-between mb-8">
+      <h1 class="text-3xl font-bold text-gray-900">Coverage Report</h1>
+      <div class="flex space-x-2">
+        <button onclick="window.print()" class="no-print inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Print
+        </button>
+        <div class="relative" x-data="{ open: false }">
+          <button @click="open = !open" class="no-print inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Export
+          </button>
+          <div x-show="open" @click.away="open = false" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+            <div class="py-1">
+              <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export as JSON</a>
+              <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export as LCOV</a>
+              <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export as XML</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+      <div class="border-b border-gray-200 px-4 py-5 sm:px-6">
+        <h3 class="text-lg leading-6 font-medium text-gray-900">Coverage Summary</h3>
+        <p class="mt-1 max-w-2xl text-sm text-gray-500">Coverage information for ]] .. file_count .. [[ files.</p>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+        <!-- Overall Coverage Card -->
+        <div class="bg-white overflow-hidden shadow rounded-lg divide-y divide-gray-200">
+          <div class="px-6 py-5 flex items-center justify-between">
+            <span class="text-lg font-medium text-gray-900">Overall Coverage</span>
+            <span class="inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium ]] .. coverage_color .. [[ text-white">
+              Grade ]] .. coverage_grade .. [[
+            </span>
+          </div>
+          <div class="px-6 py-5">
+            <div class="flex items-end">
+              <h3 class="text-5xl font-extrabold text-gray-900">]] .. line_coverage .. [[%</h3>
+              <p class="ml-2 text-sm text-gray-500">line coverage</p>
+            </div>
+            <div class="mt-4 w-full bg-gray-200 rounded-full h-2.5">
+              <div class="]] .. coverage_color .. [[ h-2.5 rounded-full" style="width: ]] .. line_coverage .. [[%"></div>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <dt class="text-sm font-medium text-gray-500 truncate">Lines Covered</dt>
+                <dd class="mt-1 text-xl font-semibold text-gray-900">]] .. executed_lines .. [[ / ]] .. executable_lines .. [[</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500 truncate">Functions Covered</dt>
+                <dd class="mt-1 text-xl font-semibold text-gray-900">]] .. executed_functions .. [[ / ]] .. total_functions .. [[</dd>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Line Coverage Card -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="px-6 py-5">
+            <h3 class="text-lg font-medium text-gray-900">Line Coverage</h3>
+            <div class="mt-2 flex items-center">
+              <div class="flex-1">
+                <div class="flex items-end">
+                  <h4 class="text-4xl font-extrabold text-gray-900">]] .. line_coverage .. [[%</h4>
+                  <p class="ml-2 text-sm text-gray-500">]] .. executed_lines .. [[ / ]] .. executable_lines .. [[ lines</p>
+                </div>
+                <div class="mt-4 w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-blue-500 h-2.5 rounded-full" style="width: ]] .. line_coverage .. [[%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="text-sm">
+                  <span class="text-gray-500">Total:</span>
+                  <span class="font-medium text-gray-900">]] .. total_lines .. [[ lines</span>
+                </div>
+                <div class="text-sm">
+                  <span class="text-gray-500">Executable:</span>
+                  <span class="font-medium text-gray-900">]] .. executable_lines .. [[ lines</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Function Coverage Card -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="px-6 py-5">
+            <h3 class="text-lg font-medium text-gray-900">Function Coverage</h3>
+            <div class="mt-2 flex items-center">
+              <div class="flex-1">
+                <div class="flex items-end">
+                  <h4 class="text-4xl font-extrabold text-gray-900">]] .. function_coverage .. [[%</h4>
+                  <p class="ml-2 text-sm text-gray-500">]] .. executed_functions .. [[ / ]] .. total_functions .. [[ functions</p>
+                </div>
+                <div class="mt-4 w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-indigo-500 h-2.5 rounded-full" style="width: ]] .. function_coverage .. [[%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="text-sm">
+                  <span class="text-gray-500">Global:</span>
+                  <span class="font-medium text-gray-900">]] .. (summary.global_functions or 0) .. [[ functions</span>
+                </div>
+                <div class="text-sm">
+                  <span class="text-gray-500">Local:</span>
+                  <span class="font-medium text-gray-900">]] .. (summary.local_functions or 0) .. [[ functions</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ]]
+
+  return html
+end
+
+--- Generates the HTML file list section
+---@param coverage_data table The coverage data
+---@return string html The HTML code for the file list section
+---@return string file_data_json JSON data for the file list
+local function generate_file_list_html(coverage_data)
+  -- Prepare file data
+  local files = {}
+  local file_data_array = {}
+  
+  for path, file_data in pairs(coverage_data.files) do
+    table.insert(files, { 
+      path = path, 
+      data = file_data,
+      coverage = file_data.line_coverage_percent,
+      coverage_class = file_data.line_coverage_percent >= 80 and "high" or (file_data.line_coverage_percent >= 50 and "medium" or "low")
+    })
+    
+    -- Build file data array for Alpine.js
+    table.insert(file_data_array, {
+      path = path,
+      coverage = tostring(file_data.line_coverage_percent),
+      executable_lines = file_data.executable_lines,
+      executed_lines = file_data.executed_lines,
+      total_functions = file_data.total_functions
+    })
+  end
+  
+  -- Sort files by path
+  table.sort(files, function(a, b) return a.path < b.path end)
+  
+  -- Convert file data to JSON for Alpine.js
+  local file_data_json = "["
+  for i, file in ipairs(file_data_array) do
+    file_data_json = file_data_json .. [[
+      {
+        "path": "]] .. file.path .. [[",
+        "coverage": "]] .. file.coverage .. [[",
+        "executable_lines": ]] .. file.executable_lines .. [[,
+        "executed_lines": ]] .. file.executed_lines .. [[,
+        "total_functions": ]] .. file.total_functions .. [[
+      }]] .. (i < #file_data_array and "," or "")
+  end
+  file_data_json = file_data_json .. "]"
+  
+  local html = [[
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6" x-data="fileListFilter()" x-init="files = JSON.parse(']] .. file_data_json:gsub("'", "\\'") .. [[')">
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+      <div class="border-b border-gray-200 px-4 py-5 sm:px-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Covered Files</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">]] .. #files .. [[ files tracked for coverage</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-2">
+            <div class="relative rounded-md shadow-sm">
+              <input
+                type="text"
+                x-model="searchQuery"
+                placeholder="Search files..."
+                class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pr-10 sm:text-sm border-gray-300 rounded-md"
+              />
+              <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="flex space-x-1">
+              <button 
+                @click="selectedCoverage = 'all'" 
+                :class="{'bg-indigo-100 text-indigo-800': selectedCoverage === 'all', 'bg-white text-gray-600': selectedCoverage !== 'all'}"
+                class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+              >
+                All
+              </button>
+              <button 
+                @click="selectedCoverage = 'high'" 
+                :class="{'bg-green-100 text-green-800': selectedCoverage === 'high', 'bg-white text-gray-600': selectedCoverage !== 'high'}"
+                class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+              >
+                High
+              </button>
+              <button 
+                @click="selectedCoverage = 'medium'" 
+                :class="{'bg-yellow-100 text-yellow-800': selectedCoverage === 'medium', 'bg-white text-gray-600': selectedCoverage !== 'medium'}"
+                class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+              >
+                Medium
+              </button>
+              <button 
+                @click="selectedCoverage = 'low'" 
+                :class="{'bg-red-100 text-red-800': selectedCoverage === 'low', 'bg-white text-gray-600': selectedCoverage !== 'low'}"
+                class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+              >
+                Low
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                File
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Coverage
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Lines
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Functions
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="file in filteredFiles" :key="file.path">
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="flex-shrink-0 h-10 w-10 flex items-center justify-center bg-gray-100 rounded">
+                      <svg class="h-6 w-6 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div class="ml-4">
+                      <a :href="'#file-' + file.path.replace(/[^\\w]/g, '-')" class="text-sm font-medium text-indigo-600 hover:text-indigo-900 hover:underline">
+                        <span x-text="file.path"></span>
+                      </a>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div>
+                      <div class="text-sm font-medium text-gray-900" x-text="file.coverage + '%'"></div>
+                      <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          :class="{
+                            'bg-green-500': parseFloat(file.coverage) >= 80,
+                            'bg-yellow-500': parseFloat(file.coverage) >= 50 && parseFloat(file.coverage) < 80,
+                            'bg-red-500': parseFloat(file.coverage) < 50
+                          }"
+                          class="h-2.5 rounded-full" 
+                          :style="'width: ' + file.coverage + '%'"
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="text-sm text-gray-900">
+                    <span x-text="file.executed_lines"></span> / <span x-text="file.executable_lines"></span>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <span x-text="file.total_functions"></span>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="filteredFiles.length === 0">
+              <td colspan="4" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                No matching files found.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  ]]
+
+  return html, file_data_json
+end
+
+--- Generates the function list for a file
+---@param file_data table The file data
+---@param file_id string The file ID for DOM references
+---@return string html The HTML code for the function list
+---@return string functions_json JSON data for the functions
+local function generate_function_list(file_data, file_id)
+  if not file_data.functions or file_data.total_functions == 0 then
+    return "", "[]"
+  end
+  
+  -- Prepare function data for Alpine.js
+  local functions_array = {}
+  local functions_by_type = {
+    global = 0,
+    local_func = 0, -- Changed 'local' to 'local_func' to avoid Lua keyword conflict
+    method = 0,
+    anonymous = 0,
+    closure = 0
+  }
+  
+  for func_id, func_data in pairs(file_data.functions) do
+    if func_data then
+      local func_entry = {
+        id = func_id,
+        name = func_data.name or "anonymous",
+        type = func_data.type or "anonymous",
+        startLine = func_data.start_line or 0,
+        endLine = func_data.end_line or 0,
+        executed = func_data.executed and "true" or "false",
+        executionCount = func_data.execution_count or 0
+      }
+      
+      table.insert(functions_array, func_entry)
+      
+      -- Count by type
+      local type_key = func_data.type
+      if type_key == "local" then
+        type_key = "local_func" -- Convert "local" type to "local_func" key
+      end
+      
+      if functions_by_type[type_key] ~= nil then
+        functions_by_type[type_key] = functions_by_type[type_key] + 1
+      end
+    end
+  end
+  
+  -- Convert to JSON for Alpine.js
+  local functions_json = "["
+  for i, func in ipairs(functions_array) do
+    functions_json = functions_json .. [[
+      {
+        "id": "]] .. func.id .. [[",
+        "name": "]] .. func.name .. [[",
+        "type": "]] .. func.type .. [[",
+        "startLine": ]] .. func.startLine .. [[,
+        "endLine": ]] .. func.endLine .. [[,
+        "executed": ]] .. func.executed .. [[,
+        "executionCount": ]] .. func.executionCount .. [[
+      }]] .. (i < #functions_array and "," or "")
+  end
+  functions_json = functions_json .. "]"
+  
+  -- Create the HTML
+  local html = [[
+  <div x-data="functionList()" x-init="functions = JSON.parse(']] .. functions_json:gsub("'", "\\'") .. [[')">
+    <h4 class="text-base font-medium text-gray-900 mt-8 mb-4">Functions (]] .. file_data.total_functions .. [[)</h4>
+    
+    <div class="mb-4 flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+      <div class="relative rounded-md shadow-sm flex-grow">
+        <input
+          type="text"
+          x-model="searchQuery"
+          placeholder="Search functions..."
+          class="focus:ring-indigo-500 focus:border-indigo-500 block w-full pr-10 sm:text-sm border-gray-300 rounded-md"
+          id="func-search-]] .. file_id .. [["
+        />
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+          </svg>
+        </div>
+      </div>
+      
+      <div class="flex space-x-1">
+        <button 
+          @click="statusFilter = 'all'" 
+          :class="{'bg-indigo-100 text-indigo-800': statusFilter === 'all', 'bg-white text-gray-600': statusFilter !== 'all'}"
+          class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+        >
+          All
+        </button>
+        <button 
+          @click="statusFilter = 'executed'" 
+          :class="{'bg-green-100 text-green-800': statusFilter === 'executed', 'bg-white text-gray-600': statusFilter !== 'executed'}"
+          class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+        >
+          Executed
+        </button>
+        <button 
+          @click="statusFilter = 'not-executed'" 
+          :class="{'bg-red-100 text-red-800': statusFilter === 'not-executed', 'bg-white text-gray-600': statusFilter !== 'not-executed'}"
+          class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded hover:bg-gray-50 focus:outline-none"
+        >
+          Not Executed
+        </button>
+      </div>
+    </div>
+    
+    <div class="flex flex-wrap mb-4 gap-2">
+      <template x-for="(count, type) in {
+        global: ]] .. functions_by_type.global .. [[,
+        local: ]] .. functions_by_type.local_func .. [[,
+        method: ]] .. functions_by_type.method .. [[,
+        anonymous: ]] .. functions_by_type.anonymous .. [[,
+        closure: ]] .. functions_by_type.closure .. [[
+      }" :key="type">
+        <label 
+          class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium cursor-pointer"
+          :class="{
+            'bg-gray-100 text-gray-800': !typeFilters.includes(type),
+            'bg-indigo-100 text-indigo-800': typeFilters.includes(type)
+          }"
+        >
+          <input 
+            type="checkbox" 
+            class="form-checkbox h-3 w-3 text-indigo-600 mr-1.5" 
+            :value="type" 
+            x-model="typeFilters"
+          />
+          <span x-text="type.charAt(0).toUpperCase() + type.slice(1)"></span>
+          <span class="ml-1 text-gray-500" x-text="count"></span>
+        </label>
+      </template>
+    </div>
+
+    <div class="overflow-x-auto shadow border-b border-gray-200 sm:rounded-lg">
+      <table class="min-w-full divide-y divide-gray-200" id="functions-]] .. file_id .. [[">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" @click="toggleSort('name')">
+              <div class="flex items-center">
+                Name
+                <svg x-show="getSortIcon('name') === 'asc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+                <svg x-show="getSortIcon('name') === 'desc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" @click="toggleSort('type')">
+              <div class="flex items-center">
+                Type
+                <svg x-show="getSortIcon('type') === 'asc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+                <svg x-show="getSortIcon('type') === 'desc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" @click="toggleSort('lines')">
+              <div class="flex items-center">
+                Lines
+                <svg x-show="getSortIcon('lines') === 'asc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+                <svg x-show="getSortIcon('lines') === 'desc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" @click="toggleSort('executed')">
+              <div class="flex items-center">
+                Status
+                <svg x-show="getSortIcon('executed') === 'asc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+                <svg x-show="getSortIcon('executed') === 'desc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" @click="toggleSort('count')">
+              <div class="flex items-center">
+                Count
+                <svg x-show="getSortIcon('count') === 'asc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+                <svg x-show="getSortIcon('count') === 'desc'" class="ml-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <template x-for="func in filteredFunctions" :key="func.id">
+            <tr 
+              class="function-row"
+              :class="{
+                'executed': func.executed === 'true',
+                'not-executed': func.executed === 'false'
+              }"
+            >
+              <td class="px-4 py-3 whitespace-nowrap text-sm">
+                <div class="flex items-center">
+                  <span class="font-medium text-gray-900" x-text="func.name"></span>
+                </div>
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm">
+                <span 
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  :class="{
+                    'bg-blue-100 text-blue-800': func.type === 'global',
+                    'bg-green-100 text-green-800': func.type === 'local',
+                    'bg-purple-100 text-purple-800': func.type === 'method',
+                    'bg-yellow-100 text-yellow-800': func.type === 'anonymous',
+                    'bg-pink-100 text-pink-800': func.type === 'closure'
+                  }"
+                >
+                  <span x-text="func.type"></span>
+                </span>
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                <a 
+                  :href="'#L' + func.startLine" 
+                  class="text-indigo-600 hover:text-indigo-900 hover:underline"
+                  x-text="func.startLine === func.endLine ? func.startLine : func.startLine + '-' + func.endLine"
+                ></a>
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm">
+                <span 
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  :class="{
+                    'bg-green-100 text-green-800': func.executed === 'true',
+                    'bg-red-100 text-red-800': func.executed === 'false'
+                  }"
+                >
+                  <span x-text="func.executed === 'true' ? 'Executed' : 'Not Executed'"></span>
+                </span>
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                <span x-text="func.executionCount"></span>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="filteredFunctions.length === 0">
+            <td colspan="5" class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+              No matching functions found.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  ]]
+  
+  return html, functions_json
+end
+
 --- Generates the HTML source code section for a file
 ---@param file_data table The file data
 ---@param file_id string The file ID for anchor links
 ---@return string html The HTML code for the source code section
 local function generate_file_source_html(file_data, file_id)
-  local html = [[
-<div class="source-code" id="file-]] .. file_id .. [[">
-  <h3>]] .. file_data.path .. [[</h3>
-  <div class="file-summary">
-    <!-- Line Coverage -->
-    <div class="summary-row">
-      <span class="summary-label">Line Coverage:</span>
-      <span class="summary-value">]] .. file_data.covered_lines .. " / " .. file_data.executable_lines .. [[ (]] .. file_data.line_coverage_percent .. [[%)</span>
-    </div>
-    <div class="progress" style="margin: 5px 0; height: 10px;">
-      <div class="progress-bar ]] .. (file_data.line_coverage_percent >= 80 and "high" or (file_data.line_coverage_percent >= 50 and "medium" or "low")) .. [[" style="width: ]] .. file_data.line_coverage_percent .. [[%;"></div>
-    </div>
-    
-    <!-- Function Coverage -->
-    <div class="summary-row" style="margin-top: 10px;">
-      <span class="summary-label">Function Coverage:</span>
-      <span class="summary-value">]] .. file_data.covered_functions .. " / " .. file_data.total_functions .. [[ (]] .. (file_data.total_functions > 0 and file_data.function_coverage_percent or 0) .. [[%)</span>
-    </div>
-    <div class="progress" style="margin: 5px 0; height: 10px;">
-      <div class="progress-bar ]] .. (file_data.function_coverage_percent >= 80 and "high" or (file_data.function_coverage_percent >= 50 and "medium" or "low")) .. [[" style="width: ]] .. file_data.function_coverage_percent .. [[%;"></div>
-    </div>
-    
-    <!-- Summary counts -->
-    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
-      <div style="background-color: #f5f5f5; padding: 5px 10px; border-radius: 4px;">
-        <strong>Lines:</strong> ]] .. file_data.total_lines .. [[
-      </div>
-      <div style="background-color: #f5f5f5; padding: 5px 10px; border-radius: 4px;">
-        <strong>Executable:</strong> ]] .. file_data.executable_lines .. [[
-      </div>
-      <div style="background-color: #f5f5f5; padding: 5px 10px; border-radius: 4px;">
-        <strong>Functions:</strong> ]] .. file_data.total_functions .. [[
-      </div>
-      <div style="background-color: ]] .. (file_data.executed_functions > 0 and "#c8e6c9" or "#ffccbc") .. [[; padding: 5px 10px; border-radius: 4px;">
-        <strong>Executed Functions:</strong> ]] .. file_data.executed_functions .. [[
-      </div>
-    </div>
-  </div>
-]]
-
-  -- Generate function list if there are any
-  if file_data.total_functions > 0 then
-    -- Count function types for filter badges
-    local type_counts = {
-      total = file_data.total_functions,
-      executed = file_data.executed_functions,
-      not_executed = file_data.total_functions - file_data.executed_functions,
-      global = 0,
-      ["local"] = 0,
-      method = 0,
-      anonymous = 0,
-      closure = 0
-    }
-    
-    -- Count functions by type
-    for _, func_data in pairs(file_data.functions) do
-      if type_counts[func_data.type] then
-        type_counts[func_data.type] = type_counts[func_data.type] + 1
-      end
-    end
-    
-    -- Add function search and filters
-    html = html .. [[
-  <div class="function-list">
-    <h4>Functions</h4>
-    <input type="text" class="function-search" placeholder="Search functions..." id="func-search-]] .. file_id .. [[">
-    
-    <div class="function-filter">
-      <label class="function-filter-item active" data-filter="all">
-        <input type="radio" name="func-filter-]] .. file_id .. [[" value="all" checked>
-        All <span class="function-count">]] .. type_counts.total .. [[</span>
-      </label>
-      <label class="function-filter-item" data-filter="executed">
-        <input type="radio" name="func-filter-]] .. file_id .. [[" value="executed">
-        Executed <span class="function-count badge-success">]] .. type_counts.executed .. [[</span>
-      </label>
-      <label class="function-filter-item" data-filter="not-executed">
-        <input type="radio" name="func-filter-]] .. file_id .. [[" value="not-executed">
-        Not Executed <span class="function-count badge-danger">]] .. (type_counts.not_executed) .. [[</span>
-      </label>
-    </div>
-    
-    <div class="function-filter">
-      <label class="function-filter-item" data-type="global">
-        <input type="checkbox" name="func-type-]] .. file_id .. [[" value="global">
-        Global <span class="function-count function-type-global">]] .. type_counts.global .. [[</span>
-      </label>
-      <label class="function-filter-item" data-type="local">
-        <input type="checkbox" name="func-type-]] .. file_id .. [[" value="local">
-        Local <span class="function-count function-type-local">]] .. type_counts["local"] .. [[</span>
-      </label>
-      <label class="function-filter-item" data-type="method">
-        <input type="checkbox" name="func-type-]] .. file_id .. [[" value="method">
-        Method <span class="function-count function-type-method">]] .. type_counts.method .. [[</span>
-      </label>
-      <label class="function-filter-item" data-type="anonymous">
-        <input type="checkbox" name="func-type-]] .. file_id .. [[" value="anonymous">
-        Anonymous <span class="function-count function-type-anonymous">]] .. type_counts.anonymous .. [[</span>
-      </label>
-      <label class="function-filter-item" data-type="closure">
-        <input type="checkbox" name="func-type-]] .. file_id .. [[" value="closure">
-        Closure <span class="function-count function-type-closure">]] .. type_counts.closure .. [[</span>
-      </label>
-    </div>
-    
-    <table class="functions" id="functions-]] .. file_id .. [[">
-      <thead>
-        <tr>
-          <th data-sort="name">Name</th>
-          <th data-sort="type">Type</th>
-          <th data-sort="lines">Lines</th>
-          <th data-sort="executed">Status</th>
-          <th data-sort="count">Execution Count</th>
-        </tr>
-      </thead>
-      <tbody>
-]]
-
-    -- Sort functions by start line
-    local functions = {}
-    for func_id, func_data in pairs(file_data.functions) do
-      table.insert(functions, {id = func_id, data = func_data})
-    end
-    
-    table.sort(functions, function(a, b) return a.data.start_line < b.data.start_line end)
-    
-    -- Add each function row
-    for _, func in ipairs(functions) do
-      local func_data = func.data
-      local executed_class = func_data.executed and "executed" or "not-executed"
-      local covered_class = func_data.covered and "covered" or "not-covered"
-      local type_class = "function-type-" .. func_data.type
-      local status_badge_class = func_data.executed and "badge-success" or "badge-danger"
-      
-      html = html .. [[
-        <tr class="]] .. executed_class .. " " .. covered_class .. [[" data-function-type="]] .. func_data.type .. [[" data-executed="]] .. tostring(func_data.executed) .. [[">
-          <td>]] .. escape_html(func_data.name) .. [[ <span class="function-type-badge ]] .. type_class .. [[">]] .. func_data.type .. [[</span></td>
-          <td>]] .. func_data.type .. [[</td>
-          <td><a href="#L]] .. func_data.start_line .. [[">]] .. func_data.start_line .. [[-]] .. func_data.end_line .. [[</a></td>
-          <td class="]] .. executed_class .. [[">
-            <span class="badge ]] .. (func_data.executed and "badge-success" or "badge-danger") .. [[">]] 
-              .. (func_data.executed and "Executed" or "Not Executed") .. 
-            [[</span>
-          </td>
-          <td>]] .. func_data.execution_count .. [[</td>
-        </tr>
-]]
-    end
-    
-    html = html .. [[
-      </tbody>
-    </table>
-  </div>
-  
-  <script class="function-sort-script">
-  (function() {
-    // Function table sorting and filtering for ]] .. escape_html(file_data.name) .. [[
-    const tableId = 'functions-]] .. file_id .. [[';
-    const searchId = 'func-search-]] .. file_id .. [[';
-    const table = document.getElementById(tableId);
-    const search = document.getElementById(searchId);
-    
-    if (!table || !search) return;
-    
-    // Sort direction state
-    let sortColumn = 'lines';
-    let sortDirection = 'asc';
-    
-    // Initial sort by line number
-    sortTable('lines', 'asc');
-    
-    // Add click handlers to table headers
-    const headers = table.querySelectorAll('th');
-    headers.forEach(header => {
-      if (header.dataset.sort) {
-        header.addEventListener('click', () => {
-          const column = header.dataset.sort;
-          // Toggle direction if same column
-          const direction = (column === sortColumn) 
-            ? (sortDirection === 'asc' ? 'desc' : 'asc')
-            : 'asc';
-          
-          sortTable(column, direction);
-        });
-      }
-    });
-    
-    // Search input handler
-    search.addEventListener('input', filterTable);
-    
-    // Filter radio buttons
-    const filterRadios = document.querySelectorAll('[name="func-filter-]] .. file_id .. [["]');
-    filterRadios.forEach(radio => {
-      radio.addEventListener('change', filterTable);
-    });
-    
-    // Type checkboxes
-    const typeCheckboxes = document.querySelectorAll('[name="func-type-]] .. file_id .. [["]');
-    typeCheckboxes.forEach(checkbox => {
-      checkbox.addEventListener('change', filterTable);
-    });
-    
-    // Filter the table based on search text and filters
-    function filterTable() {
-      const searchText = search.value.toLowerCase();
-      const rows = table.querySelectorAll('tbody tr');
-      
-      // Get active execution filter
-      const activeFilter = document.querySelector('[name="func-filter-]] .. file_id .. [["]:checked').value;
-      
-      // Get active type filters
-      const activeTypes = Array.from(document.querySelectorAll('[name="func-type-]] .. file_id .. [["]:checked'))
-        .map(cb => cb.value);
-      
-      // Show/hide rows based on filters
-      rows.forEach(row => {
-        const name = row.cells[0].textContent.toLowerCase();
-        const type = row.dataset.functionType;
-        const executed = row.dataset.executed === 'true';
-        
-        // Check search text
-        const matchesSearch = searchText === '' || name.includes(searchText);
-        
-        // Check execution filter
-        const matchesExecution = 
-          activeFilter === 'all' || 
-          (activeFilter === 'executed' && executed) ||
-          (activeFilter === 'not-executed' && !executed);
-        
-        // Check type filter (if any are checked)
-        const matchesType = activeTypes.length === 0 || activeTypes.includes(type);
-        
-        // Show/hide row
-        row.style.display = (matchesSearch && matchesExecution && matchesType) ? '' : 'none';
-      });
-    }
-    
-    // Sort the table by column
-    function sortTable(column, direction) {
-      // Update state
-      sortColumn = column;
-      sortDirection = direction;
-      
-      // Update header classes
-      headers.forEach(header => {
-        header.classList.remove('sort-asc', 'sort-desc');
-        if (header.dataset.sort === column) {
-          header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
-        }
-      });
-      
-      // Get table body and rows
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-      
-      // Sort rows
-      rows.sort((a, b) => {
-        let valueA, valueB;
-        
-        // Extract values based on column
-        switch(column) {
-          case 'name':
-            valueA = a.cells[0].textContent.toLowerCase();
-            valueB = b.cells[0].textContent.toLowerCase();
-            break;
-          case 'type':
-            valueA = a.cells[1].textContent.toLowerCase();
-            valueB = b.cells[1].textContent.toLowerCase();
-            break;
-          case 'lines':
-            valueA = parseInt(a.cells[2].textContent.split('-')[0]);
-            valueB = parseInt(b.cells[2].textContent.split('-')[0]);
-            break;
-          case 'executed':
-            valueA = a.dataset.executed === 'true' ? 1 : 0;
-            valueB = b.dataset.executed === 'true' ? 1 : 0;
-            break;
-          case 'count':
-            valueA = parseInt(a.cells[4].textContent);
-            valueB = parseInt(b.cells[4].textContent);
-            break;
-          default:
-            valueA = a.cells[0].textContent.toLowerCase();
-            valueB = b.cells[0].textContent.toLowerCase();
-        }
-        
-        // Compare values
-        if (valueA === valueB) return 0;
-        
-        let result = typeof valueA === 'string' 
-          ? valueA.localeCompare(valueB) 
-          : valueA - valueB;
-          
-        // Reverse for descending
-        return direction === 'asc' ? result : -result;
-      });
-      
-      // Reorder DOM
-      rows.forEach(row => tbody.appendChild(row));
-    }
-  })();
-  </script>
-]]
-  end
-
   -- Get all line numbers and sort them
   local line_numbers = {}
   for line_num, _ in pairs(file_data.lines) do
@@ -859,74 +918,177 @@ local function generate_file_source_html(file_data, file_id)
   end
   table.sort(line_numbers)
   
-  -- Generate source lines
-  for _, line_num in ipairs(line_numbers) do
+  -- Create function list
+  local function_list_html, functions_json = generate_function_list(file_data, file_id)
+  
+  local html = [[
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 print-break-before">
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8" id="file-]] .. file_id .. [[">
+      <div class="border-b border-gray-200 px-6 py-5">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 class="text-lg leading-6 font-medium text-gray-900">]] .. file_data.path .. [[</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">]] .. file_data.total_lines .. [[ lines (]] .. file_data.executable_lines .. [[ executable)</p>
+          </div>
+          <div class="mt-4 md:mt-0 inline-flex rounded-md shadow-sm no-print">
+            <button 
+              onclick="document.querySelectorAll('#file-]] .. file_id .. [[ pre').forEach(el => el.classList.toggle('whitespace-pre-wrap'))"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+              </svg>
+              Toggle Wrap
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="px-6 py-5 flex flex-col md:flex-row">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 flex-grow">
+          <!-- Coverage Summary -->
+          <div class="bg-white overflow-hidden border border-gray-200 rounded-lg">
+            <div class="border-b border-gray-200 px-4 py-3">
+              <h4 class="text-sm font-medium text-gray-900">Line Coverage</h4>
+            </div>
+            <div class="px-4 py-3">
+              <div class="flex items-center">
+                <div class="flex-1 flex items-center">
+                  <div class="text-3xl font-bold text-gray-900">]] .. math.floor(file_data.line_coverage_percent + 0.5) .. [[%</div>
+                  <div class="ml-3 flex-1">
+                    <div class="text-sm text-gray-500">
+                      ]] .. file_data.covered_lines .. [[ / ]] .. file_data.executable_lines .. [[ lines
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                      <div class="]] .. (file_data.line_coverage_percent >= 80 and "bg-green-500" or (file_data.line_coverage_percent >= 50 and "bg-yellow-500" or "bg-red-500")) .. [[ h-2 rounded-full" style="width: ]] .. file_data.line_coverage_percent .. [[%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Function Coverage -->
+          <div class="bg-white overflow-hidden border border-gray-200 rounded-lg">
+            <div class="border-b border-gray-200 px-4 py-3">
+              <h4 class="text-sm font-medium text-gray-900">Function Coverage</h4>
+            </div>
+            <div class="px-4 py-3">
+              <div class="flex items-center">
+                <div class="flex-1 flex items-center">
+                  <div class="text-3xl font-bold text-gray-900">]] .. file_data.function_coverage_percent .. [[%</div>
+                  <div class="ml-3 flex-1">
+                    <div class="text-sm text-gray-500">
+                      ]] .. file_data.executed_functions .. [[ / ]] .. file_data.total_functions .. [[ functions
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                      <div class="]] .. (file_data.function_coverage_percent >= 80 and "bg-green-500" or (file_data.function_coverage_percent >= 50 and "bg-yellow-500" or "bg-red-500")) .. [[ h-2 rounded-full" style="width: ]] .. file_data.function_coverage_percent .. [[%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Line Classification -->
+          <div class="bg-white overflow-hidden border border-gray-200 rounded-lg">
+            <div class="border-b border-gray-200 px-4 py-3">
+              <h4 class="text-sm font-medium text-gray-900">Line Classification</h4>
+            </div>
+            <div class="px-4 py-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm font-medium text-gray-900">Code</div>
+                <div class="text-sm text-gray-500">]] .. file_data.executable_lines .. [[ lines</div>
+              </div>
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm font-medium text-gray-900">Comment</div>
+                <div class="text-sm text-gray-500">]] .. (file_data.comment_lines or 0) .. [[ lines</div>
+              </div>
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-medium text-gray-900">Blank</div>
+                <div class="text-sm text-gray-500">]] .. (file_data.blank_lines or 0) .. [[ lines</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      ]] .. function_list_html .. [[
+      
+      <div class="px-6 py-5">
+        <div class="source-code" x-data="lineHighlighting()" x-init="init()">
+          <div x-data="syntaxHighlighting()">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden print-break-inside-avoid">
+              <div class="flex">
+                <div class="bg-gray-100 text-right border-r border-gray-200 px-3 py-2 select-none">
+                  <pre class="font-mono text-xs text-gray-600">
+  ]]
+
+  -- Generate line numbers
+  for i, line_num in ipairs(line_numbers) do
+    html = html .. line_num .. "\n"
+  end
+
+  html = html .. [[
+                  </pre>
+                </div>
+                <div class="flex-1 overflow-x-auto">
+                  <pre class="font-mono text-xs whitespace-pre pl-2 py-2">
+  ]]
+  
+  -- Generate execution count column
+  for i, line_num in ipairs(line_numbers) do
     local line_data = file_data.lines[line_num]
+    local count = ""
+    
+    if line_data.executable then
+      count = tostring(line_data.execution_count)
+    end
+    
+    html = html .. count .. "\n"
+  end
+  
+  html = html .. [[
+                  </pre>
+                </div>
+                <div class="flex-1 overflow-x-auto flex-grow">
+                  <pre class="font-mono text-xs whitespace-pre pl-2 py-2">
+  ]]
+  
+  -- Generate source code lines with syntax highlighting
+  for i, line_num in ipairs(line_numbers) do
+    local line_data = file_data.lines[line_num]
+    local line_content = line_data.content or ""
     local line_class = ""
     
-    -- Debug tracking
-    local debug_file = io.open("html_line_debug.log", "a")
-    if debug_file then
-      debug_file:write(string.format("HTML: %s:%d [executable=%s, executed=%s, line_type=%s, count=%d]\n", 
-        file_data.path, 
-        line_num,
-        tostring(line_data.executable),
-        tostring(line_data.executed),
-        line_data.line_type,
-        line_data.execution_count
-      ))
-      debug_file:close()
-    end
-    
-    -- If the line has an execution count, ensure it's properly marked
-    if line_data.execution_count > 0 then
-      line_data.executed = true
-      if line_data.line_type ~= "comment" and line_data.line_type ~= "blank" then
-        line_data.executable = true
-        line_data.covered = true
-      end
-    end
-    
-    -- Determine the correct line display class
-    if line_data.line_type == "comment" or 
-       line_data.line_type == "blank" then
+    if line_data.line_type == "comment" or line_data.line_type == "blank" then
       line_class = "not-executable"
     else
-      -- Always check execution count first as the most reliable indicator
+      -- Check execution count for executability and coverage
       if line_data.execution_count > 0 then
-        line_class = "covered"
-        -- Ensure consistency in line_data properties
-        line_data.executed = true
-        line_data.covered = true
-      elseif line_data.executed or line_data.covered then
         line_class = "covered"
       else
         line_class = "not-covered"
       end
     end
     
-    html = html .. [[
-  <div class="line ]] .. line_class .. [[" id="L]] .. line_num .. [[">
-    <div class="line-number"><a href="#L]] .. line_num .. [[">]] .. line_num .. [[</a></div>
-]]
-
-    -- Add execution count for executable lines
-    if line_data.executable then
-      html = html .. [[    <div class="execution-count">]] .. line_data.execution_count .. [[</div>]]
-    else
-      html = html .. [[    <div class="execution-count"></div>]]
-    end
-
-    html = html .. [[
-    <div class="line-content">]] .. escape_html(line_data.content) .. [[</div>
-  </div>
-]]
+    html = html .. '<span id="L' .. line_num .. '" class="' .. line_class .. '">' .. 
+           '<span x-html="highlightSyntax(\'' .. escape_html(line_content):gsub("'", "\\'") .. '\')"></span>' .. 
+           '</span>\n'
   end
   
   html = html .. [[
-</div>
-]]
-
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ]]
+  
   return html
 end
 
@@ -935,6 +1097,101 @@ end
 ---@param output_path string The path where the report should be saved
 ---@return boolean success Whether report generation succeeded
 ---@return string|nil error_message Error message if generation failed
+-- Format coverage data into HTML (this is the function expected by the formatters module)
+---@param coverage_data table The coverage data
+---@return string html_output The HTML report content
+function M.format_coverage(coverage_data)
+  -- Parameter validation
+  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
+  
+  -- Get formatter config
+  local formatter_config = {}
+  local central_config_module = require("lib.core.central_config")
+  if central_config_module then
+    formatter_config = central_config_module.get("reporting.formatters.html") or {}
+  end
+  
+  -- Generate HTML components
+  local overview_html = generate_overview_html(coverage_data)
+  local file_list_html = generate_file_list_html(coverage_data)
+  
+  -- Generate source code sections for each file
+  local source_sections = ""
+  for path, file_data in pairs(coverage_data.files) do
+    local file_id = path:gsub("[^%w]", "-")
+    source_sections = source_sections .. generate_file_source_html(file_data, file_id)
+  end
+  
+  -- Generate full HTML document
+  local html = [[<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coverage Report</title>
+  <link rel="stylesheet" href="]] .. TAILWIND_CSS_CDN .. [[">
+  <style>
+]] .. CUSTOM_CSS .. [[
+  </style>
+  <script defer src="]] .. ALPINE_JS_CDN .. [["></script>
+  <script>
+    document.addEventListener('alpine:init', function() {
+      // Initialize Alpine components
+]] .. ALPINE_COMPONENTS .. [[
+    });
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Report Header -->
+  <header class="bg-white shadow">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">Coverage Report</h1>
+          <p class="mt-2 text-sm text-gray-500">Coverage v2.0 - Generated ]] .. os.date("%Y-%m-%d %H:%M:%S") .. [[</p>
+        </div>
+        <div class="flex space-x-2 no-print">
+          <a href="#overview" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Overview
+          </a>
+          <a href="#files" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Files
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Report Body -->
+  <main>
+    <div id="overview">
+      ]] .. overview_html .. [[
+    </div>
+    
+    <div id="files">
+      ]] .. file_list_html .. [[
+    </div>
+    
+    <div id="source-sections">
+      ]] .. source_sections .. [[
+    </div>
+  </main>
+  
+  <!-- Report Footer -->
+  <footer class="bg-white mt-12 no-print">
+    <div class="max-w-7xl mx-auto py-12 px-4 overflow-hidden sm:px-6 lg:px-8">
+      <p class="mt-8 text-center text-base text-gray-400">
+        Coverage report generated by Firmo Coverage v2.0
+      </p>
+    </div>
+  </footer>
+</body>
+</html>]]
+  
+  return html
+end
+
+-- Original generate function used by the coverage module directly
 function M.generate(coverage_data, output_path)
   -- Parameter validation
   error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
@@ -942,7 +1199,7 @@ function M.generate(coverage_data, output_path)
   
   -- If output_path is a directory, add a filename
   if output_path:sub(-1) == "/" then
-    output_path = output_path .. "coverage-report-v2.html"
+    output_path = output_path .. "coverage-report.html"
   end
   
   -- Try to ensure the directory exists
@@ -966,6 +1223,17 @@ function M.generate(coverage_data, output_path)
     -- We continue despite validation errors to maximize usability
   end
   
+  -- Generate report sections
+  local overview_html = generate_overview_html(coverage_data)
+  local file_list_html, file_data_json = generate_file_list_html(coverage_data)
+  
+  -- Generate source code sections for each file
+  local source_sections = ""
+  for path, file_data in pairs(coverage_data.files) do
+    local file_id = path:gsub("[^%w]", "-")
+    source_sections = source_sections .. generate_file_source_html(file_data, file_id)
+  end
+  
   -- Generate HTML content
   local html = [[<!DOCTYPE html>
 <html lang="en">
@@ -973,134 +1241,85 @@ function M.generate(coverage_data, output_path)
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Coverage Report</title>
+  <link rel="stylesheet" href="]] .. TAILWIND_CSS_CDN .. [[">
   <style>
-]] .. CSS_STYLES .. [[
+]] .. CUSTOM_CSS .. [[
   </style>
+  <script defer src="]] .. ALPINE_JS_CDN .. [["></script>
+  <script>
+]] .. ALPINE_COMPONENTS .. [[
+  </script>
 </head>
-<body>
-  <h1>Coverage Report</h1>
-]]
+<body class="bg-gray-100 min-h-screen">
+  <!-- Report Header -->
+  <header class="bg-white shadow">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">Coverage Report</h1>
+          <p class="mt-2 text-sm text-gray-500">Coverage v2.0 - Generated ]] .. os.date("%Y-%m-%d %H:%M:%S") .. [[</p>
+        </div>
+        <div class="flex space-x-2 no-print">
+          <a href="#overview" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Overview
+          </a>
+          <a href="#files" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Files
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
 
-  -- Add summary section
-  html = html .. generate_summary_html(coverage_data.summary)
+  <!-- Report Body -->
+  <main>
+    <div id="overview">
+      ]] .. overview_html .. [[
+    </div>
+    
+    <div id="files">
+      ]] .. file_list_html .. [[
+    </div>
+    
+    <div id="source-sections">
+      ]] .. source_sections .. [[
+    </div>
+  </main>
   
-  -- Add file list section
-  html = html .. generate_file_list_html(coverage_data)
-  
-  -- Add source code sections for each file
-  for path, file_data in pairs(coverage_data.files) do
-    local file_id = path:gsub("[^%w]", "-")
-    html = html .. generate_file_source_html(file_data, file_id)
-  end
-  
-  -- Close HTML document
-  html = html .. [[
+  <!-- Report Footer -->
+  <footer class="bg-white mt-12 no-print">
+    <div class="max-w-7xl mx-auto py-12 px-4 overflow-hidden sm:px-6 lg:px-8">
+      <p class="mt-8 text-center text-base text-gray-400">
+        Coverage report generated by Firmo Coverage v2.0
+      </p>
+    </div>
+  </footer>
 </body>
-</html>
-]]
+</html>]]
 
+  -- Generate the HTML content using the format_coverage function
+  local html = M.format_coverage(coverage_data)
+  
   -- Write the report to the output file
   local success, err = error_handler.safe_io_operation(
     function() 
       return fs.write_file(output_path, html)
     end,
     output_path,
-    {operation = "write_html_report"}
+    {operation = "write_coverage_report"}
   )
   
   if not success then
-    return false, "Failed to write HTML report: " .. error_handler.format_error(err)
+    logger.error("Failed to write HTML coverage report", {
+      file_path = output_path,
+      error = error_handler.format_error(err)
+    })
+    return false, err
   end
   
-  logger.info("Generated HTML coverage report", {
-    output_path = output_path,
-    total_files = coverage_data.summary.total_files,
-    line_coverage = coverage_data.summary.line_coverage_percent .. "%"
-  })
-  
-  return true
-end
-
---- Formats coverage data as HTML
----@param coverage_data table The coverage data
----@return string html_content HTML content
-function M.format_coverage(coverage_data)
-  -- Parameter validation
-  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
-  
-  -- Check if summary is available
-  if not coverage_data.summary then
-    logger.warn("Coverage data does not contain summary data, returning empty HTML")
-    return "<html><body><h1>No coverage data available</h1></body></html>"
-  end
-  
-  -- Generate HTML content
-  local html = [[<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Coverage Report</title>
-  <style>
-]] .. CSS_STYLES .. [[
-  </style>
-</head>
-<body>
-  <h1>Coverage Report</h1>
-]]
-
-  -- Add summary section
-  html = html .. generate_summary_html(coverage_data.summary)
-  
-  -- Add file list section
-  html = html .. generate_file_list_html(coverage_data)
-  
-  -- Add source code sections for each file
-  for path, file_data in pairs(coverage_data.files) do
-    local file_id = path:gsub("[^%w]", "-")
-    html = html .. generate_file_source_html(file_data, file_id)
-  end
-  
-  -- Close HTML document
-  html = html .. [[
-</body>
-</html>
-]]
-
-  return html
-end
-
---- Writes coverage data to a file in HTML format
----@param coverage_data table The coverage data
----@param file_path string The path to write the file to
----@return boolean success Whether the write was successful
----@return string|nil error_message Error message if write failed
-function M.write_coverage_report(coverage_data, file_path)
-  -- Parameter validation
-  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
-  error_handler.assert(type(file_path) == "string", "file_path must be a string", error_handler.CATEGORY.VALIDATION)
-  
-  -- Format the data
-  local html = M.format_coverage(coverage_data)
-  
-  -- Write to file
-  local success, err = error_handler.safe_io_operation(
-    function() 
-      return fs.write_file(file_path, html)
-    end,
-    file_path,
-    {operation = "write_html_report"}
-  )
-  
-  if not success then
-    return false, "Failed to write HTML report: " .. error_handler.format_error(err)
-  end
-  
-  logger.info("Wrote HTML coverage report", {
-    file_path = file_path,
-    size = #html,
-    total_files = coverage_data.summary.total_files,
-    line_coverage = coverage_data.summary.line_coverage_percent .. "%"
+  logger.debug("Successfully wrote HTML coverage report", {
+    file_path = output_path,
+    report_size = #html
   })
   
   return true
