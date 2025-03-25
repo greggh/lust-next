@@ -75,17 +75,18 @@ return {
 }
 ```
 
-## Deprecated Features
+## Migration Status
 
-The following features have been deprecated and will be removed in a future version:
+The migration from coverage v2 to the main coverage system is now complete:
 
-1. **Legacy Coverage Module (`lib/coverage/v2`)**:
-   - The legacy v2 module still exists for backward compatibility
-   - It will be removed in a future version
-   - All code should be migrated to use the main coverage module
+1. **Legacy Coverage Module Removed**:
+   - The `lib/coverage/v2` directory has been removed
+   - All functionality has been integrated into the main coverage module
+   - The main module now implements all v2 features with enhancements
 
-2. **Legacy Test Implementation**:
+2. **Test Implementation**:
    - Tests in `tests/coverage/v2/` should be migrated to use the main coverage module
+   - All new tests should use the main coverage module directly
 
 ## Known Issues and Limitations
 
