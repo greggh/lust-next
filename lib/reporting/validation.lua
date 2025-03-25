@@ -115,8 +115,11 @@ local function validate_line_counts(coverage_data)
     -- Count files and lines directly to validate the summary
     local total_files = 0
     local total_lines = 0
+    local executable_lines = 0
+    local executed_lines = 0
     local covered_lines = 0
     local total_functions = 0
+    local executed_functions = 0
     local covered_functions = 0
     local total_blocks = 0
     local covered_blocks = 0
@@ -131,6 +134,14 @@ local function validate_line_counts(coverage_data)
           total_lines = total_lines + file_data.total_lines
         end
         
+        if file_data.executable_lines then
+          executable_lines = executable_lines + file_data.executable_lines
+        end
+        
+        if file_data.executed_lines then
+          executed_lines = executed_lines + file_data.executed_lines
+        end
+        
         if file_data.covered_lines then
           covered_lines = covered_lines + file_data.covered_lines
         end
@@ -138,6 +149,10 @@ local function validate_line_counts(coverage_data)
         -- Validate function counts
         if file_data.total_functions then
           total_functions = total_functions + file_data.total_functions
+        end
+        
+        if file_data.executed_functions then
+          executed_functions = executed_functions + file_data.executed_functions
         end
         
         if file_data.covered_functions then
@@ -154,8 +169,8 @@ local function validate_line_counts(coverage_data)
         end
         
         -- Validate per-file percentages
-        if file_data.line_coverage_percent and file_data.total_lines > 0 then
-          local calculated_pct = (file_data.covered_lines / file_data.total_lines) * 100
+        if file_data.line_coverage_percent and file_data.executable_lines > 0 then
+          local calculated_pct = (file_data.covered_lines / file_data.executable_lines) * 100
           local diff = math.abs(calculated_pct - file_data.line_coverage_percent)
           
           if diff > config.validation_threshold then
@@ -163,7 +178,9 @@ local function validate_line_counts(coverage_data)
               file = filename,
               reported = file_data.line_coverage_percent,
               calculated = calculated_pct,
-              difference = diff
+              difference = diff,
+              covered_lines = file_data.covered_lines,
+              executable_lines = file_data.executable_lines
             })
             valid = false
           end
@@ -187,10 +204,28 @@ local function validate_line_counts(coverage_data)
         valid = false
       end
       
+      if math.abs(executable_lines - (summary.executable_lines or 0)) > 0 then
+        add_issue("executable_lines", "Executable line count doesn't match sum of file executable lines", "warning", {
+          reported = summary.executable_lines,
+          calculated = executable_lines
+        })
+        valid = false
+      end
+      
+      if math.abs(executed_lines - (summary.executed_lines or 0)) > 0 then
+        add_issue("executed_lines", "Executed line count doesn't match sum of file executed lines", "warning", {
+          reported = summary.executed_lines,
+          calculated = executed_lines,
+          difference = math.abs(executed_lines - (summary.executed_lines or 0))
+        })
+        valid = false
+      end
+      
       if math.abs(covered_lines - (summary.covered_lines or 0)) > 0 then
         add_issue("covered_lines", "Covered line count doesn't match sum of file covered lines", "warning", {
           reported = summary.covered_lines,
-          calculated = covered_lines
+          calculated = covered_lines,
+          difference = math.abs(covered_lines - (summary.covered_lines or 0))
         })
         valid = false
       end
@@ -199,7 +234,17 @@ local function validate_line_counts(coverage_data)
       if summary.total_functions and math.abs(total_functions - summary.total_functions) > 0 then
         add_issue("function_count", "Total function count doesn't match sum of file function counts", "warning", {
           reported = summary.total_functions,
-          calculated = total_functions
+          calculated = total_functions,
+          difference = math.abs(total_functions - summary.total_functions)
+        })
+        valid = false
+      end
+      
+      if summary.executed_functions and math.abs(executed_functions - summary.executed_functions) > 0 then
+        add_issue("executed_functions", "Executed function count doesn't match sum of file executed functions", "warning", {
+          reported = summary.executed_functions,
+          calculated = executed_functions,
+          difference = math.abs(executed_functions - summary.executed_functions)
         })
         valid = false
       end
@@ -207,7 +252,8 @@ local function validate_line_counts(coverage_data)
       if summary.covered_functions and math.abs(covered_functions - summary.covered_functions) > 0 then
         add_issue("covered_functions", "Covered function count doesn't match sum of file covered functions", "warning", {
           reported = summary.covered_functions,
-          calculated = covered_functions
+          calculated = covered_functions,
+          difference = math.abs(covered_functions - summary.covered_functions)
         })
         valid = false
       end
@@ -251,14 +297,16 @@ local function validate_percentages(coverage_data)
     local summary = coverage_data.summary
     
     -- Validate line coverage percentage
-    if summary.total_lines and summary.total_lines > 0 and summary.covered_lines then
-      local calculated_pct = (summary.covered_lines / summary.total_lines) * 100
+    if summary.executable_lines and summary.executable_lines > 0 and summary.covered_lines then
+      local calculated_pct = (summary.covered_lines / summary.executable_lines) * 100
       
       if summary.line_coverage_percent ~= nil and 
          math.abs(calculated_pct - summary.line_coverage_percent) > config.validation_threshold then
         add_issue("line_percentage", "Line coverage percentage doesn't match calculation", "warning", {
           reported = summary.line_coverage_percent,
-          calculated = calculated_pct
+          calculated = calculated_pct,
+          covered_lines = summary.covered_lines,
+          executable_lines = summary.executable_lines
         })
         valid = false
       end
@@ -272,7 +320,9 @@ local function validate_percentages(coverage_data)
          math.abs(calculated_pct - summary.function_coverage_percent) > config.validation_threshold then
         add_issue("function_percentage", "Function coverage percentage doesn't match calculation", "warning", {
           reported = summary.function_coverage_percent,
-          calculated = calculated_pct
+          calculated = calculated_pct,
+          covered_functions = summary.covered_functions,
+          total_functions = summary.total_functions
         })
         valid = false
       end
@@ -301,9 +351,9 @@ local function validate_percentages(coverage_data)
       local block_weight = has_blocks and 0.4 or 0
       
       local line_pct = summary.line_coverage_percent or 
-                      (summary.total_lines and summary.total_lines > 0 and 
+                      (summary.executable_lines and summary.executable_lines > 0 and 
                        summary.covered_lines and
-                      (summary.covered_lines / summary.total_lines * 100) or 0)
+                      (summary.covered_lines / summary.executable_lines * 100) or 0)
                       
       local function_pct = summary.function_coverage_percent or 
                           (summary.total_functions and summary.total_functions > 0 and 

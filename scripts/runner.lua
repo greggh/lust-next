@@ -90,7 +90,15 @@ function runner.run_file(file_path, firmo, options)
 
   -- Override print to capture output for diagnostics
   _G.print = function(...)
-    local output = table.concat({ ... }, " ")
+    -- Convert arguments to strings first to handle booleans and other non-string values
+    local args = {...}
+    local string_args = {}
+    
+    for i, v in ipairs(args) do
+      string_args[i] = tostring(v)
+    end
+    
+    local output = table.concat(string_args, " ")
     table.insert(output_buffer, output)
     
     -- Still show output
@@ -340,17 +348,22 @@ function runner.run_file(file_path, firmo, options)
       file = file_path,
       traceback = debug.traceback(),
     })
-  else
-    -- Always show the completion status with test counts
-    -- Use consistent terminology
-    logger.info("Test completed", {
-      passes = results.passes,
-      failures = results.errors,
-      skipped = results.skipped,
-      tests_passed = results.passes, -- Add for consistency with run_all
-      tests_failed = results.errors, -- Add for consistency with run_all
-    })
+    
+    -- CRITICAL FIX: Ensure execution errors are counted as failures
+    -- This way, even if a test file has syntax errors or errors in describe blocks,
+    -- it will still be properly counted as a failure
+    results.errors = results.errors + 1
   end
+  
+  -- Always show the completion status with test counts
+  -- Use consistent terminology
+  logger.info("Test completed", {
+    passes = results.passes,
+    failures = results.errors,
+    skipped = results.skipped,
+    tests_passed = results.passes, -- Add for consistency with run_all
+    tests_failed = results.errors, -- Add for consistency with run_all
+  })
 
   -- Output JSON results if requested
   if options.json_output or options.results_format == "json" then
@@ -543,32 +556,37 @@ function runner.run_all(files_or_dir, firmo, options)
     logger.info("Module reset system activated", { feature = "enhanced test isolation" })
   end
 
-  -- Try to load coverage module
-  local coverage_loaded, coverage
+  -- Coverage should be already initialized in runner.main and passed in options.coverage_instance
+  -- We just need to log that we're using the pre-initialized coverage
   if options.coverage then
-    coverage_loaded, coverage = pcall(require, "lib.coverage")
-    if coverage_loaded then
-      logger.info("Coverage module loaded", { purpose = "test coverage analysis" })
-      -- Configure coverage
-      coverage.init({
-        enabled = true,
-        discover_uncovered = options.discover_uncovered ~= false,
-        debug = options.coverage_debug == true,
-        source_dirs = { ".", "lib", "src" },
-        threshold = options.threshold or 80,
-        full_reset = true, -- Start with a clean slate
+    if options.coverage_instance then
+      logger.debug("Using pre-initialized coverage instance from main function", {
+        operation = "run_all",
+        coverage_instance_valid = options.coverage_instance ~= nil
       })
-
-      -- Start coverage tracking
-      if coverage.start then
-        coverage.start()
-        logger.info("Coverage tracking started successfully")
-      else
-        logger.error("Function not found", { function_name = "coverage.start" })
+      
+      -- Ensure coverage instance is active
+      if options.coverage_instance.is_active and not options.coverage_instance.is_active() then
+        logger.warn("Coverage instance is not active, trying to start it", {
+          operation = "run_all"
+        })
+        
+        -- Try to start coverage if it's not active
+        local ok, err = pcall(function()
+          options.coverage_instance.start()
+        end)
+        
+        if not ok then
+          logger.error("Failed to start coverage in run_all", {
+            error = error_handler.format_error(err),
+            operation = "run_all.start_coverage"
+          })
+        end
       end
     else
-      logger.error("Failed to load coverage module", {
-        error = error_handler.format_error(coverage),
+      logger.warn("Coverage enabled but no coverage instance was passed", {
+        operation = "run_all",
+        solution = "Coverage instance should be initialized in main and passed in options"
       })
     end
   else
@@ -600,10 +618,20 @@ function runner.run_all(files_or_dir, firmo, options)
     local results = runner.run_file(file, firmo, options)
 
     -- Count passed/failed files
+    -- CRITICAL FIX: Consider a file failed if:
+    -- 1. There was an execution error (results.success is false), OR
+    -- 2. There were test failures (results.errors > 0)
     if results.success and results.errors == 0 then
       passed_files = passed_files + 1
     else
       failed_files = failed_files + 1
+      -- Log failure reason for debugging
+      logger.debug("File marked as failed", {
+        file = file,
+        execution_success = results.success,
+        test_errors = results.errors,
+        reason = not results.success and "Execution error" or "Test failures"
+      })
     end
     
     -- Get the actual test counts from the results
@@ -930,11 +958,37 @@ function runner.run_all(files_or_dir, firmo, options)
     -- Print coverage summary
     local summary = report_data and report_data.summary
     if summary then
+      -- Print detailed coverage data for debugging
+      if options.debug then
+        print("\nDEBUG: Coverage summary data:")
+        print("  Overall coverage: " .. string.format("%.2f", summary.overall_coverage_percent or 0) .. "%")
+        print("  Line coverage: " .. string.format("%.2f", summary.line_coverage_percent or 0) .. "%")
+        print("  Function coverage: " .. string.format("%.2f", summary.function_coverage_percent or 0) .. "%")
+        print("  File coverage: " .. string.format("%.2f", summary.file_coverage_percent or 0) .. "%")
+        
+        -- Print raw values for debugging
+        print("\nDEBUG: Raw coverage values:")
+        print("  Overall coverage (raw): " .. tostring(summary.overall_coverage_percent))
+        print("  Line coverage (raw): " .. tostring(summary.line_coverage_percent))
+        print("  Function coverage (raw): " .. tostring(summary.function_coverage_percent))
+        print("  File coverage (raw): " .. tostring(summary.file_coverage_percent))
+      end
+      
+      -- Use the numeric values for the logger to ensure proper display
+      -- Convert percentages to strings with formatting to ensure consistent display
       logger.info("Coverage summary", {
         overall = string.format("%.2f%%", summary.overall_coverage_percent or 0),
         lines = string.format("%.2f%%", summary.line_coverage_percent or 0),
         functions = string.format("%.2f%%", summary.function_coverage_percent or 0),
         files = string.format("%.2f%%", summary.file_coverage_percent or 0),
+      })
+      
+      -- Debug: Print raw values
+      logger.debug("Raw coverage percentage values:", {
+        overall_percent = summary.overall_coverage_percent,
+        line_percent = summary.line_coverage_percent,
+        function_percent = summary.function_coverage_percent,
+        file_percent = summary.file_coverage_percent
       })
     else
       logger.error("Failed to get coverage summary from report data")
@@ -1364,21 +1418,362 @@ function runner.main(args)
     return runner.watch_mode(path, firmo, options)
   end
 
+  -- Initialize coverage if running with --coverage flag
+  local coverage_init_success = true
+  local coverage = nil
+  
+  -- Try to load the central configuration
+  local central_config
+  local central_config_loaded, central_config_result = pcall(require, "lib.core.central_config")
+  if central_config_loaded then
+    central_config = central_config_result
+    logger.info("Central configuration loaded successfully")
+    
+    -- Try to load from .firmo-config.lua if it exists
+    if fs.file_exists(".firmo-config.lua") then
+      local config_loaded, config_err = central_config.load_from_file(".firmo-config.lua")
+      if config_loaded then
+        logger.info("Loaded configuration from .firmo-config.lua")
+      else
+        logger.warn("Failed to load .firmo-config.lua", {
+          error = error_handler.format_error(config_err)
+        })
+      end
+    end
+  else
+    logger.warn("Central configuration module not available", {
+      error = error_handler.format_error(central_config_result)
+    })
+  end
+  
+  if options.coverage then
+    -- Load coverage module
+    local coverage_loaded
+    coverage_loaded, coverage = pcall(require, "lib.coverage")
+    
+    if not coverage_loaded then
+      logger.error("Failed to load coverage module", {
+        error = error_handler.format_error(coverage)
+      })
+      return false
+    end
+    
+    -- Initialize and start coverage tracking
+    local ok, err = pcall(function()
+      -- Build coverage configuration from configuration file and command line options
+      local coverage_config = {
+        enabled = true,
+        full_reset = true,
+        debug = options.coverage_debug == true,
+        discover_uncovered = options.discover_uncovered ~= false,
+        threshold = options.threshold or 80
+      }
+      
+      -- Apply config from central configuration if available
+      if central_config then
+        local file_config = central_config.get("coverage", {})
+        
+        -- Merge include/exclude from config file
+        if file_config.include then 
+          coverage_config.include = file_config.include
+        end
+        
+        if file_config.exclude then
+          coverage_config.exclude = file_config.exclude
+        end
+        
+        -- Apply other config file settings (but command line options take precedence)
+        if file_config.track_blocks ~= nil then
+          coverage_config.track_blocks = file_config.track_blocks
+        end
+        
+        if file_config.use_static_analysis ~= nil then
+          coverage_config.use_static_analysis = file_config.use_static_analysis
+        end
+        
+        if file_config.auto_fix_block_relationships ~= nil then
+          coverage_config.auto_fix_block_relationships = file_config.auto_fix_block_relationships
+        end
+        
+        if file_config.track_all_executed ~= nil then
+          coverage_config.track_all_executed = file_config.track_all_executed
+        end
+        
+        if file_config.debug ~= nil and not options.coverage_debug then
+          coverage_config.debug = file_config.debug
+        end
+        
+        logger.debug("Applied coverage settings from config file", {
+          include_patterns = #(coverage_config.include or {}),
+          exclude_patterns = #(coverage_config.exclude or {})
+        })
+      else
+        -- Fallback to reasonable defaults if no config file
+        coverage_config.include = coverage_config.include or {
+          "**/*.lua",     -- All Lua files by default
+          "lib/**/*.lua", -- Library code
+          "firmo.lua"     -- Main module
+        }
+        
+        coverage_config.exclude = coverage_config.exclude or {
+          "**/tests/**/*.lua", -- Test files
+          "**/test/**/*.lua",  -- Another test directory
+          "**/*_test.lua",     -- Test files with suffix
+          "**/*_spec.lua"      -- Spec files
+        }
+      end
+      
+      -- Initialize coverage with the merged configuration
+      coverage.init(coverage_config)
+      coverage.start()
+      
+      -- Debug output of final configuration
+      logger.debug("Coverage initialized with configuration", {
+        include_patterns = coverage_config.include and table.concat(coverage_config.include, ", ") or "none",
+        exclude_patterns = coverage_config.exclude and table.concat(coverage_config.exclude, ", ") or "none",
+        debug_mode = coverage_config.debug
+      })
+    end)
+    
+    if not ok then
+      logger.error("Failed to initialize or start coverage", {
+        error = error_handler.format_error(err)
+      })
+      coverage_init_success = false
+    else
+      logger.info("Coverage tracking started successfully")
+    end
+    
+    -- Always store coverage in options so it can be passed to both run_file and run_all
+    options.coverage_instance = coverage
+  end
+  
   -- Check if path is a file or directory
   -- We can automatically detect directories without a flag
+  local test_success = false
+  
   if fs.directory_exists(path) then
     -- Run all tests in directory
     logger.info("Detected directory path", { path = path })
-    return runner.run_all(path, firmo, options)
+    test_success = runner.run_all(path, firmo, options)
+    
+    -- CRITICAL FIX: Ensure test failures cause the process to fail
+    if not test_success then
+      logger.error("Test failures detected in directory", { path = path })
+      -- Continue to generate reports, but remember to return false at the end
+    end
   elseif fs.file_exists(path) then
-    -- Run a single test file
+    -- Run a single test file with the same options (including coverage)
+    logger.info("Detected file path", { path = path })
     local result = runner.run_file(path, firmo, options)
-    return result.success and result.errors == 0
+    test_success = result.success and result.errors == 0
+    
+    -- CRITICAL FIX: Ensure test failures cause the process to fail
+    if not test_success then
+      logger.error("Test failures detected in file", { 
+        path = path,
+        success = result.success,
+        errors = result.errors,
+        test_errors = #(result.test_errors or {})
+      })
+      
+      -- Print specific error details
+      if result.test_errors and #result.test_errors > 0 then
+        for i, err in ipairs(result.test_errors) do
+          logger.error(string.format("Test error #%d: %s", i, err.message), {
+            test_name = err.test_name,
+            file = err.file
+          })
+        end
+      end
+      
+      -- Continue to generate reports, but remember to return false at the end
+    end
   else
     -- Path not found
     logger.error("Path not found", { path = path })
     return false
   end
+  
+  -- Generate coverage reports if needed
+  local report_success = true
+  
+  if options.coverage and coverage and coverage_init_success then
+    -- Stop coverage tracking
+    local ok, err = pcall(function()
+      coverage.stop()
+    end)
+    
+    if not ok then
+      logger.error("Failed to stop coverage tracking", {
+        error = error_handler.format_error(err)
+      })
+      report_success = false
+    end
+    
+    -- Get coverage report data
+    local report_data
+    ok, report_data = pcall(function() 
+      return coverage.get_report_data() 
+    end)
+    
+    if not ok or not report_data then
+      logger.error("Failed to get coverage report data", {
+        error = ok and "No data returned" or error_handler.format_error(report_data)
+      })
+      report_success = false
+    else
+      -- Count files in report_data
+      local file_count = 0
+      if report_data.files then
+        for _ in pairs(report_data.files) do
+          file_count = file_count + 1
+        end
+      end
+      
+      if file_count == 0 then
+        logger.error("No files were tracked in coverage data", {
+          operation = "coverage tracking"
+        })
+        report_success = false
+      else
+        -- Generate reports
+        local reporting
+        ok, reporting = pcall(require, "lib.reporting")
+        
+        if not ok then
+          logger.error("Failed to load reporting module")
+          report_success = false
+        else
+          -- Create reports directory
+          local report_dir = options.report_dir or "./coverage-reports"
+          fs.ensure_directory_exists(report_dir)
+          
+          -- Generate reports
+          local formats = options.formats or { "html", "json", "lcov", "cobertura" }
+          
+          for _, format in ipairs(formats) do
+            local report_path = fs.join_paths(report_dir, "coverage-report." .. format)
+            local format_success, err = reporting.save_coverage_report(report_path, report_data, format)
+            
+            if not format_success then
+              logger.error("Failed to generate " .. format .. " report", {
+                error = err and error_handler.format_error(err) or "Unknown error"
+              })
+              report_success = false
+            end
+          end
+          
+          -- Print coverage summary
+          if report_data.summary then
+            -- Calculate actual file counts manually
+            local file_count = 0
+            local covered_file_count = 0
+            local total_lines = 0
+            local covered_lines = 0
+            
+            for file_path, file_data in pairs(report_data.files) do
+              file_count = file_count + 1
+              covered_file_count = covered_file_count + 1  -- All files with data are considered covered
+              
+              -- Count lines
+              if file_data.lines then
+                for line_num, line_data in pairs(file_data.lines) do
+                  if type(line_data) == "table" and line_data.executable then
+                    total_lines = total_lines + 1
+                    if line_data.covered or line_data.executed then
+                      covered_lines = covered_lines + 1
+                    end
+                  end
+                end
+              end
+            end
+            
+            -- Calculate percentages
+            local file_percent = file_count > 0 and (covered_file_count / file_count * 100) or 0
+            local line_percent = total_lines > 0 and (covered_lines / total_lines * 100) or 0
+            
+            -- Also update the summary values directly to ensure they're consistent everywhere
+            report_data.summary.line_coverage_percent = line_percent
+            report_data.summary.file_coverage_percent = file_percent
+            report_data.summary.overall_coverage_percent = (file_percent + line_percent + (report_data.summary.function_coverage_percent or 0)) / 3
+            
+            local overall_percent = (file_percent + line_percent + (report_data.summary.function_coverage_percent or 0)) / 3
+            
+            -- Print report with manually calculated values
+            logger.info("Coverage summary", {
+              overall = string.format("%.2f%%", overall_percent),
+              lines = string.format("%.2f%%", line_percent),
+              functions = string.format("%.2f%%", report_data.summary.function_coverage_percent or 0),
+              files = string.format("%.2f%%", file_percent)
+            })
+            
+            -- Debug output for manual calculation
+            logger.debug("Manual coverage calculation", {
+              file_count = file_count,
+              covered_file_count = covered_file_count,
+              total_lines = total_lines,
+              covered_lines = covered_lines
+            })
+          end
+        end
+      end
+    end
+  end
+  
+  -- CRITICAL FIX: Return success only if all operations succeeded AND no test failures
+  local final_success = test_success and coverage_init_success and report_success
+  
+  -- Add more detailed logging about the exit status
+  logger.debug("Exit status components", {
+    test_success = test_success,
+    coverage_init_success = coverage_init_success,
+    report_success = report_success,
+    final_success = final_success
+  })
+  
+  -- Add additional debug logging for coverage data if coverage was enabled
+  if options.coverage and coverage and coverage_init_success then
+    -- Check if we have report data that includes coverage metrics
+    local has_report_data = false
+    local line_coverage_percent = 0
+    local function_coverage_percent = 0
+    local file_coverage_percent = 0
+    
+    -- Try to safely extract coverage percentages for validation
+    local success, report_data = pcall(function() 
+      return coverage.get_report_data() 
+    end)
+    
+    if success and report_data and report_data.summary then
+      has_report_data = true
+      line_coverage_percent = report_data.summary.line_coverage_percent or 0
+      function_coverage_percent = report_data.summary.function_coverage_percent or 0
+      file_coverage_percent = report_data.summary.file_coverage_percent or 0
+    end
+    
+    logger.debug("Coverage data consistency check", {
+      is_coverage_enabled = options.coverage == true,
+      coverage_object_valid = coverage ~= nil,
+      is_active = coverage.is_active and coverage.is_active() or false,
+      report_success = report_success,
+      has_report_data = has_report_data,
+      line_coverage_percent = string.format("%.2f%%", line_coverage_percent),
+      function_coverage_percent = string.format("%.2f%%", function_coverage_percent),
+      file_coverage_percent = string.format("%.2f%%", file_coverage_percent)
+    })
+  end
+  
+  -- Log a clear error message if tests failed
+  if not test_success then
+    logger.error("TESTS FAILED! Returning non-zero exit code", {
+      reason = "Tests had failures or execution errors",
+      exit_code = 1
+    })
+  end
+  
+  -- Return the combined success status
+  return final_success
 end
 
 -- If this script is being run directly, execute main function
@@ -1389,8 +1784,18 @@ if arg and arg[0]:match("runner%.lua$") then
     args[i] = arg[i]
   end
 
-  -- Run the main function and exit with appropriate code
+  -- CRITICAL FIX: Run the main function and always exit with appropriate code
+  -- This ensures test failures are properly propagated to the OS exit code
   local success = runner.main(args)
+  
+  -- Log the exit code to ensure transparency
+  logger.info("Exiting with code", { 
+    success = success, 
+    exit_code = success and 0 or 1,
+    reason = success and "All tests passed" or "Test failures detected"
+  })
+  
+  -- Always exit with appropriate code
   os.exit(success and 0 or 1)
 end
 

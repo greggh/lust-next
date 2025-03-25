@@ -43,7 +43,7 @@
 ---@field get_blocks_for_line fun(code_map: table, line_num: number): table<number, {id: string, type: string, start_line: number, end_line: number, parent?: string}>|nil Get blocks that include a specific line
 ---@field get_conditions_for_line fun(code_map: table, line_num: number): table<number, {id: string, line: number, type: string, parent?: string}>|nil Get conditions on a specific line
 ---@field get_functions_for_line fun(code_map: table, line_num: number): table<number, {name: string, start_line: number, end_line: number, is_local: boolean, parameters: string[]}>|nil Get functions that include a specific line
----@field analyze_control_flow fun(ast: table): {branches: table<number, {type: string, line: number}>, blocks: table<string, {type: string, start_line: number, end_line: number, parent_id?: string}>, conditions: table<string, {type: string, line: number, parent_id?: string}>, computed: boolean} Analyze control flow in an AST
+---@field analyze_control_flow fun(ast: table): {branches: table<number, {type: string, line: number}>, blocks: table<string, {type: string, start_line: number, end_line: number}>, conditions: table<string, {type: string, line: number}>, computed: boolean} Analyze control flow in an AST
 ---@field get_line_type fun(code_map: table, line_num: number): string Get the type of a specific line
 ---@field get_multiline_comments fun(file_path: string): table<number, boolean>|nil Get multiline comment information for a file
 ---@field invalidate_cache_for_file fun(file_path: string): boolean Remove a file from the cache
@@ -1971,45 +1971,6 @@ local function process_function_block(block, node)
 end
 
 -- Enhanced stack-based block finding implementation with nested AST support
---- Find the best container block for a block based on line span containment
----@param block table The block to find a container for
----@param all_blocks table Array of all blocks
----@param block_map table Map of block IDs to block objects
----@return string|nil best_parent_id The ID of the best parent block or nil if none found
-local function find_containing_block(block, all_blocks, block_map)
-  if not block or not block.start_line or not block.end_line then
-    return nil
-  end
-  
-  local best_parent_id = "root"
-  local best_parent_span = math.huge
-  
-  -- Find the smallest containing block that fully contains this block
-  for _, candidate in ipairs(all_blocks) do
-    if candidate.id ~= block.id and 
-       candidate.start_line and candidate.end_line and
-       candidate.start_line <= block.start_line and 
-       candidate.end_line >= block.end_line then
-      
-      -- Calculate span size of this container
-      local span_size = candidate.end_line - candidate.start_line + 1
-      
-      -- Pick the smallest container (most specific parent)
-      if span_size < best_parent_span then
-        best_parent_span = span_size
-        best_parent_id = candidate.id
-      elseif span_size == best_parent_span then
-        -- If spans are equal, prefer the container that starts earlier
-        if (candidate.start_line or 0) < (block_map[best_parent_id].start_line or 0) then
-          best_parent_id = candidate.id
-        end
-      end
-    end
-  end
-  
-  return best_parent_id
-end
-
 local function find_blocks(ast, blocks, content, parent_id)
   -- Debug logging if enabled
   if logger.is_debug_enabled() then
@@ -2189,25 +2150,13 @@ local function find_blocks(ast, blocks, content, parent_id)
   local block_map = {}
   local pending_relationships = {}
   
-  -- First pass: build block map and sort by span size (largest to smallest)
+  -- First pass: build block map
   for _, block in ipairs(blocks) do
     block_map[block.id] = block
     
     -- Initialize children array if it doesn't exist
     block.children = block.children or {}
-    
-    -- Calculate span size for more accurate nesting detection
-    block.span_size = (block.end_line or 0) - (block.start_line or 0) + 1
   end
-  
-  -- Sort blocks by span size (largest first) to ensure parent blocks are processed before children
-  table.sort(blocks, function(a, b)
-    if a.span_size == b.span_size then
-      -- If spans are equal, prioritize by start line (earlier first)
-      return (a.start_line or 0) < (b.start_line or 0)
-    end
-    return (a.span_size or 0) > (b.span_size or 0)
-  end)
   
   -- Second pass: build the hierarchy with boundary correction
   for _, block in ipairs(blocks) do
@@ -2243,28 +2192,10 @@ local function find_blocks(ast, blocks, content, parent_id)
         -- Ensure nesting depth is consistent
         block.depth = (parent_block.depth or 0) + 1
       else
-        -- Find most appropriate parent based on containment if original parent not found
-        local best_parent_id = find_containing_block(block, blocks, block_map)
-        
-        if best_parent_id and best_parent_id ~= block.id then
-          -- Found a better parent based on containment
-          block.parent_id = best_parent_id
-          local best_parent = block_map[best_parent_id]
-          table.insert(best_parent.children, block.id)
-          block.depth = (best_parent.depth or 0) + 1
-          
-          if logger.is_debug_enabled() then
-            logger.debug("Reassigned block parent based on containment", {
-              block_id = block.id,
-              new_parent_id = best_parent_id,
-              original_parent_id = block.parent_id
-            })
-          end
-        else
-          -- Parent doesn't exist yet - record for deferred processing
-          if not pending_relationships[block.parent_id] then
-            pending_relationships[block.parent_id] = {}
-          end
+        -- Parent doesn't exist yet - record for deferred processing
+        if not pending_relationships[block.parent_id] then
+          pending_relationships[block.parent_id] = {}
+        end
         table.insert(pending_relationships[block.parent_id], block.id)
         
         -- Add debug logging for missing parent
@@ -2279,8 +2210,7 @@ local function find_blocks(ast, blocks, content, parent_id)
     end
   end
   
-  -- Third pass: process any pending parent-child relationships and reassign parent blocks
-  -- based on code structure and containment
+  -- Third pass: process any pending parent-child relationships
   for parent_id, child_ids in pairs(pending_relationships) do
     -- Check if parent is now available (might have been processed later)
     local parent_block = block_map[parent_id]
@@ -2290,83 +2220,44 @@ local function find_blocks(ast, blocks, content, parent_id)
         local child_block = block_map[child_id]
         
         if child_block then
-          -- Verify the parent is a valid container for this child
-          local valid_container = 
-            parent_block.start_line and parent_block.end_line and 
-            child_block.start_line and child_block.end_line and
-            parent_block.start_line <= child_block.start_line and
-            parent_block.end_line >= child_block.end_line
+          -- Add child ID to parent's children array
+          local already_child = false
+          for _, existing_child_id in ipairs(parent_block.children) do
+            if existing_child_id == child_id then
+              already_child = true
+              break
+            end
+          end
+          
+          if not already_child then
+            table.insert(parent_block.children, child_id)
             
-          if valid_container then
-            -- Add child ID to parent's children array
-            local already_child = false
-            for _, existing_child_id in ipairs(parent_block.children) do
-              if existing_child_id == child_id then
-                already_child = true
-                break
+            -- Update parent block boundaries to encompass all children
+            if child_block.start_line and child_block.end_line then
+              -- Expand parent boundaries if needed
+              if parent_block.start_line > child_block.start_line then
+                parent_block.start_line = child_block.start_line
+              end
+              
+              if parent_block.end_line < child_block.end_line then
+                parent_block.end_line = child_block.end_line
               end
             end
             
-            if not already_child then
-              table.insert(parent_block.children, child_id)
-              
-              -- Update parent block boundaries to encompass all children
-              if child_block.start_line and child_block.end_line then
-                -- Expand parent boundaries if needed
-                if parent_block.start_line > child_block.start_line then
-                  parent_block.start_line = child_block.start_line
-                end
-                
-                if parent_block.end_line < child_block.end_line then
-                  parent_block.end_line = child_block.end_line
-                end
-              end
-              
-              -- Ensure nesting depth is consistent
-              child_block.depth = (parent_block.depth or 0) + 1
-              
-              if logger.is_debug_enabled() then
-                logger.debug("Resolved deferred parent-child relationship", {
-                  child_id = child_id,
-                  parent_id = parent_id
-                })
-              end
-            end
-          else
-            -- Invalid container, find a better parent
-            local best_parent_id = find_containing_block(child_block, blocks, block_map)
+            -- Ensure nesting depth is consistent
+            child_block.depth = (parent_block.depth or 0) + 1
             
-            if best_parent_id and best_parent_id ~= child_block.id and best_parent_id ~= parent_id then
-              -- Found a better parent based on containment
-              child_block.parent_id = best_parent_id
-              local best_parent = block_map[best_parent_id]
-              table.insert(best_parent.children, child_id)
-              child_block.depth = (best_parent.depth or 0) + 1
-              
-              if logger.is_debug_enabled() then
-                logger.debug("Reassigned block parent based on containment", {
-                  block_id = child_id,
-                  new_parent_id = best_parent_id,
-                  original_parent_id = parent_id
-                })
-              end
-            else
-              -- Connect to root as a last resort
-              child_block.parent_id = "root"
-              child_block.depth = 1
-              
-              if logger.is_debug_enabled() then
-                logger.debug("Connected to root, no valid container found", {
-                  block_id = child_id,
-                  original_parent_id = parent_id
-                })
-              end
+            if logger.is_debug_enabled() then
+              logger.debug("Resolved deferred parent-child relationship", {
+                child_id = child_id,
+                parent_id = parent_id
+              })
             end
           end
         end
       end
     else
-      -- Parent still missing - implement advanced recovery mechanism
+      -- Parent still missing - log as warning
       if logger.is_debug_enabled() then
         logger.warn("Unresolved parent-child relationships", {
           parent_id = parent_id,
@@ -2375,45 +2266,25 @@ local function find_blocks(ast, blocks, content, parent_id)
         })
       end
       
-      -- Try to find appropriate parents for each orphaned block
+      -- As a fallback, connect orphaned blocks to the root block
       for _, child_id in ipairs(child_ids) do
         local child_block = block_map[child_id]
         if child_block then
-          -- Find most appropriate parent based on code structure
-          local best_parent_id = find_containing_block(child_block, blocks, block_map)
+          child_block.parent_id = "root"
+          child_block.depth = 1
           
-          if best_parent_id and best_parent_id ~= child_block.id then
-            -- Found a better parent based on containment
-            child_block.parent_id = best_parent_id
-            local best_parent = block_map[best_parent_id]
-            table.insert(best_parent.children, child_id)
-            child_block.depth = (best_parent.depth or 0) + 1
-            
-            if logger.is_debug_enabled() then
-              logger.debug("Found container for orphaned block", {
-                block_id = child_id,
-                new_parent_id = best_parent_id,
-                original_parent_id = parent_id
-              })
-            end
-          else
-            -- As a fallback, connect orphaned blocks to the root block
-            child_block.parent_id = "root"
-            child_block.depth = 1
-            
-            if logger.is_debug_enabled() then
-              logger.debug("Orphaned block connected to root", {
-                block_id = child_id,
-                original_parent_id = parent_id
-              })
-            end
+          if logger.is_debug_enabled() then
+            logger.debug("Orphaned block connected to root", {
+              block_id = child_id,
+              original_parent_id = parent_id
+            })
           end
         end
       end
     end
   end
   
-  -- Fourth pass: validate consistency, detect overlapping blocks, and propagate execution states
+  -- Fourth pass: validate consistency and propagate execution states
   -- This ensures that if a child block is marked as executed, its parent is too
   for _, block in ipairs(blocks) do
     -- Ensure depth is set
@@ -2423,34 +2294,16 @@ local function find_blocks(ast, blocks, content, parent_id)
     
     -- Make sure we have consistent parent-child relationships
     if block.parent_id ~= "root" and not block_map[block.parent_id] then
-      -- Try one more time to find a valid parent
-      local best_parent_id = find_containing_block(block, blocks, block_map)
-      
-      if best_parent_id and best_parent_id ~= block.id then
-        block.parent_id = best_parent_id
-        local best_parent = block_map[best_parent_id]
-        table.insert(best_parent.children, block.id)
-        block.depth = (best_parent.depth or 0) + 1
-        
-        if logger.is_debug_enabled() then
-          logger.debug("Fixed inconsistent block in final validation", {
-            block_id = block.id,
-            new_parent_id = best_parent_id
-          })
-        end
-      else
-        -- Last resort - fix inconsistent parent by connecting to root
-        if logger.is_debug_enabled() then
-          logger.warn("Block with missing parent", {
-            block_id = block.id,
-            parent_id = block.parent_id
-          })
-        end
-        
-        -- Fix by connecting to root
-        block.parent_id = "root"
-        block.depth = 1
+      if logger.is_debug_enabled() then
+        logger.warn("Block with missing parent", {
+          block_id = block.id,
+          parent_id = block.parent_id
+        })
       end
+      
+      -- Fix by connecting to root
+      block.parent_id = "root"
+      block.depth = 1
     end
   end
   
@@ -3195,69 +3048,34 @@ function M.get_blocks_for_line(code_map, line_num)
     return (a.depth or 0) > (b.depth or 0)
   end)
   
-  -- Enhanced parent block inclusion with full hierarchy traversal
+  -- Find parent blocks that should also be included
   local visited = {}
   local i = 1
-  
-  -- Build a complete ancestor graph by recursively adding all parent blocks
-  local function add_all_parent_blocks(block_id)
-    if not block_id or block_id == "root" or visited[block_id] then
-      return
-    end
-    
-    local block = block_map[block_id]
-    if not block then
-      return
-    end
-    
-    -- Include the block if it contains the line (or if we're including all ancestors)
-    if block.start_line <= line_num and block.end_line >= line_num then
-      if not visited[block_id] then
-        visited[block_id] = true
-        table.insert(blocks, block)
-      end
-      
-      -- Recursively add all its parents
-      if block.parent_id and block.parent_id ~= "root" then
-        add_all_parent_blocks(block.parent_id)
-      end
-    end
-  end
-  
-  -- First mark all initially found blocks as visited
-  for _, block in ipairs(blocks) do
-    visited[block.id] = true
-  end
-  
-  -- Then add all their parent blocks
   while i <= #blocks do
     local block = blocks[i]
+    visited[block.id] = true
     
-    -- Add all ancestors for this block
-    if block.parent_id and block.parent_id ~= "root" then
-      add_all_parent_blocks(block.parent_id)
-    end
-    
-    -- Also check if any previously added blocks are children of this block
-    -- This handles cases where the block hierarchy isn't perfect
-    if block.children then
-      for _, child_id in ipairs(block.children) do
-        local child = block_map[child_id]
-        if child and child.start_line <= line_num and child.end_line >= line_num and not visited[child_id] then
-          visited[child_id] = true
-          table.insert(blocks, child)
-        end
+    -- Check if parent block exists and isn't yet included
+    if block.parent_id and block.parent_id ~= "root" and 
+       not visited[block.parent_id] and block_map[block.parent_id] then
+      local parent = block_map[block.parent_id]
+      
+      -- Only include parent if it also contains the line
+      -- This handles cases where blocks have been adjusted in post-processing
+      if parent.start_line <= line_num and parent.end_line >= line_num then
+        table.insert(blocks, parent)
+        visited[parent.id] = true
       end
     end
     
     i = i + 1
   end
   
-  -- Enhanced sort algorithm for more deterministic block ordering
+  -- Sort blocks again to ensure consistent order (outermost to innermost)
   table.sort(blocks, function(a, b)
     -- Primary sort by line span (largest blocks first)
-    local a_span = (a.end_line or 0) - (a.start_line or 0) + 1
-    local b_span = (b.end_line or 0) - (b.start_line or 0) + 1
+    local a_span = (a.end_line or 0) - (a.start_line or 0)
+    local b_span = (b.end_line or 0) - (b.start_line or 0)
     
     if a_span ~= b_span then
       return a_span > b_span
@@ -3269,25 +3087,7 @@ function M.get_blocks_for_line(code_map, line_num)
     end
     
     -- Tertiary sort by depth (outer blocks first)
-    if (a.depth or 0) ~= (b.depth or 0) then
-      return (a.depth or 0) < (b.depth or 0)
-    end
-    
-    -- Fourth sort by block type (functions before if/for/while blocks)
-    if a.type ~= b.type then
-      -- Prioritize function blocks
-      if a.type == "function" or a.type == "Function" then
-        return true
-      elseif b.type == "function" or b.type == "Function" then
-        return false
-      end
-      
-      -- Otherwise sort by type string
-      return (a.type or "") < (b.type or "")
-    end
-    
-    -- Final sort by ID to ensure a stable sort
-    return (a.id or "") < (b.id or "")
+    return (a.depth or 0) < (b.depth or 0)
   end)
   
   -- Log debug information

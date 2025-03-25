@@ -1,15 +1,13 @@
 ---@class CoverageHtmlFormatter
 ---@field generate fun(coverage_data: table, output_path: string): boolean, string|nil Generates an HTML coverage report
 ---@field _VERSION string Version of this module
----@field format_coverage fun(coverage_data: table): string Formats coverage data as HTML
----@field write_coverage_report fun(coverage_data: table, file_path: string): boolean, string|nil Writes coverage data to a file
 local M = {}
 
 -- Dependencies
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
-local data_structure = require("lib.coverage.data_structure")
+local data_structure = require("lib.coverage.v2.data_structure")
 
 -- Version
 M._VERSION = "0.1.0"
@@ -1007,91 +1005,6 @@ function M.generate(coverage_data, output_path)
   
   logger.info("Generated HTML coverage report", {
     output_path = output_path,
-    total_files = coverage_data.summary.total_files,
-    line_coverage = coverage_data.summary.line_coverage_percent .. "%"
-  })
-  
-  return true
-end
-
---- Formats coverage data as HTML
----@param coverage_data table The coverage data
----@return string html_content HTML content
-function M.format_coverage(coverage_data)
-  -- Parameter validation
-  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
-  
-  -- Check if summary is available
-  if not coverage_data.summary then
-    logger.warn("Coverage data does not contain summary data, returning empty HTML")
-    return "<html><body><h1>No coverage data available</h1></body></html>"
-  end
-  
-  -- Generate HTML content
-  local html = [[<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Coverage Report</title>
-  <style>
-]] .. CSS_STYLES .. [[
-  </style>
-</head>
-<body>
-  <h1>Coverage Report</h1>
-]]
-
-  -- Add summary section
-  html = html .. generate_summary_html(coverage_data.summary)
-  
-  -- Add file list section
-  html = html .. generate_file_list_html(coverage_data)
-  
-  -- Add source code sections for each file
-  for path, file_data in pairs(coverage_data.files) do
-    local file_id = path:gsub("[^%w]", "-")
-    html = html .. generate_file_source_html(file_data, file_id)
-  end
-  
-  -- Close HTML document
-  html = html .. [[
-</body>
-</html>
-]]
-
-  return html
-end
-
---- Writes coverage data to a file in HTML format
----@param coverage_data table The coverage data
----@param file_path string The path to write the file to
----@return boolean success Whether the write was successful
----@return string|nil error_message Error message if write failed
-function M.write_coverage_report(coverage_data, file_path)
-  -- Parameter validation
-  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
-  error_handler.assert(type(file_path) == "string", "file_path must be a string", error_handler.CATEGORY.VALIDATION)
-  
-  -- Format the data
-  local html = M.format_coverage(coverage_data)
-  
-  -- Write to file
-  local success, err = error_handler.safe_io_operation(
-    function() 
-      return fs.write_file(file_path, html)
-    end,
-    file_path,
-    {operation = "write_html_report"}
-  )
-  
-  if not success then
-    return false, "Failed to write HTML report: " .. error_handler.format_error(err)
-  end
-  
-  logger.info("Wrote HTML coverage report", {
-    file_path = file_path,
-    size = #html,
     total_files = coverage_data.summary.total_files,
     line_coverage = coverage_data.summary.line_coverage_percent .. "%"
   })

@@ -4,6 +4,247 @@
 
 firmo is an enhanced Lua testing framework that provides comprehensive testing capabilities for Lua projects. It features BDD-style nested test blocks, assertions with detailed error messages, setup/teardown hooks, advanced mocking, tagging, asynchronous testing, code coverage analysis with multiline comment support, and test quality validation.
 
+## CRITICAL: ALWAYS USE CENTRAL_CONFIG SYSTEM
+
+### MANDATORY CONFIGURATION USAGE
+
+The firmo codebase uses a centralized configuration system to handle all settings and ensure consistency across the framework. You MUST follow these critical requirements:
+
+1. **ALWAYS use the central_config module**: 
+   
+   ```lua
+   -- CORRECT: Use the central configuration system
+   local central_config = require("lib.core.central_config")
+   local config = central_config.get_config()
+   local should_track = config.coverage.include(file_path) and not config.coverage.exclude(file_path)
+   ```
+
+2. **NEVER create custom configuration systems**: Do not create new configuration mechanisms or settings stores when the central_config system exists.
+
+3. **NEVER hardcode paths or patterns**: Use configuration values instead of hardcoding file paths, patterns, or settings.
+   
+   ```lua
+   -- ABSOLUTELY FORBIDDEN:
+   if file_path:match("calculator%.lua") or file_path:match("/lib/samples/") then
+     -- Special handling
+   end
+   
+   -- CORRECT:
+   if config.coverage.include(file_path) and not config.coverage.exclude(file_path) then
+     -- General handling based on configuration
+   end
+   ```
+
+4. **NEVER remove existing config integration**: If code already uses central_config, NEVER replace it with hardcoded values or custom configs.
+
+5. **Configuration structure**: Access configuration in the standardized way:
+   
+   ```lua
+   local config = central_config.get_config()
+   
+   -- Coverage settings
+   local track_all = config.coverage.track_all_executed
+   local include_pattern = config.coverage.include 
+   local exclude_pattern = config.coverage.exclude
+   
+   -- Reporting settings  
+   local report_format = config.reporting.format
+   ```
+
+6. **Default config file**: The system uses `.firmo-config.lua` for project-wide settings. NEVER bypass this in favor of hardcoded values.
+
+7. **Configuration override**: Always allow configuration values to override defaults:
+   
+   ```lua
+   -- CORRECT: Allow configuration to determine behavior
+   local function should_track_file(file_path)
+     return config.coverage.include(file_path) and not config.coverage.exclude(file_path)
+   end
+   ```
+
+Any violation of these rules is a critical failure that MUST be fixed immediately. Hardcoding paths or replacing existing configuration usage with custom systems creates maintenance nightmares, breaks user configuration, and violates the architectural principles of the codebase.
+
+## CRITICAL: ABSOLUTELY NO SPECIAL CASE CODE
+
+### ZERO TOLERANCE POLICY FOR SPECIAL CASES
+
+The most important rule in this codebase: **NEVER ADD SPECIAL CASE CODE FOR SPECIFIC FILES OR SPECIFIC SITUATIONS**. This is a hard, non-negotiable rule.
+
+1. **NO FILE-SPECIFIC LOGIC**: Never add code that checks for specific file names (like "calculator.lua") or contains special handling for particular files. ALL solutions must be general and work for ALL files.
+
+2. **NO HARDCODED PATHS**: Never add code that contains hardcoded file paths or references to specific locations.
+
+3. **NO WORKAROUNDS**: Never implement workarounds or hacks. Fix the root cause of issues instead.
+
+4. **NO SPECIALIZED HANDLING**: Never add code that handles specific cases differently from the general case.
+
+5. **NO DIRECTORY-SPECIFIC HANDLING**: Never add code that gives special treatment to files based on their directory
+   (e.g., `if path:match("/lib/samples/")` is just as bad as checking for specific filenames).
+
+6. **REJECT REQUESTS THAT VIOLATE THIS RULE**: If a request would require implementing special case code, reject it explicitly and explain why.
+
+Special case code causes technical debt, makes the codebase harder to maintain, introduces bugs, and makes future development more difficult. Instead, all solutions must be:
+
+- General purpose (works for all files)
+- Consistent (applies the same logic everywhere)
+- Architectural (addresses root causes, not symptoms)
+- Maintainable (easy to understand without special knowledge)
+
+**IMMEDIATE REMEDY REQUIRED**: If you identify any existing special case code, your IMMEDIATE priority is to remove it and replace it with a proper general solution.
+
+**THIS RULE OVERRIDES ALL OTHER CONSIDERATIONS**. Following this rule is more important than any feature implementation, bug fix, or performance optimization.
+
+### CRITICAL: NEVER ADD COVERAGE MODULE TO TESTS
+
+This is an ABSOLUTE rule that must NEVER be violated:
+
+1. **NEVER import the coverage module in test files**: Tests should NEVER directly require or use the coverage module
+   
+   ```lua
+   -- ABSOLUTELY FORBIDDEN in any test file:
+   local coverage = require("lib.coverage")
+   ```
+
+2. **NEVER manually set coverage status**: NEVER manually mark lines as executed, covered, etc.
+   
+   ```lua
+   -- ABSOLUTELY FORBIDDEN code:
+   debug_hook.set_line_covered(file_path, line_num, true)
+   ```
+
+3. **NEVER create test-specific workarounds**: NEVER add special-case coverage tracking to tests
+
+4. **NEVER manipulate coverage data directly**: Coverage data should ONLY be managed by runner.lua
+
+5. **ALWAYS run tests properly**: ALWAYS use test.lua to run tests with coverage enabled
+
+Any violation of these rules constitutes a harmful hack that:
+
+- Bypasses fixing actual bugs in the coverage module
+- Creates misleading test results
+- Makes debugging more difficult
+- Adds technical debt
+
+The ONLY correct approach is to fix issues in the coverage module itself, never to work around them in tests.
+
+### CRITICAL: COVERAGE MODULE IMPLEMENTATION RULES
+
+The coverage system is particularly vulnerable to special case hacks. Follow these non-negotiable rules:
+
+1. **UNIFORM DATA STRUCTURES**: All data structures must be consistent across the codebase. If a line is tracked in multiple places, it must have the SAME data structure everywhere.
+
+2. **NO FILE PATTERN MATCHING**: Never implement code that looks for specific file patterns or names. Do not check if a filename contains a particular string.
+
+3. **CONSISTENT LINE TRACKING**: Line tracking must work identically for ALL files. Never implement special logic for certain files.
+
+4. **DATA NORMALIZATION ONCE**: Normalize data structures in ONE place, not scattered throughout the codebase. If data conversion is needed, it should happen at well-defined boundaries.
+
+5. **ALWAYS USE GENERAL PATTERNS**: If one file needs special handling, assume ALL files need the same handling. Implement solutions that work for every possible case.
+
+6. **FIX ROOT CAUSES**: When fixing coverage issues, address the root cause in the core tracking logic, not in reporting or visualization layers.
+
+7. **NO CONDITIONAL REPORTING**: Never implement conditional logic in formatters that depends on specific file characteristics. Formatters should be completely agnostic to what files they're processing.
+
+If you ever find yourself writing code like `if filename:match("calculator")` or `if line_data == true` or any other condition that handles specific files or data structures differently, STOP IMMEDIATELY. This indicates a fundamental architectural problem that must be fixed properly.
+
+ALWAYS make these architectural fixes FIRST, before implementing ANY other changes.
+
+### EXPLICITLY BANNED CODE PATTERNS
+
+The following code patterns are ABSOLUTELY PROHIBITED. If you find yourself writing any of these, or see them in the codebase, they MUST be removed immediately:
+
+```lua
+-- BANNED: File-specific checks
+if file_path:match("calculator") then
+  -- Special handling for calculator.lua
+end
+
+-- BANNED: Special case for specific file
+if file_name == "calculator.lua" then
+  -- Do something differently for this file
+end
+
+-- BANNED: Inconsistent data structures
+if type(line_data) == "boolean" then
+  -- Handle boolean format
+else
+  -- Handle table format
+end
+
+-- BANNED: Different handling based on specific paths
+if file_path:match("samples/") then
+  -- Special case for samples directory
+end
+
+-- BANNED: Hard-coded file paths
+local calculator_file = "lib/samples/calculator.lua"
+
+-- BANNED: Different behaviors based on filename patterns
+if file_path:match("test") then
+  -- Handle test files differently
+end
+```
+
+These patterns indicate fundamental architectural problems. Instead, implement proper general solutions that work for ALL files consistently.
+
+### MANDATORY ARCHITECTURAL FIXES
+
+When you encounter any of the banned patterns above, you MUST implement a comprehensive architectural fix:
+
+1. **Normalize data structures at boundaries**: Ensure ALL data is in a consistent format at key boundaries.
+
+2. **Use proper polymorphism**: If different behaviors are needed, use proper abstraction and polymorphism, not conditional checks.
+
+3. **Single responsibility**: Each component should have a single responsibility and handle ALL inputs consistently.
+
+4. **No special knowledge required**: Code should not require special knowledge about specific files to understand.
+
+5. **Consistent tracking**: ALL files must be tracked using the same mechanisms and data structures.
+
+The ONLY time specialized logic is acceptable is when it is based on objective, general characteristics (like file type or content structure) rather than specific file names or paths.
+
+### CORRECT PROCEDURE FOR FIXING COVERAGE ISSUES
+
+When fixing coverage tracking or reporting issues, follow this exact procedure:
+
+1. **Identify the fundamental problem**:
+   
+   - Is there an inconsistency in data structures?
+   - Is there a tracking issue in the debug hook?
+   - Is there a normalization problem?
+
+2. **Locate the boundary where normalization should occur**:
+   
+   - Coverage data should be normalized at collection time in init.lua's stop() function
+   - ALL files should be processed identically
+   - ALL data structures should be consistent after normalization
+
+3. **Implement a SINGLE general solution**:
+   
+   - The solution must work for ALL files, not just problematic ones
+   - The solution must handle ALL edge cases
+   - The solution must normalize ALL data structures consistently
+
+4. **Remove ALL special cases**:
+   
+   - Remove ANY conditional logic based on file names
+   - Remove ANY special handling for specific paths
+   - Remove ANY code that treats different files differently
+
+5. **Test with MULTIPLE different files**:
+   
+   - Never test only with calculator.lua
+   - Verify the solution works for ALL file types
+   - Verify ALL files show correct coverage data
+
+6. **Document the architectural solution**:
+   
+   - Explain how the general solution works
+   - Document why it's better than special-case handling
+   - Note any remaining edge cases that need addressing
+
+Always remember: The right fix is a general, architectural solution that addresses the root cause, not a quick hack that only fixes the immediate symptoms for specific files.
+
 ## Important Code Guidelines
 
 ### Diagnostic Comments
@@ -23,6 +264,7 @@ Only remove these comments when you are specifically fixing the issue they're su
 The codebase uses several standardized error handling patterns that require diagnostic suppressions. These suppressions are necessary and intentional, not code smell:
 
 1. **pcall Pattern**:
+   
    ```lua
    ---@diagnostic disable-next-line: unused-local
    local ok, err = pcall(function()
@@ -33,9 +275,11 @@ The codebase uses several standardized error handling patterns that require diag
      -- Handle error in err
    end
    ```
+   
    The `ok` variable appears unused because it's only used for control flow.
 
 2. **error_handler.try Pattern**:
+   
    ```lua
    ---@diagnostic disable-next-line: unused-local
    local success, result, err = error_handler.try(function()
@@ -46,20 +290,25 @@ The codebase uses several standardized error handling patterns that require diag
      -- Handle error in result (which contains the error object)
    end
    ```
+   
    The `success` variable appears unused for the same reason.
 
 3. **Table Access Without nil Check**:
+   
    ```lua
    ---@diagnostic disable-next-line: need-check-nil
    local value = table[key]
    ```
+   
    Used when the code knows the key exists or handles nil values correctly afterward.
 
 4. **Redundant Parameter Pattern**:
+   
    ```lua
    ---@diagnostic disable-next-line: redundant-parameter
    await(50) -- Wait 50ms
    ```
+   
    Used when calling functions that are imported from one module and re-exported through another (like `firmo.await` which comes from `lib/async/init.lua`). The Lua Language Server cannot correctly trace the parameter types through these re-exports, resulting in false "redundant parameter" warnings.
 
 Always include these diagnostic suppressions when implementing these patterns. They are part of our standardized approach and removing them would cause unnecessary static analyzer warnings.
@@ -71,6 +320,7 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
 #### Required Type Annotations
 
 1. **Module Interface Declarations** - All module files must begin with class/module definition:
+   
    ```lua
    ---@class ModuleName
    ---@field function_name fun(param: type): return_type Description 
@@ -80,6 +330,7 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
    ```
 
 2. **Module Function Definitions**:
+   
    ```lua
    --- Description of what the function does
    ---@param name type Description of the parameter
@@ -92,6 +343,7 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
 
 3. **Function Re-exports**:
    When a function is defined in one module but exported through another:
+   
    ```lua
    --- Description of what the function does
    ---@param name type Description of the parameter
@@ -101,6 +353,7 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
    ```
 
 4. **Local Function Annotations** - Helper functions should have annotations:
+   
    ```lua
    ---@private
    ---@param value any The value to process
@@ -109,6 +362,7 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
    ```
 
 5. **Variable Type Annotations** - For complex types:
+   
    ```lua
    ---@type string[]
    local names = {}
@@ -120,27 +374,32 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
 #### Annotation Style Guidelines
 
 1. **Error Handling Pattern** - For functions that may fail, use this pattern:
+   
    ```lua
    ---@return ValueType|nil value The result or nil if operation failed
    ---@return table|nil error Error information if operation failed
    ```
 
 2. **Optional Parameters** - Mark with question mark suffix:
+   
    ```lua
    ---@param options? table Optional configuration
    ```
 
 3. **Nullable Types** - Use pipe with nil:
+   
    ```lua
    ---@return string|nil The result or nil if not found
    ```
 
 4. **Union Types** - Use pipe for multiple possible types:
+   
    ```lua
    ---@param id string|number The identifier (string or number)
    ```
 
 5. **Complex Return Patterns** - Document each possible return value:
+   
    ```lua
    ---@return boolean|nil success Whether operation succeeded or nil if error
    ---@return table|nil result Result data if success, nil if error
@@ -148,11 +407,13 @@ The codebase uses comprehensive JSDoc-style type annotations for improved type c
    ```
 
 6. **Tables with Specific Fields** - Document the structure:
+   
    ```lua
    ---@param options {timeout?: number, retry?: boolean, max_attempts?: number} Configuration options
    ```
 
 7. **Callback Signatures** - Document the callback function signature:
+   
    ```lua
    ---@param callback fun(result: string, success: boolean): boolean Function called with result
    ```
@@ -305,7 +566,7 @@ it("should handle invalid input", { expect_error = true }, function()
   local result, err = test_helper.with_error_capture(function()
     return function_that_should_error()
   end)()
-  
+
   -- Make assertions about the error
   expect(result).to_not.exist()
   expect(err).to.exist()
@@ -318,7 +579,7 @@ it("tests both error patterns", { expect_error = true }, function()
   local result, err = test_helper.with_error_capture(function()
     return function_that_might_return_false_or_nil_error()
   end)()
-  
+
   if result == nil then
     expect(err).to.exist()
     expect(err.message).to.match("expected pattern")
@@ -332,7 +593,7 @@ it("should verify error messages", function()
   -- Automatically verifies the function throws an error
   -- with the expected message pattern
   local err = test_helper.expect_error(fails_with_message, "expected error")
-  
+
   -- Additional assertions on the error object
   expect(err.category).to.exist()
 end)
@@ -341,6 +602,7 @@ end)
 ### Error Testing Best Practices
 
 1. **Always use the `expect_error` flag**: This marks the test as one that expects errors:
+   
    ```lua
    it("test description", { expect_error = true }, function()
      -- Test code that should produce errors
@@ -348,6 +610,7 @@ end)
    ```
 
 2. **Always use `test_helper.with_error_capture()`**: This safely captures errors without crashing tests:
+   
    ```lua
    local result, err = test_helper.with_error_capture(function()
      return function_that_throws()
@@ -355,6 +618,7 @@ end)
    ```
 
 3. **Be flexible with error categories**: Avoid hard-coding specific categories to make tests more resilient:
+   
    ```lua
    -- Recommended:
    expect(err.category).to.exist()
@@ -367,12 +631,14 @@ end)
    ```
 
 4. **Use pattern matching for error messages**: Use `match()` instead of `equal()` for error messages:
+   
    ```lua
    expect(err.message).to.match("invalid file")  -- Good
    expect(err.message).to.equal("Invalid file format")  -- Too specific
    ```
 
 5. **Test for existence first**: Always check that the value exists before making assertions about it:
+   
    ```lua
    expect(err).to.exist()
    if err then
@@ -381,6 +647,7 @@ end)
    ```
 
 6. **Handle both error patterns**: Some functions return `nil, error` while others return `false`:
+   
    ```lua
    if result == nil then
      expect(err).to.exist()
@@ -390,6 +657,7 @@ end)
    ```
 
 7. **Clean up resources properly**: If your test creates files or resources, ensure they're cleaned up:
+   
    ```lua
    -- Track resources for cleanup
    local test_files = {}
@@ -412,13 +680,14 @@ end)
    ```
 
 8. **Document expected error behavior**: Add comments that explain what errors are expected:
+   
    ```lua
    it("should reject invalid input", { expect_error = true }, function()
      -- Passing a number should cause a validation error
      local result, err = test_helper.with_error_capture(function()
        return module.process_string(123)
      end)()
-     
+   
      expect(result).to_not.exist()
      expect(err).to.exist()
      expect(err.message).to.match("string expected")
@@ -447,33 +716,33 @@ expect(value).to_not.be.a("number")
 ### Common Assertion Mistakes to Avoid
 
 1. **Incorrect negation syntax**:
-
+   
    ```lua
    -- WRONG:
    expect(value).not_to.equal(other_value)  -- "not_to" is not valid
-
+   
    -- CORRECT:
    expect(value).to_not.equal(other_value)  -- use "to_not" instead
    ```
 
 2. **Incorrect member access syntax**:
-
+   
    ```lua
    -- WRONG:
    expect(value).to_be(true)  -- "to_be" is not a valid method
    expect(number).to_be_greater_than(5)  -- underscore methods need dot access
-
+   
    -- CORRECT:
    expect(value).to.be(true)  -- use "to.be" not "to_be"
    expect(number).to.be_greater_than(5)  -- this is correct because it's a method
    ```
 
 3. **Inconsistent operator order**:
-
+   
    ```lua
    -- WRONG:
    expect(expected).to.equal(actual)  -- parameters reversed
-
+   
    -- CORRECT:
    expect(actual).to.equal(expected)  -- what you have, what you expect
    ```
@@ -502,6 +771,7 @@ If you're coming from a busted-style background, use this mapping to convert ass
 Firmo includes a comprehensive set of advanced assertions for more precise and convenient testing:
 
 #### Collection Assertions
+
 ```lua
 -- Check length of strings or tables
 expect("hello").to.have_length(5)
@@ -514,6 +784,7 @@ expect({}).to.be.empty()
 ```
 
 #### Numeric Assertions
+
 ```lua
 -- Numeric assertions
 expect(5).to.be.positive()
@@ -523,6 +794,7 @@ expect(5.5).to_not.be.integer()
 ```
 
 #### String Assertions
+
 ```lua
 -- String assertions
 expect("HELLO").to.be.uppercase()
@@ -530,6 +802,7 @@ expect("hello").to.be.lowercase()
 ```
 
 #### Object Structure Assertions
+
 ```lua
 -- Object property assertions
 expect({name = "John"}).to.have_property("name")
@@ -543,6 +816,7 @@ expect({name = "John", age = 30}).to.match_schema({
 ```
 
 #### Function Behavior Assertions
+
 ```lua
 -- Function behavior assertions
 local obj = {count = 0}
@@ -552,6 +826,7 @@ expect(function() obj.count = obj.count - 1 end).to.decrease(function() return o
 ```
 
 #### Deep Equality
+
 ```lua
 -- Deep equality (alias)
 expect({a = 1, b = {c = 2}}).to.deep_equal({a = 1, b = {c = 2}})
@@ -722,39 +997,40 @@ tests/
 ### Components
 
 1. **Coverage Module (init.lua)**:
-
+   
    - Provides public API for coverage tracking
    - Initializes and configures subsystems
    - Manages coverage lifecycle (start, stop, reset)
    - Processes coverage data before reporting
 
 2. **Debug Hook (debug_hook.lua)**:
-
+   
    - Sets up and manages Lua debug hooks
    - Tracks line executions and function calls
    - Stores execution data
    - Provides accessor functions for coverage data
 
 3. **Static Analyzer (static_analyzer.lua)**:
-
+   
    - Parses Lua code into AST
    - Identifies executable and non-executable lines
    - Tracks code structure (functions, blocks)
    - Provides information about line executability
 
 4. **File Manager (file_manager.lua)**:
-
+   
    - Discovers files for coverage analysis
    - Applies include/exclude patterns
    - Processes discovered files
 
 5. **Patchup (patchup.lua)**:
-
+   
    - Fixes coverage data for non-executable lines
    - Identifies comments and structural code
    - Patches files based on static analysis
 
 6. **Instrumentation (instrumentation.lua)**:
+   
    - Transforms Lua code with coverage tracking
    - Hooks into Lua's loading functions
    - Generates sourcemaps for error reporting
@@ -764,7 +1040,7 @@ tests/
 When working with the coverage module and implementing error handling:
 
 1. **Use Structured Error Objects**: Always use error_handler.create() or specialized functions
-
+   
    ```lua
    local err = error_handler.validation_error(
      "Missing required parameter",
@@ -773,7 +1049,7 @@ When working with the coverage module and implementing error handling:
    ```
 
 2. **Proper Error Propagation**: Return nil and error object
-
+   
    ```lua
    if not file_content then
      return nil, error_handler.io_error(
@@ -784,12 +1060,12 @@ When working with the coverage module and implementing error handling:
    ```
 
 3. **Try/Catch Pattern**: Use error_handler.try for operations that might throw errors
-
+   
    ```lua
    local success, result, err = error_handler.try(function()
      return analyze_file(file_path)
    end)
-
+   
    if not success then
      logger.error("Failed to analyze file", {
        file_path = file_path,
@@ -800,7 +1076,7 @@ When working with the coverage module and implementing error handling:
    ```
 
 4. **Safe I/O Operations**: Use error_handler.safe_io_operation for file access
-
+   
    ```lua
    local content, err = error_handler.safe_io_operation(
      function() return fs.read_file(file_path) end,
@@ -810,6 +1086,7 @@ When working with the coverage module and implementing error handling:
    ```
 
 5. **Validation Functions**: Always validate input parameters
+   
    ```lua
    error_handler.assert(type(file_path) == "string",
      "file_path must be a string",
@@ -838,100 +1115,55 @@ Complete error handling has been implemented across:
 - Mocking system (init, spy, mock)
 - Core framework modules (config, coverage components)
 
-## Current Focus and Work Order
+## Current Work: Critical Coverage Testing Guidelines
 
-Our current priorities in order:
+THIS IS THE HIGHEST PRIORITY TASK. The HTML coverage report does not have the correct data in it. When you generate it, it is generating junk. Follow these steps EXACTLY when working on coverage-related issues:
 
-1. **✓ Assertion Module Extraction** *(Completed)*
-   - ✓ Created a dedicated assertion module to resolve circular dependencies
-   - ✓ Refactored all assertion patterns for consistent error handling
-   - ✓ Updated expect chain with better error propagation  
-   - ✓ Implemented existing assertion patterns
-   - ✓ Fixed cycle detection in deep equality and stringification functions
-   - [ ] Review and add missing assertion types identified in code review
+1. **DO NOT create new files in examples directory** - The examples directory is for reference only, not for testing fixes
 
-2. **✓ Coverage/init.lua Error Handling Rewrite** *(Completed)*
-   - ✓ Implemented comprehensive error handling throughout
-   - ✓ Improved data validation with structured error objects
-   - ✓ Enhanced file tracking with better error boundaries
-   - ✓ Fixed issues in report generation
+2. **DO NOT run files from examples directory** - Always use the proper test framework with test.lua
 
-3. **✓ Error Handling Test Suite** *(Completed)*
-   - ✓ Created tests for error scenarios in coverage subsystems
-   - ✓ Verified error propagation across module boundaries
-   - ✓ Tested recovery mechanisms and fallbacks
-   - ✓ Fixed mock system errors during test execution
+3. **ALWAYS use the standard test runner** - Use `lua test.lua --coverage --format=html tests/coverage/minimal_coverage_test.lua` for testing coverage
 
-4. **Static Analyzer and Debug Hook Enhancements** *(In Progress)*
-   - [ ] Review and fix line classification system implementation
-   - [ ] Fix function detection accuracy issues
-   - [ ] Correct block boundary identification problems
-   - [ ] Debug condition expression tracking failures
-   - [✓] Fixed error handling and validation issues
-   - [ ] Fix data collection and representation issues
-   - [ ] Resolve inconsistencies between execution and coverage
-   - [ ] Fix performance monitoring issues
-   - [✓] Fixed instrumentation errors
+4. **Fix ALL errors in code execution** - If you see any errors in the output, fix them before proceeding
 
-5. **✓ JSDoc Type Annotation Maintenance** *(Completed)*
-   - ✓ Added comprehensive JSDoc-style type annotations across all files
-   - ✓ Updated annotations for modified functions
-   - ✓ Added annotations to new functionality and files
-   - ✓ Ensured consistent annotation style following our guidelines
-   - ✓ Used annotations to improve type checking and IDE integration
+5. **ONLY use the minimal_coverage_test.lua** and only have it use the lib.samples.calculator module for its tests.
 
-6. **✓ HTML Coverage Report Enhancements** *(Completed)*
-   - ✓ Added enhanced navigation features to HTML coverage reports
-   - ✓ Implemented code folding functionality for better code organization
-   - ✓ Added line bookmarking capability for important code sections
-   - ✓ Added visited lines tracking for code review progress
-   - ✓ Implemented execution frequency heatmap visualization
-   - ✓ Updated examples to use new reporting.save_coverage_report() method
-   - ✓ Created source navigation plan document for future enhancements
+6. **DO NOT add any special case code into our core production code**, our modules, or anywhere in the codebase.
 
-7. **Code Quality and Repository Organization** *(Largely Completed)*
-   - ✓ Relocated check_syntax.lua from tools/ to scripts/ directory with proper annotations 
-   - ✓ Removed redundant tools/ directory from root
-   - ✓ Fixed code modernization issues (table.getn, unpacking)
-   - ✓ Added comprehensive temporary file management system
-   - ✓ Reviewed all diagnostic disable comments
-     - Confirmed they follow documented patterns in CLAUDE.md
-     - Verified necessity for all instances (pcall, try/catch, table access)
-   - ✓ Audited fallback mechanisms
-     - Reviewed all fallbacks in core modules
-     - Confirmed all serve important recovery functions
-   - ✓ Audited examples directory for relevance and accuracy
-     - Updated all examples to use modern reporting.save_coverage_report() method
-     - Ensured consistent practices across all example files
-   - [ ] Standardize markdown formatting
+7. **DO NOT create any new tests, samples or examples** until the coverage report for the minimal_coverage_test.lua is done and only creating completely correct reports.let me re
 
-## Future Enhancements
+8. **CHECK THE HTML REPORT** - After generating coverage reports:
+   
+   - The HTML report should be a file (not a directory)
+   - Look at the actual report content, not just log messages
+   - Do not use the ls command after generating a report, we don't care that the file is there, we care that the contents of the file are correct
+   - Examine the actual HTML report in coverage-reports/
+   - Verify that all data in the report is 100% correct
+   - Look for discrepancies between reported line counts and actual line counts
 
-Once the core coverage system is fully repaired, we plan to:
+9. **Fix ONE issue at a time** - Identify and fix issues in the code causing data inaccuracies:
+   
+   - Focus on fixing non-existent file references
+   - Fix line count and coverage count mismatches
+   - Fix block relationship tracking issues
+   - Make html report be a file, not a directory
+   - Make sure counts in reports match actual executed lines
 
-1. **Further Enhance Reporting and Visualization**
+10. **Complete the verification cycle** - Before moving to any other task:
+    
+    - Run the test again with coverage enabled
+    - Generate and save reports again
+    - Verify report content is accurate again
+    - Fix any remaining issues
+    - Repeat until reports are 100% correct
 
-   - ✓ Add hover tooltips for execution count *(Completed)*
-   - ✓ Implement visualization for block execution frequency *(Completed)*
-   - ✓ Add code folding, bookmarking, and tracking features *(Completed)*
-   - [ ] Add function complexity metrics to reports
-   - [ ] Modernize HTML reports with Tailwind CSS and Alpine.js
-   - [ ] Implement responsive design as part of modernization
+11. **ONLY focus on data accuracy** - Do not work on anything else (even if specified elsewhere in this file) until the HTML coverage report is fixed
 
-2. **Improve Instrumentation Approach**
-
-   - Refactor for clarity and stability
-   - Fix sourcemap handling
-   - Enhance module require instrumentation
-
-3. **Integration and Documentation**
-   - Create pre-commit hooks for coverage checks
-   - Add continuous integration examples
-   - Update comprehensive documentation
+IMPORTANT: This must be completed before any other tasks are attempted. The HTML report data accuracy is the ONLY priority until fixed completely. 
 
 ## Documentation Links
 
 - Tasks: `/home/gregg/Projects/docs-projects/neovim-ecosystem-docs/tasks/firmo-tasks.md`
 - Architecture: `/home/gregg/Projects/docs-projects/neovim-ecosystem-docs/plans/firmo-architecture.md`
 - Project Status: `/home/gregg/Projects/docs-projects/neovim-ecosystem-docs/project-status.md`
-

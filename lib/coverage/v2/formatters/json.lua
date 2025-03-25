@@ -1,7 +1,5 @@
 ---@class CoverageJsonFormatter
 ---@field generate fun(coverage_data: table, output_path: string): boolean, string|nil Generates a JSON coverage report
----@field format_coverage fun(coverage_data: table): string Formats coverage data as JSON
----@field write_coverage_report fun(coverage_data: table, file_path: string): boolean, string|nil Writes coverage data to a file
 ---@field _VERSION string Version of this module
 local M = {}
 
@@ -9,7 +7,7 @@ local M = {}
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
-local data_structure = require("lib.coverage.data_structure")
+local data_structure = require("lib.coverage.v2.data_structure")
 
 -- Version
 M._VERSION = "0.1.0"
@@ -262,64 +260,6 @@ function M.generate(coverage_data, output_path)
     total_files = coverage_data.summary.total_files,
     line_coverage = coverage_data.summary.line_coverage_percent .. "%",
     function_coverage = coverage_data.summary.function_coverage_percent .. "%"
-  })
-  
-  return true
-end
-
---- Formats coverage data as JSON
----@param coverage_data table The coverage data
----@return string json_content JSON content
-function M.format_coverage(coverage_data)
-  -- Parameter validation
-  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
-  
-  -- Check if summary is available
-  if not coverage_data.summary then
-    logger.warn("Coverage data does not contain summary data, returning empty JSON content")
-    return "{}"
-  end
-  
-  -- Prepare data for JSON serialization (removing large strings)
-  local json_data = prepare_json_data(coverage_data)
-  
-  -- Format the data as JSON
-  local json_content = encode_json(json_data, true)
-  
-  return json_content
-end
-
---- Writes coverage data to a file in JSON format
----@param coverage_data table The coverage data
----@param file_path string The path to write the file to
----@return boolean success Whether the write was successful
----@return string|nil error_message Error message if write failed
-function M.write_coverage_report(coverage_data, file_path)
-  -- Parameter validation
-  error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
-  error_handler.assert(type(file_path) == "string", "file_path must be a string", error_handler.CATEGORY.VALIDATION)
-  
-  -- Format the data
-  local json = M.format_coverage(coverage_data)
-  
-  -- Write to file
-  local success, err = error_handler.safe_io_operation(
-    function() 
-      return fs.write_file(file_path, json)
-    end,
-    file_path,
-    {operation = "write_json_report"}
-  )
-  
-  if not success then
-    return false, "Failed to write JSON report: " .. error_handler.format_error(err)
-  end
-  
-  logger.info("Wrote JSON coverage report", {
-    file_path = file_path,
-    size = #json,
-    total_files = coverage_data.summary.total_files,
-    line_coverage = coverage_data.summary.line_coverage_percent .. "%"
   })
   
   return true

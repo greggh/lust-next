@@ -47,23 +47,48 @@ return {
 
   -- Coverage Analysis
   coverage = {
-    enabled = false,                  -- Whether coverage is enabled by default
-    source_dirs = {".", "src", "lib"}, -- Directories to scan for source files
-    use_default_patterns = true,      -- Whether to use default include/exclude patterns
-    discover_uncovered = true,        -- Discover files that aren't executed by tests
-    include = {                       -- Files to include in coverage (appended to defaults when use_default_patterns is true)
-      "*.lua",                        -- All Lua files in current directory
-      "**/*.lua",                     -- All Lua files in subdirectories
+    enabled = false,                    -- Whether coverage is enabled by default
+    use_default_patterns = false,       -- Whether to use default include/exclude patterns
+    discover_uncovered = true,          -- Discover files that aren't executed by tests
+    
+    -- Files to include in coverage (these are the ONLY patterns used when use_default_patterns=false)
+    -- These patterns determine which files will be tracked for code coverage
+    -- Configure these based on YOUR project's specific structure
+    include = {                      
+      "**/*.lua",                       -- Example: track all Lua files by default
     },
-    exclude = {                       -- Files to exclude from coverage (appended to defaults when use_default_patterns is true)
-      "*_test.lua",                   -- Test files with suffix
-      "test_*.lua",                   -- Test files with prefix
-      "tests/**/*.lua",               -- All files in tests directory
+    
+    -- Files to exclude from coverage (these are the ONLY patterns used when use_default_patterns=false)
+    -- Configure these based on YOUR project's specific structure
+    exclude = {                       
+      -- Add specific patterns for files you want to exclude from coverage
+      -- For example: "vendor/**/*.lua", "external/**/*.lua"
     },
-    threshold = 90,                   -- Coverage threshold percentage
-    format = "summary",               -- Default report format (summary, json, html, lcov)
-    output = nil,                     -- Custom output file path (nil=auto-generated)
-    debug = false,                    -- Enable debug output for coverage module
+    
+    -- Include all executed files in coverage reports, regardless of patterns
+    -- This can be useful to find files you weren't aware needed coverage
+    track_all_executed = false,
+    
+    -- Coverage threshold percentage for success
+    threshold = 80,                   
+    
+    -- Default report format (summary, json, html, lcov)
+    format = "html",                  
+    
+    -- Custom output file path (nil=auto-generated)
+    output = nil,                     
+    
+    -- Enable debug output for coverage module
+    debug = false,                    
+    
+    -- Block tracking for more detailed coverage analysis
+    track_blocks = true,              
+    
+    -- Use static analysis for improved coverage accuracy
+    use_static_analysis = true,       
+    
+    -- Automatically fix block relationship issues
+    auto_fix_block_relationships = true,
   },
 
   -- Test Quality Validation

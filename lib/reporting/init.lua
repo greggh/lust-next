@@ -1416,6 +1416,53 @@ function M.save_coverage_report(file_path, coverage_data, format, options)
     validate = options.validate ~= false, -- Default to validate=true
   })
 
+  -- CRITICAL FIX: Check for minimal valid data structure before proceeding
+  if not coverage_data.files or not coverage_data.summary then
+    local err = error_handler.validation_error(
+      "Invalid coverage data structure: missing required fields",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_coverage_report",
+        module = "reporting",
+        missing_files = coverage_data.files == nil,
+        missing_summary = coverage_data.summary == nil
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  -- Count files in the coverage data - an empty report is invalid
+  local file_count = 0
+  if coverage_data.files then
+    for _ in pairs(coverage_data.files) do
+      file_count = file_count + 1
+    end
+  end
+  
+  -- CRITICAL FIX: Fail if there are no files in the coverage data
+  if file_count == 0 then
+    local err = error_handler.validation_error(
+      "Invalid coverage data: no files found in coverage data",
+      {
+        file_path = file_path,
+        format = format,
+        operation = "save_coverage_report",
+        module = "reporting",
+        file_count = file_count
+      }
+    )
+    logger.error(err.message, err.context)
+    return nil, err
+  end
+  
+  -- Log file count for debugging
+  logger.debug("Coverage file count validation", {
+    file_count = file_count,
+    files_valid = file_count > 0
+  })
+
   -- Validate coverage data before saving if not disabled
   if options.validate ~= false then
     -- Safely get the validation module using error_handler.try
@@ -1554,12 +1601,19 @@ function M.save_coverage_report(file_path, coverage_data, format, options)
     end
   end
 
+  -- Write all formats (including HTML) directly to file
   -- Write to file with error handling
+  logger.debug("Writing coverage report file", {
+    file_path = file_path,
+    format = format,
+    content_length = #content
+  })
+  
   ---@diagnostic disable-next-line: unused-local
   local write_success, write_err = error_handler.try(function()
     return M.write_file(file_path, content)
   end)
-
+  
   if not write_success then
     local err = error_handler.io_error(
       "Failed to write coverage report to file",
@@ -1569,17 +1623,17 @@ function M.save_coverage_report(file_path, coverage_data, format, options)
         operation = "save_coverage_report",
         module = "reporting",
       },
-      write_success -- write_success contains the error when success is false
+      write_err
     )
     logger.error(err.message, err.context)
     return nil, err
   end
-
+  
   logger.debug("Successfully saved coverage report", {
     file_path = file_path,
     format = format,
   })
-
+  
   return true
 end
 

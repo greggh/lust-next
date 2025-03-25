@@ -16,59 +16,15 @@ local central_config = require("lib.core.central_config")
 local fs = require("lib.tools.filesystem")
 
 -- Internal modules
-local debug_hook = require("lib.coverage.debug_hook")
-local data_structure = require("lib.coverage.data_structure")
-local line_classifier = require("lib.coverage.line_classifier")
+local debug_hook = require("lib.coverage.v2.debug_hook")
+local data_structure = require("lib.coverage.v2.data_structure")
+local line_classifier = require("lib.coverage.v2.line_classifier")
+
+-- Formatters
+local formatters = require("lib.coverage.v2.formatters")
 
 -- Version
 M._VERSION = "0.1.0"
-
---- Initializes the coverage module with configuration
----@param config table Configuration table with include/exclude patterns and other settings
----@return boolean success Whether initialization was successful
-function M.init(config)
-  logger.info("Initializing coverage module (v2)")
-  
-  -- Store configuration in central_config
-  if config then
-    if type(config.debug) == "boolean" then
-      central_config.set("coverage.debug", config.debug)
-    end
-    
-    if type(config.track_all_executed) == "boolean" then
-      central_config.set("coverage.track_all_executed", config.track_all_executed)
-    end
-    
-    if type(config.include) == "table" then
-      central_config.set("coverage.include", config.include)
-    end
-    
-    if type(config.exclude) == "table" then
-      central_config.set("coverage.exclude", config.exclude)
-    end
-    
-    if type(config.source_dirs) == "table" then
-      central_config.set("coverage.source_dirs", config.source_dirs)
-    end
-    
-    if type(config.report_dir) == "string" then
-      central_config.set("coverage.report_dir", config.report_dir)
-    end
-    
-    if type(config.auto_fix_block_relationships) == "boolean" then
-      central_config.set("coverage.auto_fix_block_relationships", config.auto_fix_block_relationships)
-    end
-    
-    logger.debug("Coverage configuration set", {
-      debug = central_config.get("coverage.debug"),
-      track_all_executed = central_config.get("coverage.track_all_executed"),
-      include_count = #(central_config.get("coverage.include") or {}),
-      exclude_count = #(central_config.get("coverage.exclude") or {})
-    })
-  end
-  
-  return true
-end
 
 --- Starts coverage tracking
 ---@return boolean success Whether coverage tracking was successfully started
@@ -97,14 +53,7 @@ function M.stop()
     return false
   end
   
-  -- Get the configuration for auto-fixing block relationships
-  local auto_fix_blocks = central_config.get("coverage.auto_fix_block_relationships")
-  if auto_fix_blocks ~= nil then
-    -- Only call set if it's explicitly configured
-    debug_hook.set_auto_fix_block_relationships(auto_fix_blocks)
-  end
-  
-  -- Stop the debug hook (which will auto-fix block relationships if enabled)
+  -- Stop the debug hook
   local success = debug_hook.stop()
   if not success then
     logger.error("Failed to stop coverage tracking")
@@ -213,115 +162,6 @@ function M.get_file_coverage(file_path)
   return coverage_data.files[normalized_path]
 end
 
---- Explicitly tracks a file for coverage
----@param file_path string The file path to track
----@return boolean success Whether the file was successfully tracked
----@return string|nil error_message Error message if tracking failed
-function M.track_file(file_path)
-  -- Parameter validation
-  error_handler.assert(type(file_path) == "string", "file_path must be a string", error_handler.CATEGORY.VALIDATION)
-  
-  -- Normalize the path
-  local normalized_path = data_structure.normalize_path(file_path)
-  if not normalized_path then
-    return false, "Failed to normalize file path"
-  end
-  
-  logger.debug("Tracking file for coverage", {
-    file_path = file_path,
-    normalized_path = normalized_path,
-    operation = "track_file"
-  })
-  
-  -- Get the coverage data
-  local coverage_data = debug_hook.get_coverage_data()
-  if not coverage_data then
-    return false, "No coverage data available, coverage tracking may not be started"
-  end
-  
-  -- Check if file already exists in the data structure
-  if coverage_data.files[normalized_path] then
-    logger.debug("File already being tracked", {
-      file_path = normalized_path
-    })
-    return true
-  end
-  
-  -- Read the file content
-  local content, err = error_handler.safe_io_operation(
-    function() return fs.read_file(file_path) end,
-    file_path,
-    {operation = "read_file_for_tracking"}
-  )
-  
-  if not content then
-    return false, "Failed to read file: " .. error_handler.format_error(err)
-  end
-  
-  -- Initialize coverage data for the file
-  data_structure.initialize_file(coverage_data, normalized_path, content)
-  
-  logger.info("Started tracking file for coverage", {
-    file_path = normalized_path
-  })
-  
-  return true
-end
-
---- Explicitly marks a line as executed for coverage
----@param file_path string The file path
----@param line_num number The line number to mark as executed
----@return boolean success Whether the line was successfully marked
----@return string|nil error_message Error message if marking failed
-function M.track_line(file_path, line_num)
-  -- Parameter validation
-  error_handler.assert(type(file_path) == "string", "file_path must be a string", error_handler.CATEGORY.VALIDATION)
-  error_handler.assert(type(line_num) == "number", "line_num must be a number", error_handler.CATEGORY.VALIDATION)
-  
-  -- Check if coverage is active
-  if not M.is_running() then
-    logger.debug("Coverage not active, ignoring track_line", {
-      file_path = file_path,
-      line_num = line_num
-    })
-    return false, "Coverage tracking is not active"
-  end
-  
-  -- Normalize the path
-  local normalized_path = data_structure.normalize_path(file_path)
-  if not normalized_path then
-    return false, "Failed to normalize file path"
-  end
-  
-  logger.debug("Manually tracking line execution", {
-    file_path = normalized_path,
-    line_num = line_num,
-    operation = "track_line"
-  })
-  
-  -- Get the coverage data
-  local coverage_data = debug_hook.get_coverage_data()
-  if not coverage_data then
-    return false, "No coverage data available"
-  end
-  
-  -- Ensure the file is being tracked
-  if not coverage_data.files[normalized_path] then
-    local success, err = M.track_file(file_path)
-    if not success then
-      return false, "Failed to track file: " .. (err or "Unknown error")
-    end
-  end
-  
-  -- Mark the line as executed
-  local success = data_structure.mark_line_executed(coverage_data, normalized_path, line_num)
-  if not success then
-    return false, "Failed to mark line as executed"
-  end
-  
-  return true
-end
-
 --- Generates coverage reports in specified formats
 ---@param output_dir string Directory where reports should be saved
 ---@param formats string[] List of formats to generate (html, lcov, json)
@@ -358,21 +198,9 @@ function M.generate_reports(output_dir, formats)
   
   -- Generate reports in each requested format
   for _, format in ipairs(formats) do
-    local formatter = nil
-    
-    -- Load the appropriate formatter
-    if format == "html" then
-      formatter = require("lib.reporting.formatters.html")
-    elseif format == "lcov" then
-      formatter = require("lib.reporting.formatters.lcov")
-    elseif format == "cobertura" then
-      formatter = require("lib.reporting.formatters.cobertura")
-    elseif format == "json" then
-      formatter = require("lib.reporting.formatters.json")
-    end
-    
+    local formatter = formatters.get_formatter(format)
     if formatter then
-      local output_path = output_dir .. "coverage-report." .. format
+      local output_path = output_dir .. "coverage-report-v2." .. format
       local success, err = formatter.generate(coverage_data, output_path)
       
       if success then
@@ -407,22 +235,7 @@ end
 --- Gets a list of available report formats
 ---@return string[] formats List of available format names
 function M.get_available_formats()
-  local available_formats = {"html", "lcov"}
-  
-  -- Check if other formatters are available
-  local function has_formatter(name)
-    local success = pcall(function() require("lib.reporting.formatters." .. name) end)
-    return success
-  end
-  
-  if has_formatter("cobertura") then
-    table.insert(available_formats, "cobertura")
-  end
-  if has_formatter("json") then
-    table.insert(available_formats, "json")
-  end
-  
-  return available_formats
+  return formatters.get_available_formats()
 end
 
 return M

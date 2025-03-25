@@ -3,15 +3,13 @@
 ---@field stop fun(): boolean Stops the debug hook
 ---@field is_running fun(): boolean Checks if the debug hook is running
 ---@field get_coverage_data fun(): table|nil Returns the current coverage data
----@field fix_block_relationships fun(): {files_processed: number, relationships_fixed: number, pending_relationships_resolved: number} Fixes inconsistent parent-child relationships in block tracking
----@field set_auto_fix_block_relationships fun(enabled: boolean): boolean Sets whether to automatically fix block relationships on stop
 ---@field _VERSION string Version of this module
 local M = {}
 
 -- Dependencies
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
-local data_structure = require("lib.coverage.data_structure")
+local data_structure = require("lib.coverage.v2.data_structure")
 local central_config = require("lib.core.central_config")
 local fs = require("lib.tools.filesystem")
 
@@ -24,9 +22,6 @@ local original_hook = nil
 local coverage_data = nil
 local file_cache = {}
 local tracked_files_log = nil
-local auto_fix_block_relationships = true -- Enabled by default
-local last_executed_line = {} -- Track the most recent line executed in each file
-local original_error = error -- Store the original error function for our error tracking
 
 -- Default configuration used when central_config is not available
 local default_config = {
@@ -88,64 +83,55 @@ local function should_track_file(file_path)
   -- Get configuration safely
   local config = get_safe_config()
   
-  -- Check if the file should be tracked based on configuration
-  if config.coverage then
-    -- If track_all_executed is enabled, check file extension
-    if config.coverage.track_all_executed and normalized_path:match("%.lua$") then
-      -- Check exclude patterns first
-      local should_exclude = false
-      if type(config.coverage.exclude) == "table" then
-        for _, pattern in ipairs(config.coverage.exclude) do
+  -- For basic tests, accept most Lua files
+  if normalized_path:match("%.lua$") then
+    -- Always exclude vendor and framework files
+    if normalized_path:match("/lib/tools/vendor/") or
+       normalized_path:match("/lib/tools/test_helper%.lua$") or
+       normalized_path:match("/test%.lua$") or
+       normalized_path:match("/scripts/runner%.lua$") then
+      return false
+    end
+    
+    -- If track_all_executed is enabled, accept all other Lua files
+    if config.coverage and config.coverage.track_all_executed then
+      return true
+    end
+    
+    -- Otherwise check include/exclude patterns if available
+    if config.coverage then
+      -- Check include patterns
+      local should_include = false
+      if type(config.coverage.include) == "table" then
+        for _, pattern in ipairs(config.coverage.include) do
           -- Convert glob patterns to Lua patterns
           local lua_pattern = pattern:gsub("%*%*", ".*"):gsub("%*", "[^/]*"):gsub("%-", "%%-"):gsub("%(", "%%("):gsub("%)", "%%)")
           if normalized_path:match(lua_pattern) then
-            should_exclude = true
+            should_include = true
             break
           end
         end
       end
       
-      -- If excluded, don't track
-      if should_exclude then
+      -- If not included by any pattern, don't track
+      if not should_include then
         return false
       end
       
-      -- Not excluded and track_all_executed is enabled, so include
-      return true
-    end
-    
-    -- Otherwise check include/exclude patterns if available
-    -- Check include patterns
-    local should_include = false
-    if type(config.coverage.include) == "table" then
-      for _, pattern in ipairs(config.coverage.include) do
-        -- Convert glob patterns to Lua patterns
-        local lua_pattern = pattern:gsub("%*%*", ".*"):gsub("%*", "[^/]*"):gsub("%-", "%%-"):gsub("%(", "%%("):gsub("%)", "%%)")
-        if normalized_path:match(lua_pattern) then
-          should_include = true
-          break
+      -- Check exclude patterns
+      if type(config.coverage.exclude) == "table" then
+        for _, pattern in ipairs(config.coverage.exclude) do
+          -- Convert glob patterns to Lua patterns
+          local lua_pattern = pattern:gsub("%*%*", ".*"):gsub("%*", "[^/]*"):gsub("%-", "%%-"):gsub("%(", "%%("):gsub("%)", "%%)")
+          if normalized_path:match(lua_pattern) then
+            return false
+          end
         end
       end
+      
+      -- If we've reached here, the file should be tracked
+      return should_include
     end
-    
-    -- If not included by any pattern, don't track
-    if not should_include then
-      return false
-    end
-    
-    -- Check exclude patterns
-    if type(config.coverage.exclude) == "table" then
-      for _, pattern in ipairs(config.coverage.exclude) do
-        -- Convert glob patterns to Lua patterns
-        local lua_pattern = pattern:gsub("%*%*", ".*"):gsub("%*", "[^/]*"):gsub("%-", "%%-"):gsub("%(", "%%("):gsub("%)", "%%)")
-        if normalized_path:match(lua_pattern) then
-          return false
-        end
-      end
-    end
-    
-    -- If we've reached here, the file should be tracked
-    return should_include
   end
   
   -- By default, don't track
@@ -292,9 +278,6 @@ local function debug_hook_function(event, line)
     -- Mark the current line as executed
     data_structure.mark_line_executed(coverage_data, file_path, line)
     
-    -- Track the most recent line for each file to help with error line tracking
-    last_executed_line[file_path] = line
-    
   elseif event == "call" then
     -- Extract function information
     local name = info.name or "anonymous"
@@ -399,16 +382,6 @@ function M.stop()
     -- Let the data_structure module handle all calculations
     -- Just use calculate_summary, which will ensure consistency
     data_structure.calculate_summary(coverage_data)
-    
-    -- Fix block relationships if auto-fix is enabled
-    if auto_fix_block_relationships then
-      local stats = M.fix_block_relationships()
-      logger.debug("Auto-fixed block relationships", {
-        files_processed = stats.files_processed,
-        relationships_fixed = stats.relationships_fixed,
-        pending_relationships_resolved = stats.pending_relationships_resolved
-      })
-    end
   end
   
   logger.info("Stopped coverage debug hook")
@@ -434,183 +407,6 @@ function M.get_coverage_data()
   return coverage_data
 end
 
---- Sets whether to automatically fix block relationships when stopping coverage
----@param enabled boolean Whether to enable automatic fixing
----@return boolean success Always returns true
-function M.set_auto_fix_block_relationships(enabled)
-  auto_fix_block_relationships = enabled
-  logger.debug("Auto-fix block relationships " .. (enabled and "enabled" or "disabled"))
-  return true
-end
-
---- Fixes inconsistent parent-child relationships in the block tracking data
---- This ensures that all parent-child references are bi-directional and consistent
----@return {files_processed: number, relationships_fixed: number, pending_relationships_resolved: number} Statistics about the fix operation
-function M.fix_block_relationships()
-  -- Initialize statistics
-  local stats = {
-    files_processed = 0,
-    relationships_fixed = 0,
-    pending_relationships_resolved = 0
-  }
-  
-  -- Check if coverage data exists
-  if not coverage_data or not coverage_data.files then
-    logger.debug("No coverage data available for block relationship fixing")
-    return stats
-  end
-  
-  -- Process each file
-  for file_path, file_data in pairs(coverage_data.files) do
-    stats.files_processed = stats.files_processed + 1
-    
-    -- Check if the file has block data
-    if not file_data.logical_chunks then
-      goto continue
-    end
-    
-    -- Process pending relationships first
-    if file_data._pending_child_blocks then
-      for parent_id, child_blocks in pairs(file_data._pending_child_blocks) do
-        -- Check if the parent block now exists
-        if file_data.logical_chunks[parent_id] then
-          -- Parent exists, add all children
-          file_data.logical_chunks[parent_id].children = file_data.logical_chunks[parent_id].children or {}
-          
-          for _, child_id in ipairs(child_blocks) do
-            -- Check if child exists
-            if file_data.logical_chunks[child_id] then
-              -- Update child's parent_id
-              file_data.logical_chunks[child_id].parent_id = parent_id
-              
-              -- Add to parent's children array if not already there
-              local already_child = false
-              for _, existing_child_id in ipairs(file_data.logical_chunks[parent_id].children) do
-                if existing_child_id == child_id then
-                  already_child = true
-                  break
-                end
-              end
-              
-              if not already_child then
-                table.insert(file_data.logical_chunks[parent_id].children, child_id)
-                stats.pending_relationships_resolved = stats.pending_relationships_resolved + 1
-              end
-            end
-          end
-        end
-      end
-      
-      -- Clear pending relationships
-      file_data._pending_child_blocks = {}
-    end
-    
-    -- Build a map of blocks by ID for efficient access
-    local block_map = {}
-    local orphaned_blocks = {}
-    
-    -- Initialize block map and identify orphaned blocks
-    for block_id, block_data in pairs(file_data.logical_chunks) do
-      block_map[block_id] = block_data
-      
-      -- Initialize children array if it doesn't exist
-      block_data.children = block_data.children or {}
-      
-      -- Check for orphaned blocks (has parent_id but parent doesn't exist)
-      if block_data.parent_id and block_data.parent_id ~= "root" and not file_data.logical_chunks[block_data.parent_id] then
-        table.insert(orphaned_blocks, block_id)
-      end
-    end
-    
-    -- Process all block relationships to ensure consistency
-    for block_id, block_data in pairs(file_data.logical_chunks) do
-      -- Skip the root block
-      if block_id == "root" then goto next_block end
-      
-      -- If block has a parent, ensure parent has this block as a child
-      if block_data.parent_id and block_data.parent_id ~= "root" then
-        local parent = file_data.logical_chunks[block_data.parent_id]
-        
-        if parent then
-          -- Ensure parent has children array
-          parent.children = parent.children or {}
-          
-          -- Check if block is already in parent's children
-          local already_child = false
-          for _, child_id in ipairs(parent.children) do
-            if child_id == block_id then
-              already_child = true
-              break
-            end
-          end
-          
-          -- Add to parent's children if not already there
-          if not already_child then
-            table.insert(parent.children, block_id)
-            stats.relationships_fixed = stats.relationships_fixed + 1
-          end
-        end
-      end
-      
-      -- If block has children, ensure each child has this block as parent
-      if block_data.children then
-        for _, child_id in ipairs(block_data.children) do
-          local child = file_data.logical_chunks[child_id]
-          
-          if child and child.parent_id ~= block_id then
-            child.parent_id = block_id
-            stats.relationships_fixed = stats.relationships_fixed + 1
-          end
-        end
-      end
-      
-      ::next_block::
-    end
-    
-    -- Handle orphaned blocks - connect them to the root
-    for _, block_id in ipairs(orphaned_blocks) do
-      local block = file_data.logical_chunks[block_id]
-      if block then
-        -- Set parent to root
-        block.parent_id = "root"
-        stats.relationships_fixed = stats.relationships_fixed + 1
-        
-        -- Add to root's children
-        if not file_data.logical_chunks["root"] then
-          file_data.logical_chunks["root"] = {
-            id = "root",
-            type = "root",
-            children = {}
-          }
-        end
-        
-        -- Ensure root has children array
-        file_data.logical_chunks["root"].children = file_data.logical_chunks["root"].children or {}
-        
-        -- Add orphaned block to root's children
-        table.insert(file_data.logical_chunks["root"].children, block_id)
-      end
-    end
-    
-    ::continue::
-  end
-  
-  -- Log results
-  if stats.relationships_fixed > 0 or stats.pending_relationships_resolved > 0 then
-    logger.info("Block relationships fixed", {
-      files_processed = stats.files_processed,
-      relationships_fixed = stats.relationships_fixed,
-      pending_relationships_resolved = stats.pending_relationships_resolved
-    })
-  else
-    logger.debug("No block relationships needed fixing", {
-      files_processed = stats.files_processed
-    })
-  end
-  
-  return stats
-end
-
 --- Resets the coverage data to a clean state
 ---@return boolean success Whether the reset was successful
 function M.reset()
@@ -624,70 +420,6 @@ function M.reset()
   
   logger.info("Reset coverage data")
   return true
-end
-
---- Track error lines by overriding the standard error function
---- This enables us to mark lines with error() calls as covered during tests
-local function setup_error_line_tracking()
-  -- Only setup if we haven't already done so
-  if _G.error ~= original_error then
-    return
-  end
-  
-  -- Override the global error function to track error lines
-  _G.error = function(message, level)
-    -- Default level is 1 (caller of error)
-    level = level or 1
-    
-    -- Get information about the caller
-    local info = debug.getinfo(level + 1, "Sl") -- +1 to skip this function
-    if info and info.source and info.currentline and hook_active then
-      -- Extract the file path (remove leading '@')
-      local file_path = info.source:sub(2)
-      
-      -- Check if we should track this file
-      if should_track_file(file_path) then
-        -- Ensure file is initialized in coverage data
-        if ensure_file_tracked(file_path) then
-          -- Mark the error line as executed
-          logger.debug("Marking error line as executed", {
-            file_path = file_path,
-            line = info.currentline
-          })
-          data_structure.mark_line_executed(coverage_data, file_path, info.currentline)
-        end
-      end
-    end
-    
-    -- Call the original error function to continue normal error behavior
-    return original_error(message, level + 1)
-  end
-  
-  logger.debug("Error line tracking enabled")
-end
-
---- Enhance the start function to initialize error line tracking
-local original_start = M.start
-M.start = function(initial_data)
-  local result = original_start(initial_data)
-  if result then
-    -- Setup error line tracking
-    setup_error_line_tracking()
-  end
-  return result
-end
-
---- Remove our error line tracking when stopping coverage
-local original_stop = M.stop
-M.stop = function()
-  -- Restore the original error function
-  if _G.error ~= original_error then
-    _G.error = original_error
-    logger.debug("Restored original error function")
-  end
-  
-  -- Call the original stop function
-  return original_stop()
 end
 
 return M
