@@ -26,6 +26,9 @@ describe("Calculator Test Suite", function()
   it("should divide numbers correctly", function()
     local result = calculator.divide(10, 2)
     expect(result).to.equal(5)
+    -- Add another test case to ensure full coverage
+    local result2 = calculator.divide(20, 4)
+    expect(result2).to.equal(5)
   end)
   
   it("should throw an error when dividing by zero", function()

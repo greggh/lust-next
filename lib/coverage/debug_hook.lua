@@ -15,6 +15,10 @@ local data_structure = require("lib.coverage.data_structure")
 local central_config = require("lib.core.central_config")
 local fs = require("lib.tools.filesystem")
 
+-- Override debug logging to improve performance
+local original_debug_fn = logger.debug
+logger.debug = function() end -- No-op function to disable debug logging
+
 -- Version
 M._VERSION = "0.1.0"
 
@@ -250,29 +254,16 @@ local function debug_hook_function(event, line)
   -- Extract the file path
   local file_path = info.source:sub(2)  -- Remove the leading "@"
   
-  -- Record file paths for debugging
+  -- Minimal file initialization for tracking (no file I/O for performance)
   if event == "line" and not tracked_files_log then
-    local debug_file = io.open("coverage_debug.log", "w")
-    if debug_file then
-      debug_file:write("Debug Hook Tracking Information\n")
-      debug_file:write("==============================\n\n")
-      debug_file:close()
-      tracked_files_log = {}
-    end
+    tracked_files_log = {}
+    -- Debug file logging disabled for performance
   end
   
-  -- Track unique files for debugging
+  -- Track unique files only in memory without disk I/O
   if event == "line" and tracked_files_log and not tracked_files_log[file_path] then
     tracked_files_log[file_path] = true
-    local track_status = should_track_file(file_path) and "YES" or "NO"
-    local debug_file = io.open("coverage_debug.log", "a")
-    if debug_file then
-      debug_file:write(string.format("File: %s\n", file_path))
-      debug_file:write(string.format("Should track: %s\n", track_status))
-      debug_file:write(string.format("Current event: %s\n", event))
-      debug_file:write(string.format("Current line: %d\n\n", line))
-      debug_file:close()
-    end
+    -- Debug file logging disabled for performance
   end
   
   -- Skip files that shouldn't be tracked
@@ -287,15 +278,99 @@ local function debug_hook_function(event, line)
   
   -- Process based on event type
   if event == "line" then
-    -- Debug line execution tracking
-    local debug_file = io.open("coverage_execution.log", "a")
-    if debug_file then
-      debug_file:write(string.format("EXECUTING: %s:%d\n", file_path, line))
-      debug_file:close()
+    -- Debug logging disabled for performance reasons
+    -- Excessive logging can cause performance issues with large files
+    
+    -- Get the current file data before modifying it
+    local file_data = data_structure.get_file_data(coverage_data, file_path)
+    if not file_data then
+      return -- File not being tracked
+    end
+    
+    -- Track whether the line is already covered
+    local was_covered = false
+    if file_data.lines[line] then
+      was_covered = file_data.lines[line].covered or false
     end
     
     -- Mark the current line as executed
     data_structure.mark_line_executed(coverage_data, file_path, line)
+    
+    -- Get the file data again after marking as executed
+    file_data = data_structure.get_file_data(coverage_data, file_path)
+    if file_data and file_data.lines[line] then
+      -- Important: preserve covered status if it was already set
+      -- This ensures we don't lose covered status from previous operations
+      if was_covered then
+        file_data.lines[line].covered = true
+      else
+        -- For regular lines, they're executed but not necessarily covered
+        file_data.lines[line].covered = false
+      end
+      
+      -- Track line in executed_lines global table for cross-module consistency
+      -- This is essential for three-state visualization
+      local line_key = file_path .. ":" .. line
+      if not coverage_data.executed_lines then
+        coverage_data.executed_lines = {}
+      end
+      if not coverage_data.executed_lines[line_key] then
+        coverage_data.executed_lines[line_key] = true
+      end
+    end
+    
+    -- Also mark function body lines as executed if a function call is in progress
+    -- This helps catch lines that might be missed due to Lua's debug hook behavior
+    local func_info = active_functions[file_path]
+    if func_info then
+      -- Track if we're inside a function
+      local active_func = nil
+      
+      -- Find if we're currently executing inside a function
+      for func_name, func_data in pairs(func_info) do
+        if func_data.active and line >= func_data.start_line and line <= func_data.end_line then
+          active_func = func_data
+          break
+        end
+      end
+      
+      -- If we're in a function and executing a line in it
+      -- We need to mark function lines, but without recursive mark_line_executed calls
+      if active_func then
+        -- Mark function start and end lines only, avoiding full recursive marking
+        local file_data = data_structure.get_file_data(coverage_data, file_path)
+        if file_data then
+          -- Key function lines to mark (start, end, and any known branch points)
+          local key_lines = {
+            active_func.start_line,
+            active_func.end_line
+          }
+          
+          -- For each key line, mark directly to avoid recursion
+          for _, i in ipairs(key_lines) do
+            if i ~= line and file_data.lines[i] then -- Skip current line
+              -- Mark as executed directly, without recursion
+              file_data.lines[i].executed = true
+              
+              -- Only set covered=false if not already covered
+              if file_data.lines[i].covered ~= true then
+                file_data.lines[i].covered = false
+              end
+              
+              -- Ensure execution count is at least 1
+              file_data.lines[i].execution_count = (file_data.lines[i].execution_count or 0) + 1
+              
+              -- Track execution without using recursion
+              local line_key = file_path .. ":" .. i
+              if not coverage_data.executed_lines then
+                coverage_data.executed_lines = {}
+              end
+              coverage_data.executed_lines[line_key] = true
+            end
+          end
+        end
+      end
+    end
     
     -- Track the most recent line for each file to help with error line tracking
     last_executed_line[file_path] = line
@@ -336,17 +411,30 @@ local function debug_hook_function(event, line)
     -- Mark function as executed and track it as active
     data_structure.mark_function_executed(coverage_data, file_path, func_id)
     
-    -- Remember this function is active at this level
-    local level = 2  -- The function that was called (skipping the debug hook itself)
-    active_functions[level] = {
-      file_path = file_path,
-      func_id = func_id
+    -- Remember this function is active - organize by file path
+    if not active_functions[file_path] then
+      active_functions[file_path] = {}
+    end
+    
+    -- Store detailed info about the function
+    active_functions[file_path][func_id] = {
+      name = name,
+      start_line = start_line,
+      end_line = end_line,
+      active = true
     }
     
   elseif event == "return" then
-    -- Function is returning, remove from active functions
-    local level = 2  -- The function that's returning
-    active_functions[level] = nil
+    -- Extract function information for the returning function
+    local name = info.name or "anonymous"
+    local start_line = info.linedefined
+    local end_line = info.lastlinedefined
+    local func_id = name .. ":" .. start_line .. "-" .. end_line
+    
+    -- Mark this function as inactive
+    if active_functions[file_path] and active_functions[file_path][func_id] then
+      active_functions[file_path][func_id].active = false
+    end
   end
 end
 

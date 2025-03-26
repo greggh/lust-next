@@ -7,7 +7,7 @@ return {
     enabled = false,                     -- Only enable with --coverage flag
     use_default_patterns = false,        -- Use only our explicit patterns
     discover_uncovered = true,           -- Find uncovered files
-    debug = false,                       -- Disable debug mode to reduce output
+    debug = false,                       -- Disable debug mode to avoid excessive logging
     
     -- Include patterns for our project
     include = {
@@ -58,11 +58,12 @@ return {
         collapsible_sections = true,     -- Make report sections collapsible
         
         -- Debug settings for fixing calculator.lua coverage issue
-        debug_mode = true,               -- Enable debug mode to see coverage details
+        debug_mode = false,              -- Disable debug mode for better performance
         
         -- Processing enhancements to fix calculator.lua coverage issue
-        mark_executed_as_covered = true, -- Any executed line should be marked as covered
+        mark_executed_as_covered = false, -- Do NOT mark executed lines as covered automatically
         check_all_execution_sources = true, -- Check all sources for execution data
+        force_three_state_visualization = true, -- Force three-state visualization
         
         -- Enhanced features
         enhanced_navigation = true,      -- Enable enhanced navigation
@@ -82,15 +83,15 @@ return {
   
   -- Logging Configuration - useful for debugging
   logging = {
-    level = 4,                          -- DEBUG level for development
+    level = 3,                          -- INFO level for better performance
     timestamps = true,                  -- Include timestamps
     use_colors = true,                  -- Use colors for better readability
     
     -- Module-specific log levels
     modules = {
-      coverage = 4,                     -- DEBUG level for coverage module
-      debug_hook = 5,                   -- VERBOSE level for debug hook
-      runner = 4,                       -- DEBUG level for runner
+      coverage = 2,                     -- WARN level for coverage module to reduce logging
+      debug_hook = 2,                   -- WARN level for debug hook to reduce logging
+      runner = 3,                       -- INFO level for runner
     }
   }
 }

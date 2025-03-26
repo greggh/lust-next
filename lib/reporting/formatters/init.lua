@@ -14,7 +14,7 @@ logging.configure_from_config("formatters")
 local M = {
   -- Export a list of built-in formatters for documentation
   built_in = {
-    coverage = {"summary", "json", "html", "lcov", "cobertura"},
+    coverage = {"summary", "json", "html", "html_simple", "lcov", "cobertura"},
     quality = {"summary", "json", "html"},
     results = {"junit", "tap", "csv"}
   }
@@ -58,6 +58,7 @@ function M.register_all(formatters)
     "summary",
     "json",
     "html",
+    "html_simple",
     "lcov",
     "tap",
     "csv",

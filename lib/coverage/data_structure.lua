@@ -15,6 +15,10 @@ local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
 local central_config = require("lib.core.central_config")
 
+-- Override debug logging to improve performance
+local original_debug_fn = logger.debug
+logger.debug = function() end -- No-op function to disable debug logging
+
 -- Version
 M._VERSION = "0.1.0"
 
@@ -234,39 +238,39 @@ function M.mark_line_executed(data, file_path, line_number)
   if not file_data.lines[line_number] then
     -- Some files like assertion.lua might have line execution events for lines 
     -- that weren't in the source when we read it. This could happen if the file changed,
-    -- or if there are multiple versions. We'll dynamically add these lines.
+    -- or if there are multiple versions. We'll add only the needed line.
     if line_number > file_data.total_lines then
-      -- Add new line entries for all lines up to this one
-      for i = file_data.total_lines + 1, line_number do
-        file_data.lines[i] = {
-          executable = true,  -- Assume it's executable since we're executing it
-          executed = false,
-          covered = false,
-          execution_count = 0,
-          line_type = M.LINE_TYPES.CODE,  -- Default classification
-          content = "-- Dynamically added line " .. i,  -- Placeholder content
-        }
+      -- Skip files over a certain threshold to avoid performance issues
+      if file_data.total_lines > 1000 and line_number > file_data.total_lines + 100 then
+        -- Skip expanding when the gap is too large
+        return false
       end
       
+      -- Performance optimization: Only add the specific line needed
+      file_data.lines[line_number] = {
+        executable = true,  -- Assume it's executable since we're executing it
+        executed = false,
+        covered = false,
+        execution_count = 0,
+        line_type = M.LINE_TYPES.CODE,  -- Default classification
+        content = "-- Dynamically added line",  -- Placeholder content
+      }
+      
       -- Update file statistics
+      local original_lines = file_data.total_lines
       file_data.total_lines = line_number
-      data.summary.total_lines = data.summary.total_lines + (line_number - file_data.total_lines)
+      data.summary.total_lines = data.summary.total_lines + (line_number - original_lines)
       
       -- Only log once per file
       if not file_data.expanded_lines_logged then
         logger.info("Dynamically expanded line count for file", {
           file_path = normalized_path,
-          original_lines = file_data.total_lines,
+          original_lines = original_lines,
           new_lines = line_number
         })
         file_data.expanded_lines_logged = true
       end
     else
-      logger.warn("Attempted to mark non-existent line as executed", {
-        file_path = normalized_path,
-        line_number = line_number,
-        total_lines = file_data.total_lines
-      })
       return false
     end
   end
@@ -274,18 +278,7 @@ function M.mark_line_executed(data, file_path, line_number)
   -- Get the line data
   local line_data = file_data.lines[line_number]
   
-  -- Log execution
-  local debug_file = io.open("line_tracking_debug.log", "a")
-  if debug_file then
-    debug_file:write(string.format("MARKED EXECUTED: %s:%d [type=%s, was_executed=%s, count=%d]\n", 
-      normalized_path, 
-      line_number,
-      line_data.line_type,
-      tostring(line_data.executed),
-      line_data.execution_count
-    ))
-    debug_file:close()
-  end
+  -- Removed debug file logging to improve performance
   
   -- Important: If a line is executed, it must be executable
   if line_data.line_type ~= M.LINE_TYPES.COMMENT and
@@ -297,21 +290,72 @@ function M.mark_line_executed(data, file_path, line_number)
   line_data.execution_count = line_data.execution_count + 1
   file_data.execution_counts[line_number] = line_data.execution_count
   
-  -- When a line is executed, it's definitely executable, executed, and covered
-  if line_data.line_type ~= "comment" and line_data.line_type ~= "blank" then
-    line_data.executable = true
+  -- Always mark as executed
+  if not line_data.executed then
+    line_data.executed = true
+    file_data.executed_lines = file_data.executed_lines + 1
   end
   
-  -- Mark as executed
+  -- When a line is executed, it's definitely executable and executed, but not necessarily covered
+  if line_data.line_type ~= "comment" and line_data.line_type ~= "blank" then
+    line_data.executable = true
+    -- Do not set covered=true here; covered status should be set separately by test assertions
+    -- This creates the distinction between executed code vs code covered by tests
+    
+    -- We don't need to track in a global table for every line execution
+    -- This was causing performance issues due to excessive table growth
+    -- The executed status is already tracked in line_data.executed
+    
+    -- We'll use the file-specific tracking instead, which is more efficient
+    -- This is crucial for performance with many files and lines
+    
+    -- Debug logging disabled due to excessive file size
+    -- local debug_file = io.open("line_coverage_debug.log", "a")
+    -- if debug_file then
+    --   debug_file:write(string.format("MARKED COVERED: %s:%d [type=%s, content=%s]\n", 
+    --     normalized_path, 
+    --     line_number,
+    --     line_data.line_type,
+    --     (line_data.content and line_data.content:sub(1, 30) or "nil") .. "..."
+    --   ))
+    --   debug_file:close()
+    -- end
+  end
+  
+  -- Mark as executed but not necessarily covered
   line_data.executed = true
   
-  -- Mark as covered too
-  line_data.covered = true
+  -- Important: We MUST preserve the distinction between executed and covered
+  -- Only set covered=false if it wasn't already true AND it's a code line
+  -- This ensures we don't change previously covered lines
+  if line_data.covered ~= true and 
+     line_data.line_type ~= M.LINE_TYPES.COMMENT and 
+     line_data.line_type ~= M.LINE_TYPES.BLANK then
+    line_data.covered = false
+  end
+  
+  -- Track in global table for cross-module consistency
+  -- We'll track only new executions to avoid excessive growth
+  if line_data.line_type ~= M.LINE_TYPES.COMMENT and line_data.line_type ~= M.LINE_TYPES.BLANK then
+    local line_key = normalized_path .. ":" .. line_number
+    if not data.executed_lines then
+      data.executed_lines = {}
+    end
+    if not data.executed_lines[line_key] then
+      data.executed_lines[line_key] = true
+    end
+  end
+  
+  -- Update execution count for tracking
+  if not file_data.execution_counts then
+    file_data.execution_counts = {}
+  end
+  file_data.execution_counts[line_number] = (file_data.execution_counts[line_number] or 0) + 1
   
   -- We don't update file statistics here as they will be recalculated
   -- during calculate_summary to ensure consistency
   
-  return true
+  return true  -- Return success
 end
 
 --- Sets the classification for a line
@@ -449,11 +493,20 @@ function M.mark_line_covered(data, file_path, line_number)
     -- Update file statistics
     file_data.covered_lines = file_data.covered_lines + 1
     
-    -- We no longer update global statistics here, they will be calculated
-    -- by calculate_summary when needed. This prevents inconsistencies.
+    -- Track line in covered_lines global table for cross-module consistency
+    -- This is essential for the three-state visualization to work properly
+    local line_key = normalized_path .. ":" .. line_number
+    if not data.covered_lines then
+      data.covered_lines = {}
+    end
+    data.covered_lines[line_key] = true
     
-    -- Mark file as covered if this is the first covered line
-    -- (We'll track this during calculate_summary)
+    -- Debug logging disabled due to excessive file size
+    -- local debug_file = io.open("coverage_marking.log", "a")
+    -- if debug_file then
+    --   debug_file:write(string.format("EXPLICIT COVERED: %s:%d\n", normalized_path, line_number))
+    --   debug_file:close()
+    -- end
   end
   
   return true
@@ -517,8 +570,9 @@ function M.calculate_summary(data)
           line_data.executable = true
         end
         
-        -- All executed lines are also considered covered
-        line_data.covered = true
+        -- Crucial fix: Do NOT automatically mark executed lines as covered!
+        -- This preserves the distinction between "executed" and "covered"
+        -- line_data.covered = true
       end
       
       -- Count all executed and executable lines correctly
@@ -528,10 +582,12 @@ function M.calculate_summary(data)
           summary.executed_lines = summary.executed_lines + 1
           file_has_executed_lines = true
         
-          -- All executed lines are considered covered too
-          file_data.covered_lines = file_data.covered_lines + 1
-          summary.covered_lines = summary.covered_lines + 1
-          file_has_covered_lines = true
+          -- Only count as covered if explicitly marked as covered
+          if line_data.covered then
+            file_data.covered_lines = file_data.covered_lines + 1
+            summary.covered_lines = summary.covered_lines + 1
+            file_has_covered_lines = true
+          end
         end
       else
         -- Ensure non-executable lines are never counted as executed or covered

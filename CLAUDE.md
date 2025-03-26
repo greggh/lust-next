@@ -127,27 +127,61 @@ Any violation of these rules constitutes a harmful hack that:
 
 The ONLY correct approach is to fix issues in the coverage module itself, never to work around them in tests.
 
-### CRITICAL: COVERAGE MODULE IMPLEMENTATION RULES
+### CRITICAL: INSTRUMENTATION-BASED COVERAGE IMPLEMENTATION RULES
 
-The coverage system is particularly vulnerable to special case hacks. Follow these non-negotiable rules:
+The new coverage system MUST use a comprehensive instrumentation-based approach. To ensure the system is robust and future-proof, follow these non-negotiable architectural rules:
 
-1. **UNIFORM DATA STRUCTURES**: All data structures must be consistent across the codebase. If a line is tracked in multiple places, it must have the SAME data structure everywhere.
+1. **THREE-STATE DISTINCTION**: The core design MUST clearly distinguish between:
+   - **Covered Lines**: Executed AND verified by assertions (Green)
+   - **Executed Lines**: Only executed, NOT verified (Orange)
+   - **Not Covered Lines**: Not executed at all (Red)
 
-2. **NO FILE PATTERN MATCHING**: Never implement code that looks for specific file patterns or names. Do not check if a filename contains a particular string.
+2. **CODE INSTRUMENTATION**: The system MUST use source code instrumentation:
+   - Parse Lua source code and add tracking calls
+   - Insert instrumentation at the beginning of each logical line
+   - Preserve original line numbering for error reporting
+   - Maintain source maps for accurate error reporting
 
-3. **CONSISTENT LINE TRACKING**: Line tracking must work identically for ALL files. Never implement special logic for certain files.
+3. **ASSERTION TRACING**: The system MUST trace which lines an assertion actually verifies:
+   - Track the call stack when assertions run
+   - Identify which functions/lines the assertion calls
+   - Connect assertions to the code they verify
 
-4. **DATA NORMALIZATION ONCE**: Normalize data structures in ONE place, not scattered throughout the codebase. If data conversion is needed, it should happen at well-defined boundaries.
+4. **UNIFORM DATA STRUCTURES**: All data MUST use consistent structures:
+   - Same line data format everywhere
+   - Clear properties for executed vs. covered status
+   - Normalized at system boundaries
 
-5. **ALWAYS USE GENERAL PATTERNS**: If one file needs special handling, assume ALL files need the same handling. Implement solutions that work for every possible case.
+5. **SINGLE SOURCE OF TRUTH**: For each coverage state:
+   - One definitive location determines coverage status
+   - All components refer to this source
+   - No duplicate or conflicting status tracking
 
-6. **FIX ROOT CAUSES**: When fixing coverage issues, address the root cause in the core tracking logic, not in reporting or visualization layers.
+6. **CLEAN COMPONENT SEPARATION**:
+   - **Instrumentation Engine**: Transform source code with tracking
+   - **Module Loader**: Hook into module loading for instrumentation
+   - **Runtime Tracker**: Record execution data
+   - **Data Model**: Handle storage and data structure
+   - **Assertion Integration**: Connect assertions to executed code
+   - **Reporting System**: Visualize results without altering data
 
-7. **NO CONDITIONAL REPORTING**: Never implement conditional logic in formatters that depends on specific file characteristics. Formatters should be completely agnostic to what files they're processing.
+7. **NO SPECIAL CASES**: The system MUST work uniformly for all code:
+   - No file-specific logic whatsoever
+   - No pattern matching on filenames
+   - Same behavior for all files regardless of size/location
 
-If you ever find yourself writing code like `if filename:match("calculator")` or `if line_data == true` or any other condition that handles specific files or data structures differently, STOP IMMEDIATELY. This indicates a fundamental architectural problem that must be fixed properly.
+8. **EXPLICIT > IMPLICIT**: Make all behavior explicit:
+   - No automatic promotion from executed to covered
+   - Explicit marking of covered state by assertions
+   - Clear documentation of how lines get marked
 
-ALWAYS make these architectural fixes FIRST, before implementing ANY other changes.
+9. **PERFORMANCE BY DESIGN**: Build performance in from the start:
+   - Lightweight instrumentation with minimal overhead
+   - Caching of instrumented modules
+   - Optimized data structures for minimal memory usage
+   - Efficient HTML generation algorithms
+
+If ANY code violates these principles, STOP and redesign the system. The architecture must be fundamentally sound before ANY implementation begins.
 
 ### EXPLICITLY BANNED CODE PATTERNS
 
@@ -1003,37 +1037,63 @@ tests/
    - Manages coverage lifecycle (start, stop, reset)
    - Processes coverage data before reporting
 
-2. **Debug Hook (debug_hook.lua)**:
+2. **Instrumentation Engine**:
    
-   - Sets up and manages Lua debug hooks
-   - Tracks line executions and function calls
-   - Stores execution data
-   - Provides accessor functions for coverage data
+   - **Parser (parser.lua)**: 
+     - Parses Lua source code
+     - Identifies logical lines and code structure
+     - Builds AST for transformation
+   
+   - **Transformer (transformer.lua)**:
+     - Inserts tracking calls at each logical line
+     - Maintains original code structure
+     - Preserves comments and whitespace
+   
+   - **Source Mapper (sourcemap.lua)**:
+     - Maps instrumented line numbers to original lines
+     - Provides utilities for error reporting
 
-3. **Static Analyzer (static_analyzer.lua)**:
+3. **Module Loading Integration**:
    
-   - Parses Lua code into AST
-   - Identifies executable and non-executable lines
-   - Tracks code structure (functions, blocks)
-   - Provides information about line executability
+   - **Loader Hook (loader/hook.lua)**:
+     - Hooks into Lua's module loading system
+     - Intercepts require calls
+     - Instruments modules before execution
+   
+   - **Module Cache (loader/cache.lua)**:
+     - Caches instrumented modules
+     - Provides fast lookup of transformed code
 
-4. **File Manager (file_manager.lua)**:
+4. **Runtime Tracking**:
    
-   - Discovers files for coverage analysis
-   - Applies include/exclude patterns
-   - Processes discovered files
+   - **Runtime Tracker (runtime/tracker.lua)**:
+     - Provides global tracking functions
+     - Records line execution
+     - Associates lines with modules
+   
+   - **Data Store (runtime/data_store.lua)**:
+     - Stores execution data
+     - Manages coverage information
 
-5. **Patchup (patchup.lua)**:
+5. **Assertion Integration**:
    
-   - Fixes coverage data for non-executable lines
-   - Identifies comments and structural code
-   - Patches files based on static analysis
+   - **Assertion Hook (assertion/hook.lua)**:
+     - Hooks into firmo's assertion system
+     - Captures assertion execution context
+   
+   - **Line Association (assertion/analyzer.lua)**:
+     - Associates assertions with verified lines
+     - Marks lines as covered rather than just executed
 
-6. **Instrumentation (instrumentation.lua)**:
+6. **Reporting System**:
    
-   - Transforms Lua code with coverage tracking
-   - Hooks into Lua's loading functions
-   - Generates sourcemaps for error reporting
+   - **HTML Reporter (report/html.lua)**:
+     - Generates visual HTML reports
+     - Provides three-color visualization
+   
+   - **JSON Reporter (report/json.lua)**:
+     - Outputs machine-readable coverage data
+     - Supports integration with other tools
 
 ### Error Handling Guidelines
 
@@ -1115,52 +1175,78 @@ Complete error handling has been implemented across:
 - Mocking system (init, spy, mock)
 - Core framework modules (config, coverage components)
 
-## Current Work: Critical Coverage Testing Guidelines
+## Current Work: Coverage System V3 Implementation
 
-THIS IS THE HIGHEST PRIORITY TASK. The HTML coverage report does not have the correct data in it. When you generate it, it is generating junk. Follow these steps EXACTLY when working on coverage-related issues:
+THIS IS THE HIGHEST PRIORITY TASK. The current coverage system (V2) does not correctly distinguish between executed and covered code. A complete rewrite (V3) is required.
 
-1. **DO NOT create new files in examples directory** - The examples directory is for reference only, not for testing fixes
+### Critical Differentiation: Three Coverage States
 
-2. **DO NOT run files from examples directory** - Always use the proper test framework with test.lua
+Our coverage system MUST properly distinguish between three states:
 
-3. **ALWAYS use the standard test runner** - Use `lua test.lua --coverage --format=html tests/coverage/minimal_coverage_test.lua` for testing coverage
+1. **Covered Lines** (Green): Code that is both executed AND verified by assertions
+2. **Executed Lines** (Orange): Code that executes during tests but is NOT verified by assertions
+3. **Not Covered Lines** (Red): Code that does not execute at all
 
-4. **Fix ALL errors in code execution** - If you see any errors in the output, fix them before proceeding
+Current implementation incorrectly marks lines as "covered" when they are merely "executed."
 
-5. **ONLY use the minimal_coverage_test.lua** and only have it use the lib.samples.calculator module for its tests.
+### V3 Implementation Requirements
 
-6. **DO NOT add any special case code into our core production code**, our modules, or anywhere in the codebase.
+1. **Follow the V3 Architecture Plan** - Located at `docs/coverage-v3-plan.md`
 
-7. **DO NOT create any new tests, samples or examples** until the coverage report for the minimal_coverage_test.lua is done and only creating completely correct reports.let me re
+2. **Complete Rewrite Required** - Do not patch V2; build V3 from scratch in a separate directory
 
-8. **CHECK THE HTML REPORT** - After generating coverage reports:
-   
-   - The HTML report should be a file (not a directory)
-   - Look at the actual report content, not just log messages
-   - Do not use the ls command after generating a report, we don't care that the file is there, we care that the contents of the file are correct
-   - Examine the actual HTML report in coverage-reports/
-   - Verify that all data in the report is 100% correct
-   - Look for discrepancies between reported line counts and actual line counts
+3. **MANDATORY Component Overhaul**:
+   - **Assertion Integration**: Must trace what code an assertion verifies
+   - **Stack Tracer**: Must identify precise lines covered by each assertion
+   - **Coverage Data Structure**: Must maintain clear separation between executed/covered states
+   - **HTML Reporter**: Must show the three states with proper color differentiation
 
-9. **Fix ONE issue at a time** - Identify and fix issues in the code causing data inaccuracies:
-   
-   - Focus on fixing non-existent file references
-   - Fix line count and coverage count mismatches
-   - Fix block relationship tracking issues
-   - Make html report be a file, not a directory
-   - Make sure counts in reports match actual executed lines
+4. **Implementation Order** (strictly follow this sequence):
+   - First: Build core data model for tracking the 3 states
+   - Second: Create stack tracer to connect assertions to tested code
+   - Third: Implement debug hook with simplified tracking
+   - Fourth: Build HTML reporter with accurate visualization
 
-10. **Complete the verification cycle** - Before moving to any other task:
-    
-    - Run the test again with coverage enabled
-    - Generate and save reports again
-    - Verify report content is accurate again
-    - Fix any remaining issues
-    - Repeat until reports are 100% correct
+5. **Testing Methodology**:
+   - Use `tests/coverage/minimal_coverage_test.lua` for initial verification
+   - Verify results against `lib/samples/calculator.lua`
+   - Expected results:
+     - Function definitions (lines 6, 11, 16, 21) should be EXECUTED (orange)
+     - Function bodies verified by assertions (7-8, 12-13, 17-18, 25-26) should be COVERED (green)
+     - Error case (line 23) should be either COVERED or EXECUTED depending on assertion specifics
+     - No line in calculator.lua should incorrectly show as COVERED
 
-11. **ONLY focus on data accuracy** - Do not work on anything else (even if specified elsewhere in this file) until the HTML coverage report is fixed
+6. **SUCCESS CRITERIA** - The implementation is ONLY successful when:
+   - HTML report shows THREE distinct states with clear visual separation
+   - ZERO lines are marked "covered" when they are merely "executed"
+   - Calculator.lua lines match the expected covered/executed states described above
+   - No test timeouts or performance issues occur during report generation
 
-IMPORTANT: This must be completed before any other tasks are attempted. The HTML report data accuracy is the ONLY priority until fixed completely. 
+7. **NO PROGRESS REPORTS OR SUMMARIES** until the complete V3 system is working with 100% accuracy
+
+8. **Verification Process**:
+   - Run test: `lua test.lua --coverage --format=html tests/coverage/minimal_coverage_test.lua`
+   - Verify coverage-reports/coverage-report.html shows correct three-state data
+   - Confirm calculator.lua shows correct states for each line
+
+### Technical Requirements
+
+1. **Stack-based Verification**: Must track which lines are invoked directly by test code
+2. **Assertion Context**: Store which assertions verified which lines
+3. **Normalized Data Structure**: Use consistent data formats throughout
+4. **Central Configuration**: All settings through central_config
+5. **Zero Special Cases**: No special handling for any file or line
+6. **Visual Documentation**: Add clear legend explaining the three states
+7. **Performance Optimization**: Report must generate in under 30 seconds
+
+### Documentation and Integration
+
+After V3 implementation is complete and verified:
+1. Update all documentation to use V3 terminology and API
+2. Migrate all existing tests to use V3 coverage
+3. Prepare full test suite with V3 coverage
+
+IMPORTANT: This task supersedes ALL other tasks. Do not work on anything else until the V3 coverage system is complete and generating 100% accurate reports. 
 
 ## Documentation Links
 

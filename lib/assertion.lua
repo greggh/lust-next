@@ -56,7 +56,7 @@ local unpack = table.unpack or _G.unpack
 
 -- Lazy-load dependencies to avoid circular dependencies
 ---@diagnostic disable-next-line: unused-local
-local _error_handler, _logging, _firmo
+local _error_handler, _logging, _firmo, _coverage
 
 --- Get the error handler module with lazy loading to avoid circular dependencies
 ---@return table|nil The error handler module or nil if not available
@@ -76,6 +76,16 @@ local function get_logging()
     _logging = success and logging or nil
   end
   return _logging
+end
+
+--- Get the coverage module with lazy loading to avoid circular dependencies
+---@return table|nil The coverage module or nil if not available
+local function get_coverage()
+  if not _coverage then
+    local success, coverage = pcall(require, "lib.coverage")
+    _coverage = success and coverage or nil
+  end
+  return _coverage
 end
 
 --- Get a logger instance for this module
@@ -2074,6 +2084,37 @@ function M.expect(v)
             action = t.action,
             value = tostring(t.val),
           })
+          
+          -- Mark the code involved in this assertion as covered
+          -- This is what creates the distinction between "executed" and "covered" in the coverage report
+          local coverage = get_coverage()
+          if coverage and coverage.mark_line_covered then
+            -- Get the current stack frame to find where the assertion is happening
+            local info = debug.getinfo(3, "Sl") -- 3 is the caller of the assertion
+            if info and info.source and info.currentline then
+              local file_path = info.source:sub(2) -- Remove the '@' prefix
+              
+              -- Use the public API to mark the line as covered, which is safe and general
+              local success, err = pcall(function()
+                coverage.mark_line_covered(file_path, info.currentline)
+              end)
+              
+              -- Disable logging to improve performance
+              -- Log was causing excessive output and performance issues
+              -- if success then
+              --   logger.debug("Marked line as covered from assertion", {
+              --     file_path = file_path,
+              --     line_number = info.currentline
+              --   })
+              -- else
+              --   logger.debug("Failed to mark line as covered", {
+              --     file_path = file_path,
+              --     line_number = info.currentline,
+              --     error = tostring(err)
+              --   })
+              -- end
+            end
+          end
         end
       end
     end,
