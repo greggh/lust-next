@@ -229,6 +229,13 @@ reporting.configure_formatter("html", {
 reporting.generate_coverage_report("html", "./coverage-reports/custom-report.html")
 ```
 
+### Advanced Configuration
+
+For detailed configuration of specific reporting components, see:
+
+- [HTML Formatter Configuration](./configuration-details/html_formatter.md) - Customize HTML report appearance and behavior
+- [Report Validation Configuration](./configuration-details/report_validation.md) - Ensure accuracy of coverage reports
+
 ## Troubleshooting
 
 ### Low Coverage Issues
