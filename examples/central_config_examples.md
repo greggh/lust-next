@@ -129,15 +129,27 @@ return {
   
   -- Reporting settings
   reporting = {
-    format = "html",
-    output_dir = "./coverage-reports",
+    format = {"html", "json", "lcov"}, -- Use multiple formats
+    output_path = "./coverage-reports/",
     formatters = {
       html = {
+        output_path = "coverage-reports/coverage-report.html",
+        show_line_numbers = true,
+        syntax_highlighting = true,
         theme = "dark",
-        title = "Coverage Report"
+        max_lines_display = 200,
+        simplified_large_files = true
       },
       json = {
-        pretty = true
+        output_path = "coverage-reports/coverage-report.json",
+        pretty = true,
+        truncate_content = true
+      },
+      lcov = {
+        output_path = "coverage-reports/coverage-report.lcov"
+      },
+      cobertura = {
+        output_path = "coverage-reports/coverage-report.cobertura"
       }
     }
   },
@@ -155,6 +167,8 @@ return {
 fs.write_file(".firmo-config.lua", config_content)
 print("Configuration file created")
 ```
+
+For more detailed information about all formatter options, see [Coverage Report Formatters](../docs/guides/configuration-details/formatters.md).
 
 ### Loading a Configuration File
 

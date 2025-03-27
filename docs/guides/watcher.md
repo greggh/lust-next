@@ -6,6 +6,8 @@ This guide explains how to use Firmo's watcher module to monitor filesystem chan
 
 The watcher module helps you monitor files and directories for changes, allowing you to trigger actions like running tests when code is modified. This is particularly useful for development workflows where you want immediate feedback as you make changes.
 
+For detailed configuration options, see [File Watcher Configuration](./configuration-details/watcher.md).
+
 Key capabilities of the watcher module include:
 
 - Monitoring multiple directories for changes

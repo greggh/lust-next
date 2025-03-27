@@ -233,8 +233,9 @@ reporting.generate_coverage_report("html", "./coverage-reports/custom-report.htm
 
 For detailed configuration of specific reporting components, see:
 
-- [HTML Formatter Configuration](./configuration-details/html_formatter.md) - Customize HTML report appearance and behavior
+- [Coverage Report Formatters](./configuration-details/formatters.md) - Comprehensive documentation of all formatter options
 - [Report Validation Configuration](./configuration-details/report_validation.md) - Ensure accuracy of coverage reports
+- [File Watcher Configuration](./configuration-details/watcher.md) - Configure continuous testing with file watching
 
 ## Troubleshooting
 

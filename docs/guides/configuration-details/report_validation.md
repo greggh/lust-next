@@ -239,4 +239,4 @@ After configuring validation, consider using the following features:
 - **Statistical analysis** to identify areas for testing improvement
 - **Validation reports** for historical tracking of code quality
 
-For more information, see the [HTML Formatter Configuration](./html_formatter.md) and [Coverage Guide](../coverage.md) documentation.
+For more information, see the [Coverage Report Formatters](./formatters.md) and [Coverage Guide](../coverage.md) documentation.

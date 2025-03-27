@@ -43,6 +43,10 @@ _A powerful testing library for Lua projects. This enhanced fork of [lust](https
 - 🔬 **Quality Validation** - Validate test quality with customizable levels
 - 📋 **Modular Reporting** - Centralized reporting system with robust fallbacks
 - 🧹 **Code Fixing** - Fix common Lua code issues with custom fixers and tool integration (StyLua, Luacheck)
+- ⚙️ **Central Configuration** - Unified configuration system across all modules
+- ⚡ **Parallel Execution** - Run tests in parallel for improved performance
+- 📝 **Structured Logging** - Comprehensive logging with multiple output formats
+- 🔌 **Interactive Mode** - Command-line interface for interactive test running
 
 ## Quick Start
 
@@ -90,144 +94,162 @@ describe('my project', function()
 end)
 ```
 
-## Modular Reporting System
+## Configuration and Customization
 
-firmo includes a powerful modular reporting system for generating coverage and quality reports:
+Firmo provides extensive configuration options through its central configuration system:
 
 ```lua
--- Enable coverage tracking
-firmo.coverage_options.enabled = true
--- Run tests with coverage analysis
-firmo.run_discovered("./tests", "*_test.lua", {
+-- Create or modify .firmo-config.lua in your project root
+return {
+  -- Test discovery configuration
+  discovery = {
+    include = {"*_test.lua", "test_*.lua"},
+    exclude = {"*_fixture.lua"}
+  },
+  
+  -- Coverage configuration
   coverage = {
-    enabled = true,          -- Enable coverage tracking
-    format = "html",         -- Output format (html, json, lcov, summary)
-    threshold = 80,          -- Minimum required coverage percentage
-    output = "./coverage",   -- Output directory/file
-    include = {"src/*.lua"}, -- Patterns of files to include
-    exclude = {"test/*.lua"} -- Patterns of files to exclude
+    enabled = true,
+    include = function(file_path)
+      return file_path:match("^src/") ~= nil
+    end,
+    exclude = function(file_path)
+      return file_path:match("^src/vendor/") ~= nil
+    end,
+    threshold = 80,
+    output_dir = "./coverage-reports"
+  },
+  
+  -- Reporting configuration
+  reporting = {
+    format = "html",
+    formatters = {
+      html = {
+        theme = "dark",
+        show_line_numbers = true
+      }
+    }
+  },
+  
+  -- Parallel execution configuration
+  parallel = {
+    workers = 4,
+    timeout = 60,
+    fail_fast = true
+  },
+  
+  -- Logging configuration
+  logging = {
+    level = "INFO",
+    output_file = "test-log.txt"
   }
-})
--- Generate coverage report programmatically
-firmo.generate_coverage_report("html", "./coverage/report.html")
--- Enable quality validation
-firmo.quality_options.enabled = true
-firmo.quality_options.level = 3 -- Quality level (1-5)
--- Generate quality report
-firmo.generate_quality_report("html", "./quality-report.html")
+}
 ```
 
-### Report Formats
+For detailed configuration options, see the [Configuration Details](docs/guides/configuration-details/README.md) directory.
 
-The reporting system supports multiple output formats:
+## Command Line Interface
 
-- **HTML**: Visual reports with color-coded coverage information
-- **JSON**: Machine-readable format for CI integration
-- **LCOV**: Industry-standard format for coverage tools
-- **Summary**: Text-based overview of results
+Firmo provides a comprehensive command line interface:
 
-### Robust Implementation
+```bash
+# Run all tests in the tests directory
+lua test.lua tests/
 
-The modular reporting architecture ensures reliable report generation:
+# Run with coverage and generate HTML report
+lua test.lua --coverage --format=html tests/
 
-- Separation of concerns between data collection and reporting
-- Multiple fallback mechanisms for reliable operation
-- Comprehensive error handling and diagnostics
-- Cross-platform compatibility
-- Directory creation with multiple fallback methods
+# Run in watch mode
+lua test.lua --watch tests/
 
-## Integration with hooks-util
+# Run in parallel with 8 workers
+lua test.lua --parallel --workers=8 tests/
 
-firmo is integrated with the [hooks-util](https://github.com/greggh/hooks-util) framework, providing a standardized testing experience for Lua-based Neovim projects:
+# Run with quality validation
+lua test.lua --quality --quality-level=3 tests/
 
-```lua
--- From hooks-util, set up a project with firmo testing
-local firmo = require("hooks-util.firmo")
-firmo.setup_project("/path/to/your/project")
+# Run in interactive mode
+lua test.lua --interactive
+
+# Run with focused tags
+lua test.lua --tags="unit,fast" tests/
+
+# Filter tests by pattern
+lua test.lua --pattern="database" tests/
 ```
-
-This integration provides:
-
-- Automatic test discovery and setup
-- Standard test directory structure
-- CI workflow generation for GitHub/GitLab/Azure
-- Pre-commit hook integration
-- Coverage and quality validation in pre-commit hooks
-  See the [hooks-util documentation](https://github.com/greggh/hooks-util/blob/main/docs/api/lua-integration.md) for more details on using firmo with hooks-util.
-
-## Upcoming Features
-
-### Comprehensive Lua Code Quality Module
-
-We're developing a powerful Lua code quality module that goes beyond what existing tools like StyLua and Luacheck can do:
-
-- **Advanced Fixing Capabilities**: Automatically fix issues that other tools can only detect
-- **Neovim-Specific Rules**: Special handling for Neovim plugin development patterns
-- **Integration with Existing Tools**: Seamless integration with StyLua and Luacheck
-- **Custom Fixers**: Special handling for multiline strings, unused variables, and more
-- **Flexible Configuration**: Adapt to different Lua codebases and style preferences
-- **hooks-util Integration**: Built into the hooks-util pre-commit system
-  The quality module will be available as a standalone component as well as integrated with hooks-util.
 
 ## Documentation
 
-Full documentation is available in the [docs](docs/) directory:
+Comprehensive documentation is available in the [docs](docs/) directory:
 
-- [Getting Started](docs/guides/getting-started.md) - Detailed guide for beginners
-- [API Reference](docs/api/README.md) - Complete API documentation
-- [Examples](examples/) - Example scripts demonstrating features
+### Getting Started
+- [Getting Started Guide](docs/guides/getting-started.md) - Detailed guide for beginners
 - [Migration Guide](docs/guides/migrating.md) - Migrating from other test frameworks
 
-### Core Functions
+### API Reference
+- [Core API](docs/api/core.md) - Core testing functionality
+- [Assertions API](docs/api/assertions.md) - Assertion functions and matchers
+- [Mocking API](docs/api/mocking.md) - Mocking, stubbing, and spying
+- [Async API](docs/api/async.md) - Asynchronous testing
+- [Logging API](docs/api/logging.md) - Structured logging
 
-#### `firmo.describe(name, func)`, `firmo.fdescribe(name, func)`, `firmo.xdescribe(name, func)`
+### Configuration
+- [Central Configuration Guide](docs/guides/central_config.md) - Unified configuration system
+- [Configuration Details](docs/guides/configuration-details/README.md) - Detailed module-specific configuration
 
-Used to declare a group of tests. Groups created using `describe` can be nested.
+### Advanced Features
+- [Coverage Guide](docs/guides/coverage.md) - Code coverage tracking and reporting
+- [Quality Validation](docs/guides/quality.md) - Ensuring test quality
+- [Parallel Execution](docs/guides/parallel.md) - Running tests in parallel
+
+### Example Code
+- [Examples Directory](examples/) - Example scripts demonstrating features
+
+## Core Functions
+
+### Test Definition
 
 ```lua
 describe("math operations", function()
   -- Regular test group - runs normally
 end)
+
 fdescribe("focused group", function()
   -- Focused test group - these tests ALWAYS run even when others are focused
 end)
+
 xdescribe("excluded group", function()
   -- Excluded test group - these tests NEVER run
 end)
-```
 
-#### `firmo.it(name, func)`, `firmo.fit(name, func)`, `firmo.xit(name, func)`
-
-Used to declare a test, which consists of a set of assertions.
-
-```lua
 it("adds two numbers correctly", function()
   -- Regular test - runs normally
   expect(2 + 2).to.equal(4)
 end)
+
 fit("important test", function()
   -- Focused test - this test ALWAYS runs even when others are focused
   expect(true).to.be.truthy()
 end)
+
 xit("work in progress", function()
   -- Excluded test - this test NEVER runs
   expect(false).to.be.truthy() -- Won't fail since it's excluded
 end)
-
 ```
 
-#### `firmo.before(fn)` and `firmo.after(fn)`
-
-Set up functions that run before or after each test in a describe block.
+### Lifecycle Hooks
 
 ```lua
 describe("database tests", function()
   before(function()
-    -- Set up database connection
+    -- Set up database connection before each test
   end)
+  
   after(function()
-    -- Close database connection
+    -- Close database connection after each test
   end)
+  
   it("queries data correctly", function()
     -- Test here
   end)
@@ -236,395 +258,93 @@ end)
 
 ### Assertions
 
-firmo uses "expect style" assertions that can be chained for readable tests:
+Firmo uses "expect style" assertions that can be chained for readable tests:
 
 ```lua
+-- Basic assertions
+expect(value).to.exist()
 expect(value).to.equal(expected)
+expect(value).to.be.truthy()
+expect(value).to.be.a("string")
+expect(value).to.match("pattern")
+
+-- Negated assertions
+expect(value).to_not.equal(unexpected)
 expect(value).to_not.be.nil()
-```
 
-#### Basic Assertions
-
-- `expect(x).to.exist()` - Fails if `x` is `nil`
-- `expect(x).to.equal(y, [eps])` - Strict equality test (with optional epsilon for floats)
-- `expect(x).to.be(y)` - Equality using the `==` operator
-- `expect(x).to.be.truthy()` - Fails if `x` is `nil` or `false`
-- `expect(x).to.be.a(y)` - Type checking
-- `expect(x).to.have(y)` - Check if table contains value
-- `expect(f).to.fail()` - Ensures function throws an error
-- `expect(f).to.fail.with(pattern)` - Ensures function throws an error matching pattern
-- `expect(x).to.match(p)` - Matches string against pattern
-- `expect(x).to_not.*` - Negates any assertion
-
-#### Enhanced Assertions
-
-##### Table Assertions
-
-```lua
--- Check for specific keys
+-- Table assertions
 expect(table).to.contain.key("id")
-expect(table).to.contain.keys({"id", "name", "email"})
--- Check for values
 expect(table).to.contain.value("example")
-expect(table).to.contain.values({"one", "two"})
--- Check for subset/superset relationships
-expect(small_table).to.contain.subset(big_table)
--- Check for exact key set
-expect(table).to.contain.exactly({"only", "these", "keys"})
-```
 
-##### String Assertions
-
-```lua
--- Check string prefix/suffix
-expect(str).to.start_with("hello")
-expect(str).to.end_with("world")
-
-```
-
-##### Type Assertions
-
-```lua
--- Advanced type checking
-expect(fn).to.be_type("callable")  -- Function or callable table
-expect(num).to.be_type("comparable")  -- Can use < operator
-expect(table).to.be_type("iterable")  -- Can iterate with pairs()
-```
-
-##### Numeric Assertions
-
-```lua
--- Numeric comparisons
+-- Numeric assertions
 expect(value).to.be_greater_than(minimum)
 expect(value).to.be_less_than(maximum)
-expect(value).to.be_between(min, max)  -- Inclusive
-expect(value).to.be_approximately(target, delta)
+expect(value).to.be_between(min, max)
+
+-- Error assertions
+expect(function_that_throws).to.fail()
+expect(function_that_throws).to.fail.with("pattern")
 ```
 
-##### Error Assertions
+### Mocking
 
 ```lua
--- Enhanced error checking
-expect(function_that_throws).to.throw.error()
-expect(function_that_throws).to.throw.error_matching("pattern")
-expect(function_that_throws).to.throw.error_type("string")
-```
-
-### Spies
-
-Spies track function calls and their arguments:
-
-```lua
+-- Create a spy to track function calls
 local spy = firmo.spy(myFunction)
 spy(1, 2, 3)
-expect(#spy).to.equal(1)
-expect(spy[1][1]).to.equal(1)
-```
+expect(spy.called).to.be.truthy()
+expect(spy.call_count).to.equal(1)
 
-### Custom Assertions
+-- Create a stub that returns a fixed value
+local stub = firmo.stub(42)
+expect(stub()).to.equal(42)
 
-You can add custom assertions:
-
-```lua
-firmo.paths.empty = {
-  test = function(value)
-    return #value == 0,
-      'expected ' .. tostring(value) .. ' to be empty',
-      'expected ' .. tostring(value) .. ' to not be empty'
-  end
-}
-table.insert(firmo.paths.be, 'empty')
-expect({}).to.be.empty()
-```
-
-### New Features
-
-#### Output Formatting
-
-Configure the test output format to your preference:
-
-```lua
--- Configure output format programmatically
-firmo.format({
-  use_color = true,          -- Whether to use color codes in output
-  indent_char = '  ',        -- Character to use for indentation (tab or spaces)
-  indent_size = 2,           -- How many indent_chars to use per level
-  show_trace = false,        -- Show stack traces for errors
-  show_success_detail = true, -- Show details for successful tests
-  compact = false,           -- Use compact output format (less verbose)
-  dot_mode = false,          -- Use dot mode (. for pass, F for fail)
-  summary_only = false       -- Show only summary, not individual tests
-})
--- Or disable colors
-firmo.nocolor()
-```
-
-Available command-line options when running tests:
-
-```bash
-
-# Use different output formats
-lua firmo.lua --format dot       # Minimal output with dots (. for pass, F for fail)
-lua firmo.lua --format compact   # Compact output with minimal details
-lua firmo.lua --format summary   # Show only the final summary
-lua firmo.lua --format detailed  # Show full details including stack traces
-
-# Control indentation
-lua firmo.lua --indent space     # Use spaces for indentation
-lua firmo.lua --indent tab       # Use tabs for indentation
-lua firmo.lua --indent 4         # Use 4 spaces for indentation
-
-# Disable colors
-lua firmo.lua --no-color
-```
-
-#### Focused and Excluded Tests
-
-Run only specific tests using focus and exclude features:
-
-```lua
--- Run only focused tests
-fdescribe("important module", function()
-  it("does something", function()
-    -- This test runs because parent is focused
-  end)
-  xit("isn't ready", function()
-    -- This test is excluded even though parent is focused
-  end)
-end)
-describe("other module", function()
-  it("normal test", function()
-    -- This won't run when focus mode is active
-  end)
-  fit("critical feature", function()
-    -- This test runs because it's focused
-  end)
-})
-```
-
-When any `fdescribe` or `fit` is present, firmo enters "focus mode" where only focused tests run. This is useful for working on a specific feature or debugging a failure.
-
-#### Automatic Test Discovery
-
-Automatically find and run all test files:
-
-```lua
--- Run all test files in the current directory and subdirectories
-firmo.run_discovered(".")
-```
-
-#### Module Reset Utilities
-
-Ensure clean state between tests with module reset utilities:
-
-```lua
--- Reset a module to get a fresh instance
-local fresh_module = firmo.reset_module("path.to.module")
--- Ensure modules are reset between tests
-describe("Database tests", function()
-  local db
-  before_each(function()
-    -- Reset the module before each test to ensure clean state
-    db = firmo.reset_module("my.database")
-  end)
-  it("performs operations correctly", function()
-    -- Test with a fresh module instance
-    db.connect()
-    -- ... more test code
-  end)
-end)
--- Run a test with a fresh module in a single call
-firmo.with_fresh_module("path.to.module", function(mod)
-  -- Test code using the fresh module instance
-  mod.function_call()
-  expect(mod.result).to.equal(expected)
-end)
-```
-
-The module reset utilities provide several benefits:
-
-- Ensures each test runs with a fresh module state
-- Eliminates test cross-contamination
-- Reduces boilerplate with clear, consistent syntax
-- Automatically available as globals with `expose_globals()`
-
-#### Test Filtering and Tagging
-
-Tag tests and run only specific tags:
-
-```lua
--- Add tags to a test
-firmo.tags("unit", "math")
-it("adds numbers correctly", function()
-  expect(1 + 1).to.equal(2)
-end)
--- Add tags to a group of tests
-describe("Math operations", function()
-  firmo.tags("unit", "math")
-  it("test1", function() end)
-  it("test2", function() end)
-  -- Both tests inherit the "unit" and "math" tags
-end)
--- Filter by tag programmatically
-firmo.only_tags("unit")
-firmo.run_discovered("./tests")
--- Filter by test name pattern
-firmo.filter("math")
-firmo.run_discovered("./tests")
--- Reset all filters
-firmo.reset_filters()
--- Command line filtering (when running directly)
--- lua firmo.lua --tags unit,math
--- lua firmo.lua --filter "addition"
-```
-
-You can use the filtering system to run specific subsets of your tests:
-
-```lua
--- Run tests with options
-firmo.run_discovered("./tests", "*_test.lua", {
-  tags = {"unit", "fast"},
-  filter = "calculation"
-})
--- Run filtered tests from CLI
--- lua firmo.lua --dir ./tests --tags unit,fast --filter calculation
-```
-
-#### Async Testing
-
-Test asynchronous code with await/async:
-
-```lua
--- Basic usage with it_async shorthand
-it_async("tests async code", function()
-  local result = nil
-  -- Start async operation
-  startAsyncOperation(function(data)
-    result = data
-  end)
-  -- Wait for a specific amount of time
-  firmo.await(100) -- Wait 100ms
-  -- Make assertions after the wait
-  expect(result).to.equal("expected result")
-end)
--- Use wait_until for condition-based waiting
-it_async("waits for a condition", function()
-  local value = false
-  -- Start async operation that will set value to true
-  setTimeout(function() value = true end, 50)
-  -- Wait until value becomes true or timeout after 200ms
-  firmo.wait_until(function() return value end, 200)
-  -- Assert after condition is met
-  expect(value).to.be.truthy()
-end)
--- Custom timeouts per test
-it("tests with custom timeout", firmo.async(function()
-  -- Test code here
-  firmo.await(500)
-  expect(true).to.be.truthy()
-end, 1000)) -- 1 second timeout
--- Set global default timeout
-firmo.set_timeout(5000) -- 5 seconds for all async tests
--- Run multiple async operations in parallel
-it_async("handles parallel operations", function()
-  -- Define multiple async operations
-  local function op1()
-    await(100)
-    return "op1 result"
-  end
-  local function op2()
-    await(200)
-    return "op2 result"
-  end
-  local function op3()
-    await(300)
-    return "op3 result"
-  end
-  -- Run all operations in parallel and get all results
-  local results = parallel_async(op1, op2, op3)
-  -- Verify all results
-  expect(#results).to.equal(3)
-  expect(results[1]).to.equal("op1 result")
-  expect(results[2]).to.equal("op2 result")
-  expect(results[3]).to.equal("op3 result")
-end)
-```
-
-Key async features:
-
-- `firmo.async(fn, timeout)` - Wraps a function to be executed asynchronously
-- `firmo.it_async(name, fn, timeout)` - Shorthand for async tests
-- `firmo.await(ms)` - Waits for the specified time in milliseconds
-- `firmo.wait_until(condition_fn, timeout, check_interval)` - Waits until a condition function returns true
-- `firmo.parallel_async(fn1, fn2, ...)` - Runs multiple async functions in parallel and returns all results
-- `firmo.set_timeout(ms)` - Sets the default timeout for async tests
-
-#### Mocking
-
-Create and manage mocks with a comprehensive mocking system:
-
-```lua
--- Basic spy usage - track function calls while preserving behavior
-local my_fn = function(a, b) return a + b end
-local spy_fn = firmo.spy(my_fn)
-spy_fn(5, 10)  -- Call the function
-expect(spy_fn.called).to.be.truthy()
-expect(spy_fn.call_count).to.equal(1)
-expect(spy_fn:called_with(5, 10)).to.be.truthy()
--- Spy on an object method
-local calculator = { add = function(a, b) return a + b end }
-local add_spy = firmo.spy(calculator, "add")
-calculator.add(2, 3)  -- Call the method
-expect(add_spy.called).to.be.truthy()
-add_spy:restore()  -- Restore original method
--- Create a simple stub that returns a value
-local config_stub = firmo.stub({debug = true, version = "1.0"})
-local config = config_stub()  -- Returns the stubbed value
--- Create complete mocks of objects
+-- Create a mock with specific behaviors
 local db_mock = firmo.mock(database)
--- Stub methods with implementation functions
 db_mock:stub("query", function(query_string)
-  expect(query_string).to.match("SELECT")
   return {rows = {{id = 1, name = "Test"}}}
 end)
--- Or stub with simple values
-db_mock:stub("connect", true)
--- Use argument matchers for flexible verification
-local api_mock = firmo.mock(api)
-api_mock:stub("get_users", {users = {{id = 1, name = "Test"}}})
-api.get_users({filter = "active", limit = 10})
--- Verify with powerful argument matchers
-expect(api_mock._stubs.get_users:called_with(
-  firmo.arg_matcher.table_containing({filter = "active"})
-)).to.be.truthy()
--- Set expectations with fluent API before calls
-api_mock:expect("get_users").with(firmo.arg_matcher.any()).to.be.called.times(1)
-api_mock:expect("get_user").with(firmo.arg_matcher.number()).to.not_be.called()
--- Verify call sequence
-expect(api_mock:verify_sequence({
-  {method = "get_users", args = {firmo.arg_matcher.table()}}
-})).to.be.truthy()
--- Use with context manager for automatic cleanup
-firmo.with_mocks(function(mock)
-  local api_mock = mock(api)
-  api_mock:stub("get_data", {success = true, items = {}})
-  -- Test code that uses api.get_data()
-  -- Verify all expectations
-  api_mock:verify_expectations()
-  -- No need to restore - happens automatically
-end)
+
+-- Use the mock in your tests
+local result = database.query("SELECT * FROM users")
+expect(result.rows[1].name).to.equal("Test")
+expect(db_mock.query:called_with("SELECT * FROM users")).to.be.truthy()
 ```
 
-The enhanced mocking system includes:
+### Async Testing
 
-- **Spies**: Track function calls without changing behavior
-- **Stubs**: Replace functions with test implementations
-- **Mocks**: Create complete test doubles with verification
-- **Argument Matchers**: Flexible argument matching (`string()`, `number()`, `table_containing()`, etc.)
-- **Call Sequence Verification**: Check specific order of method calls
-- **Expectation API**: Fluent interface for setting up expectations
-- **Call Tracking**: Verify arguments, call counts, and call order
-- **Automatic Cleanup**: Restore original functionality after tests
+```lua
+-- Test asynchronous code
+it_async("fetches data asynchronously", function()
+  local result = nil
+  
+  -- Start async operation
+  start_async_operation(function(data)
+    result = data
+  end)
+  
+  -- Wait for completion
+  firmo.await(100) -- Wait 100ms
+  
+  -- Make assertions
+  expect(result).to.exist()
+  expect(result.status).to.equal("success")
+end)
+
+-- Wait for a condition
+it_async("waits for a condition", function()
+  local completed = false
+  
+  -- Start operation
+  setTimeout(function() completed = true end, 50)
+  
+  -- Wait until condition is true or timeout after 200ms
+  firmo.wait_until(function() return completed end, 200)
+  
+  -- Assert condition was met
+  expect(completed).to.be.truthy()
+end)
+```
 
 ## Installation
 
@@ -633,7 +353,6 @@ The enhanced mocking system includes:
 Simply copy `firmo.lua` into your project directory:
 
 ```bash
-
 # Download the file
 curl -O https://raw.githubusercontent.com/greggh/firmo/main/firmo.lua
 
