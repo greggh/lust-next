@@ -97,7 +97,7 @@ parallel.register_with_firmo(firmo)
 
 This function also adds CLI options for parallel execution to Firmo, allowing you to run:
 ```
-lua firmo.lua --parallel --workers 4 tests/
+lua test.lua --parallel --workers 4 tests/
 ```
 
 ### `parallel.reset()`

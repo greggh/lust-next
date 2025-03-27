@@ -102,10 +102,10 @@ The `--tags` option allows you to specify tags to filter by, separated by commas
 ```bash
 
 # Run only tests tagged with "unit"
-lua firmo.lua --tags unit
+lua test.lua --tags unit
 
 # Run tests tagged with either "fast" or "critical"
-lua firmo.lua --tags fast,critical
+lua test.lua --tags fast,critical
 
 ```
 
@@ -116,7 +116,7 @@ The `--filter` option allows you to specify a pattern to match against test name
 ```bash
 
 # Run only tests with "validation" in their name
-lua firmo.lua --filter validation
+lua test.lua --filter validation
 
 ```
 
@@ -127,7 +127,7 @@ You can combine tag and pattern filters to further narrow the tests that run.
 ```bash
 
 # Run only "unit" tests with "validation" in their name
-lua firmo.lua --tags unit --filter validation
+lua test.lua --tags unit --filter validation
 
 ```
 

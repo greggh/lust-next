@@ -5,7 +5,7 @@ This directory contains guides and tutorials for using Firmo.
 
 - [Getting Started](getting-started.md): A beginner's guide to using Firmo
 - [Reporting](reporting.md): Guide to coverage, quality, and reporting
-- [Coverage Configuration](coverage_configuration.md): Detailed guide to configuring code coverage
+- [Coverage](coverage.md): Guide to code coverage tracking and reporting
 - [Advanced Topics](advanced-topics.md): Detailed exploration of advanced features
 - [Testing Patterns](testing-patterns.md): Common testing patterns and best practices
 - [Migration Guide](migration-guide.md): Guide for migrating from firmo or other testing frameworks

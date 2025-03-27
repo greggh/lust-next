@@ -4,7 +4,7 @@ This section contains detailed API documentation for all Firmo functionality.
 ## Table of Contents
 
 - [Core Functions](core.md) - Essential test functions (`describe`, `it`, etc.)
-- [Assertions](assertions.md) - Assertion functions for test verification
+- [Assertions](assertion.md) - Assertion functions for test verification
 - [Async Testing](async.md) - APIs for testing asynchronous code
 - [Mocking](mocking.md) - Mocking, spying, and stubbing capabilities
 - [Module Reset](module_reset.md) - Module management utilities for clean test state
@@ -98,9 +98,9 @@ firmo.coverage_options.enabled = true
 firmo.coverage_options.include = {"src/*.lua"}
 firmo.coverage_options.exclude = {"tests/*.lua"}
 -- Run tests with coverage
-firmo.run_discovered("./tests")
+lua test.lua tests/ --coverage
 -- Generate a coverage report
-firmo.generate_coverage_report("html", "./coverage-report.html")
+lua test.lua tests/ --coverage --format html
 -- Enable quality validation
 firmo.quality_options.enabled = true
 firmo.quality_options.level = 3 -- Comprehensive quality level

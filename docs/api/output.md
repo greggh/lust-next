@@ -212,19 +212,19 @@ When running tests via the command line, you can use the `--format` option to sp
 ```bash
 
 # Run tests with dot mode
-lua firmo.lua --format dot
+lua test.lua --format dot
 
 # Run tests with compact mode
-lua firmo.lua --format compact
+lua test.lua --format compact
 
 # Run tests with summary only
-lua firmo.lua --format summary
+lua test.lua --format summary
 
 # Run tests with detailed output
-lua firmo.lua --format detailed
+lua test.lua --format detailed
 
 # Run tests with plain text (no colors)
-lua firmo.lua --format plain
+lua test.lua --format plain
 
 ```
 
@@ -233,13 +233,13 @@ You can also customize indentation from the command line:
 ```bash
 
 # Use spaces for indentation
-lua firmo.lua --indent spaces
+lua test.lua --indent spaces
 
 # Use 4 spaces for indentation
-lua firmo.lua --indent 4
+lua test.lua --indent 4
 
 # Use tabs for indentation
-lua firmo.lua --indent tabs
+lua test.lua --indent tabs
 
 ```
 

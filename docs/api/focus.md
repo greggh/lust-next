@@ -125,10 +125,10 @@ When running tests via the command line, focus mode works alongside tag and filt
 ```bash
 
 # Run tests with focus mode respecting focused tests
-lua firmo.lua
+lua test.lua tests/
 
 # Focus mode can be combined with other filters
-lua firmo.lua --tags unit
+lua test.lua tests/ --tags unit
 
 ```
 If filters are active (via tags or pattern) but no focused tests match the filters, no tests will run.

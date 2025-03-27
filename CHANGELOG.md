@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clear terminal interface with status indicators
   - Support for Ctrl+C to exit watch mode
   - Integration with interactive CLI mode
+- Complete documentation overhaul:
+  - Standardized three-part structure for all modules (API reference, guide, examples)
+  - Added missing guides for all core modules (focus, filtering, output, CLI, core, coverage)
+  - Comprehensive examples for all modules showing practical use cases
+  - Updated all command references to use current test.lua execution pattern
+  - Enhanced README with module relationship explanations
+  - Consistent terminology and approach throughout documentation
+  - Expanded architectural principles documentation
+  - Updated CI integration examples with modern practices
 
 ### Fixed
 
