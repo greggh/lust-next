@@ -1,6 +1,6 @@
 # Logging API
 
-The logging system in firmo provides a centralized way to handle log messages with different severity levels, module-specific configuration, output options, search capabilities, external tool integration, and test result integration.
+The firmo logging system provides a comprehensive structured logging framework with support for multiple severity levels, module-specific configuration, various output formats, search capabilities, external tool integration, and test reporting integration.
 
 ## Basic Usage
 
@@ -16,8 +16,8 @@ logger.fatal("Severe error requiring immediate attention")
 logger.error("Critical error: database connection failed")
 logger.warn("Warning: configuration file missing, using defaults")
 logger.info("Server started on port 8080")
-logger.debug("Request parameters: " .. json.encode(params))
-logger.trace("Function called with arguments: " .. table.concat(args, ", "))
+logger.debug("Request parameters", {user_id = 123, query = "search term"})
+logger.trace("Function called with arguments", {args = {1, 2, 3}})
 
 -- Structured logging with parameters
 logger.info("User logged in", {
@@ -31,43 +31,72 @@ logger.info("User logged in", {
 
 The logging system supports 6 severity levels:
 
-| Level   | Constant          | Description                                         |
-|---------|-------------------|-----------------------------------------------------|
-| FATAL   | logging.LEVELS.FATAL   | Severe errors that prevent application operation   |
-| ERROR   | logging.LEVELS.ERROR   | Critical errors that prevent normal operation      |
-| WARN    | logging.LEVELS.WARN    | Unexpected conditions that don't stop execution    |
-| INFO    | logging.LEVELS.INFO    | Normal operational messages                        |
-| DEBUG   | logging.LEVELS.DEBUG   | Detailed information useful for debugging          |
-| TRACE   | logging.LEVELS.TRACE   | Extremely detailed diagnostic information          |
+| Level   | Constant              | Description                                       |
+|---------|------------------------|--------------------------------------------------|
+| FATAL   | logging.LEVELS.FATAL   | Severe errors that prevent application operation  |
+| ERROR   | logging.LEVELS.ERROR   | Critical errors that prevent normal operation     |
+| WARN    | logging.LEVELS.WARN    | Unexpected conditions that don't stop execution   |
+| INFO    | logging.LEVELS.INFO    | Normal operational messages                       |
+| DEBUG   | logging.LEVELS.DEBUG   | Detailed information useful for debugging         |
+| TRACE   | logging.LEVELS.TRACE   | Extremely detailed diagnostic information         |
 
-## Configuration
+## Logging Module API
+
+### Core Functions
+
+- **get_logger(module_name)**: Creates/retrieves a logger for the specified module
+- **configure(options)**: Sets up global logging configuration
+- **configure_from_config(module_name)**: Configures logging based on global configuration
+- **configure_from_options(module_name, options)**: Configures logging from command-line options
+- **set_module_level(module_name, level)**: Sets the log level for a specific module
+- **flush()**: Flushes any buffered log messages
+- **silent_mode(enabled)**: Enables/disables silent mode for testing
+
+### Logger Objects
+
+Each logger created with `get_logger()` provides these methods:
+
+- **fatal(message, params)**: Logs a fatal error message
+- **error(message, params)**: Logs an error message
+- **warn(message, params)**: Logs a warning message
+- **info(message, params)**: Logs an information message
+- **debug(message, params)**: Logs a debug message
+- **trace(message, params)**: Logs a trace message
+- **would_log(level)**: Checks if a message at the specified level would be logged
+- **is_fatal_enabled()**: Checks if FATAL level is enabled
+- **is_error_enabled()**: Checks if ERROR level is enabled
+- **is_warn_enabled()**: Checks if WARN level is enabled
+- **is_info_enabled()**: Checks if INFO level is enabled
+- **is_debug_enabled()**: Checks if DEBUG level is enabled
+- **is_trace_enabled()**: Checks if TRACE level is enabled
+
+## Configuration Options
 
 ### Basic Configuration
 
-You can configure the logging system with various options:
-
 ```lua
 logging.configure({
-  level = logging.LEVELS.INFO,   -- Global default level
-  timestamps = true,             -- Include timestamps in log messages
-  use_colors = true,             -- Use ANSI colors in console output
-  output_file = "firmo.log", -- Log to file (nil = console only)
-  log_dir = "logs",              -- Directory for log files
-  max_file_size = 1024 * 1024,   -- 1MB max file size before rotation
-  max_log_files = 5,             -- Keep 5 rotated log files
-  format = "text",               -- Log format: "text" or "json"
-  json_file = "firmo.json",  -- Separate JSON structured log file
-  buffering = false,             -- Buffer logs for higher performance
-  buffer_size = 100,             -- Buffer size when buffering is enabled
-  buffer_flush_interval = 5000,  -- Auto-flush buffer every 5 seconds
-  silent_mode = false,           -- Disable all output (for testing)
-  parameter_format = "structured" -- Format for parameter logging
+  level = logging.LEVELS.INFO,     -- Global default level
+  timestamps = true,               -- Include timestamps in log messages
+  use_colors = true,               -- Use ANSI colors in console output
+  output_file = "firmo.log",       -- Log to file (nil = console only)
+  log_dir = "logs",                -- Directory for log files
+  max_file_size = 1024 * 1024,     -- 1MB max file size before rotation
+  max_log_files = 5,               -- Keep 5 rotated log files
+  format = "text",                 -- Log format: "text" or "json"
+  json_file = "firmo.json",        -- Separate JSON structured log file
+  buffering = false,               -- Buffer logs for higher performance
+  buffer_size = 100,               -- Buffer size when buffering is enabled
+  buffer_flush_interval = 5000,    -- Auto-flush buffer every 5 seconds
+  silent_mode = false,             -- Disable all output (for testing)
+  standard_metadata = {            -- Metadata added to all logs
+    version = "1.0.0",
+    environment = "production"
+  }
 })
 ```
 
 ### Module-Specific Levels
-
-You can set different log levels for specific modules:
 
 ```lua
 -- Set levels for specific modules
@@ -86,10 +115,8 @@ logging.configure({
 
 ### Module Filtering
 
-You can filter logs to only show specific modules:
-
 ```lua
--- Only show logs from the UI and API modules
+-- Only show logs from specific modules
 logging.filter_module("ui")
 logging.filter_module("api")
 
@@ -102,10 +129,8 @@ logging.clear_module_filters()
 
 ### Module Blacklisting
 
-You can also exclude specific modules from logging:
-
 ```lua
--- Hide logs from the database module
+-- Hide logs from specific modules
 logging.blacklist_module("database")
 
 -- Use wildcards to hide multiple modules
@@ -115,7 +140,7 @@ logging.blacklist_module("debug*")  -- Hide any module starting with "debug"
 logging.clear_blacklist()
 ```
 
-## Structured Logging (JSON)
+## Structured Logging
 
 For machine processing and log analysis tools, the logging system supports JSON structured output:
 
@@ -127,14 +152,7 @@ logging.configure({
 })
 ```
 
-The JSON log file format is one JSON object per line (newline-delimited JSON):
-
-```
-{"timestamp":"2025-03-10T14:32:45","level":"INFO","module":"app","message":"Application started"}
-{"timestamp":"2025-03-10T14:32:46","level":"ERROR","module":"database","message":"Connection failed","params":{"host":"db.example.com","retries":3}}
-```
-
-### Structured Parameter Logging
+### Parameter Logging
 
 You can attach structured parameters to any log message:
 
@@ -147,22 +165,16 @@ logger.info("Processing completed", {
 })
 ```
 
-The parameters appear in JSON logs as a `params` object and in text logs in parentheses:
-
-```
-[INFO] [my_module] Processing completed (items_processed=157, duration_ms=432, success_rate=0.98, source=monthly_report)
-```
-
 ## Log Rotation
 
 The logging system automatically rotates log files when they reach the configured size:
 
 ```lua
 logging.configure({
-  output_file = "app.log",     -- Log file name
-  log_dir = "logs",            -- Log directory
-  max_file_size = 10 * 1024,   -- 10KB max file size (small for demo)
-  max_log_files = 3            -- Keep 3 rotated log files
+  output_file = "app.log",       -- Log file name
+  log_dir = "logs",              -- Log directory
+  max_file_size = 10 * 1024,     -- 10KB max file size
+  max_log_files = 3              -- Keep 3 rotated log files
 })
 ```
 
@@ -171,9 +183,9 @@ When rotation occurs:
 - Previous rotated files move up: app.log.1 → app.log.2, etc.
 - The oldest rotated file is deleted if max_log_files is exceeded
 
-## Integration with Global Config
+## Integration with Central Configuration
 
-The logging system integrates with firmo's global configuration system:
+The logging system integrates with firmo's central configuration system:
 
 ```lua
 -- In your .firmo-config.lua file:
@@ -193,24 +205,60 @@ return {
       reporting = 2  -- WARN level for reporting module
     },
     format = "text",
-    json_file = "firmo.json",
-    module_filter = {"coverage", "reporting", "test*"},
-    buffering = true,
-    buffer_size = 100
+    json_file = "firmo.json"
   }
 }
 ```
 
-To configure a module using the global config:
+To configure a module using the central config:
 
 ```lua
 local logging = require("lib.tools.logging")
+local logger = logging.get_logger("my_module")
 logging.configure_from_config("my_module")
 ```
 
-## Checking Log Level Availability
+## Error Handling Integration
 
-You can check if a specific log level is enabled before performing expensive operations:
+### Expected Error Suppression
+
+In tests that use the `{ expect_error = true }` flag, expected errors are automatically downgraded to DEBUG level with an [EXPECTED] prefix:
+
+```lua
+it("should throw an error for invalid input", { expect_error = true }, function()
+  -- This error will be downgraded to DEBUG level in logs
+  local result, err = function_that_should_error()
+  
+  expect(result).to_not.exist()
+  expect(err).to.exist()
+  expect(err.message).to.match("Invalid input")
+})
+```
+
+### Error History Access
+
+All expected errors can be accessed programmatically:
+
+```lua
+-- After running tests with expected errors
+local error_handler = require("lib.tools.error_handler")
+local expected_errors = error_handler.get_expected_test_errors()
+
+-- Print all expected errors
+for i, err in ipairs(expected_errors) do
+  print(string.format("[%s] From module %s: %s", 
+    os.date("%H:%M:%S", err.timestamp),
+    err.module or "unknown", 
+    err.message))
+end
+
+-- Clear expected errors when done
+error_handler.clear_expected_test_errors()
+```
+
+## Performance Considerations
+
+### Check Level Before Expensive Operations
 
 ```lua
 local logger = logging.get_logger("database")
@@ -218,84 +266,70 @@ local logger = logging.get_logger("database")
 if logger.is_debug_enabled() then
   -- Only do this expensive operation if debug logging is enabled
   local stats = calculate_detailed_stats()
-  logger.debug("Database stats: " .. table.concat(stats, ", "))
+  logger.debug("Database stats", stats)
 end
 ```
 
-## Log Search and Query
-
-The logging system includes powerful search capabilities to find and analyze log entries:
+### Using Buffering for High-Volume Logging
 
 ```lua
-local log_search = require("lib.tools.logging.search")
-
--- Search logs with filtering
-local results = log_search.search_logs({
-  log_file = "logs/application.log",
-  level = "ERROR",              -- Filter by log level
-  module = "database",          -- Filter by module
-  message_pattern = "timeout",  -- Filter by message content
-  from_date = "2025-03-01",     -- Filter by date range
-  to_date = "2025-03-10",
-  limit = 100                   -- Limit results (default 1000)
+-- Enable buffering globally
+logging.configure({
+  buffering = true,
+  buffer_size = 100,            -- Buffer size (entries)
+  buffer_flush_interval = 5000, -- Auto-flush interval (ms)
+  buffer_flush_on_exit = true   -- Flush buffer on program exit
 })
 
--- Process search results
-print("Found " .. results.count .. " matching entries")
-for i, entry in ipairs(results.entries) do
-  print(entry.timestamp .. " | " .. entry.level .. " | " .. entry.message)
+-- Use buffered logging
+local logger = logging.get_logger("high_volume")
+
+for i = 1, 1000 do
+  logger.debug("Processing item " .. i)  -- Not written immediately
 end
 
--- Use wildcard patterns for module filtering
-local db_errors = log_search.search_logs({
-  log_file = "logs/application.log",
-  level = "ERROR",
-  module = "database*"          -- Matches database.query, database.connection, etc.
-})
+-- Manually flush all buffers
+logging.flush_buffers()
+```
 
--- Get log statistics
-local stats = log_search.get_log_stats("logs/application.log")
-print("Total log entries: " .. stats.total_entries)
-print("Error count: " .. stats.errors)
-print("Warning count: " .. stats.warnings)
-print("First log: " .. stats.first_timestamp)
-print("Last log: " .. stats.last_timestamp)
-print("Log file size: " .. stats.file_size .. " bytes")
+## Silent Mode for Testing
 
--- Modules with most errors
-for module, count in pairs(stats.by_module) do
-  print(module .. ": " .. count .. " entries")
-end
+```lua
+-- Enable silent mode (no output)
+logging.configure({ silent_mode = true })
 
--- Export logs to different formats
-log_search.export_logs(
-  "logs/application.log",       -- Source log file
-  "logs/exported.csv",          -- Output file
-  "csv",                        -- Format (csv, json, html, text)
-  { source_format = "text" }    -- Options
+-- No output will be produced
+local logger = logging.get_logger("test")
+logger.info("This won't be output anywhere")
+
+-- Re-enable output
+logging.configure({ silent_mode = false })
+```
+
+## Test Formatter Integration
+
+The logging system integrates with the test reporting system:
+
+```lua
+local formatter_integration = require("lib.tools.logging.formatter_integration")
+
+-- Enhance all test formatters with logging capabilities
+formatter_integration.enhance_formatters()
+
+-- Create a test-specific logger with context
+local test_logger = formatter_integration.create_test_logger(
+  "Database Connection Test",      -- Test name
+  { component = "database" }       -- Test context
 )
 
--- Create a real-time log processor
-local processor = log_search.get_log_processor({
-  output_file = "logs/filtered.log",
-  format = "json",
-  level = "ERROR",              -- Only process ERROR level
-  module = "database*",         -- Only process database modules
-  callback = function(entry)    -- Optional processing callback
-    print("Filtered log: " .. entry.message)
-  end
-})
+-- Log with test context
+test_logger.info("Starting database connection test")
+-- Result: "[INFO] [test.Database_Connection_Test] Starting database connection test (test_name=Database Connection Test, component=database)"
 
--- Process a log entry
-local entry = {
-  timestamp = "2025-03-10 12:34:56",
-  level = "ERROR",
-  module = "database.connection",
-  message = "Connection timeout"
-}
-
-processor.process(entry)        -- Returns true if processed (passed filters)
-processor.close()               -- Close processor when done
+-- Create a step-specific logger
+local step_logger = test_logger.step("Connection establishment")
+step_logger.info("Connecting to database")
+-- Result: "[INFO] [test.Database_Connection_Test] Connecting to database (test_name=Database Connection Test, component=database, step=Connection establishment)"
 ```
 
 ## External Tool Integration
@@ -327,142 +361,4 @@ log_export.create_platform_file(
     environment = "production"
   }
 )
-
--- Create real-time exporter for external platform
-local exporter = log_export.create_realtime_exporter(
-  "datadog",
-  {
-    api_key = "your-datadog-api-key",
-    service = "my-service",
-    environment = "production",
-    tags = { "component:api", "version:1.2.3" }
-  }
-)
-
--- Export a log entry
-local formatted = exporter.export({
-  timestamp = "2025-03-10 12:34:56",
-  level = "ERROR",
-  module = "database",
-  message = "Connection failed"
-})
-
--- Get HTTP endpoint information for the platform
-local endpoint = exporter.http_endpoint
--- { method = "POST", url = "https://http-intake.logs.datadoghq.com/v1/input", headers = {...} }
-
--- Export multiple entries in platform-specific format
-local entries = log_export.export_to_platform(
-  {  -- Array of log entries
-    {
-      timestamp = "2025-03-10 12:34:56",
-      level = "ERROR",
-      module = "database",
-      message = "Connection failed"
-    }
-  },
-  "loki",  -- Target platform
-  { environment = "production" }  -- Platform-specific options
-)
 ```
-
-## Test Formatter Integration
-
-The logging system integrates with the test reporting system:
-
-```lua
-local formatter_integration = require("lib.tools.logging.formatter_integration")
-
--- Enhance all test formatters with logging capabilities
-formatter_integration.enhance_formatters()
-
--- Create a test-specific logger with context
-local test_logger = formatter_integration.create_test_logger(
-  "Database Connection Test",      -- Test name
-  { component = "database" }       -- Test context
-)
-
--- Log with test context
-test_logger.info("Starting database connection test")
--- Result: "[INFO] [test.Database_Connection_Test] Starting database connection test (test_name=Database Connection Test, component=database)"
-
--- Create a step-specific logger
-local step_logger = test_logger.step("Connection establishment")
-step_logger.info("Connecting to database")
--- Result: "[INFO] [test.Database_Connection_Test] Connecting to database (test_name=Database Connection Test, component=database, step=Connection establishment)"
-
--- Integrate with the test reporting system
-formatter_integration.integrate_with_reporting({
-  include_parameters = true,     -- Include test parameters in logs
-  log_test_starts = true,        -- Log when tests start
-  log_test_completions = true    -- Log when tests complete
-})
-
--- Create a specialized log formatter for test results
-formatter_integration.create_log_formatter()
-
--- Use the log formatter in reporting
-local reporting = require("lib.reporting")
-reporting.generate(test_results, {"log"})  -- Output in log-friendly format
-```
-
-## Buffering for High-Volume Logging
-
-For high-performance scenarios, the logging system supports buffering:
-
-```lua
--- Enable buffering globally
-logging.configure({
-  buffering = true,
-  buffer_size = 100,             -- Buffer size (entries)
-  buffer_flush_interval = 5000,  -- Auto-flush interval (ms)
-  buffer_flush_on_exit = true    -- Flush buffer on program exit
-})
-
--- Use buffered logging
-local logger = logging.get_logger("high_volume")
-
-for i = 1, 1000 do
-  logger.debug("Processing item " .. i)  -- Not written immediately
-end
-
--- Manually flush all buffers
-logging.flush_buffers()
-```
-
-## Silent Mode for Testing
-
-When testing output-dependent code, you can enable silent mode:
-
-```lua
--- Enable silent mode (no output)
-logging.configure({ silent_mode = true })
-
--- No output will be produced
-local logger = logging.get_logger("test")
-logger.info("This won't be output anywhere")
-
--- Re-enable output
-logging.configure({ silent_mode = false })
-```
-
-## Performance Considerations
-
-- Log messages at levels below the current threshold are discarded with minimal overhead
-- When logging to files, the system checks if the file needs rotation on each write
-- Use buffering for high-volume logging scenarios to reduce I/O overhead
-- Structured parameter logging adds some overhead - use sparingly for DEBUG and TRACE levels
-- The JSON structured log format has slightly higher overhead than plain text logging
-- Consider using the filesystem module instead of direct io.* functions for improved error handling
-
-## Examples
-
-See the following examples for detailed usage:
-- `examples/logging_example.lua` - Basic logging usage
-- `examples/logging_config_example.lua` - Configuration options with JSON structured logging
-- `examples/logging_rotation_example.lua` - Log rotation demonstration
-- `examples/logging_rotation_test.lua` - Testing rotation functionality
-- `examples/logging_search_example.lua` - Log search and analysis features
-- `examples/logging_export_example.lua` - Exporting logs to external platforms
-- `examples/logging_formatter_example.lua` - Test formatter integration
-- `examples/logging_buffer_example.lua` - High-performance buffered logging

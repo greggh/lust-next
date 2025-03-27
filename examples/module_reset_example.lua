@@ -2,6 +2,10 @@
 -- Module reset example for firmo
 -- This example demonstrates how to use the module reset functionality
 -- to improve test isolation between test files.
+--
+-- This is a simple interactive demo that can be run directly.
+-- For more comprehensive examples and testing patterns, see:
+-- examples/module_reset_examples.md
 
 local firmo = require("firmo")
 

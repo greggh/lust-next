@@ -195,6 +195,15 @@ function M.load_module(module_name)
   tracker.register_file(file_id, file_path)
   tracker.register_sourcemap(file_id, sourcemap_data)
   
+  -- Also register the file path with the ID for better reporting
+  if type(file_path) == "string" then
+    -- Log so we can debug mapping issues
+    logger.debug("Registered file path to ID mapping", {
+      file_path = file_path,
+      file_id = file_id
+    })
+  end
+  
   -- Load the instrumented code
   local loader, err = load(instrumented_code, "@" .. file_path)
   if not loader then

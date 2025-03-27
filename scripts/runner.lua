@@ -1524,7 +1524,13 @@ function runner.main(args)
       end
       
       -- Initialize coverage with the merged configuration
-      coverage.init(coverage_config)
+      -- Modern coverage module (v3) doesn't have init(), just start()
+      if type(coverage.init) == "function" then
+        -- Legacy coverage module
+        coverage.init(coverage_config)
+      end
+      
+      -- Always call start (works for both legacy and modern modules)
       coverage.start()
       
       -- Debug output of final configuration
@@ -1614,7 +1620,16 @@ function runner.main(args)
     -- Get coverage report data
     local report_data
     ok, report_data = pcall(function() 
-      return coverage.get_report_data() 
+      -- Try both methods to get report data
+      if type(coverage.get_report_data) == "function" then
+        -- Legacy method
+        return coverage.get_report_data() 
+      elseif type(coverage.get_data) == "function" then
+        -- New instrumentation-based method
+        return coverage.get_data()
+      else
+        error("No compatible function found to get coverage data")
+      end
     end)
     
     if not ok or not report_data then
@@ -1625,8 +1640,16 @@ function runner.main(args)
     else
       -- Count files in report_data
       local file_count = 0
+      
+      -- Handle both old and new formats
       if report_data.files then
+        -- Old format (legacy)
         for _ in pairs(report_data.files) do
+          file_count = file_count + 1
+        end
+      elseif report_data.execution_data then
+        -- New format (v3 instrumentation)
+        for _ in pairs(report_data.execution_data) do
           file_count = file_count + 1
         end
       end
@@ -1637,85 +1660,161 @@ function runner.main(args)
         })
         report_success = false
       else
-        -- Generate reports
-        local reporting
-        ok, reporting = pcall(require, "lib.reporting")
+        -- Create reports directory
+        local report_dir = options.report_dir or "./coverage-reports"
+        fs.ensure_directory_exists(report_dir)
         
-        if not ok then
-          logger.error("Failed to load reporting module")
-          report_success = false
-        else
-          -- Create reports directory
-          local report_dir = options.report_dir or "./coverage-reports"
-          fs.ensure_directory_exists(report_dir)
+        -- Generate reports
+        local formats = options.formats or { "html", "json", "lcov", "cobertura" }
+        
+        -- First try using the instrumentation-based generate_report method
+        if type(coverage.generate_report) == "function" then
+          logger.info("Using instrumentation-based coverage report generation")
           
-          -- Generate reports
-          local formats = options.formats or { "html", "json", "lcov", "cobertura" }
+          -- Try to load data_store module for coverage summary calculations
+          local data_store
+          local data_store_loaded, data_store_result = pcall(require, "lib.coverage.runtime.data_store")
+          if data_store_loaded then
+            data_store = data_store_result
+            logger.debug("Loaded data_store module for coverage calculations")
+          end
           
           for _, format in ipairs(formats) do
             local report_path = fs.join_paths(report_dir, "coverage-report." .. format)
-            local format_success, err = reporting.save_coverage_report(report_path, report_data, format)
+            logger.info("Generating " .. format .. " report using instrumentation system", {
+              path = report_path
+            })
             
-            if not format_success then
-              logger.error("Failed to generate " .. format .. " report", {
-                error = err and error_handler.format_error(err) or "Unknown error"
+            -- Use the direct method
+            local success, result = pcall(function() 
+              return coverage.generate_report(format, report_path)
+            end)
+            
+            if success and result == true then
+              logger.info("Successfully generated " .. format .. " coverage report", {
+                path = report_path
+              })
+              
+              -- Get summary data from the instrumentation system
+              if format == "html" and data_store and data_store.calculate_summary then
+                -- Use the values from the report for the summary output
+                local summary_data
+                local summary_success, summary_err = pcall(function()
+                  summary_data = data_store.calculate_summary(report_data)
+                  return true
+                end)
+                
+                if summary_success and summary_data then
+                  -- Update the report_data summary with the calculated values
+                  report_data.summary = summary_data
+                end
+              end
+              
+              -- Verify the HTML report
+              if format == "html" then
+                local file_exists = fs.file_exists(report_path)
+                local is_file = file_exists and not fs.directory_exists(report_path)
+                logger.info("HTML report verification", {
+                  path = report_path,
+                  exists = file_exists,
+                  is_file = is_file
+                })
+                
+                -- Update the coverage summary with the values from the HTML report
+                if data_store_loaded and data_store and report_data and report_data.summary then
+                  logger.info("Updated coverage summary", {
+                    overall = string.format("%.2f%%", (report_data.summary.overall_coverage_percent or 0)),
+                    lines = string.format("%.2f%%", (report_data.summary.line_coverage_percent or 0)),
+                    functions = string.format("%.2f%%", (report_data.summary.function_coverage_percent or 0)),
+                    files = string.format("%.2f%%", (report_data.summary.file_coverage_percent or 0))
+                  })
+                end
+              end
+            else
+              logger.error("Failed to generate " .. format .. " report with instrumentation", {
+                format = format,
+                path = report_path,
+                error = success and "Unknown error" or tostring(result)
               })
               report_success = false
             end
           end
+        else
+          -- Fall back to the legacy reporting module
+          logger.info("Falling back to legacy reporting module")
+          local reporting
+          ok, reporting = pcall(require, "lib.reporting")
           
-          -- Print coverage summary
-          if report_data.summary then
-            -- Calculate actual file counts manually
-            local file_count = 0
-            local covered_file_count = 0
-            local total_lines = 0
-            local covered_lines = 0
-            
-            for file_path, file_data in pairs(report_data.files) do
-              file_count = file_count + 1
-              covered_file_count = covered_file_count + 1  -- All files with data are considered covered
+          if not ok then
+            logger.error("Failed to load reporting module")
+            report_success = false
+          else
+            -- Generate reports with the reporting module
+            for _, format in ipairs(formats) do
+              local report_path = fs.join_paths(report_dir, "coverage-report." .. format)
+              local format_success, err = reporting.save_coverage_report(report_path, report_data, format)
               
-              -- Count lines
-              if file_data.lines then
-                for line_num, line_data in pairs(file_data.lines) do
-                  if type(line_data) == "table" and line_data.executable then
-                    total_lines = total_lines + 1
-                    if line_data.covered or line_data.executed then
-                      covered_lines = covered_lines + 1
-                    end
+              if not format_success then
+                logger.error("Failed to generate " .. format .. " report", {
+                  error = err and error_handler.format_error(err) or "Unknown error"
+                })
+                report_success = false
+              end
+            end
+          end
+        end
+        
+        -- Print coverage summary
+        if report_data.summary then
+          -- Calculate actual file counts manually
+          local file_count = 0
+          local covered_file_count = 0
+          local total_lines = 0
+          local covered_lines = 0
+          
+          for file_path, file_data in pairs(report_data.files or {}) do
+            file_count = file_count + 1
+            covered_file_count = covered_file_count + 1  -- All files with data are considered covered
+            
+            -- Count lines
+            if file_data.lines then
+              for line_num, line_data in pairs(file_data.lines) do
+                if type(line_data) == "table" and line_data.executable then
+                  total_lines = total_lines + 1
+                  if line_data.covered or line_data.executed then
+                    covered_lines = covered_lines + 1
                   end
                 end
               end
             end
-            
-            -- Calculate percentages
-            local file_percent = file_count > 0 and (covered_file_count / file_count * 100) or 0
-            local line_percent = total_lines > 0 and (covered_lines / total_lines * 100) or 0
-            
-            -- Also update the summary values directly to ensure they're consistent everywhere
-            report_data.summary.line_coverage_percent = line_percent
-            report_data.summary.file_coverage_percent = file_percent
-            report_data.summary.overall_coverage_percent = (file_percent + line_percent + (report_data.summary.function_coverage_percent or 0)) / 3
-            
-            local overall_percent = (file_percent + line_percent + (report_data.summary.function_coverage_percent or 0)) / 3
-            
-            -- Print report with manually calculated values
-            logger.info("Coverage summary", {
-              overall = string.format("%.2f%%", overall_percent),
-              lines = string.format("%.2f%%", line_percent),
-              functions = string.format("%.2f%%", report_data.summary.function_coverage_percent or 0),
-              files = string.format("%.2f%%", file_percent)
-            })
-            
-            -- Debug output for manual calculation
-            logger.debug("Manual coverage calculation", {
-              file_count = file_count,
-              covered_file_count = covered_file_count,
-              total_lines = total_lines,
-              covered_lines = covered_lines
-            })
           end
+          
+          -- Calculate percentages
+          local file_percent = file_count > 0 and (covered_file_count / file_count * 100) or 0
+          local line_percent = total_lines > 0 and (covered_lines / total_lines * 100) or 0
+          
+          -- Also update the summary values directly to ensure they're consistent everywhere
+          report_data.summary.line_coverage_percent = line_percent
+          report_data.summary.file_coverage_percent = file_percent
+          report_data.summary.overall_coverage_percent = (file_percent + line_percent + (report_data.summary.function_coverage_percent or 0)) / 3
+          
+          local overall_percent = (file_percent + line_percent + (report_data.summary.function_coverage_percent or 0)) / 3
+          
+          -- Print report with manually calculated values
+          logger.info("Coverage summary", {
+            overall = string.format("%.2f%%", overall_percent),
+            lines = string.format("%.2f%%", line_percent),
+            functions = string.format("%.2f%%", report_data.summary.function_coverage_percent or 0),
+            files = string.format("%.2f%%", file_percent)
+          })
+          
+          -- Debug output for manual calculation
+          logger.debug("Manual coverage calculation", {
+            file_count = file_count,
+            covered_file_count = covered_file_count,
+            total_lines = total_lines,
+            covered_lines = covered_lines
+          })
         end
       end
     end

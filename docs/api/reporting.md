@@ -1,140 +1,161 @@
 # Reporting Module API
-The reporting module in firmo provides a centralized system for generating and saving reports from test data.
+
+The reporting module in firmo provides a centralized system for generating, formatting, and saving reports from test data.
 
 ## Overview
-The reporting module handles report formatting and file operations, providing a clean separation of concerns between data collection and output generation. It supports multiple output formats, robust file operations, and fallback mechanisms to ensure reliable report generation.
 
-## Basic Usage
+The reporting module handles the entire reporting pipeline from raw data to formatted output files, including:
 
-```lua
-local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Get coverage data
-local coverage_data = firmo.get_coverage_data()
--- Format coverage data as HTML
-local html_report = reporting.format_coverage(coverage_data, "html")
--- Save the report to a file
-reporting.write_file("./coverage-report.html", html_report)
--- Or use the auto-save function for multiple formats
-reporting.auto_save_reports(coverage_data, nil, "./reports")
+- Unified interface for generating coverage, quality, and test results reports
+- Support for multiple output formats (HTML, JSON, XML, CSV, TAP, etc.)
+- Pluggable formatter system with customizable themes and options
+- File saving with appropriate error handling and validation
+- Integration with central configuration system
+- Automatic directory creation and path management
+- Validation of report data and formatted output
 
-```
+## Module Functions
 
-## Configuration
-The reporting module doesn't require explicit configuration, as it receives its configuration from the modules that call it.
+### Module Configuration
 
-## API Reference
+#### `reporting.configure(options)`
+
+Configure the reporting module with custom options.
+
+Parameters:
+- `options` (table): Configuration options for the reporting module
+
+Returns:
+- The reporting module for method chaining
+
+#### `reporting.configure_formatter(formatter_name, formatter_config)`
+
+Configure a specific formatter.
+
+Parameters:
+- `formatter_name` (string): Name of the formatter to configure
+- `formatter_config` (table): Configuration options for the formatter
+
+Returns:
+- The reporting module for method chaining
+
+#### `reporting.configure_formatters(formatters_config)`
+
+Configure multiple formatters at once.
+
+Parameters:
+- `formatters_config` (table): Table of formatter configurations {formatter_name = config, ...}
+
+Returns:
+- The reporting module for method chaining
+
+#### `reporting.get_formatter_config(formatter_name)`
+
+Get configuration for a specific formatter.
+
+Parameters:
+- `formatter_name` (string): Name of the formatter to get configuration for
+
+Returns:
+- `formatter_config` (table): Configuration for the formatter or nil if not found
 
 ### Report Formatting Functions
 
 #### `reporting.format_coverage(coverage_data, format)`
-Format coverage data into the specified output format:
 
-```lua
-local coverage_data = firmo.get_coverage_data()
-local html_report = reporting.format_coverage(coverage_data, "html")
+Format coverage data into the specified output format.
 
-```
 Parameters:
-
 - `coverage_data` (table): Coverage data structure from the coverage module
-- `format` (string): Output format (html, json, lcov, summary)
-Returns:
+- `format` (string): Output format (html, json, lcov, cobertura, etc.)
 
-- The formatted report content (string)
+Returns:
+- The formatted report content (string or table depending on format)
 
 #### `reporting.format_quality(quality_data, format)`
-Format quality data into the specified output format:
 
-```lua
-local quality_data = firmo.get_quality_data()
-local html_report = reporting.format_quality(quality_data, "html")
+Format quality data into the specified output format.
 
-```
 Parameters:
-
 - `quality_data` (table): Quality data structure from the quality module
 - `format` (string): Output format (html, json, summary)
-Returns:
 
-- The formatted report content (string)
+Returns:
+- The formatted report content (string or table depending on format)
+
+#### `reporting.format_results(results_data, format)`
+
+Format test results data into the specified output format.
+
+Parameters:
+- `results_data` (table): Test results data structure
+- `format` (string): Output format (junit, tap, csv)
+
+Returns:
+- The formatted report content (string or table depending on format)
 
 ### File I/O Functions
 
 #### `reporting.write_file(file_path, content)`
-Write content to a file, creating directories as needed:
 
-```lua
-reporting.write_file("./reports/coverage-report.html", html_report)
+Write content to a file, creating directories as needed.
 
-```
 Parameters:
-
 - `file_path` (string): Path to the file to write
-- `content` (string): Content to write to the file
+- `content` (string or table): Content to write to the file
+
 Returns:
-
 - `success` (boolean): True if the file was written successfully
-- `error` (string, optional): Error message if the operation failed
+- `error` (table, optional): Error object if the operation failed
 
-#### `reporting.save_coverage_report(file_path, coverage_data, format)`
-Format and save a coverage report:
+#### `reporting.save_coverage_report(file_path, coverage_data, format, options)`
 
-```lua
-local coverage_data = firmo.get_coverage_data()
-reporting.save_coverage_report("./coverage-report.html", coverage_data, "html")
+Format and save a coverage report.
 
-```
 Parameters:
-
 - `file_path` (string): Path to save the report
 - `coverage_data` (table): Coverage data structure
-- `format` (string): Output format (html, json, lcov, summary)
-Returns:
+- `format` (string): Output format (html, json, lcov, cobertura, etc.)
+- `options` (table, optional): Options for saving the report:
+  - `validate` (boolean): Whether to validate the data before saving (default: true)
+  - `strict_validation` (boolean): Whether to abort if validation fails (default: false)
+  - `validate_format` (boolean): Whether to validate the formatted output (default: true)
 
+Returns:
 - `success` (boolean): True if the report was saved successfully
-- `error` (string, optional): Error message if the operation failed
+- `error` (table, optional): Error object if the operation failed
 
 #### `reporting.save_quality_report(file_path, quality_data, format)`
-Format and save a quality report:
 
-```lua
-local quality_data = firmo.get_quality_data()
-reporting.save_quality_report("./quality-report.html", quality_data, "html")
+Format and save a quality report.
 
-```
 Parameters:
-
 - `file_path` (string): Path to save the report
 - `quality_data` (table): Quality data structure
 - `format` (string): Output format (html, json, summary)
-Returns:
 
+Returns:
 - `success` (boolean): True if the report was saved successfully
-- `error` (string, optional): Error message if the operation failed
+- `error` (table, optional): Error object if the operation failed
+
+#### `reporting.save_results_report(file_path, results_data, format)`
+
+Format and save a test results report.
+
+Parameters:
+- `file_path` (string): Path to save the report
+- `results_data` (table): Test results data structure
+- `format` (string): Output format (junit, tap, csv)
+
+Returns:
+- `success` (boolean): True if the report was saved successfully
+- `error` (table, optional): Error object if the operation failed
 
 #### `reporting.auto_save_reports(coverage_data, quality_data, results_data, options)`
-Automatically save multiple report formats to a directory with configurable paths:
 
-```lua
--- Simple usage (backward compatible)
-reporting.auto_save_reports(coverage_data, nil, nil, "./reports")
--- Save both coverage and quality reports
-reporting.auto_save_reports(coverage_data, quality_data, nil, "./reports")
--- Advanced usage with path templates
-reporting.auto_save_reports(coverage_data, quality_data, results_data, {
-  report_dir = "./reports",
-  report_suffix = "-v1.0",
-  coverage_path_template = "coverage-{date}.{format}",
-  quality_path_template = "quality/report-{date}.{format}",
-  results_path_template = "test-results-{datetime}.{format}",
-  timestamp_format = "%Y-%m-%d",
-  verbose = true
-})
+Automatically save multiple report formats to a directory with configurable paths.
 
-```
 Parameters:
-
 - `coverage_data` (table, optional): Coverage data structure
 - `quality_data` (table, optional): Quality data structure
 - `results_data` (table, optional): Test results data structure
@@ -148,221 +169,273 @@ Parameters:
     - `results_path_template` (string, optional): Path template for test results reports
     - `timestamp_format` (string, optional): Format string for timestamps (default: "%Y-%m-%d")
     - `verbose` (boolean, optional): Enable verbose debugging output
-Path templates support the following placeholders:
+    - `validate` (boolean, optional): Whether to validate reports before saving (default: true)
+    - `strict_validation` (boolean, optional): If true, don't save invalid reports (default: false)
+    - `validation_report` (boolean, optional): If true, generate validation report (default: false)
+    - `validation_report_path` (string, optional): Path for validation report
 
+Path templates support the following placeholders:
 - `{format}`: Output format (html, json, lcov, etc.)
 - `{type}`: Report type (coverage, quality, results)
 - `{date}`: Current date using timestamp format
 - `{datetime}`: Current date and time (%Y-%m-%d_%H-%M-%S)
 - `{suffix}`: The report suffix if specified
-Returns:
 
+Returns:
 - `results` (table): Table of results for each saved report with success/error information
 
-## Robust Fallback Mechanisms
-The reporting module includes several fallback mechanisms to ensure reliable operation:
+### Formatter Management Functions
 
-### Directory Creation
-The module employs multiple approaches to ensure directories exist:
+#### `reporting.register_coverage_formatter(name, formatter_fn)`
 
-```lua
--- First attempt with Lua's standard functions
-local success, err = ensure_directory(path)
-if not success then
-  -- Fallback with direct operating system command
-  os.execute('mkdir -p "' .. path .. '"')
-  -- Verify creation
-  local test_cmd = 'test -d "' .. path .. '"'
-  local exists = os.execute(test_cmd)
-end
+Register a custom coverage report formatter.
 
-```
+Parameters:
+- `name` (string): Name of the formatter to register
+- `formatter_fn` (function): Function to format coverage reports
 
-### Input Validation
-The module validates input data and provides defaults:
+Returns:
+- `success` (boolean): True if formatter was registered successfully
+- `error` (table, optional): Error object if registration failed
 
-```lua
--- Check if coverage data is valid
-if not coverage_data then
-  coverage_data = {
-    files = {},
-    summary = {
-      total_files = 0,
-      covered_files = 0,
-      -- ...other defaults
-    }
-  }
-end
+#### `reporting.register_quality_formatter(name, formatter_fn)`
 
-```
+Register a custom quality report formatter.
 
-### File Writing
-The module uses protected calls for file writing:
+Parameters:
+- `name` (string): Name of the formatter to register
+- `formatter_fn` (function): Function to format quality reports
 
-```lua
--- Use pcall for reliable error handling
-local write_ok, write_err = pcall(function()
-  file:write(content)
-  file:close()
-end)
-if not write_ok then
-  return false, "Error writing to file: " .. tostring(write_err)
-end
+Returns:
+- `success` (boolean): True if formatter was registered successfully
+- `error` (table, optional): Error object if registration failed
 
-```
+#### `reporting.register_results_formatter(name, formatter_fn)`
 
-## Report Formats
+Register a custom test results formatter.
 
-### Test Results Report Formats
+Parameters:
+- `name` (string): Name of the formatter to register
+- `formatter_fn` (function): Function to format test results
 
-- **JUnit XML**: Standard XML format for CI/CD integration, compatible with most test runners and reporting tools
-- **TAP (Test Anything Protocol)**: Simple text-based format widely used in testing frameworks
-  - TAP version 13 compatible
-  - YAML diagnostic blocks for failures and errors
-  - SKIP directives for pending/skipped tests
-- **CSV (Comma-Separated Values)**: Tabular format for easy import into spreadsheets and data analysis tools
-  - Fields: test ID, test suite, test name, status, duration, message, error type, details, timestamp
+Returns:
+- `success` (boolean): True if formatter was registered successfully
+- `error` (table, optional): Error object if registration failed
 
-### Coverage Report Formats
+#### `reporting.load_formatters(formatter_module)`
 
-- **HTML**: Visual reports with color-coded coverage information
+Load formatters from a module (table with format functions).
+
+Parameters:
+- `formatter_module` (table): Module containing formatters {coverage={}, quality={}, results={}}
+
+Returns:
+- `registered` (number): Number of formatters registered
+- `error` (table, optional): Error object if some formatters failed to register
+
+#### `reporting.get_available_formatters()`
+
+Get list of available formatters for each type.
+
+Returns:
+- `available_formatters` (table): Table with lists of formatters by type {coverage={}, quality={}, results={}}
+
+### Validation Functions
+
+#### `reporting.validate_coverage_data(coverage_data)`
+
+Validate coverage data before saving.
+
+Parameters:
+- `coverage_data` (table): Coverage data structure from the coverage module
+
+Returns:
+- `is_valid` (boolean): True if the data is valid
+- `issues` (table): List of validation issues if any
+
+#### `reporting.validate_report_format(formatted_data, format)`
+
+Validate formatted report output.
+
+Parameters:
+- `formatted_data` (string or table): Formatted report content
+- `format` (string): Output format name
+
+Returns:
+- `is_valid` (boolean): True if the format is valid
+- `error_message` (string): Error message if validation failed
+
+#### `reporting.validate_report(coverage_data, formatted_output, format)`
+
+Perform comprehensive validation of a coverage report.
+
+Parameters:
+- `coverage_data` (table): Coverage data structure
+- `formatted_output` (string or table, optional): Formatted report content
+- `format` (string, optional): Output format name
+
+Returns:
+- `result` (table): Validation results with analysis information
+
+### Utility Functions
+
+#### `reporting.reset()`
+
+Reset the module to default configuration (local config only).
+
+Returns:
+- The reporting module for method chaining
+
+#### `reporting.full_reset()`
+
+Fully reset both local and central configuration.
+
+Returns:
+- The reporting module for method chaining
+
+#### `reporting.debug_config()`
+
+Show current configuration for debugging.
+
+Returns:
+- `debug_info` (table): Current configuration information
+
+## Built-in Formatters
+
+### Coverage Report Formatters
+
+- **HTML**: Interactive HTML report with syntax highlighting and file details
+- **HTML Simple**: Simplified HTML report for faster loading
 - **JSON**: Machine-readable format for CI integration
-- **LCOV**: Industry-standard format for coverage tools
-- **Summary**: Text-based overview of results
+- **LCOV**: Industry-standard format compatible with coverage tools
+- **Cobertura**: XML format compatible with Jenkins and other CI systems
+- **Summary**: Text-based overview of coverage results
 
-### Quality Report Formats
+### Quality Report Formatters
 
 - **HTML**: Visual quality assessment with detailed analysis
 - **JSON**: Machine-readable format for CI integration
 - **Summary**: Text-based quality evaluation
 
-## Command-Line Configuration
-The reporting functionality can be configured through command-line options:
+### Test Results Formatters
 
-```bash
+- **JUnit XML**: Standard XML format for CI/CD integration, compatible with most test runners
+- **TAP (Test Anything Protocol)**: Simple text-based format widely used in testing frameworks
+- **CSV (Comma-Separated Values)**: Tabular format for easy import into spreadsheets and data analysis tools
 
-# Set the output directory for all reports
-lua run_tests.lua --output-dir ./reports
+## Data Structures
 
-# Add a suffix to all report filenames (useful for versioning)
-lua run_tests.lua --report-suffix "-2025-03-08"
-
-# Custom path template for coverage reports
-lua run_tests.lua --coverage-path "coverage-{date}.{format}"
-
-# Custom path template for quality reports
-lua run_tests.lua --quality-path "quality/report-{date}.{format}"
-
-# Custom path template for test results
-lua run_tests.lua --results-path "results/{datetime}.{format}"
-
-# Custom timestamp format
-lua run_tests.lua --timestamp-format "%Y%m%d"
-
-# Enable verbose output during report generation
-lua run_tests.lua --verbose-reports
-
-```
-These options can be combined with other firmo options:
-
-```bash
-lua run_tests.lua --coverage --output-dir ./reports --report-suffix "-$(date +%Y%m%d)" tests/coverage_test.lua
-
-```
-
-## Examples
-
-### Test Results Report Generation
+### Coverage Data Structure
 
 ```lua
-local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Run tests
-firmo.run_discovered('./tests')
--- Get test results data
-local results_data = firmo.get_test_results()
--- Generate different report formats
-local junit_report = reporting.format_results(results_data, "junit")
-local tap_report = reporting.format_results(results_data, "tap")
-local csv_report = reporting.format_results(results_data, "csv")
--- Save reports to files
-reporting.write_file("./reports/test-results.xml", junit_report)
-reporting.write_file("./reports/test-results.tap", tap_report)
-reporting.write_file("./reports/test-results.csv", csv_report)
--- Or save a specific format
-reporting.save_results_report("./reports/test-results.tap", results_data, "tap")
--- Or use the auto-save function for all formats (includes JUnit XML, TAP, and CSV)
-reporting.auto_save_reports(nil, nil, results_data, "./reports")
--- Or use the advanced configuration features
-reporting.auto_save_reports(nil, nil, results_data, {
-  report_dir = "./reports",
-  report_suffix = "-" .. os.date("%Y%m%d"),
-  results_path_template = "junit/results-{date}.{format}",
-  verbose = true
-})
-
+{
+  files = {
+    ["path/to/file.lua"] = {
+      path = "path/to/file.lua",
+      total_lines = 100,
+      executable_lines = 80,
+      covered_lines = 65,
+      executed_lines = 75,
+      total_functions = 10,
+      executed_functions = 8,
+      line_coverage_percent = 81.25,
+      function_coverage_percent = 80.0,
+      lines = {
+        [1] = { line_type = "code", executable = true, execution_count = 5, covered = true, content = "function add(a, b)" },
+        [2] = { line_type = "code", executable = true, execution_count = 5, covered = true, content = "  return a + b" },
+        [3] = { line_type = "code", executable = true, execution_count = 5, covered = true, content = "end" },
+        -- more lines...
+      }
+    },
+    -- more files...
+  },
+  summary = {
+    total_files = 10,
+    covered_files = 9,
+    total_lines = 1000,
+    executable_lines = 800,
+    covered_lines = 650,
+    executed_lines = 720,
+    total_functions = 100,
+    executed_functions = 85,
+    line_coverage_percent = 81.25,
+    function_coverage_percent = 85.0,
+    overall_percent = 83.13
+  }
+}
 ```
 
-### Coverage Report Generation
+### Quality Data Structure
 
 ```lua
-local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Run tests with coverage
-firmo.coverage_options.enabled = true
-firmo.run_discovered('./tests')
--- Get coverage data
-local coverage_data = firmo.get_coverage_data()
--- Generate different report formats
-local html_report = reporting.format_coverage(coverage_data, "html")
-local json_report = reporting.format_coverage(coverage_data, "json")
-local lcov_report = reporting.format_coverage(coverage_data, "lcov")
-local summary_report = reporting.format_coverage(coverage_data, "summary")
--- Save reports to files
-reporting.write_file("./reports/coverage.html", html_report)
-reporting.write_file("./reports/coverage.json", json_report)
-reporting.write_file("./reports/coverage.lcov", lcov_report)
--- Or use the auto-save function for all formats
-reporting.auto_save_reports(coverage_data, nil, "./reports")
-
+{
+  level = 3,
+  level_name = "Comprehensive",
+  tests = {
+    ["path/to/test.lua"] = {
+      path = "path/to/test.lua",
+      total_tests = 15,
+      quality_compliant_tests = 12,
+      total_assertions = 45,
+      assertions_per_test = 3.0,
+      coverage_percent = 80.0,
+      issues = {
+        { line = 10, test = "should validate input", issue = "No error case assertions", severity = "warning" },
+        -- more issues...
+      }
+    },
+    -- more test files...
+  },
+  summary = {
+    tests_analyzed = 100,
+    tests_passing_quality = 85,
+    quality_percent = 85.0,
+    assertions_total = 350,
+    assertions_per_test_avg = 3.5,
+    issues = {
+      { category = "missing_error_case", count = 15, severity = "warning" },
+      { category = "single_assertion", count = 10, severity = "warning" },
+      -- more issue categories...
+    }
+  }
+}
 ```
 
-### Combined Coverage and Quality Reporting
+### Test Results Data Structure
 
 ```lua
-local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Enable both coverage and quality
-firmo.coverage_options.enabled = true
-firmo.quality_options.enabled = true
-firmo.quality_options.level = 3
--- Run tests
-firmo.run_discovered('./tests')
--- Get both data sets
-local coverage_data = firmo.get_coverage_data()
-local quality_data = firmo.get_quality_data()
--- Save all reports
-reporting.auto_save_reports(coverage_data, quality_data, "./reports")
-
+{
+  name = "TestSuite",
+  timestamp = "2025-03-26T14:30:00",
+  tests = 100,
+  failures = 5,
+  errors = 2,
+  skipped = 3,
+  time = 1.234,
+  test_cases = {
+    {
+      name = "should add two numbers",
+      classname = "calculator_test",
+      time = 0.001,
+      status = "pass"
+    },
+    {
+      name = "should handle division by zero",
+      classname = "calculator_test",
+      time = 0.002,
+      status = "fail",
+      failure = {
+        message = "Expected error message to match 'division by zero'",
+        type = "Assertion",
+        details = "calculator_test.lua:45: Expected error message to match 'division by zero', got 'cannot divide by zero'"
+      }
+    },
+    -- more test cases...
+  }
+}
 ```
 
-### Custom Report Directory Structure
+## See Also
 
-```lua
-local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Run tests with coverage
-firmo.coverage_options.enabled = true
-firmo.run_discovered('./tests')
--- Get coverage data
-local coverage_data = firmo.get_coverage_data()
--- Create custom directory structure
-reporting.write_file("./reports/coverage/html/index.html", 
-                    reporting.format_coverage(coverage_data, "html"))
-reporting.write_file("./reports/coverage/json/data.json", 
-                    reporting.format_coverage(coverage_data, "json"))
-reporting.write_file("./reports/coverage/lcov/coverage.lcov", 
-                    reporting.format_coverage(coverage_data, "lcov"))
-
-```
-
+- [Reporting Module Guide](../guides/reporting.md) - Practical guide with usage examples and best practices
+- [Reporting Examples](../../examples/reporting_examples.md) - Complete code examples for common reporting tasks

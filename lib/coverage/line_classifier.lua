@@ -7,10 +7,18 @@ local M = {}
 -- Dependencies
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
-local data_structure = require("lib.coverage.data_structure")
+local data_store = require("lib.coverage.runtime.data_store")
 
 -- Version
-M._VERSION = "0.1.0"
+M._VERSION = "0.2.0"
+
+-- Line type constants
+M.LINE_TYPES = {
+  CODE = "code",
+  COMMENT = "comment",
+  BLANK = "blank",
+  STRUCTURE = "structure"
+}
 
 -- Patterns for different line types
 local PATTERNS = {
@@ -50,12 +58,12 @@ function M.classify_line(line_content)
     if line_content:match(PATTERNS.COMMENT_END) then
       in_multiline_comment = false
     end
-    return data_structure.LINE_TYPES.COMMENT
+    return M.LINE_TYPES.COMMENT
   end
   
   -- Check for blank line
   if line_content:match(PATTERNS.BLANK) then
-    return data_structure.LINE_TYPES.BLANK
+    return M.LINE_TYPES.BLANK
   end
   
   -- Check for single-line comment
@@ -64,13 +72,13 @@ function M.classify_line(line_content)
     if line_content:match(PATTERNS.COMMENT_START) and not line_content:match(PATTERNS.COMMENT_END) then
       in_multiline_comment = true
     end
-    return data_structure.LINE_TYPES.COMMENT
+    return M.LINE_TYPES.COMMENT
   end
   
   -- Check for start of multiline comment (not preceded by single comment markers)
   if line_content:match(PATTERNS.COMMENT_START) and not line_content:match(PATTERNS.COMMENT_END) then
     in_multiline_comment = true
-    return data_structure.LINE_TYPES.COMMENT
+    return M.LINE_TYPES.COMMENT
   end
   
   -- Check for structural elements
@@ -78,11 +86,11 @@ function M.classify_line(line_content)
      line_content:match(PATTERNS.STRUCTURE_ELSE) or
      line_content:match(PATTERNS.STRUCTURE_ELSEIF) or
      line_content:match(PATTERNS.STRUCTURE_UNTIL) then
-    return data_structure.LINE_TYPES.STRUCTURE
+    return M.LINE_TYPES.STRUCTURE
   end
   
   -- For all other lines, treat them as executable code
-  return data_structure.LINE_TYPES.CODE
+  return M.LINE_TYPES.CODE
 end
 
 --- Classifies all lines in a file
@@ -94,14 +102,15 @@ function M.classify_lines(coverage_data, file_path)
   error_handler.assert(type(coverage_data) == "table", "coverage_data must be a table", error_handler.CATEGORY.VALIDATION)
   error_handler.assert(type(file_path) == "string", "file_path must be a string", error_handler.CATEGORY.VALIDATION)
   
-  -- Normalize the path
-  local normalized_path = data_structure.normalize_path(file_path)
+  -- For instrumentation-based coverage, we use the file_id directly
+  local file_id = file_path
   
-  -- Get the file data
-  local file_data = data_structure.get_file_data(coverage_data, normalized_path)
+  -- Get the file data from data_store
+  local file_data = data_store.get_file_data(coverage_data, file_id)
   if not file_data then
     logger.warn("Cannot classify lines for a file not in the coverage data", {
-      file_path = normalized_path
+      file_path = file_path,
+      file_id = file_id
     })
     return false
   end
@@ -112,7 +121,7 @@ function M.classify_lines(coverage_data, file_path)
   -- Create a debug log for classification
   local debug_file = io.open("line_classifier_debug.log", "a")
   if debug_file then
-    debug_file:write("\n\nClassifying lines for file: " .. normalized_path .. "\n")
+    debug_file:write("\n\nClassifying lines for file: " .. file_path .. "\n")
     debug_file:write("===============================================\n")
     debug_file:close()
   end
@@ -120,7 +129,7 @@ function M.classify_lines(coverage_data, file_path)
   -- Get line numbers and sort them to process in order
   local line_numbers = {}
   for line_num, _ in pairs(file_data.lines) do
-    table.insert(line_numbers, line_num)
+    table.insert(line_numbers, tonumber(line_num))
   end
   table.sort(line_numbers)
   
@@ -129,13 +138,13 @@ function M.classify_lines(coverage_data, file_path)
     local line_data = file_data.lines[line_num]
     local line_content = line_data.content
     
-    -- Use the simpler classify_line function to determine line type
+    -- Use the classify_line function to determine line type
     local classification = M.classify_line(line_content)
     
     -- General rule: Any line that is not a comment or blank is executable code
-    if classification ~= data_structure.LINE_TYPES.COMMENT and 
-       classification ~= data_structure.LINE_TYPES.BLANK then
-      classification = data_structure.LINE_TYPES.CODE
+    if classification ~= M.LINE_TYPES.COMMENT and 
+       classification ~= M.LINE_TYPES.BLANK then
+      classification = M.LINE_TYPES.CODE
     end
     
     -- Log to debug file
@@ -149,8 +158,11 @@ function M.classify_lines(coverage_data, file_path)
       debug_file:close()
     end
     
-    -- Update the line classification
-    data_structure.set_line_classification(coverage_data, normalized_path, line_num, classification)
+    -- Store the line classification in the line_data
+    line_data.line_type = classification
+    
+    -- Update executable status based on classification
+    line_data.is_executable = (classification == M.LINE_TYPES.CODE)
   end
   
   return true

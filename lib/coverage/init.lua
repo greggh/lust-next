@@ -121,18 +121,33 @@ function M.stop()
     end
   end
   
-  -- For testing purposes, make sure we have at least one covered line 
-  -- This ensures our three-state visualization works
-  if not coverage_data.covered_lines or not next(coverage_data.covered_lines) then
-    local calculator_file_id = "file_6c69622f73616d706c65732f63616c63"
-    
-    -- Ensure we have tracked execution data
-    if coverage_data.execution_data and coverage_data.execution_data[calculator_file_id] then
-      -- Mark line 7 as covered
-      data_store.add_coverage(coverage_data, calculator_file_id, 7)
-      
-      logger.debug("Added test coverage data to ensure three-state visualization")
+  -- We no longer need to artificially add coverage data
+  -- The assertion hooks now properly mark covered lines
+  -- Log coverage data for diagnostic purposes
+  local file_ids = {}
+  -- Count execution data
+  if coverage_data.execution_data then
+    for file_id, _ in pairs(coverage_data.execution_data) do
+      file_ids[file_id] = true
     end
+  end
+  
+  -- Count coverage data
+  if coverage_data.coverage_data then
+    for file_id, _ in pairs(coverage_data.coverage_data) do
+      file_ids[file_id] = true
+    end
+  end
+  
+  -- Log tracked files
+  for file_id, _ in pairs(file_ids) do
+    local file_path = coverage_data.file_map and coverage_data.file_map[file_id] or file_id
+    logger.info("Tracked file in coverage", {
+      file_id = file_id,
+      file_path = file_path,
+      has_execution = coverage_data.execution_data and coverage_data.execution_data[file_id] ~= nil,
+      has_coverage = coverage_data.coverage_data and coverage_data.coverage_data[file_id] ~= nil
+    })
   end
   
   -- Calculate summary
@@ -171,6 +186,33 @@ function M.get_data()
   if not coverage_data then
     coverage_data = data_store.create()
   end
+  
+  -- Debug log the coverage data
+  local file_count = 0
+  if coverage_data and coverage_data.execution_data then
+    for file_id, _ in pairs(coverage_data.execution_data) do
+      file_count = file_count + 1
+      logger.debug("Coverage data contains file", {
+        file_id = file_id,
+        file_path = data_store.get_file_path(coverage_data, file_id),
+        execution_count = (next(coverage_data.execution_data[file_id]) ~= nil) and "has executions" or "no executions"
+      })
+    end
+  end
+  
+  -- Count entries in the file map
+  local file_map_entries = 0
+  if coverage_data.file_map then
+    for _, _ in pairs(coverage_data.file_map) do
+      file_map_entries = file_map_entries + 1
+    end
+  end
+  
+  logger.info("Returning coverage data", {
+    files_count = file_count,
+    has_file_map = coverage_data.file_map ~= nil,
+    file_map_entries = file_map_entries
+  })
   
   return coverage_data
 end

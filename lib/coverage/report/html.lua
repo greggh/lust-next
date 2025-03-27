@@ -81,9 +81,9 @@ table th {
 .executed-color { background-color: var(--executed-color); color: white; }
 .not-covered-color { background-color: var(--not-covered-color); color: white; }
 
-.covered-bg { background-color: rgba(76, 175, 80, 0.1); }
-.executed-bg { background-color: rgba(255, 152, 0, 0.1); }
-.not-covered-bg { background-color: rgba(244, 67, 54, 0.1); }
+.covered-bg { background-color: rgba(76, 175, 80, 0.4); }  /* Increased opacity for better visibility */
+.executed-bg { background-color: rgba(255, 152, 0, 0.4); }  /* Increased opacity for better visibility */
+.not-covered-bg { background-color: rgba(244, 67, 54, 0.4); }  /* Increased opacity for better visibility */
 
 .file-content {
   margin-top: 20px;
@@ -182,6 +182,35 @@ local function generate_file_html(file_data)
 ]], status_class, line_number, escape_html(line_data.content or ""))
   end
   
+  -- Ensure we display a readable file path, not just an ID
+  local display_path = file_data.file_path
+  
+  -- If the path looks like a file ID (hex encoded), try to get the real path
+  if display_path:match("^file_") then
+    -- First, check if we can get the real path using the data_store function
+    if file_data.file_id and data_store.get_file_path then
+      local real_path = data_store.get_file_path(data, file_data.file_id)
+      if real_path and type(real_path) == "string" and not real_path:match("^file_") then
+        display_path = real_path
+        logger.debug("Found real path in file_map", {
+          file_id = file_data.file_id,
+          real_path = real_path
+        })
+      end
+    end
+    
+    -- If we still have a file ID, try to extract info from content
+    if display_path:match("^file_") and file_data.content then
+      -- Try to find a better name from the content if available
+      if file_data.content:match("^%-%- .-Module") then
+        local module_name = file_data.content:match("^%-%- (.-)\n")
+        if module_name then
+          display_path = module_name
+        end
+      end
+    end
+  end
+  
   local file_html = string.format([[
 <div class="file">
   <h3>%s</h3>
@@ -193,7 +222,7 @@ local function generate_file_html(file_data)
     %s
   </div>
 </div>
-]], escape_html(file_data.file_path), 
+]], escape_html(display_path), 
    format_percent(file_data.summary.line_coverage_percent),
    file_data.summary.covered_lines,
    file_data.summary.executable_lines,
@@ -215,7 +244,24 @@ function M.generate(data, output_path)
   
   -- Calculate summary if not already calculated
   if not data.summary or not data.summary.line_coverage_percent then
+    logger.info("Calculating coverage summary for HTML report")
     data_store.calculate_summary(data)
+  end
+  
+  -- Log summary data for diagnostic purposes
+  if data.summary then
+    logger.info("Coverage summary for HTML report", {
+      total_files = data.summary.total_files or 0,
+      covered_files = data.summary.covered_files or 0,
+      total_lines = data.summary.total_lines or 0,
+      executable_lines = data.summary.executable_lines or 0,
+      executed_lines = data.summary.executed_lines or 0,
+      covered_lines = data.summary.covered_lines or 0,
+      line_coverage_percent = data.summary.line_coverage_percent or 0,
+      file_coverage_percent = data.summary.file_coverage_percent or 0
+    })
+  else
+    logger.warn("No summary data available for HTML report")
   end
   
   -- Ensure the output path has the right extension
@@ -274,9 +320,130 @@ function M.generate(data, output_path)
     file_ids[file_id] = true
   end
   
+  -- Filter files based on central configuration
+  local filtered_file_ids = {}
+  local seen_file_paths = {}
+  
+  -- Get central configuration safely - use the correct function name (get)
+  local central_config = require("lib.core.central_config")
+  local config = nil
+  
+  -- Safely access configuration using the correct function (central_config.get)
+  local success, result = pcall(function()
+    return central_config.get()
+  end)
+  
+  if success and type(result) == "table" then
+    config = result
+    logger.debug("Successfully loaded central configuration")
+  else
+    logger.warn("Failed to get central configuration, using defaults", {
+      error = tostring(result)
+    })
+    -- Create minimal configuration - include everything
+    config = {
+      coverage = {
+        include = function() return true end,
+        exclude = function() return false end
+      }
+    }
+  end
+  
+  for file_id, _ in pairs(file_ids) do
+    -- Try to get the real file path using our specialized function
+    local file_path = data_store.get_file_path(data, file_id) or ""
+    logger.debug("Checking file for inclusion", {
+      file_id = file_id,
+      resolved_path = file_path
+    })
+    
+    -- Only include files that match the central configuration
+    local should_include = false
+    
+    -- Default to including files if path is available
+    if file_path ~= "" then
+      -- Make sure config.coverage functions are actually callable functions
+      if type(config.coverage.include) == "function" and
+         type(config.coverage.exclude) == "function" then
+        -- Use the configuration functions
+        should_include = config.coverage.include(file_path) and 
+                         not config.coverage.exclude(file_path)
+        
+        logger.debug("File inclusion decision from config", {
+          file_path = file_path,
+          include = config.coverage.include(file_path),
+          exclude = config.coverage.exclude(file_path),
+          should_include = should_include
+        })
+      else
+        -- If config functions are not callable, include everything
+        should_include = true
+        logger.warn("Config include/exclude not callable functions, including all files", {
+          file_path = file_path
+        })
+      end
+    end
+    
+    -- Deduplicate files with the same path
+    if should_include then
+      -- Normalize the path for deduplication
+      local norm_path = file_path:gsub("\\", "/")
+      
+      -- Handle multiple file_ids that represent the same file
+      -- This is especially important for calculator.lua which appears with both a hex ID
+      -- and a regular path ID
+      
+      -- Check if we've seen this file path before
+      if seen_file_paths[norm_path] then
+        local existing_id = seen_file_paths[norm_path]
+        local existing_data = data_store.get_file_data(data, existing_id)
+        local current_data = data_store.get_file_data(data, file_id)
+        
+        -- Perform deduplication based on data quality
+        local should_replace = false
+        
+        -- Prioritize data that has more execution or coverage information
+        if current_data and existing_data then
+          -- Case 1: Current ID has more executed lines
+          if current_data.summary.executed_lines > existing_data.summary.executed_lines then
+            should_replace = true
+          -- Case 2: Equal execution but more covered lines
+          elseif current_data.summary.executed_lines == existing_data.summary.executed_lines and
+                 current_data.summary.covered_lines > existing_data.summary.covered_lines then
+            should_replace = true
+          -- Case 3: Equal execution and coverage, but better file path resolution
+          elseif current_data.summary.executed_lines == existing_data.summary.executed_lines and
+                 current_data.summary.covered_lines == existing_data.summary.covered_lines then
+            -- Prefer non-hex IDs over hex IDs (they're more readable)
+            if not file_id:match("^file_") and existing_id:match("^file_") then
+              should_replace = true
+            end
+          end
+        end
+        
+        -- If we determined this version is better, replace the existing one
+        if should_replace then
+          filtered_file_ids[existing_id] = nil
+          filtered_file_ids[file_id] = true
+          seen_file_paths[norm_path] = file_id
+          
+          logger.info("Replacing duplicate file entry with better representation", {
+            path = norm_path,
+            old_id = existing_id, 
+            new_id = file_id
+          })
+        end
+      else
+        -- First time seeing this file
+        filtered_file_ids[file_id] = true
+        seen_file_paths[norm_path] = file_id
+      end
+    end
+  end
+  
   -- Convert to a sorted list
   local file_id_list = {}
-  for file_id, _ in pairs(file_ids) do
+  for file_id, _ in pairs(filtered_file_ids) do
     table.insert(file_id_list, file_id)
   end
   table.sort(file_id_list)
@@ -288,6 +455,94 @@ function M.generate(data, output_path)
       local file_path = file_data.file_path or file_id
       local line_coverage = file_data.summary.line_coverage_percent
       
+      -- Make sure we display a readable file path, not just an ID
+      local display_path = file_path
+      
+      -- First attempt: Try to use the data_store function
+      if (display_path:match("^file_") or display_path == file_id) and data_store.get_file_path then
+        local real_path = data_store.get_file_path(data, file_id)
+        if real_path and type(real_path) == "string" and not real_path:match("^file_") then
+          display_path = real_path
+          logger.debug("Found real path for file list using function", {
+            file_id = file_id,
+            real_path = real_path
+          })
+        end
+      end
+      
+      -- Second attempt: Manually search the file_map for bidirectional mappings
+      if display_path:match("^file_") or display_path == file_id then
+        -- Try to extract a more meaningful name from the file map
+        for k, v in pairs(data.file_map or {}) do
+          if type(k) == "string" and not k:match("^file_") and v == file_id then
+            display_path = k
+            logger.debug("Found real path for file list in file_map", {
+              file_id = file_id,
+              real_path = k
+            })
+            break
+          end
+        end
+      end
+      
+      -- For files with hex IDs that we couldn't resolve, try to infer more information generically
+      if (display_path:match("^file_") or display_path == file_id) and 
+         file_id:match("^file_") and file_data.summary.executable_lines > 0 then
+         
+        -- Use central config settings to determine how to handle unresolved paths
+        local path_display_config = config.reporting and 
+                                  config.reporting.formatters and 
+                                  config.reporting.formatters.html and
+                                  config.reporting.formatters.html.unresolved_file_handling or "infer"
+        
+        if path_display_config == "infer" and file_data.content and file_data.content ~= "" then
+          -- Generic module detection from file content, applicable to any Lua module
+          -- No specific file patterns or hardcoded paths
+          
+          -- Look for a module name anywhere in the file via common Lua patterns
+          local module_info = {}
+          
+          -- Check first few lines for a module comment
+          local first_lines = file_data.content:gsub("\r", ""):match("^([^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*)")
+          if first_lines and first_lines:match("%-%-[^\n]*[Mm]odule") then
+            local comment = first_lines:match("%-%-([^\n]*)")
+            if comment then
+              module_info.comment = comment:gsub("^%s*", ""):gsub("%s*$", "")
+            end
+          end
+            
+          -- Look for standard Lua module patterns in file content
+          -- This is general and would work for ANY Lua module
+          if file_data.content:match("local%s+[%w_]+%s*=%s*{}") then
+            module_info.type = "Standard Lua module" 
+          elseif file_data.content:match("return%s+function") then
+            module_info.type = "Function module"
+          elseif file_data.content:match("return%s+{") then
+            module_info.type = "Table module"
+          end
+          
+          -- Create a generic description based on what we found
+          if module_info.comment or module_info.type then
+            local desc = module_info.comment or module_info.type or "Lua module"
+            display_path = "(Unresolved file ID - " .. desc .. ")"
+            
+            logger.debug("Generic file type inference", {
+              file_id = file_id,
+              description = desc
+            })
+          else
+            -- Simple hex ID display if we couldn't infer
+            display_path = "(File ID: " .. file_id:sub(1, 10) .. "...)"
+          end
+        elseif path_display_config == "hex" then
+          -- Just show the hex ID
+          display_path = "(File ID: " .. file_id:sub(1, 10) .. "...)"
+        else
+          -- Default to "(Unresolved file path)"
+          display_path = "(Unresolved file path)"
+        end
+      end
+      
       file_list_html = file_list_html .. string.format([[
 <tr>
   <td><a href="#file-%s">%s</a></td>
@@ -296,7 +551,7 @@ function M.generate(data, output_path)
     %s
   </td>
 </tr>
-]], file_id, escape_html(file_path), format_percent(line_coverage), progress_bar(line_coverage, "covered-color"))
+]], file_id, escape_html(display_path), format_percent(line_coverage), progress_bar(line_coverage, "covered-color"))
     end
   end
   
@@ -376,8 +631,16 @@ function M.generate(data, output_path)
     return false, "Failed to write HTML report: " .. tostring(write_err)
   end
   
+  -- Print the actual coverage data that will appear in the HTML report
   logger.info("Generated HTML coverage report", {
-    output_path = output_path
+    output_path = output_path,
+    coverage_summary = {
+      total_files = data.summary.total_files,
+      executable_lines = data.summary.executable_lines,
+      covered_lines = data.summary.covered_lines,
+      line_coverage_percent = data.summary.line_coverage_percent,
+      file_coverage_percent = data.summary.file_coverage_percent
+    }
   })
   
   return true

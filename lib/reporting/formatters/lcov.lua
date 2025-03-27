@@ -9,10 +9,10 @@ local M = {}
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
-local data_structure = require("lib.coverage.data_structure")
+local data_store = require("lib.coverage.runtime.data_store")
 
 -- Version
-M._VERSION = "0.1.0"
+M._VERSION = "0.2.0"
 
 --- Generates an LCOV coverage report
 ---@param coverage_data table The coverage data
@@ -41,13 +41,9 @@ function M.generate(coverage_data, output_path)
     end
   end
   
-  -- Validate the coverage data structure
-  local is_valid, validation_error = data_structure.validate(coverage_data)
-  if not is_valid then
-    logger.warn("Coverage data validation failed, attempting to generate report anyway", {
-      error = validation_error
-    })
-    -- We continue despite validation errors to maximize usability
+  -- Check for basic coverage data structure
+  if not coverage_data.execution_data or not coverage_data.coverage_data then
+    logger.warn("Coverage data structure doesn't match expected format, but will attempt to generate report anyway")
   end
   
   -- Build LCOV content

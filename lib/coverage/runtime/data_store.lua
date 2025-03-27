@@ -199,6 +199,36 @@ function M.get_line_status(data, file_id, line_number)
   end
 end
 
+-- Get a file path from a file ID
+---@param data table The coverage data store
+---@param file_id string The unique identifier for the file
+---@return string|nil file_path The file path or nil if not found
+function M.get_file_path(data, file_id)
+  -- Parameter validation
+  error_handler.assert(type(data) == "table", "data must be a table", error_handler.CATEGORY.VALIDATION)
+  error_handler.assert(type(file_id) == "string", "file_id must be a string", error_handler.CATEGORY.VALIDATION)
+  
+  -- Check if file map exists
+  if not data.file_map then
+    return nil
+  end
+  
+  -- Direct lookup
+  local file_path = data.file_map[file_id]
+  if file_path and type(file_path) == "string" and not file_path:match("^file_") then
+    return file_path
+  end
+  
+  -- Reverse lookup
+  for path, id in pairs(data.file_map) do
+    if type(path) == "string" and not path:match("^file_") and id == file_id then
+      return path
+    end
+  end
+  
+  return nil
+end
+
 -- Get data for a specific file
 ---@param data table The coverage data store
 ---@param file_id string The unique identifier for the file
@@ -214,18 +244,33 @@ function M.get_file_data(data, file_id)
   end
   
   -- Get file path from file map
-  local file_path = data.file_map[file_id]
+  local file_path = M.get_file_path(data, file_id) or file_id
   
   -- Get file content if available
   local content = nil
   if file_path and fs.file_exists(file_path) then
-    content = fs.read_file(file_path)
+    local read_success, read_content, err = pcall(function() 
+      return fs.read_file(file_path)
+    end)
+    
+    if read_success and read_content then
+      content = read_content
+      logger.debug("Successfully read source file content", {
+        file_path = file_path,
+        content_length = #content
+      })
+    else
+      logger.warn("Failed to read source file", {
+        file_path = file_path,
+        error = err and tostring(err) or "Unknown error"
+      })
+    end
   end
   
   -- Analyze the file data
   local file_data = {
-    file_id = file_id,
-    file_path = file_path,
+    file_id = file_id, -- Store the file ID for reference
+    file_path = file_path or file_id, -- Use ID as fallback if path not available
     content = content,
     lines = {},
     summary = {
@@ -267,8 +312,40 @@ function M.get_file_data(data, file_id)
     local execution_count = M.get_execution_count(data, file_id, line_number)
     local is_covered = M.is_covered(data, file_id, line_number)
     
-    -- Determine if the line is executable (has been executed or is instrumentable)
+    -- Determine if the line is executable
+    -- In instrumentation mode, we count a line as executable if:
+    -- 1. It was executed at least once, OR
+    -- 2. It contains actual code (not comments or empty lines)
     local is_executable = execution_count > 0
+    
+    -- For lines that weren't executed, check if they look like code
+    if not is_executable and content then
+      local line_content = ""
+      local line_count = 0
+      for l in content:gmatch("[^\r\n]+") do
+        line_count = line_count + 1
+        if line_count == line_number then
+          line_content = l
+          break
+        end
+      end
+      
+      -- Skip comments and empty lines
+      local trimmed = line_content:gsub("^%s+", ""):gsub("%s+$", "")
+      if trimmed ~= "" and not trimmed:match("^%-%-") then
+        -- Check if it has Lua code patterns (e.g., keywords, function calls, etc.)
+        if trimmed:match("function") or 
+           trimmed:match("if%s+") or
+           trimmed:match("for%s+") or
+           trimmed:match("while%s+") or
+           trimmed:match("return") or
+           trimmed:match("local%s+") or
+           trimmed:match("end") or
+           trimmed:match("=") then
+          is_executable = true
+        end
+      end
+    end
     
     if is_executable then
       executable_lines = executable_lines + 1
@@ -282,10 +359,61 @@ function M.get_file_data(data, file_id)
       covered_lines = covered_lines + 1
     end
     
+    -- Extract line content from source if available
+    local line_content = ""
+    if content then
+      -- More robust line extraction using gmatch
+      local lines = {}
+      local line_count = 0
+      
+      -- Split content into lines and store in array
+      for line in content:gmatch("([^\r\n]*)[\r\n]?") do
+        line_count = line_count + 1
+        lines[line_count] = line
+        
+        -- Stop if we've reached our target line (optimization for large files)
+        if line_count >= line_number then
+          break
+        end
+      end
+      
+      -- Get the content for our target line
+      if line_number <= line_count then
+        line_content = lines[line_number] or ""
+      end
+      
+      -- If we still don't have content, try the previous approach as a fallback
+      if line_content == "" and line_number <= line_count then
+        -- Fallback approach
+        local start_pos = 1
+        local current_line = 1
+        
+        -- Find the starting position of the target line
+        while current_line < line_number and start_pos <= #content do
+          local next_newline = content:find("[\r\n]", start_pos) or #content + 1
+          start_pos = (content:sub(next_newline, next_newline + 1) == "\r\n") 
+                      and (next_newline + 2) or (next_newline + 1)
+          current_line = current_line + 1
+        end
+        
+        -- Extract the line content
+        if current_line == line_number and start_pos <= #content then
+          local end_pos = content:find("[\r\n]", start_pos) or #content + 1
+          line_content = content:sub(start_pos, end_pos - 1)
+        end
+      end
+      
+      logger.debug("Extracted line content", {
+        file_id = file_id,
+        line_number = line_number,
+        content_length = #line_content
+      })
+    end
+    
     -- Store line data
     file_data.lines[line_number] = {
       number = line_number,
-      content = content and content:match("([^\n]*)\n?", (line_number - 1) * (content:find("\n") or #content + 1) + 1),
+      content = line_content,
       execution_count = execution_count,
       is_executable = is_executable,
       is_executed = execution_count > 0,
@@ -356,6 +484,16 @@ function M.calculate_summary(data)
       summary.executable_lines = summary.executable_lines + file_data.summary.executable_lines
       summary.executed_lines = summary.executed_lines + file_data.summary.executed_lines
       summary.covered_lines = summary.covered_lines + file_data.summary.covered_lines
+      
+      -- Log file data for diagnostics
+      logger.info("Including file in coverage summary", {
+        file_id = file_id,
+        file_path = file_data.file_path,
+        total_lines = file_data.summary.total_lines,
+        executable_lines = file_data.summary.executable_lines,
+        executed_lines = file_data.summary.executed_lines,
+        covered_lines = file_data.summary.covered_lines
+      })
       
       -- Update file execution and coverage counts
       if file_data.summary.executed_lines > 0 then

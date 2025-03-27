@@ -1,16 +1,6 @@
-# Filesystem Module
+# Filesystem Module API Reference
 
-The filesystem module provides a comprehensive, platform-independent interface for file and directory operations in Lua. It is designed to work consistently across all operating systems while providing robust error handling and convenience functions.
-
-## Overview
-
-The filesystem module offers functions for:
-
-- Reading, writing, and manipulating files
-- Creating, listing, and managing directories
-- Manipulating file paths in a platform-independent way
-- Discovering and filtering files with glob patterns
-- Retrieving file and directory information
+The filesystem module provides a comprehensive, platform-independent interface for file and directory operations in Lua. It is designed to work consistently across all operating systems while providing robust error handling, path manipulation, file discovery, and temporary file management capabilities.
 
 ## Importing the Module
 
@@ -26,9 +16,14 @@ local fs = require("lib.tools.filesystem")
 local content, err = fs.read_file(path)
 ```
 
-Reads the entire contents of a file. Returns the file contents or `nil` and an error message if the file cannot be read.
+Reads the entire contents of a file.
 
-**Replaces:** `io.open(path, "r"):read("*a")`
+**Parameters:**
+- `path` (string): Path to the file to read
+
+**Returns:**
+- `content` (string|nil): File contents or nil if the file cannot be read
+- `err` (string|nil): Error message if the operation failed
 
 ### Writing Files
 
@@ -36,9 +31,15 @@ Reads the entire contents of a file. Returns the file contents or `nil` and an e
 local success, err = fs.write_file(path, content)
 ```
 
-Writes content to a file, creating the file and any necessary parent directories. Returns `true` on success or `nil` and an error message on failure.
+Writes content to a file, creating the file and any necessary parent directories.
 
-**Replaces:** `io.open(path, "w"):write(content)`
+**Parameters:**
+- `path` (string): Path to the file to write
+- `content` (string): Content to write to the file
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Appending to Files
 
@@ -46,9 +47,15 @@ Writes content to a file, creating the file and any necessary parent directories
 local success, err = fs.append_file(path, content)
 ```
 
-Appends content to an existing file, creating the file if it doesn't exist. Returns `true` on success or `nil` and an error message on failure.
+Appends content to an existing file, creating the file if it doesn't exist.
 
-**Replaces:** `io.open(path, "a"):write(content)`
+**Parameters:**
+- `path` (string): Path to the file to append to
+- `content` (string): Content to append to the file
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Copying Files
 
@@ -56,9 +63,15 @@ Appends content to an existing file, creating the file if it doesn't exist. Retu
 local success, err = fs.copy_file(source, destination)
 ```
 
-Copies a file from `source` to `destination`, creating any necessary parent directories. Returns `true` on success or `nil` and an error message on failure.
+Copies a file from `source` to `destination`, creating any necessary parent directories.
 
-**Replaces:** Manual implementation with `io.open` for reading and writing
+**Parameters:**
+- `source` (string): Path to the source file
+- `destination` (string): Path to the destination file
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Moving Files
 
@@ -66,9 +79,15 @@ Copies a file from `source` to `destination`, creating any necessary parent dire
 local success, err = fs.move_file(source, destination)
 ```
 
-Moves a file from `source` to `destination`, creating any necessary parent directories. Returns `true` on success or `nil` and an error message on failure.
+Moves a file from `source` to `destination`, creating any necessary parent directories.
 
-**Replaces:** `os.rename(source, destination)` with better error handling and cross-filesystem support
+**Parameters:**
+- `source` (string): Path to the source file
+- `destination` (string): Path to the destination file
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Deleting Files
 
@@ -76,9 +95,30 @@ Moves a file from `source` to `destination`, creating any necessary parent direc
 local success, err = fs.delete_file(path)
 ```
 
-Deletes a file. Returns `true` on success or `nil` and an error message on failure.
+Deletes a file.
 
-**Replaces:** `os.remove(path)` with better error handling
+**Parameters:**
+- `path` (string): Path to the file to delete
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
+
+### Renaming Files or Directories
+
+```lua
+local success, err = fs.rename(old_path, new_path)
+```
+
+Renames a file or directory.
+
+**Parameters:**
+- `old_path` (string): Path to the file or directory to rename
+- `new_path` (string): New path for the file or directory
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ## Directory Operations
 
@@ -88,9 +128,14 @@ Deletes a file. Returns `true` on success or `nil` and an error message on failu
 local success, err = fs.create_directory(path)
 ```
 
-Creates a directory and any necessary parent directories. Returns `true` on success or `nil` and an error message on failure.
+Creates a directory and any necessary parent directories.
 
-**Replaces:** `os.execute('mkdir -p "' .. path .. '"')` with cross-platform support
+**Parameters:**
+- `path` (string): Path to the directory to create
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Ensuring Directories Exist
 
@@ -98,9 +143,14 @@ Creates a directory and any necessary parent directories. Returns `true` on succ
 local success, err = fs.ensure_directory_exists(path)
 ```
 
-Creates a directory only if it doesn't already exist. Returns `true` if the directory exists or was created successfully, or `nil` and an error message on failure.
+Creates a directory only if it doesn't already exist.
 
-**Replaces:** Manual check and directory creation
+**Parameters:**
+- `path` (string): Path to ensure exists
+
+**Returns:**
+- `success` (boolean|nil): True if the directory exists or was created successfully, or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting Directory Contents
 
@@ -108,9 +158,78 @@ Creates a directory only if it doesn't already exist. Returns `true` if the dire
 local contents, err = fs.get_directory_contents(path)
 ```
 
-Lists the contents of a directory. Returns a table of file and directory names or `nil` and an error message on failure.
+Lists the contents of a directory.
 
-**Replaces:** `io.popen('ls -1 "' .. path .. '"')` or `io.popen('dir /b "' .. path .. '"')` with platform-independent implementation
+**Parameters:**
+- `path` (string): Path to the directory to list
+
+**Returns:**
+- `contents` (table|nil): Table of file and directory names or nil on failure
+- `err` (string|nil): Error message if the operation failed
+
+### Getting Directory Items
+
+```lua
+local items, err = fs.get_directory_items(path, include_hidden)
+```
+
+Gets all items (files and directories) in a directory.
+
+**Parameters:**
+- `path` (string): Path to the directory to list
+- `include_hidden` (boolean, optional): Whether to include hidden files (default: false)
+
+**Returns:**
+- `items` (table|nil): Table of file and directory names or nil on failure
+- `err` (string|nil): Error message if the operation failed
+
+### Listing Files
+
+```lua
+local files, err = fs.list_files(path, include_hidden)
+```
+
+Lists only files (not directories) in a directory.
+
+**Parameters:**
+- `path` (string): Path to the directory to list
+- `include_hidden` (boolean, optional): Whether to include hidden files (default: false)
+
+**Returns:**
+- `files` (table|nil): Table of file names or nil on failure
+- `err` (string|nil): Error message if the operation failed
+
+### Listing Files Recursively
+
+```lua
+local files, err = fs.list_files_recursive(path, include_hidden)
+```
+
+Lists all files in a directory and its subdirectories.
+
+**Parameters:**
+- `path` (string): Path to the directory to list
+- `include_hidden` (boolean, optional): Whether to include hidden files (default: false)
+
+**Returns:**
+- `files` (table|nil): Table of file paths or nil on failure
+- `err` (string|nil): Error message if the operation failed
+
+### Listing Directories
+
+```lua
+local dirs, err = fs.list_directories(path, include_hidden)
+```
+
+Lists only directories (not files) in a directory.
+
+**Parameters:**
+- `path` (string): Path to the directory to list
+- `include_hidden` (boolean, optional): Whether to include hidden directories (default: false)
+
+**Returns:**
+- `dirs` (table|nil): Table of directory names or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ### Deleting Directories
 
@@ -118,9 +237,15 @@ Lists the contents of a directory. Returns a table of file and directory names o
 local success, err = fs.delete_directory(path, recursive)
 ```
 
-Deletes a directory. If `recursive` is `true`, deletes all contents recursively. Returns `true` on success or `nil` and an error message on failure.
+Deletes a directory.
 
-**Replaces:** `os.execute('rm -rf "' .. path .. '"')` or `os.execute('rmdir /s /q "' .. path .. '"')` with platform-independent implementation
+**Parameters:**
+- `path` (string): Path to the directory to delete
+- `recursive` (boolean, optional): If true, deletes all contents recursively (default: false)
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ## Path Manipulation
 
@@ -130,9 +255,13 @@ Deletes a directory. If `recursive` is `true`, deletes all contents recursively.
 local normalized = fs.normalize_path(path)
 ```
 
-Standardizes path separators and removes redundant elements. Always uses forward slashes `/` as the path separator, regardless of platform.
+Standardizes path separators and removes redundant elements. Always uses forward slashes (`/`) as the path separator, regardless of platform.
 
-**Replaces:** Custom path normalization logic
+**Parameters:**
+- `path` (string): Path to normalize
+
+**Returns:**
+- `normalized` (string|nil): Normalized path or nil if path is nil
 
 ### Joining Paths
 
@@ -142,7 +271,12 @@ local joined = fs.join_paths(path1, path2, ...)
 
 Combines multiple path segments into a single path, handling separators appropriately.
 
-**Replaces:** String concatenation with manual separator handling
+**Parameters:**
+- `path1, path2, ...` (string): Path segments to join
+
+**Returns:**
+- `joined` (string|nil): Joined path or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting Directory Name
 
@@ -152,7 +286,11 @@ local dir = fs.get_directory_name(path)
 
 Extracts the directory component from a path.
 
-**Replaces:** String manipulation with pattern matching
+**Parameters:**
+- `path` (string): Path to process
+
+**Returns:**
+- `dir` (string|nil): Directory component of path or nil if path is nil
 
 ### Getting File Name
 
@@ -162,7 +300,12 @@ local name = fs.get_file_name(path)
 
 Extracts the file name component from a path.
 
-**Replaces:** String manipulation with pattern matching
+**Parameters:**
+- `path` (string): Path to process
+
+**Returns:**
+- `name` (string|nil): File name component of path or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting File Extension
 
@@ -170,9 +313,29 @@ Extracts the file name component from a path.
 local ext = fs.get_extension(path)
 ```
 
-Extracts the file extension from a path.
+Extracts the file extension from a path (without the dot).
 
-**Replaces:** String manipulation with pattern matching
+**Parameters:**
+- `path` (string): Path to process
+
+**Returns:**
+- `ext` (string|nil): File extension (without the dot) or empty string if no extension, nil on error
+- `err` (string|nil): Error message if the operation failed
+
+### Changing File Extension
+
+```lua
+local new_path = fs.change_extension(path, new_ext)
+```
+
+Changes the extension of a file path.
+
+**Parameters:**
+- `path` (string): Path to process
+- `new_ext` (string): New extension (without the dot)
+
+**Returns:**
+- `new_path` (string): Path with the new extension
 
 ### Getting Absolute Path
 
@@ -182,7 +345,12 @@ local abs_path = fs.get_absolute_path(path)
 
 Converts a relative path to an absolute path.
 
-**Replaces:** Various approaches using `os.getenv("PWD")` or `io.popen("cd"):read("*l")`
+**Parameters:**
+- `path` (string): Path to convert
+
+**Returns:**
+- `abs_path` (string|nil): Absolute path or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting Relative Path
 
@@ -192,7 +360,55 @@ local rel_path = fs.get_relative_path(path, base)
 
 Computes the relative path from `base` to `path`.
 
-**Replaces:** Complex path manipulation logic
+**Parameters:**
+- `path` (string): Path to convert
+- `base` (string): Base path to make relative to
+
+**Returns:**
+- `rel_path` (string|nil): Path relative to base or nil if path or base is nil
+
+### Checking if Path is Absolute
+
+```lua
+local is_absolute = fs.is_absolute_path(path)
+```
+
+Checks if a path is absolute.
+
+**Parameters:**
+- `path` (string): Path to check
+
+**Returns:**
+- `is_absolute` (boolean): True if the path is absolute, false otherwise
+
+### Getting Current Directory
+
+```lua
+local current_dir, err = fs.get_current_directory()
+```
+
+Gets the current working directory.
+
+**Parameters:** None
+
+**Returns:**
+- `current_dir` (string|nil): Current working directory or nil on error
+- `err` (string|nil): Error message if the operation failed
+
+### Setting Current Directory
+
+```lua
+local success, err = fs.set_current_directory(dir_path)
+```
+
+Sets the current working directory.
+
+**Parameters:**
+- `dir_path` (string): Directory to set as current
+
+**Returns:**
+- `success` (boolean|nil): True on success or nil on failure
+- `err` (string|nil): Error message if the operation failed
 
 ## File Discovery
 
@@ -204,6 +420,12 @@ local pattern = fs.glob_to_pattern(glob)
 
 Converts a glob pattern (like `*.lua`) to a Lua pattern string.
 
+**Parameters:**
+- `glob` (string): Glob pattern to convert
+
+**Returns:**
+- `pattern` (string|nil): Lua pattern equivalent or nil if glob is nil
+
 ### Matching Patterns
 
 ```lua
@@ -212,15 +434,46 @@ local matches = fs.matches_pattern(path, pattern)
 
 Tests if a path matches a glob pattern.
 
+**Parameters:**
+- `path` (string): Path to test
+- `pattern` (string): Glob pattern to match against
+
+**Returns:**
+- `matches` (boolean|nil): True if path matches pattern, nil on error
+- `err` (string|nil): Error message if the operation failed
+
+### Glob Pattern Matching
+
+```lua
+local files, err = fs.glob(pattern, base_dir)
+```
+
+Finds files matching a glob pattern.
+
+**Parameters:**
+- `pattern` (string): Glob pattern to match
+- `base_dir` (string, optional): Base directory to search in (default: current directory)
+
+**Returns:**
+- `files` (table|nil): List of matching file paths or nil on error
+- `err` (string|nil): Error message if the operation failed
+
 ### Discovering Files
 
 ```lua
-local files = fs.discover_files(directories, patterns, exclude_patterns)
+local files, err = fs.discover_files(directories, patterns, exclude_patterns)
 ```
 
 Finds all files in the specified directories that match any pattern in `patterns` and don't match any pattern in `exclude_patterns`.
 
-**Replaces:** Complex implementations using `io.popen` with `find` or other commands
+**Parameters:**
+- `directories` (table): List of root directories to search in
+- `patterns` (table, optional): List of glob patterns to include (default: `{"*"}`)
+- `exclude_patterns` (table, optional): List of glob patterns to exclude
+
+**Returns:**
+- `files` (table|nil): List of matching file paths or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Scanning Directories
 
@@ -228,9 +481,14 @@ Finds all files in the specified directories that match any pattern in `patterns
 local files = fs.scan_directory(path, recursive)
 ```
 
-Lists all files in a directory. If `recursive` is `true`, includes files in subdirectories.
+Lists all files in a directory.
 
-**Replaces:** Recursive directory traversal with `io.popen`
+**Parameters:**
+- `path` (string): Directory path to scan
+- `recursive` (boolean): Whether to include files in subdirectories
+
+**Returns:**
+- `files` (table): List of absolute file paths found in the directory
 
 ### Finding Matches
 
@@ -240,6 +498,63 @@ local matches = fs.find_matches(files, pattern)
 
 Filters a list of files to those matching a glob pattern.
 
+**Parameters:**
+- `files` (table): List of file paths to filter
+- `pattern` (string): Glob pattern to match against
+
+**Returns:**
+- `matches` (table): List of matching file paths
+
+### Finding Files
+
+```lua
+local files, err = fs.find_files(dir_path, pattern, recursive)
+```
+
+Finds files in a directory that match a pattern.
+
+**Parameters:**
+- `dir_path` (string): Directory to search in
+- `pattern` (string): Lua pattern to match against file names
+- `recursive` (boolean, optional): Whether to search in subdirectories (default: false)
+
+**Returns:**
+- `files` (table|nil): List of matching file paths or nil on error
+- `err` (string|nil): Error message if the operation failed
+
+### Finding Directories
+
+```lua
+local dirs, err = fs.find_directories(dir_path, pattern, recursive)
+```
+
+Finds directories in a directory that match a pattern.
+
+**Parameters:**
+- `dir_path` (string): Directory to search in
+- `pattern` (string): Lua pattern to match against directory names
+- `recursive` (boolean, optional): Whether to search in subdirectories (default: false)
+
+**Returns:**
+- `dirs` (table|nil): List of matching directory paths or nil on error
+- `err` (string|nil): Error message if the operation failed
+
+### Detecting Project Root
+
+```lua
+local root_dir, err = fs.detect_project_root(start_dir, markers)
+```
+
+Attempts to find the root directory of a project by looking for common project marker files.
+
+**Parameters:**
+- `start_dir` (string, optional): Directory to start searching from (default: current directory)
+- `markers` (table, optional): List of marker files/directories to look for
+
+**Returns:**
+- `root_dir` (string|nil): Project root directory or nil if not found
+- `err` (string|nil): Error message if an error occurred
+
 ## Information Functions
 
 ### Checking if File Exists
@@ -248,9 +563,13 @@ Filters a list of files to those matching a glob pattern.
 local exists = fs.file_exists(path)
 ```
 
-Tests if a file exists.
+Tests if a file exists and is readable.
 
-**Replaces:** Opening and closing a file to check existence
+**Parameters:**
+- `path` (string): Path to the file to check
+
+**Returns:**
+- `exists` (boolean): True if the file exists and is readable
 
 ### Checking if Directory Exists
 
@@ -258,9 +577,35 @@ Tests if a file exists.
 local exists = fs.directory_exists(path)
 ```
 
-Tests if a directory exists.
+Tests if a directory exists and is accessible.
 
-**Replaces:** Platform-specific checks using `os.execute`
+**Parameters:**
+- `path` (string): Path to the directory to check
+
+**Returns:**
+- `exists` (boolean): True if the directory exists and is accessible
+
+### Getting File Information
+
+```lua
+local info, err = fs.get_file_info(file_path)
+```
+
+Gets detailed information about a file.
+
+**Parameters:**
+- `file_path` (string): Path to the file
+
+**Returns:**
+- `info` (table|nil): Table containing file information or nil on error:
+  - `size` (number): Size in bytes
+  - `modified` (number): Last modified timestamp
+  - `type` (string): File type
+  - `is_directory` (boolean): Whether it's a directory
+  - `is_file` (boolean): Whether it's a regular file
+  - `is_link` (boolean): Whether it's a symbolic link
+  - `permissions` (string): File permissions
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting File Size
 
@@ -270,7 +615,12 @@ local size, err = fs.get_file_size(path)
 
 Gets the size of a file in bytes.
 
-**Replaces:** Opening file, seeking to end, and getting position
+**Parameters:**
+- `path` (string): Path to the file to check
+
+**Returns:**
+- `size` (number|nil): File size in bytes or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting Modified Time
 
@@ -280,7 +630,27 @@ local time, err = fs.get_modified_time(path)
 
 Gets the modification timestamp of a file or directory.
 
-**Replaces:** Platform-specific approaches using `io.popen` with `stat` or other commands
+**Parameters:**
+- `path` (string): Path to the file or directory
+
+**Returns:**
+- `time` (number|nil): Modification time as Unix timestamp or nil on error
+- `err` (string|nil): Error message if the operation failed
+
+### Getting File Modified Time
+
+```lua
+local time, err = fs.get_file_modified_time(path)
+```
+
+Gets the modification timestamp of a file.
+
+**Parameters:**
+- `path` (string): Path to the file
+
+**Returns:**
+- `time` (number|nil): Modification time as Unix timestamp or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Getting Creation Time
 
@@ -290,7 +660,12 @@ local time, err = fs.get_creation_time(path)
 
 Gets the creation timestamp of a file or directory.
 
-**Replaces:** Platform-specific approaches using `io.popen`
+**Parameters:**
+- `path` (string): Path to the file or directory
+
+**Returns:**
+- `time` (number|nil): Creation time as Unix timestamp or nil on error
+- `err` (string|nil): Error message if the operation failed
 
 ### Testing if Path is a File
 
@@ -300,7 +675,11 @@ local is_file = fs.is_file(path)
 
 Tests if a path points to a file.
 
-**Replaces:** Combination of existence checks
+**Parameters:**
+- `path` (string): Path to check
+
+**Returns:**
+- `is_file` (boolean): True if the path exists and is a file
 
 ### Testing if Path is a Directory
 
@@ -310,156 +689,109 @@ local is_dir = fs.is_directory(path)
 
 Tests if a path points to a directory.
 
-**Replaces:** Platform-specific checks
+**Parameters:**
+- `path` (string): Path to check
 
-## Example Usage
+**Returns:**
+- `is_dir` (boolean): True if the path exists and is a directory
+
+## Temporary File Operations
+
+The filesystem module is complemented by the `temp_file` module for temporary file management during tests:
 
 ```lua
-local fs = require("lib.tools.filesystem")
-
--- Basic file operations
-local content = "Hello, world!"
-fs.write_file("/tmp/example.txt", content)
-local read_content = fs.read_file("/tmp/example.txt")
-print(read_content)  -- "Hello, world!"
-
--- Directory operations
-fs.create_directory("/tmp/test/nested")
-local files = fs.get_directory_contents("/tmp/test")
-for _, file in ipairs(files) do
-    print(file)
-end
-
--- Path manipulation
-local path = fs.join_paths("/tmp", "test", "file.txt")
-print(path)  -- "/tmp/test/file.txt"
-print(fs.get_directory_name(path))  -- "/tmp/test"
-print(fs.get_file_name(path))       -- "file.txt"
-print(fs.get_extension(path))       -- "txt"
-
--- File discovery
-local lua_files = fs.discover_files({"/src"}, {"*.lua"}, {"test/*"})
-for _, file in ipairs(lua_files) do
-    print(file)
-end
+local temp_file = require("lib.tools.temp_file")
 ```
 
-## Migrating from io.* functions
+### Creating Temporary Files
 
-The filesystem module provides a robust replacement for standard Lua I/O functions with better error handling, cross-platform compatibility, and higher-level operations. Here's how to replace common io.* patterns:
-
-### Reading a file
-
-**Before:**
 ```lua
-local file, err = io.open("data.txt", "r")
-if not file then
-    print("Error opening file: " .. (err or ""))
-    return
-end
-local content = file:read("*a")
-file:close()
-return content
+local temp_path, err = temp_file.create_with_content(content, extension)
 ```
 
-**After:**
+Creates a temporary file with specified content.
+
+**Parameters:**
+- `content` (string): Content to write to the file
+- `extension` (string, optional): File extension without the dot (default: "tmp")
+
+**Returns:**
+- `temp_path` (string|nil): Path to the created file or nil on error
+- `err` (table|nil): Error object if file creation failed
+
+### Creating Temporary Directories
+
 ```lua
-local content, err = fs.read_file("data.txt")
-if not content then
-    print("Error reading file: " .. (err or ""))
-    return
-end
-return content
+local dir_path, err = temp_file.create_temp_directory()
 ```
 
-### Writing a file
+Creates a temporary directory.
 
-**Before:**
+**Parameters:** None
+
+**Returns:**
+- `dir_path` (string|nil): Path to the created directory or nil on error
+- `err` (table|nil): Error object if directory creation failed
+
+### Registering Files for Cleanup
+
 ```lua
-local file, err = io.open("output.txt", "w")
-if not file then
-    print("Error opening file: " .. (err or ""))
-    return false
-end
-file:write("Hello, world!")
-file:close()
-return true
+local registered = temp_file.register_file(file_path)
 ```
 
-**After:**
+Registers an existing file for automatic cleanup when tests complete.
+
+**Parameters:**
+- `file_path` (string): Path to the file to register
+
+**Returns:**
+- `registered` (string): The file path that was registered
+
+### Using Temporary Files with Callbacks
+
 ```lua
-local success, err = fs.write_file("output.txt", "Hello, world!")
-if not success then
-    print("Error writing file: " .. (err or ""))
-    return false
-end
-return true
+local result, err = temp_file.with_temp_file(content, callback, extension)
 ```
 
-### Checking if a file exists
+Creates a temporary file, uses it with a callback, and cleans it up.
 
-**Before:**
+**Parameters:**
+- `content` (string): Content to write to the file
+- `callback` (function): Function to call with the temporary file path
+- `extension` (string, optional): File extension (default: "tmp")
+
+**Returns:**
+- `result` (any|nil): Result from the callback or nil on error
+- `err` (table|nil): Error object if operation failed
+
+### Using Temporary Directories with Callbacks
+
 ```lua
-local file = io.open("data.txt", "r")
-if file then
-    file:close()
-    return true
-end
-return false
+local result, err = temp_file.with_temp_directory(callback)
 ```
 
-**After:**
+Creates a temporary directory, uses it with a callback, and cleans it up.
+
+**Parameters:**
+- `callback` (function): Function to call with the temporary directory path
+
+**Returns:**
+- `result` (any|nil): Result from the callback or nil on error
+- `err` (table|nil): Error object if operation failed
+
+### Cleaning Up Temporary Files
+
 ```lua
-return fs.file_exists("data.txt")
+local success, errors = temp_file.cleanup_test_context()
 ```
 
-### Creating a directory
+Cleans up all temporary files and directories registered for the current test context.
 
-**Before:**
-```lua
-local success = os.execute('mkdir "new_dir"')
-if not success then
-    print("Failed to create directory")
-    return false
-end
-return true
-```
+**Parameters:** None
 
-**After:**
-```lua
-local success, err = fs.create_directory("new_dir")
-if not success then
-    print("Failed to create directory: " .. (err or ""))
-    return false
-end
-return true
-```
-
-### Listing directory contents
-
-**Before:**
-```lua
-local handle = io.popen('ls -1 "directory"')
-if not handle then
-    return {}
-end
-local result = {}
-for file in handle:lines() do
-    table.insert(result, file)
-end
-handle:close()
-return result
-```
-
-**After:**
-```lua
-local contents, err = fs.get_directory_contents("directory")
-if not contents then
-    print("Error listing directory: " .. (err or ""))
-    return {}
-end
-return contents
-```
+**Returns:**
+- `success` (boolean): Whether all files were cleaned up successfully
+- `errors` (table): Array of resources that could not be cleaned up
 
 ## Error Handling
 
@@ -477,8 +809,6 @@ if not content then
 end
 ```
 
-The filesystem module provides detailed error messages and handles "Permission denied" errors gracefully, avoiding excessive error output when traversing system directories.
-
 ## Platform Compatibility
 
 The filesystem module works consistently across all platforms, including:
@@ -494,21 +824,3 @@ It handles platform-specific differences internally, providing a consistent API 
 - Path normalization is optimized for frequent use
 - Operations are designed to minimize system calls where possible
 - For high-volume operations, consider batching changes to minimize I/O overhead
-
-## Logging Integration
-
-The filesystem module integrates with the logging system for detailed diagnostics:
-
-```lua
--- Configure verbose logging for filesystem operations
-local logging = require("lib.tools.logging")
-logging.configure_module("filesystem", {
-  level = logging.LEVELS.DEBUG
-})
-
--- Filesystem operations will now produce detailed logs
-local fs = require("lib.tools.filesystem")
-fs.read_file("config.json")  -- Will log detailed information about the operation
-```
-
-This is particularly useful for debugging file access issues in complex applications.

@@ -125,25 +125,9 @@ function M.on_assertion(assertion_type, subject, expected, success, context)
   -- Extract call stack information from context
   local call_stack = context.call_stack
   
-  -- For testing, directly mark calculator.add lines as covered if called in an equality assertion
-  if assertion_type == "equal" then
-    local file_id = "file_6c69622f73616d706c65732f63616c63" -- Calculator file ID
-    
-    -- Mark line 7 (inside add function) as covered
-    tracker.mark_covered(file_id, 7)
-    
-    -- Mark other lines if this is an assertion on a specific function
-    if subject == 8 then -- add result
-      tracker.mark_covered(file_id, 8)
-    elseif subject == 6 then -- subtract result
-      tracker.mark_covered(file_id, 13)
-    end
-    
-    logger.debug("Marked calculator line as covered due to assertion", {
-      file_id = file_id,
-      assertion_type = assertion_type
-    })
-  end
+  -- We don't need any special case handling here
+  -- The analyzer.analyze_assertion will determine which lines should be covered
+  -- in a general way that works for all files without special cases
   
   -- Analyze the call stack to determine which lines are verified by this assertion
   local verified_lines = analyzer.analyze_assertion(assertion_type, subject, expected, success, call_stack)

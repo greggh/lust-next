@@ -1,571 +1,522 @@
-# Guide to Coverage, Quality, and Reporting
-This guide provides an overview of firmo's coverage tracking, quality validation, and reporting capabilities.
+# Reporting Module Guide
+
+This guide provides practical information about the firmo reporting module, which handles formatting and saving reports for coverage, quality, and test results data.
 
 ## Introduction
-The firmo testing framework includes three interconnected modules for ensuring test quality and code coverage:
 
-1. **Coverage Module**: Tracks which lines and functions are executed during tests
-2. **Quality Module**: Validates that tests meet defined quality standards
-3. **Reporting Module**: Formats and saves reports from both modules
-These modules work together in a modular architecture, with clear separation of concerns:
+The reporting module centralizes all reporting functionality in the firmo framework, providing:
 
-- Coverage and quality modules collect data during test execution
-- The reporting module handles formatting and file I/O operations
-- Multiple fallback mechanisms ensure reliable operation under all conditions
+- A unified interface for generating different types of reports
+- Support for multiple output formats (HTML, JSON, XML, CSV, TAP, etc.)
+- File I/O operations with robust error handling
+- Automatic directory creation and management
+- Integration with the central configuration system
+- Validation of report data and formatted output
 
-## Getting Started with Coverage
+## Basic Usage
 
-### Basic Coverage Tracking
-To enable coverage tracking in your tests:
+### Generating Coverage Reports
+
+The most common use case is generating coverage reports from test execution:
 
 ```lua
 local firmo = require('firmo')
--- Enable coverage tracking
+local reporting = require('lib.reporting')
+
+-- Run tests with coverage
 firmo.coverage_options.enabled = true
--- Run your tests
 firmo.run_discovered('./tests')
--- Generate an HTML report
-firmo.generate_coverage_report('html', './coverage-report.html')
 
-```
-From the command line:
-
-```bash
-
-# Run tests with coverage and generate HTML report
-lua firmo.lua --coverage --coverage-format html tests/
-
-```
-
-### Interpreting Coverage Reports
-Coverage reports provide several key metrics:
-
-- **Line Coverage**: Percentage of code lines executed during tests
-- **Function Coverage**: Percentage of functions called during tests
-- **File Coverage**: Percentage of files with at least some coverage
-- **Overall Coverage**: Weighted average of line and function coverage
-The HTML report provides a visual breakdown with color-coded indicators:
-
-- **Green**: Good coverage (80% or higher)
-- **Orange**: Moderate coverage (50-80%)
-- **Red**: Poor coverage (below 50%)
-
-### Customizing Coverage Analysis
-You can customize which files are included in coverage analysis:
-
-```lua
--- Configure coverage options
-firmo.coverage_options = {
-  enabled = true,
-  include = {
-    "src/*.lua",         -- Include files in src directory
-    "lib/**/*.lua"       -- Include files in lib and subdirectories
-  },
-  exclude = {
-    "src/vendor/*.lua",  -- Exclude vendor files
-    "test/**/*.lua"      -- Exclude test files
-  },
-  threshold = 90         -- Require 90% coverage
-}
-
-```
-From the command line:
-
-```bash
-
-# Set custom include/exclude patterns
-lua firmo.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
-
-```
-
-## Getting Started with Quality Validation
-
-### Basic Quality Validation
-To enable quality validation in your tests:
-
-```lua
-local firmo = require('firmo')
--- Enable quality validation at level 3
-firmo.quality_options.enabled = true
-firmo.quality_options.level = 3
--- Run your tests
-firmo.run_discovered('./tests')
--- Generate an HTML report
-firmo.generate_quality_report('html', './quality-report.html')
-
-```
-From the command line:
-
-```bash
-
-# Run tests with quality validation at level 3
-lua firmo.lua --quality --quality-level 3 tests/
-
-```
-
-### Understanding Quality Levels
-The quality module supports five progressive quality levels:
-
-1. **Basic** (Level 1): 
-   - At least one assertion per test
-   - Proper test naming
-   - No empty test blocks
-1. **Standard** (Level 2): 
-   - Multiple assertions per test
-   - Error case handling
-   - Clear test organization
-1. **Comprehensive** (Level 3): 
-   - Edge case testing
-   - Type checking assertions
-   - Proper mock/stub usage
-   - Isolated setup/teardown
-1. **Advanced** (Level 4): 
-   - Boundary condition testing
-   - Complete mock verification
-   - Integration and unit test separation
-   - Performance validation
-1. **Complete** (Level 5): 
-   - 100% branch coverage
-   - Security testing
-   - API contract testing
-   - Full dependency isolation
-
-### Writing Tests for Different Quality Levels
-Here are examples of tests at different quality levels:
-
-#### Level 1: Basic
-
-```lua
-it("should add two numbers", function()
-  -- One basic assertion
-  expect(calculator.add(2, 3)).to.equal(5)
-end)
-
-```
-
-#### Level 2: Standard
-
-```lua
-it("should add two numbers correctly", function()
-  -- Multiple assertions
-  expect(calculator.add(2, 3)).to.equal(5)
-  expect(calculator.add(-1, 1)).to.equal(0)
-  -- Error case handling
-  expect(function() calculator.add("a", 2) end).to.fail()
-end)
-
-```
-
-#### Level 3: Comprehensive
-
-```lua
-describe("calculator.add", function()
-  local calculator
-  before_each(function()
-    -- Isolated setup
-    calculator = reset_module("src.calculator")
-  end)
-  it("should handle various numeric inputs", function()
-    -- Edge cases
-    expect(calculator.add(0, 0)).to.equal(0)
-    expect(calculator.add(-1, -1)).to.equal(-2)
-    expect(calculator.add(math.huge, 1)).to.equal(math.huge)
-    -- Type checking
-    expect(calculator.add(1.5, 2.5)).to.equal(4.0)
-    expect(calculator.add(0, -0)).to.equal(0)
-  end)
-  it("should validate inputs", function()
-    -- Mock usage
-    local validator = firmo.mock(calculator.validator)
-    validator:stub("is_number", true)
-    calculator.add(2, 3)
-    -- Verify mock was called correctly
-    expect(validator.stubs.is_number).to.be.called.times(2)
-  end)
-end)
-
-```
-
-#### Level 4: Advanced
-
-```lua
-describe("calculator.divide", function()
-  local calculator
-  local logs
-  before_each(function()
-    calculator = reset_module("src.calculator")
-    logs = firmo.mock(calculator.logs)
-  end)
-  after_each(function()
-    -- Cleanup resources
-    logs:restore()
-  end)
-  it("should handle boundary conditions", function()
-    -- Boundary testing
-    expect(calculator.divide(1, 0.0001)).to.be.approximately(10000, 0.01)
-    expect(calculator.divide(0, 5)).to.equal(0)
-    expect(function() calculator.divide(1, 0) end).to.throw.error_matching("division by zero")
-    -- Performance validation
-    local start_time = os.clock()
-    for i = 1, 1000 do
-      calculator.divide(i, 2)
-    end
-    local elapsed = os.clock() - start_time
-    expect(elapsed).to.be_less_than(0.01) -- 10ms for 1000 operations
-  end)
-  it("should properly validate and log operations", function()
-    -- Complete mock verification
-    local validator = firmo.mock(calculator.validator)
-    validator:stub("is_number", true)
-    logs:stub("record")
-    calculator.divide(10, 2)
-    -- Verify call sequence
-    expect(validator:verify_sequence({
-      {method = "is_number", args = {10}},
-      {method = "is_number", args = {2}}
-    })).to.be.truthy()
-    expect(logs.stubs.record).to.be.called.with(
-      firmo.arg_matcher.string_containing("division")
-    )
-  end)
-end)
-
-```
-
-#### Level 5: Complete
-
-```lua
-describe("calculator.evaluate", function()
-  local calculator
-  local security
-  before_each(function()
-    calculator = reset_module("src.calculator")
-    security = firmo.mock(calculator.security)
-    security:stub("validate_expression", true)
-  end)
-  -- Comprehensive branch coverage
-  it("should handle addition expressions", function()
-    expect(calculator.evaluate("2 + 3")).to.equal(5)
-  end)
-  it("should handle subtraction expressions", function()
-    expect(calculator.evaluate("5 - 3")).to.equal(2)
-  end)
-  it("should handle multiplication expressions", function()
-    expect(calculator.evaluate("2 * 3")).to.equal(6)
-  end)
-  it("should handle division expressions", function()
-    expect(calculator.evaluate("6 / 2")).to.equal(3)
-  end)
-  it("should handle invalid operations", function()
-    expect(function() calculator.evaluate("2 $ 3") end).to.throw.error()
-  end)
-  -- Security testing
-  it("should prevent code injection", function()
-    -- Test for security vulnerabilities
-    local malicious_input = "2 + 3; os.execute('rm -rf /')"
-    -- Verify security validation is called
-    calculator.evaluate(malicious_input)
-    expect(security.stubs.validate_expression).to.be.called.with(malicious_input)
-    -- Verify error is thrown if validation fails
-    security:stub("validate_expression", false)
-    expect(function() calculator.evaluate(malicious_input) end).to.throw.error_matching("security")
-  end)
-  -- API contract testing
-  it("should validate the complete API contract", function()
-    -- Verify function signature
-    expect(calculator.evaluate).to.be_type("callable")
-    -- Verify argument validation
-    expect(function() calculator.evaluate(123) end).to.throw.error()
-    expect(function() calculator.evaluate(nil) end).to.throw.error()
-    expect(function() calculator.evaluate({}) end).to.throw.error()
-    -- Verify return value
-    local result = calculator.evaluate("2 + 3")
-    expect(result).to.be_type("number")
-    -- Verify error conditions
-    expect(function() calculator.evaluate("") end).to.throw.error()
-    expect(function() calculator.evaluate("1 / 0") end).to.throw.error()
-    -- Verify complex expressions
-    expect(calculator.evaluate("(2 + 3) * 4")).to.equal(20)
-    expect(calculator.evaluate("2 + 3 * 4")).to.equal(14)
-  end)
-end)
-
-```
-
-## Using the Modular Reporting System
-The reporting system in firmo follows a modular architecture with clear separation of concerns:
-
-1. **Data Collection**: Coverage and quality modules collect data during test execution
-2. **Data Processing**: Modules process raw data into structured formats
-3. **Report Formatting**: The reporting module formats data into desired output formats
-4. **File I/O**: The reporting module handles directory creation and file writing
-
-### Manual Report Generation
-You can manually control each step of the reporting process:
-
-```lua
-local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Run tests with coverage and quality validation
-firmo.coverage_options.enabled = true
-firmo.quality_options.enabled = true
-firmo.quality_options.level = 3
-firmo.run_discovered('./tests')
--- Get coverage and quality data
+-- Get coverage data
 local coverage_data = firmo.get_coverage_data()
-local quality_data = firmo.get_quality_data()
--- Format data into different output formats
-local html_coverage = reporting.format_coverage(coverage_data, "html")
-local json_coverage = reporting.format_coverage(coverage_data, "json")
-local html_quality = reporting.format_quality(quality_data, "html")
--- Save reports to files
-reporting.write_file("./reports/coverage.html", html_coverage)
-reporting.write_file("./reports/coverage.json", json_coverage)
-reporting.write_file("./reports/quality.html", html_quality)
 
+-- Format coverage data as HTML
+local html_report = reporting.format_coverage(coverage_data, "html")
+
+-- Save the report to a file
+reporting.write_file("./reports/coverage-report.html", html_report)
 ```
 
-### Auto-Save Functionality
+From the command line:
+
+```bash
+# Run tests with coverage and generate HTML report
+lua test.lua --coverage --format=html tests/
+```
+
+### Multi-Format Reporting
+
+You can generate multiple report formats at once:
+
+```lua
+local firmo = require('firmo')
+local reporting = require('lib.reporting')
+
+-- Run tests with coverage
+firmo.coverage_options.enabled = true
+firmo.run_discovered('./tests')
+
+-- Get coverage data
+local coverage_data = firmo.get_coverage_data()
+
+-- Generate different report formats
+local html_report = reporting.format_coverage(coverage_data, "html")
+local json_report = reporting.format_coverage(coverage_data, "json")
+local lcov_report = reporting.format_coverage(coverage_data, "lcov")
+
+-- Save reports to files
+reporting.write_file("./reports/coverage.html", html_report)
+reporting.write_file("./reports/coverage.json", json_report)
+reporting.write_file("./reports/coverage.lcov", lcov_report)
+```
+
+### Using Auto-Save Functionality
+
 For convenience, the reporting module offers auto-save functionality:
 
 ```lua
 local firmo = require('firmo')
-local reporting = require('src.reporting')
--- Run tests with coverage and quality validation
+local reporting = require('lib.reporting')
+
+-- Run tests with coverage
+firmo.coverage_options.enabled = true
+firmo.run_discovered('./tests')
+
+-- Auto-save reports in multiple formats
+reporting.auto_save_reports(
+  firmo.get_coverage_data(),  -- coverage data
+  nil,                        -- quality data (none in this example)
+  nil,                        -- test results data (none in this example)
+  "./reports"                 -- output directory
+)
+```
+
+This will create:
+- `./reports/coverage-report.html`
+- `./reports/coverage-report.json`
+- `./reports/coverage-report.lcov`
+- `./reports/coverage-report.cobertura.xml`
+
+## Advanced Usage
+
+### Configuring the Reporting Module
+
+You can configure the reporting module directly:
+
+```lua
+local reporting = require('lib.reporting')
+
+-- Configure the reporting module
+reporting.configure({
+  debug = true,               -- Enable debug logging
+  verbose = true,             -- Enable verbose output
+  report_dir = "./reports",   -- Set default report directory
+  report_suffix = "-v1.0"     -- Add a suffix to all report filenames
+})
+
+-- Configure specific formatters
+reporting.configure_formatter("html", {
+  theme = "light",            -- Use light theme for HTML reports
+  show_line_numbers = true,   -- Show line numbers in HTML reports
+  highlight_syntax = true     -- Enable syntax highlighting
+})
+
+-- Configure multiple formatters at once
+reporting.configure_formatters({
+  html = { theme = "light" },
+  json = { pretty = true }
+})
+```
+
+### Custom Report Paths with Templates
+
+You can use path templates for more control over report file names:
+
+```lua
+local reporting = require('lib.reporting')
+
+-- Advanced usage with path templates
+reporting.auto_save_reports(
+  coverage_data,
+  quality_data,
+  results_data,
+  {
+    report_dir = "./reports",
+    report_suffix = "-v1.0",
+    coverage_path_template = "coverage-{date}.{format}",
+    quality_path_template = "quality/report-{date}.{format}",
+    results_path_template = "test-results-{datetime}.{format}",
+    timestamp_format = "%Y-%m-%d",
+    verbose = true
+  }
+)
+```
+
+Path templates support the following placeholders:
+- `{format}`: Output format (html, json, lcov, etc.)
+- `{type}`: Report type (coverage, quality, results)
+- `{date}`: Current date using timestamp format
+- `{datetime}`: Current date and time (%Y-%m-%d_%H-%M-%S)
+- `{suffix}`: The report suffix if specified
+
+### Test Results Reporting
+
+You can generate reports for test results:
+
+```lua
+local firmo = require('firmo')
+local reporting = require('lib.reporting')
+
+-- Run tests
+firmo.run_discovered('./tests')
+
+-- Get test results data
+local results_data = firmo.get_test_results()
+
+-- Generate different report formats
+local junit_report = reporting.format_results(results_data, "junit")
+local tap_report = reporting.format_results(results_data, "tap")
+local csv_report = reporting.format_results(results_data, "csv")
+
+-- Save reports to files
+reporting.write_file("./reports/test-results.xml", junit_report)
+reporting.write_file("./reports/test-results.tap", tap_report)
+reporting.write_file("./reports/test-results.csv", csv_report)
+```
+
+### Combined Coverage and Quality Reporting
+
+You can generate reports for both coverage and quality:
+
+```lua
+local firmo = require('firmo')
+local reporting = require('lib.reporting')
+
+-- Enable both coverage and quality
 firmo.coverage_options.enabled = true
 firmo.quality_options.enabled = true
+firmo.quality_options.level = 3
+
+-- Run tests
 firmo.run_discovered('./tests')
--- Get coverage and quality data
+
+-- Get both data sets
 local coverage_data = firmo.get_coverage_data()
 local quality_data = firmo.get_quality_data()
--- Auto-save all report formats to a directory
-reporting.auto_save_reports(coverage_data, quality_data, "./reports")
--- This will generate:
--- ./reports/coverage-report.html
--- ./reports/coverage-report.json
--- ./reports/coverage-report.lcov
--- ./reports/quality-report.html
--- ./reports/quality-report.json
 
+-- Save all reports to the configured directory
+reporting.auto_save_reports(coverage_data, quality_data, nil, "./reports")
 ```
 
-### Command Line Usage
-The most convenient way to generate reports is through the command line:
+### Validating Reports
+
+The reporting module includes validation functionality:
+
+```lua
+local firmo = require('firmo')
+local reporting = require('lib.reporting')
+
+-- Get coverage data
+local coverage_data = firmo.get_coverage_data()
+
+-- Validate coverage data
+local is_valid, issues = reporting.validate_coverage_data(coverage_data)
+if not is_valid then
+  print("Coverage data validation failed:")
+  for _, issue in ipairs(issues) do
+    print("- " .. issue.message)
+  end
+end
+
+-- Format data with validation
+local html_report = reporting.format_coverage(coverage_data, "html")
+local format_valid, error_message = reporting.validate_report_format(html_report, "html")
+
+-- Save with validation options
+reporting.save_coverage_report(
+  "./reports/coverage.html", 
+  coverage_data, 
+  "html", 
+  {
+    validate = true,             -- Validate data before saving
+    strict_validation = false,   -- Continue even if validation fails
+    validate_format = true       -- Validate the formatted output
+  }
+)
+```
+
+## Report Formats
+
+### Coverage Report Formats
+
+The reporting module supports several coverage report formats:
+
+#### HTML
+
+The HTML format provides an interactive, visual representation of coverage data:
+
+```lua
+local html_report = reporting.format_coverage(coverage_data, "html")
+reporting.write_file("./reports/coverage.html", html_report)
+```
+
+Features:
+- Color-coded line coverage (green for covered, orange for executed, red for not covered)
+- File-by-file breakdown with coverage percentages
+- Syntax highlighting for source code
+- Collapsible file view
+- Dark and light theme options
+
+#### JSON
+
+The JSON format provides machine-readable coverage data:
+
+```lua
+local json_report = reporting.format_coverage(coverage_data, "json")
+reporting.write_file("./reports/coverage.json", json_report)
+```
+
+This format is useful for:
+- Integration with other tools
+- Storing coverage data for historical comparison
+- Custom processing and visualization
+
+#### LCOV
+
+The LCOV format is compatible with many coverage tools:
+
+```lua
+local lcov_report = reporting.format_coverage(coverage_data, "lcov")
+reporting.write_file("./reports/coverage.lcov", lcov_report)
+```
+
+This format is useful for:
+- Integration with CI/CD systems
+- Coverage trend analysis
+- Third-party coverage tools
+
+#### Cobertura XML
+
+The Cobertura XML format is compatible with Jenkins and other CI systems:
+
+```lua
+local cobertura_report = reporting.format_coverage(coverage_data, "cobertura")
+reporting.write_file("./reports/coverage.xml", cobertura_report)
+```
+
+### Test Results Formats
+
+The reporting module supports several test results formats:
+
+#### JUnit XML
+
+JUnit XML is a standard format for test results:
+
+```lua
+local junit_report = reporting.format_results(results_data, "junit")
+reporting.write_file("./reports/test-results.xml", junit_report)
+```
+
+Features:
+- Compatible with most CI/CD systems
+- Includes test case details, durations, and failures
+- Structured format for automated processing
+
+#### TAP (Test Anything Protocol)
+
+TAP is a simple text-based format for test results:
+
+```lua
+local tap_report = reporting.format_results(results_data, "tap")
+reporting.write_file("./reports/test-results.tap", tap_report)
+```
+
+Features:
+- Human-readable format
+- Compatible with TAP consumers
+- Simple to parse and generate
+
+#### CSV (Comma-Separated Values)
+
+CSV provides tabular test results data:
+
+```lua
+local csv_report = reporting.format_results(results_data, "csv")
+reporting.write_file("./reports/test-results.csv", csv_report)
+```
+
+Features:
+- Easy import into spreadsheets
+- Simple data analysis and filtering
+- Widely supported format
+
+## Command Line Integration
+
+The reporting functionality can be controlled through command-line options:
 
 ```bash
+# Run tests with coverage and generate HTML report
+lua test.lua --coverage --format=html tests/
 
-# Run tests with coverage and quality validation
-lua firmo.lua --coverage --quality --quality-level 3 tests/
+# Set custom output directory
+lua test.lua --coverage --output-dir=./reports tests/
 
-# Specify report formats
-lua firmo.lua --coverage --coverage-format html --quality --quality-format json tests/
+# Generate multiple report formats
+lua test.lua --coverage --format=html,json,lcov tests/
 
-# Set custom output paths
-lua firmo.lua --coverage --coverage-output ./reports/coverage.html tests/
+# Add a suffix to report filenames
+lua test.lua --coverage --report-suffix="-$(date +%Y%m%d)" tests/
 
+# Set custom path templates
+lua test.lua --coverage --coverage-path="coverage-{date}.{format}" tests/
+
+# Enable verbose output
+lua test.lua --coverage --verbose-reports tests/
 ```
 
-## Robust Fallback Mechanisms
-The reporting system in firmo includes several fallback mechanisms to ensure reliable operation under all conditions:
+## Custom Formatters
 
-### Module Loading Fallbacks
-
-```lua
--- Try loading the module through various means
-local mod = package.loaded["src.reporting"]
-if not mod then
-  mod = require("src.reporting")
-end
-if not mod then
-  mod = require("deps.firmo.src.reporting")
-end
-if not mod then
-  -- Try direct file loading
-  local ok, loaded = pcall(dofile, "./deps/firmo/src/reporting.lua")
-  if ok then mod = loaded end
-end
-
-```
-
-### Directory Creation Fallbacks
+You can register custom formatters for specialized reporting needs:
 
 ```lua
--- First attempt with standard approach
-local success = ensure_directory(path)
-if not success then
-  -- Fallback to direct OS command
-  os.execute('mkdir -p "' .. path .. '"')
-  -- Verify directory exists
-  local test_cmd = 'test -d "' .. path .. '"'
-  success = (os.execute(test_cmd) == 0)
-end
+local reporting = require('lib.reporting')
 
-```
-
-### Data Collection Fallbacks
-
-```lua
--- Check if coverage data is valid
-if not coverage_data or not coverage_data.files or not next(coverage_data.files) then
-  -- Create fallback data manually
-  coverage_data = {
-    files = {},
-    summary = {
-      total_files = 0,
-      covered_files = 0,
-      total_lines = 0,
-      covered_lines = 0,
-      -- ... other defaults
-    }
-  }
-  -- Add known source files
-  for _, file_path in ipairs(source_files) do
-    -- Count lines and create coverage data
-    local line_count = count_lines(file_path)
-    coverage_data.files[file_path] = {
-      total_lines = line_count,
-      covered_lines = math.floor(line_count * 0.7), -- 70% coverage
-      -- ... other metrics
-    }
+-- Register a custom Markdown formatter
+reporting.register_coverage_formatter("markdown", function(coverage_data)
+  local md = "# Coverage Report\n\n"
+  md = md .. "## Summary\n\n"
+  md = md .. "- Files: " .. coverage_data.summary.total_files .. "\n"
+  md = md .. "- Line Coverage: " .. coverage_data.summary.line_coverage_percent .. "%\n"
+  
+  md = md .. "\n## Files\n\n"
+  for path, file_data in pairs(coverage_data.files) do
+    local coverage = 0
+    if file_data.executable_lines > 0 then
+      coverage = (file_data.covered_lines / file_data.executable_lines) * 100
+    end
+    md = md .. "- **" .. path .. "**: " .. string.format("%.2f", coverage) .. "%\n"
   end
-end
-
-```
-
-### File Writing Fallbacks
-
-```lua
--- Try to write with protected call
-local ok, err = pcall(function()
-  file:write(content)
-  file:close()
+  
+  return md
 end)
-if not ok then
-  -- Try alternative approach
-  local tmpfile = os.tmpname()
-  local tmp = io.open(tmpfile, "w")
-  if tmp then
-    tmp:write(content)
-    tmp:close()
-    os.execute('mv "' .. tmpfile .. '" "' .. file_path .. '"')
-  end
-end
 
+-- Use the custom formatter
+local markdown_report = reporting.format_coverage(coverage_data, "markdown")
+reporting.write_file("./reports/coverage.md", markdown_report)
 ```
 
 ## Best Practices
 
-### Organizing Tests for Quality
+### Error Handling
 
-1. **Use proper describe/it structure**:
+Always check for errors when using the reporting module:
+
+```lua
+local success, err = reporting.save_coverage_report(
+  "./reports/coverage.html", 
+  coverage_data, 
+  "html"
+)
+
+if not success then
+  print("Failed to save report: " .. err.message)
+  -- Handle the error appropriately
+end
+```
+
+### Report Organization
+
+Organize your reports with a consistent directory structure:
+
+```lua
+-- Create a timestamp-based directory structure
+local timestamp = os.date("%Y-%m-%d_%H-%M-%S")
+local base_dir = "./reports/" .. timestamp
+
+-- Save reports with appropriate naming
+reporting.write_file(base_dir .. "/coverage/html/index.html", html_report)
+reporting.write_file(base_dir .. "/coverage/json/data.json", json_report)
+reporting.write_file(base_dir .. "/coverage/lcov/coverage.lcov", lcov_report)
+```
+
+### Continuous Integration
+
+For CI integration, use the LCOV or Cobertura formats:
+
+```bash
+# Run in CI environment
+lua test.lua --coverage --format=lcov tests/
+
+# Upload coverage to a service like Codecov
+codecov -f ./coverage-reports/coverage-report.lcov
+```
+
+### Report Validation
+
+Validate reports before publishing them:
+
+```lua
+-- Run comprehensive validation
+local validation_result = reporting.validate_report(coverage_data)
+
+if not validation_result.validation.is_valid then
+  print("Report validation failed:")
+  for _, issue in ipairs(validation_result.validation.issues) do
+    print("- " .. issue.message)
+  end
+  -- Handle validation issues
+end
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Directory creation failures**:
    ```lua
-   describe("Module name", function()
-     describe("Function name", function()
-       it("should handle specific case", function()
-         -- Test code
-       end)
-     end)
-   end)
+   -- Ensure directory exists manually if needed
+   local fs = require("lib.tools.filesystem")
+   local dir_exists = fs.ensure_directory_exists("./reports")
+   if not dir_exists then
+     print("Failed to create report directory")
+   end
    ```
 
-1. **Isolate test state properly**:
+2. **Missing coverage data**:
    ```lua
-   describe("Database operations", function()
-     local db
-     before_each(function()
-       db = reset_module("src.database")
-     end)
-     after_each(function()
-       db.disconnect()
-     end)
-     it("should connect successfully", function()
-       -- Test code
-     end)
-   end)
+   -- Check if coverage data is valid
+   if not coverage_data or not coverage_data.files or not next(coverage_data.files) then
+     print("No coverage data available. Did you enable coverage tracking?")
+   end
    ```
 
-1. **Use appropriate assertion levels**:
-   - Basic tests: `expect(value).to.equal(expected)`
-   - Type tests: `expect(value).to.be_type("number")`
-   - Error tests: `expect(function() fn() end).to.throw.error()`
-   - Complex tests: `expect(object).to.contain.keys({"id", "name"})`
-1. **Test both happy and error paths**:
+3. **Report formatting errors**:
    ```lua
-   it("should handle valid inputs", function()
-     expect(fn("valid")).to.equal("expected")
+   -- Use error handling for report formatting
+   local ok, formatted_report = pcall(function()
+     return reporting.format_coverage(coverage_data, "html") 
    end)
-   it("should handle invalid inputs", function()
-     expect(function() fn(nil) end).to.throw.error()
-     expect(function() fn("") end).to.throw.error()
-   end)
+   
+   if not ok then
+     print("Error formatting report: " .. tostring(formatted_report))
+   end
    ```
 
-### Maximizing Coverage
+### Debugging
 
-1. **Target critical code first**:
-   - Focus on business logic over utility functions
-   - Ensure error handling paths are covered
-   - Test boundary conditions and edge cases
-1. **Use pattern-based inclusion/exclusion**:
-   ```lua
-   firmo.coverage_options = {
-     include = {"src/core/*.lua", "src/api/*.lua"},
-     exclude = {"src/vendor/*.lua", "src/generated/*.lua"}
-   }
-   ```
+The reporting module includes a debug mode:
 
-1. **Verify coverage with CI integration**:
-   ```bash
-   # Run in CI environment
-   lua firmo.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
-   ```
+```lua
+-- Enable debug mode
+reporting.configure({ debug = true, verbose = true })
 
-### CI Integration
+-- Get configuration debug info
+local config_info = reporting.debug_config()
+print("Using central config:", config_info.using_central_config)
+print("Debug mode:", config_info.local_config.debug)
+```
 
-1. **GitHub Actions Example**:
-   ```yaml
-   name: Tests
-   on: [push, pull_request]
-   jobs:
-     test:
-       runs-on: ubuntu-latest
-       steps:
+## See Also
 
-       - uses: actions/checkout@v2
-       - name: Setup Lua
-         uses: leafo/gh-actions-lua@v8
-         with:
-           luaVersion: "5.3"
-
-       - name: Run tests with coverage
-         run: |
-           lua firmo.lua --coverage --coverage-threshold 80 --coverage-format lcov tests/
-
-       - name: Upload coverage report
-         uses: codecov/codecov-action@v2
-         with:
-           files: ./coverage-reports/coverage-report.lcov
-   ```
-
-1. **Pre-commit Hook Example**:
-   ```bash
-   #!/bin/bash
-   # Run tests with coverage and quality validation
-   lua firmo.lua --coverage --coverage-threshold 80 --quality --quality-level 3 tests/
-   # Check exit code
-   if [ $? -ne 0 ]; then
-     echo "Tests failed or coverage/quality below threshold"
-     exit 1
-   fi
-   ```
-
-## Conclusion
-The firmo coverage, quality, and reporting system provides a comprehensive solution for ensuring test quality and code coverage. By using these modules, you can:
-
-1. Track which parts of your code are being tested
-2. Validate that your tests meet defined quality standards
-3. Generate detailed reports in multiple formats
-4. Integrate with CI/CD pipelines for automated validation
-The modular architecture with robust fallback mechanisms ensures reliable operation under all conditions, making firmo a robust choice for testing Lua projects.
-For more details, see the API documentation for the [coverage](../api/coverage.md), [quality](../api/quality.md), and [reporting](../api/reporting.md) modules.
-
+- [Reporting Module API](../api/reporting.md) - Complete API reference with all functions and parameters
+- [Reporting Examples](../../examples/reporting_examples.md) - More comprehensive examples for various use cases

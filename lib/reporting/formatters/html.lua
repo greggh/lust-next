@@ -5,9 +5,10 @@ local M = {}
 -- Dependencies
 local error_handler = require("lib.tools.error_handler")
 local logger = require("lib.tools.logging")
-local data_structure = require("lib.coverage.data_structure")
 local fs = require("lib.tools.filesystem")
 local central_config = require("lib.core.central_config")
+-- Use runtime data_store instead of deprecated data_structure
+local data_store = require("lib.coverage.runtime.data_store")
 
 -- Override debug logging to improve performance
 local original_debug_fn = logger.debug
