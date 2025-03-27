@@ -34,6 +34,14 @@ These examples demonstrate the fundamental capabilities of Firmo:
 - [HTML Coverage Example](html_coverage_example.lua): Shows how to generate HTML coverage reports
 - [Instrumentation Example](instrumentation_example.lua): Demonstrates the instrumentation-based coverage system
 
+## Configuration and Infrastructure
+
+- [Central Config Example](central_config_example.lua): Shows how to use the centralized configuration system
+- [Error Handling Example](error_handling_example.lua): Demonstrates standardized error handling patterns
+- [Filesystem Example](filesystem_example.lua): Shows file operations with proper error handling
+- [CLI Tool Example](cli_tool_example.lua): Demonstrates building command-line interface tools
+- [Benchmark Example](benchmark_example.lua): Shows performance testing and analysis
+
 ## Tools and Utilities
 
 - [Module Reset Example](module_reset_example.lua): Shows how to reset module state between tests
@@ -62,10 +70,12 @@ If you're new to Firmo, we recommend exploring the examples in the following ord
 
 1. [Basic Example](basic_example.lua)
 2. [Assertions Example](assertions_example.lua)
-3. [Report Example](report_example.lua)
-4. [Coverage Example](coverage_example.lua)
-5. [Comprehensive Testing Example](comprehensive_testing_example.lua)
-6. [Mocking Example](mocking_example.lua)
+3. [Central Config Example](central_config_example.lua)
+4. [Error Handling Example](error_handling_example.lua)
+5. [Coverage Example](coverage_example.lua)
+6. [Report Example](report_example.lua)
+7. [Mocking Example](mocking_example.lua)
+8. [Comprehensive Testing Example](comprehensive_testing_example.lua)
 
 ## Organization
 
