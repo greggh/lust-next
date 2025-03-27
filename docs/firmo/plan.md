@@ -33,50 +33,50 @@ The current debug-hook based coverage system has significant limitations and wil
 
 ### Implementation Plan
 
-#### Phase 1: Core Instrumentation (3 weeks)
+#### Phase 1: Core Instrumentation (6 days)
 
-1. **Week 1: Parser and Transformer**
+1. **Days 1-2: Parser and Transformer**
    - Implement Lua source code parser
    - Implement code transformer
    - Create basic instrumentation tests
 
-2. **Week 2: Module Loading**
+2. **Days 3-4: Module Loading**
    - Implement module loader hooks
    - Build instrumented module cache
    - Create loader tests
 
-3. **Week 3: Runtime Tracking**
+3. **Days 5-6: Runtime Tracking**
    - Implement runtime tracking system
    - Build basic data storage
    - Create runtime tests
 
-#### Phase 2: Integration and Data Model (2 weeks)
+#### Phase 2: Integration and Data Model (4 days)
 
-4. **Week 4: Assertion Integration**
+4. **Days 7-8: Assertion Integration**
    - Implement assertion hooks
    - Build assertion analyzer
    - Create assertion tests
 
-5. **Week 5: Data Model and Storage**
+5. **Days 9-10: Data Model and Storage**
    - Implement data model schema
    - Build data model operations
    - Create data model tests
 
-#### Phase 3: Reporting and API (2 weeks)
+#### Phase 3: Reporting and API (3 days)
 
-6. **Week 6: Reporting System**
+6. **Days 11-12: Reporting System**
    - Implement HTML reporter
    - Build JSON reporter
    - Create reporting tests
 
-7. **Week 7: Public API and Integration**
+7. **Day 13: Public API and Integration**
    - Implement public API
    - Build central config integration
    - Create integration tests
 
-#### Phase 4: Testing and Documentation (1 week)
+#### Phase 4: Testing and Documentation (2 days)
 
-8. **Week 8: Testing and Documentation**
+8. **Days 14-15: Testing and Documentation**
    - Conduct comprehensive testing
    - Write usage documentation
    - Create examples
@@ -116,24 +116,24 @@ The Quality module validates that tests meet specified quality criteria across f
    - Add support for custom rule definitions
    - Implement quality level validation
 
-### Implementation Timeline (4 weeks)
+### Implementation Timeline (5 days)
 
-1. **Week 1: Core Rule Implementation**
+1. **Day 1-2: Core Rule Implementation**
    - Implement level 1-3 quality rules
    - Create rule validation framework
    - Build rule testing harness
 
-2. **Week 2: Advanced Rules and Runner Integration**
+2. **Day 3: Advanced Rules and Runner Integration**
    - Implement level 4-5 quality rules
    - Integrate with test runner
    - Add CLI support
 
-3. **Week 3: Reporting System**
+3. **Day 4: Reporting System**
    - Implement HTML reporting
    - Build JSON reporting
    - Create summary reporting
 
-4. **Week 4: Configuration and Documentation**
+4. **Day 5: Configuration and Documentation**
    - Complete central_config integration
    - Create comprehensive documentation
    - Add examples and usage guides
@@ -166,19 +166,19 @@ The Watcher module provides file system monitoring capabilities for continuous t
    - Add support for pattern matching
    - Implement watch options
 
-### Implementation Timeline (3 weeks)
+### Implementation Timeline (5 days)
 
-1. **Week 1: Core Watching Implementation**
+1. **Days 1-2: Core Watching Implementation**
    - Implement file change detection
    - Build directory monitoring
    - Create efficient timestamp checking
 
-2. **Week 2: Event System and Runner Integration**
+2. **Days 3-4: Event System and Runner Integration**
    - Implement event dispatching
    - Build debounce functionality
    - Integrate with test runner
 
-3. **Week 3: Configuration and Documentation**
+3. **Day 5: Configuration and Documentation**
    - Complete central_config integration
    - Create comprehensive documentation
    - Add examples and usage guides
@@ -211,24 +211,24 @@ The Benchmark module provides comprehensive utilities for measuring and analyzin
    - Add support for benchmark options
    - Implement environment detection
 
-### Implementation Timeline (3 weeks)
+### Implementation Timeline (5 days)
 
-1. **Week 1: Core Benchmarking Implementation**
+1. **Days 1-2: Core Benchmarking Implementation**
    - Implement time measurement functions
    - Build memory usage tracking
    - Create statistical analysis
 
-2. **Week 2: Comparison and Reporting**
+2. **Days 3-4: Comparison and Reporting**
    - Implement benchmark comparison
    - Build result formatting
    - Create HTML and JSON output
 
-3. **Week 3: Integration and Documentation**
+3. **Day 5: Integration and Documentation**
    - Integrate with test runner
    - Complete central_config integration
    - Create comprehensive documentation
 
-## Part 5: CodeFix Module Completion (Lower Priority)
+## Part 5: CodeFix Module Completion (Medium Priority)
 
 ### Overview
 
@@ -256,24 +256,24 @@ The CodeFix module provides code quality checking and fixing capabilities, integ
    - Add support for tool-specific options
    - Implement file inclusion/exclusion patterns
 
-### Implementation Timeline (4 weeks)
+### Implementation Timeline (5 days)
 
-1. **Week 1: External Tool Integration**
+1. **Days 1-2: External Tool Integration**
    - Implement StyLua integration
    - Build Luacheck integration
    - Create tool execution wrappers
 
-2. **Week 2: Custom Fixers**
+2. **Day 3: Custom Fixers**
    - Implement trailing whitespace fixer
    - Build unused variable fixer
    - Create string concatenation optimizer
 
-3. **Week 3: File Operations**
+3. **Day 4: File Operations**
    - Implement safe file modification
    - Build backup functionality
    - Create change tracking
 
-4. **Week 4: Integration and Documentation**
+4. **Day 5: Integration and Documentation**
    - Integrate with test framework
    - Complete central_config integration
    - Create comprehensive documentation
@@ -306,14 +306,14 @@ Enhance the HTML coverage report to provide more detailed information and better
    - Filter by file pattern
    - Toggle display options
 
-### Implementation Timeline (2 weeks)
+### Implementation Timeline (3 days)
 
-1. **Week 1: Core Visualization Improvements**
+1. **Days 1-2: Core Visualization Improvements**
    - Implement three-state visualization
    - Add execution count display
    - Enhance syntax highlighting
 
-2. **Week 2: Navigation and Filtering**
+2. **Day 3: Navigation and Filtering**
    - Implement file tree navigation
    - Add filtering functionality
    - Create directory summary views
@@ -322,29 +322,30 @@ Enhance the HTML coverage report to provide more detailed information and better
 
 | Module | Priority | Timeline | Status |
 |--------|----------|----------|--------|
-| Instrumentation-Based Coverage | Highest | 8 weeks | In Progress |
-| Quality Module | Medium | 4 weeks | Partially Implemented |
-| Watcher Module | Medium | 3 weeks | Partially Implemented |
-| Benchmark Module | Medium | 3 weeks | Partially Implemented |
-| CodeFix Module | Lower | 4 weeks | Partially Implemented |
-| HTML Coverage Report Enhancements | Medium | 2 weeks | Partially Implemented |
+| Instrumentation-Based Coverage | Highest | 15 days | In Progress |
+| Quality Module | Medium | 5 days | Partially Implemented |
+| Watcher Module | Medium | 5 days | Partially Implemented |
+| Benchmark Module | Medium | 5 days | Partially Implemented |
+| CodeFix Module | Medium | 5 days | Partially Implemented |
+| HTML Coverage Report Enhancements | Medium | 3 days | Partially Implemented |
 
 ## Overall Roadmap
 
-1. **Current Focus (2025 Q2)**:
+1. **Current Focus (April 2025)**:
    - Complete instrumentation-based coverage system
    - Enhance HTML coverage reporting
    - Complete Quality module
 
-2. **Next Phase (2025 Q3)**:
+2. **Next Phase (May 2025)**:
    - Complete Watcher module
    - Complete Benchmark module
+   - Complete CodeFix module
    - Enhance documentation and examples
 
-3. **Future Work (2025 Q4)**:
-   - Complete CodeFix module
+3. **Future Work (June 2025)**:
    - Add branch coverage analysis
    - Implement performance profiling
+   - CI/CD integration enhancements
 
 ## Success Criteria
 
@@ -358,4 +359,4 @@ For each module, success criteria include:
 
 ## Conclusion
 
-This comprehensive plan outlines both immediate priorities and longer-term goals for the Firmo testing framework. The instrumentation-based coverage system remains the highest priority, but work on other modules will proceed in parallel as resources allow.
+This comprehensive plan outlines both immediate priorities and short-term goals for the Firmo testing framework. The instrumentation-based coverage system remains the highest priority, but work on other modules will proceed in parallel with one module being completed approximately each week.
