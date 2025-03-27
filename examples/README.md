@@ -13,25 +13,34 @@ These examples demonstrate the fundamental capabilities of Firmo:
 ## Testing Features
 
 - [Mocking Example](mocking_example.lua): Demonstrates how to mock objects and functions
+- [Mock Sequence Example](mock_sequence_example.lua): Shows sequence-based tracking for mocks
 - [Async Example](async_example.lua): Shows how to test asynchronous code
+- [Parallel Async Example](parallel_async_example.lua): Demonstrates parallel test execution
 - [Tagging Example](tagging_example.lua): Illustrates how to use tags to organize and filter tests
+- [Focused Tests Example](focused_tests_example.lua): Shows how to run specific test subsets
+- [Extended Assertions Example](extended_assertions_example.lua): Shows specialized assertion types
+- [Specialized Assertions Example](specialized_assertions_example.lua): Domain-specific assertions
 
 ## Reporting and Output
 
 - [Report Example](report_example.lua): Demonstrates the different report formats available
 - [HTML Report Example](html_report_example.lua): Shows how to generate HTML test reports
-- [JSON Output Example](json_output_example.lua): Explains how to generate JSON test results
+- [Custom Formatters Example](custom_formatters_example.lua): Illustrates creating custom report formats
+- [Formatter Config Example](formatter_config_example.lua): Shows how to configure formatters
 
 ## Code Coverage
 
-- [Coverage Example](coverage_example.lua): Basic introduction to code coverage tracking
+- [Coverage Example](coverage_example.lua): Introduction to code coverage tracking
 - [HTML Coverage Example](html_coverage_example.lua): Shows how to generate HTML coverage reports
+- [Instrumentation Example](instrumentation_example.lua): Demonstrates the instrumentation-based coverage system
 
 ## Tools and Utilities
 
-- [Logging Example](logging_example.lua): Comprehensive guide to the logging system
-- [Error Handling Example](test_error_handling_example.lua): Demonstrates standard error handling patterns
+- [Module Reset Example](module_reset_example.lua): Shows how to reset module state between tests
 - [Temp File Management Example](temp_file_management_example.lua): Shows how to manage temporary test files
+- [Watch Mode Example](watch_mode_example.lua): Demonstrates continuous testing
+- [Codefix Example](codefix_example.lua): Shows automatic code correction utilities
+- [Interactive Mode Example](interactive_mode_example.lua): Demonstrates the interactive testing mode
 
 ## Running Examples
 
@@ -57,8 +66,9 @@ If you're new to Firmo, we recommend exploring the examples in the following ord
 4. [Coverage Example](coverage_example.lua)
 5. [Comprehensive Testing Example](comprehensive_testing_example.lua)
 6. [Mocking Example](mocking_example.lua)
-7. [Error Handling Example](test_error_handling_example.lua)
 
 ## Organization
 
-Many of the example files have been consolidated into comprehensive examples that show multiple related features. If you're looking for a specific feature, check the corresponding comprehensive example first.
+The examples directory has been consolidated to provide clear, non-redundant demonstrations of Firmo's capabilities. Each example focuses on a specific aspect of the framework, and comprehensive examples combine multiple features.
+
+For detailed report examples, check the [reports](reports) directory which contains sample outputs in various formats.
