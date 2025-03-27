@@ -1,0 +1,361 @@
+# Firmo Development Roadmap
+
+## Overview
+
+This document outlines the comprehensive development plan for the Firmo testing framework, including both ongoing work and future goals. The plan is organized by priority, with the instrumentation-based coverage system being the highest priority task.
+
+## Part 1: Instrumentation-Based Coverage System (Highest Priority)
+
+### Overview
+
+The current debug-hook based coverage system has significant limitations and will be completely replaced with a source code instrumentation approach that guarantees accurate tracking of all executed lines. The new system will properly distinguish between three states of code:
+
+1. **Covered** (Green): Code that has been executed AND verified by assertions
+2. **Executed** (Orange): Code that has been executed but not verified by assertions
+3. **Not Covered** (Red): Code that has not been executed at all
+
+### Core Principles
+
+1. **No Special Cases**: The system must work for all Lua files without any special case code
+2. **Automated Tracking**: The system must automatically track execution without manual marking
+3. **Assertion Integration**: The system must automatically detect when executed code is verified by assertions
+4. **Consistent Data Model**: The system must use a consistent data structure throughout
+5. **Central Configuration**: The system must respect the central configuration system
+
+### Architecture Components
+
+1. **Instrumentation Engine**: Parse Lua source code and insert tracking statements
+2. **Module Loading Integration**: Hook into Lua's module loading system
+3. **Coverage Tracking Runtime**: Track executed lines during program execution
+4. **Assertion Integration**: Detect when assertions are executed and associate with specific lines
+5. **Data Model**: Define a consistent data structure for coverage information
+6. **Reporting System**: Generate reports from coverage data
+
+### Implementation Plan
+
+#### Phase 1: Core Instrumentation (3 weeks)
+
+1. **Week 1: Parser and Transformer**
+   - Implement Lua source code parser
+   - Implement code transformer
+   - Create basic instrumentation tests
+
+2. **Week 2: Module Loading**
+   - Implement module loader hooks
+   - Build instrumented module cache
+   - Create loader tests
+
+3. **Week 3: Runtime Tracking**
+   - Implement runtime tracking system
+   - Build basic data storage
+   - Create runtime tests
+
+#### Phase 2: Integration and Data Model (2 weeks)
+
+4. **Week 4: Assertion Integration**
+   - Implement assertion hooks
+   - Build assertion analyzer
+   - Create assertion tests
+
+5. **Week 5: Data Model and Storage**
+   - Implement data model schema
+   - Build data model operations
+   - Create data model tests
+
+#### Phase 3: Reporting and API (2 weeks)
+
+6. **Week 6: Reporting System**
+   - Implement HTML reporter
+   - Build JSON reporter
+   - Create reporting tests
+
+7. **Week 7: Public API and Integration**
+   - Implement public API
+   - Build central config integration
+   - Create integration tests
+
+#### Phase 4: Testing and Documentation (1 week)
+
+8. **Week 8: Testing and Documentation**
+   - Conduct comprehensive testing
+   - Write usage documentation
+   - Create examples
+
+### Success Criteria
+
+The implementation is ONLY successful when:
+- HTML report shows THREE distinct states with clear visual separation
+- ZERO lines are marked "covered" when they are merely "executed"
+- No test timeouts or performance issues occur during report generation
+
+## Part 2: Quality Module Completion (Medium Priority)
+
+### Overview
+
+The Quality module validates that tests meet specified quality criteria across five progressive levels. While the API has been defined, the implementation is incomplete.
+
+### Remaining Components
+
+1. **Quality Rules Implementation**:
+   - Complete implementation of all quality rules across levels 1-5
+   - Build rule validation logic
+   - Implement detailed reporting of rule violations
+
+2. **Integration with Test Runner**:
+   - Integrate quality validation with test running
+   - Implement quality checking for individual test files
+   - Add support for quality validation in the CLI
+
+3. **Reporting System**:
+   - Complete the HTML report formatter
+   - Implement JSON reporting
+   - Create summary reporting functionality
+
+4. **Configuration Integration**:
+   - Complete integration with central_config
+   - Add support for custom rule definitions
+   - Implement quality level validation
+
+### Implementation Timeline (4 weeks)
+
+1. **Week 1: Core Rule Implementation**
+   - Implement level 1-3 quality rules
+   - Create rule validation framework
+   - Build rule testing harness
+
+2. **Week 2: Advanced Rules and Runner Integration**
+   - Implement level 4-5 quality rules
+   - Integrate with test runner
+   - Add CLI support
+
+3. **Week 3: Reporting System**
+   - Implement HTML reporting
+   - Build JSON reporting
+   - Create summary reporting
+
+4. **Week 4: Configuration and Documentation**
+   - Complete central_config integration
+   - Create comprehensive documentation
+   - Add examples and usage guides
+
+## Part 3: Watcher Module Completion (Medium Priority)
+
+### Overview
+
+The Watcher module provides file system monitoring capabilities for continuous testing and automatic reloading. While the API has been defined, the implementation is incomplete.
+
+### Remaining Components
+
+1. **Core Watching Functionality**:
+   - Complete file change detection
+   - Implement efficient timestamp checking
+   - Build directory monitoring
+
+2. **Event System**:
+   - Implement event dispatching for file changes
+   - Add support for event filtering
+   - Create debounce functionality
+
+3. **Integration with Test Runner**:
+   - Integrate with test runner for continuous testing
+   - Add support for selective test re-running
+   - Implement watch mode in the CLI
+
+4. **Configuration Integration**:
+   - Complete integration with central_config
+   - Add support for pattern matching
+   - Implement watch options
+
+### Implementation Timeline (3 weeks)
+
+1. **Week 1: Core Watching Implementation**
+   - Implement file change detection
+   - Build directory monitoring
+   - Create efficient timestamp checking
+
+2. **Week 2: Event System and Runner Integration**
+   - Implement event dispatching
+   - Build debounce functionality
+   - Integrate with test runner
+
+3. **Week 3: Configuration and Documentation**
+   - Complete central_config integration
+   - Create comprehensive documentation
+   - Add examples and usage guides
+
+## Part 4: Benchmark Module Completion (Medium Priority)
+
+### Overview
+
+The Benchmark module provides comprehensive utilities for measuring and analyzing the performance of Lua code. While the API has been defined, the implementation is incomplete.
+
+### Remaining Components
+
+1. **Core Benchmarking Functionality**:
+   - Complete time measurement functions
+   - Implement statistical analysis
+   - Build memory usage tracking
+
+2. **Comparison and Reporting**:
+   - Implement benchmark comparison
+   - Build result formatting
+   - Create visualization utilities
+
+3. **Integration with Test Framework**:
+   - Integrate with test runner
+   - Add support for performance testing
+   - Implement benchmark suite running
+
+4. **Configuration Integration**:
+   - Complete integration with central_config
+   - Add support for benchmark options
+   - Implement environment detection
+
+### Implementation Timeline (3 weeks)
+
+1. **Week 1: Core Benchmarking Implementation**
+   - Implement time measurement functions
+   - Build memory usage tracking
+   - Create statistical analysis
+
+2. **Week 2: Comparison and Reporting**
+   - Implement benchmark comparison
+   - Build result formatting
+   - Create HTML and JSON output
+
+3. **Week 3: Integration and Documentation**
+   - Integrate with test runner
+   - Complete central_config integration
+   - Create comprehensive documentation
+
+## Part 5: CodeFix Module Completion (Lower Priority)
+
+### Overview
+
+The CodeFix module provides code quality checking and fixing capabilities, integrating with external tools like StyLua and Luacheck while also providing custom fixers. While the API has been defined, the implementation is incomplete.
+
+### Remaining Components
+
+1. **Core Fixing Functionality**:
+   - Complete integration with StyLua
+   - Implement Luacheck integration
+   - Build custom fixers
+
+2. **File Operations**:
+   - Implement safe file modification
+   - Build backup functionality
+   - Create change tracking
+
+3. **Integration with Test Framework**:
+   - Integrate with pre-test hooks
+   - Add support for automatic fixing
+   - Implement fix verification
+
+4. **Configuration Integration**:
+   - Complete integration with central_config
+   - Add support for tool-specific options
+   - Implement file inclusion/exclusion patterns
+
+### Implementation Timeline (4 weeks)
+
+1. **Week 1: External Tool Integration**
+   - Implement StyLua integration
+   - Build Luacheck integration
+   - Create tool execution wrappers
+
+2. **Week 2: Custom Fixers**
+   - Implement trailing whitespace fixer
+   - Build unused variable fixer
+   - Create string concatenation optimizer
+
+3. **Week 3: File Operations**
+   - Implement safe file modification
+   - Build backup functionality
+   - Create change tracking
+
+4. **Week 4: Integration and Documentation**
+   - Integrate with test framework
+   - Complete central_config integration
+   - Create comprehensive documentation
+
+## Part 6: HTML Coverage Report Enhancements (Medium Priority)
+
+### Overview
+
+Enhance the HTML coverage report to provide more detailed information and better visualization.
+
+### Planned Improvements
+
+1. **Three-State Visualization**:
+   - Distinct colors for covered, executed, and not covered lines
+   - Clear legend explaining the three states
+   - Line highlighting for better visibility
+
+2. **Execution Count Display**:
+   - Show execution count for each line
+   - Provide visual indication of heavily executed lines
+   - Add execution statistics
+
+3. **File Navigation**:
+   - Implement file tree navigation
+   - Add search functionality
+   - Create directory summary views
+
+4. **Filtering and View Options**:
+   - Filter by coverage status
+   - Filter by file pattern
+   - Toggle display options
+
+### Implementation Timeline (2 weeks)
+
+1. **Week 1: Core Visualization Improvements**
+   - Implement three-state visualization
+   - Add execution count display
+   - Enhance syntax highlighting
+
+2. **Week 2: Navigation and Filtering**
+   - Implement file tree navigation
+   - Add filtering functionality
+   - Create directory summary views
+
+## Timeline Summary
+
+| Module | Priority | Timeline | Status |
+|--------|----------|----------|--------|
+| Instrumentation-Based Coverage | Highest | 8 weeks | In Progress |
+| Quality Module | Medium | 4 weeks | Partially Implemented |
+| Watcher Module | Medium | 3 weeks | Partially Implemented |
+| Benchmark Module | Medium | 3 weeks | Partially Implemented |
+| CodeFix Module | Lower | 4 weeks | Partially Implemented |
+| HTML Coverage Report Enhancements | Medium | 2 weeks | Partially Implemented |
+
+## Overall Roadmap
+
+1. **Current Focus (2025 Q2)**:
+   - Complete instrumentation-based coverage system
+   - Enhance HTML coverage reporting
+   - Complete Quality module
+
+2. **Next Phase (2025 Q3)**:
+   - Complete Watcher module
+   - Complete Benchmark module
+   - Enhance documentation and examples
+
+3. **Future Work (2025 Q4)**:
+   - Complete CodeFix module
+   - Add branch coverage analysis
+   - Implement performance profiling
+
+## Success Criteria
+
+For each module, success criteria include:
+
+1. **Functionality**: All planned features fully implemented
+2. **Integration**: Properly integrated with other modules
+3. **Documentation**: Comprehensive API documentation, guides, and examples
+4. **Testing**: Full test coverage
+5. **Quality**: Adherence to project coding standards and architectural principles
+
+## Conclusion
+
+This comprehensive plan outlines both immediate priorities and longer-term goals for the Firmo testing framework. The instrumentation-based coverage system remains the highest priority, but work on other modules will proceed in parallel as resources allow.
