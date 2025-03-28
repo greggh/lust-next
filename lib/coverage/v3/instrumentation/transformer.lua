@@ -1,149 +1,310 @@
--- AST transformer for adding coverage instrumentation
-local error_handler = require("lib.tools.error_handler")
+-- V3 Coverage Transformer
+-- Transforms Lua source code to add coverage tracking
+
+local parser = require("lib.tools.parser")
 local logging = require("lib.tools.logging")
-local central_config = require("lib.core.central_config")
 
 -- Initialize module logger
-local logger = logging.get_logger("coverage.v3.instrumentation.transformer")
+local logger = logging.get_logger("coverage.v3.transformer")
 
----@class coverage_v3_instrumentation_transformer
----@field transform fun(ast: table): table|nil, table? Transform AST to add coverage tracking
----@field generate fun(ast: table): string|nil Generate code from AST
----@field _VERSION string Module version
 local M = {
   _VERSION = "3.0.0"
 }
 
--- Helper to create a tracking call node
-local function create_tracking_call(line, type)
-  return {
-    tag = "Call",
-    pos = 0,
-    end_pos = 0,
-    [1] = {
-      tag = "Index",
-      pos = 0,
-      end_pos = 0,
-      [1] = {
-        tag = "Id",
-        pos = 0,
-        end_pos = 0,
-        [1] = "_firmo_coverage"
-      },
-      [2] = {
-        tag = "String",
-        pos = 0,
-        end_pos = 0,
-        [1] = "track"
-      }
-    },
-    [2] = {
-      tag = "ExpList",
-      pos = 0,
-      end_pos = 0,
-      [1] = {
-        tag = "Number",
-        pos = 0,
-        end_pos = 0,
-        [1] = line
-      },
-      [2] = {
-        tag = "String",
-        pos = 0,
-        end_pos = 0,
-        [1] = type
-      }
-    }
-  }
-end
+-- Map operator names to symbols
+local op_symbols = {
+  add = "+",
+  sub = "-",
+  mul = "*",
+  div = "/",
+  idiv = "//",
+  mod = "%",
+  pow = "^",
+  concat = "..",
+  eq = "==",
+  ne = "~=",
+  lt = "<",
+  le = "<=",
+  gt = ">",
+  ge = ">=",
+  and_ = "and",
+  or_ = "or",
+  not_ = "not",
+  len = "#",
+  unm = "-",
+  bnot = "~",
+  band = "&",
+  bor = "|",
+  bxor = "~",
+  shl = "<<",
+  shr = ">>"
+}
 
--- Helper to insert tracking before a node
-local function insert_tracking(node, tracking)
-  if node.tag == "Block" then
-    table.insert(node, 1, tracking)
-  else
-    -- Wrap in a block
-    local block = {
-      tag = "Block",
-      pos = node.pos,
-      end_pos = node.end_pos,
-      tracking,
-      node
-    }
-    for k, v in pairs(node) do
-      if type(k) ~= "number" then
-        block[k] = v
+-- Convert AST back to Lua code
+local function ast_to_string(ast)
+  if not ast then return "" end
+  
+  local function indent(level)
+    return string.rep("  ", level)
+  end
+  
+  local function visit(node, level)
+    level = level or 0
+    if type(node) ~= "table" then return tostring(node) end
+    
+    local result = {}
+    if node.tag == "Block" then
+      for _, stmt in ipairs(node) do
+        table.insert(result, indent(level) .. visit(stmt, level))
+      end
+      return table.concat(result, "\n")
+    
+    elseif node.tag == "Call" then
+      local func = visit(node[1])
+      local args = {}
+      for i=2, #node do
+        table.insert(args, visit(node[i]))
+      end
+      return func .. "(" .. table.concat(args, ", ") .. ")"
+    
+    elseif node.tag == "Id" then
+      return node[1]
+    
+    elseif node.tag == "String" then
+      return string.format("%q", node[1])
+    
+    elseif node.tag == "Number" then
+      return tostring(node[1])
+    
+    elseif node.tag == "Function" then
+      local params = {}
+      for _, param in ipairs(node[1]) do
+        table.insert(params, visit(param))
+      end
+      return "function(" .. table.concat(params, ", ") .. ")\n" ..
+             visit(node[2], level + 1) .. "\n" ..
+             indent(level) .. "end"
+    
+    elseif node.tag == "Local" then
+      local names = {}
+      for _, name in ipairs(node[1]) do
+        table.insert(names, visit(name))
+      end
+      local values = {}
+      if node[2] then
+        for _, value in ipairs(node[2]) do
+          table.insert(values, visit(value))
+        end
+      end
+      if #values > 0 then
+        return "local " .. table.concat(names, ", ") .. " = " .. table.concat(values, ", ")
+      else
+        return "local " .. table.concat(names, ", ")
+      end
+    
+    elseif node.tag == "Set" then
+      local vars = {}
+      for _, var in ipairs(node[1]) do
+        table.insert(vars, visit(var))
+      end
+      local values = {}
+      for _, value in ipairs(node[2]) do
+        table.insert(values, visit(value))
+      end
+      return table.concat(vars, ", ") .. " = " .. table.concat(values, ", ")
+    
+    elseif node.tag == "Return" then
+      local values = {}
+      for _, value in ipairs(node) do
+        table.insert(values, visit(value))
+      end
+      return "return " .. table.concat(values, ", ")
+    
+    elseif node.tag == "If" then
+      local result = "if " .. visit(node[1]) .. " then\n"
+      result = result .. visit(node[2], level + 1) .. "\n"
+      result = result .. indent(level) .. "end"
+      return result
+    
+    elseif node.tag == "Index" then
+      -- Handle both string and identifier indices
+      local base = visit(node[1])
+      local index = node[2]
+      if index.tag == "String" then
+        -- For string indices, use dot notation if possible
+        if index[1]:match("^[%a_][%w_]*$") then
+          return base .. "." .. index[1]
+        else
+          return base .. "[" .. visit(index) .. "]"
+        end
+      else
+        return base .. "." .. visit(index)
+      end
+    
+    elseif node.tag == "Op" then
+      if #node == 2 then
+        -- Unary operator
+        local op = op_symbols[node[1]] or node[1]
+        return op .. visit(node[2])
+      else
+        -- Binary operator
+        local op = op_symbols[node[1]] or node[1]
+        return visit(node[2]) .. " " .. op .. " " .. visit(node[3])
       end
     end
-    return block
+    
+    return ""
   end
-  return node
+  
+  return visit(ast)
 end
 
--- Transform AST to add coverage tracking
-function M.transform(ast)
-  -- Create source map
-  local source_map = {}
+-- Get line number from AST node
+local function get_line(node)
+  if type(node) ~= "table" then return 0 end
+  if type(node.line) == "number" then return node.line end
+  if type(node.pos) == "table" and type(node.pos.line) == "number" then return node.pos.line end
+  return 0
+end
+
+-- Track function calls and assertions
+local function add_tracking_calls(ast, filename)
+  if not ast or type(ast) ~= "table" then return ast end
   
-  -- Add coverage tracking to executable nodes
-  local function transform_node(node)
-    if not node or type(node) ~= "table" then
-      return node
-    end
+  -- Handle function definitions
+  if ast.tag == "Function" then
+    -- Add tracking to function body
+    local body = ast[2]
+    local tracking = {
+      tag = "Call",
+      [1] = {
+        tag = "Id",
+        [1] = "__firmo_v3_track_function_entry"
+      },
+      [2] = {
+        tag = "String",
+        [1] = filename
+      },
+      [3] = {
+        tag = "Number",
+        [1] = get_line(ast)
+      }
+    }
     
-    -- Skip non-executable nodes
-    if not node.tag then
-      return node
-    end
-    
-    -- Record source map entry
-    if node.pos and node.end_pos then
-      source_map[#source_map + 1] = {
-        start = node.pos,
-        finish = node.end_pos,
-        line = node.line
+    -- Insert tracking at start of function body
+    table.insert(body, 1, tracking)
+  end
+  
+  -- Handle function calls
+  if ast.tag == "Call" then
+    local func = ast[1]
+    if func.tag == "Id" and func[1] == "expect" then
+      -- Add assertion tracking
+      local cleanup_var = "__firmo_v3_cleanup_" .. tostring({}):match("table: (.+)")
+      local tracking = {
+        tag = "Local",
+        [1] = {{
+          tag = "Id",
+          [1] = cleanup_var
+        }},
+        [2] = {{
+          tag = "Call",
+          [1] = {
+            tag = "Id",
+            [1] = "__firmo_v3_track_assertion"
+          },
+          [2] = {
+            tag = "String",
+            [1] = filename
+          },
+          [3] = {
+            tag = "Number",
+            [1] = get_line(ast)
+          }
+        }}
+      }
+      
+      -- Add cleanup call after assertion
+      local cleanup = {
+        tag = "Call",
+        [1] = {
+          tag = "Id",
+          [1] = cleanup_var
+        }
+      }
+      
+      return {
+        tag = "Block",
+        tracking,
+        ast,
+        cleanup
+      }
+    else
+      -- Add line tracking before call
+      local tracking = {
+        tag = "Call",
+        [1] = {
+          tag = "Id",
+          [1] = "__firmo_v3_track_line"
+        },
+        [2] = {
+          tag = "String",
+          [1] = filename
+        },
+        [3] = {
+          tag = "Number",
+          [1] = get_line(ast)
+        }
+      }
+      
+      return {
+        tag = "Block",
+        tracking,
+        ast
       }
     end
-    
-    -- Add tracking based on node type
-    local tracking
-    if node.tag == "Function" then
-      tracking = create_tracking_call(node.line, "function")
-    elseif node.tag == "Call" then
-      tracking = create_tracking_call(node.line, "call") 
-    elseif node.tag == "Return" then
-      tracking = create_tracking_call(node.line, "return")
-    elseif node.tag == "If" or node.tag == "While" or node.tag == "Repeat" then
-      tracking = create_tracking_call(node.line, "branch")
-    end
-    
-    -- Transform child nodes
-    for i, child in ipairs(node) do
-      node[i] = transform_node(child)
-    end
-    
-    -- Insert tracking if needed
-    if tracking then
-      node = insert_tracking(node, tracking)
-    end
-    
-    return node
   end
   
-  -- Transform the AST
-  local transformed = transform_node(ast)
-  if not transformed then
-    return nil, "Failed to transform AST"
+  -- Recursively process child nodes
+  for i, child in ipairs(ast) do
+    if type(child) == "table" then
+      ast[i] = add_tracking_calls(child, filename)
+    end
   end
   
-  return transformed, source_map
+  return ast
 end
 
--- Generate code from AST
-function M.generate(ast)
-  -- TODO: Implement code generation
-  -- For now just return dummy code
-  return "-- TODO: Generate real code"
+-- Transform source code by adding coverage tracking
+function M.transform(source, filename)
+  logger.debug("Transforming source", {
+    filename = filename,
+    source_length = #source
+  })
+  
+  -- Parse source into AST
+  local ast, err = parser.parse(source, filename)
+  if not ast then
+    logger.error("Failed to parse source", {
+      filename = filename,
+      error = err
+    })
+    return nil, err
+  end
+  
+  -- Add tracking calls
+  local instrumented_ast = add_tracking_calls(ast, filename)
+  
+  -- Convert back to source
+  local result = ast_to_string(instrumented_ast)
+  
+  logger.debug("Source transformation complete", {
+    filename = filename,
+    original_size = #source,
+    instrumented_size = #result
+  })
+  
+  return result
 end
 
 return M

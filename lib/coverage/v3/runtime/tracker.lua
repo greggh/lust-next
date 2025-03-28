@@ -1,69 +1,56 @@
--- Runtime tracking for instrumented code
-local error_handler = require("lib.tools.error_handler")
-local logging = require("lib.tools.logging")
-local central_config = require("lib.core.central_config")
+-- V3 Coverage Runtime Tracker
+-- Provides runtime tracking functions for instrumented code
+
 local data_store = require("lib.coverage.v3.runtime.data_store")
+local logging = require("lib.tools.logging")
 
 -- Initialize module logger
-local logger = logging.get_logger("coverage.v3.runtime.tracker")
+local logger = logging.get_logger("coverage.v3.tracker")
 
----@class coverage_v3_runtime_tracker
----@field track fun(line: number, type: string): boolean Track code execution
----@field start fun(): boolean Start tracking
----@field stop fun(): boolean Stop tracking
----@field reset fun(): boolean Reset tracking data
----@field _VERSION string Module version
 local M = {
   _VERSION = "3.0.0"
 }
 
--- Track whether tracking is active
-local is_active = false
-
--- Track code execution
-function M.track(line, type)
-  if not is_active then
-    return false
-  end
+-- Track function entry
+function M.__firmo_v3_track_function_entry(filename, line)
+  data_store.track_line(filename, line)
   
-  -- Get current file
-  local info = debug.getinfo(2, "S")
-  if not info or not info.source or info.source:sub(1,1) ~= "@" then
-    return false
-  end
-  
-  local file = info.source:sub(2)
-  
-  -- Record execution
-  data_store.record_execution(file, line)
-  
-  -- Record coverage based on type
-  if type == "assertion" then
-    data_store.record_coverage(file, line)
-  end
-  
-  return true
+  logger.debug("Tracked function entry", {
+    filename = filename,
+    line = line
+  })
 end
 
--- Start tracking
-function M.start()
-  is_active = true
-  logger.debug("Started coverage tracking")
-  return true
+-- Track line execution
+function M.__firmo_v3_track_line(filename, line)
+  data_store.track_line(filename, line)
+  
+  logger.debug("Tracked line execution", {
+    filename = filename,
+    line = line
+  })
 end
 
--- Stop tracking
-function M.stop()
-  is_active = false
-  logger.debug("Stopped coverage tracking")
-  return true
+-- Track an assertion
+function M.__firmo_v3_track_assertion(filename, line)
+  data_store.start_assertion(filename, line)
+  
+  logger.debug("Started assertion tracking", {
+    filename = filename,
+    line = line
+  })
+  
+  -- Return cleanup function
+  return function()
+    data_store.end_assertion()
+    logger.debug("Ended assertion tracking")
+  end
 end
 
--- Reset tracking data
+-- Reset tracking
 function M.reset()
   data_store.reset()
-  logger.debug("Reset coverage tracking data")
-  return true
+  logger.debug("Reset tracking")
 end
 
 return M

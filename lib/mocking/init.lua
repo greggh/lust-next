@@ -615,7 +615,7 @@ mocking.with_mocks = mocking.mock.with_mocks
 --- to subsequent tests, preventing hard-to-debug test interactions.
 ---
 --- @param after_test_fn? function Function to call after each test (optional)
---- @return function hook The cleanup hook function to use with firmo's after_each
+--- @return function hook The cleanup hook function to use with firmo's after
 ---
 --- @usage
 --- -- In your test setup code
@@ -623,7 +623,27 @@ mocking.with_mocks = mocking.mock.with_mocks
 --- local mocking = require("lib.mocking")
 --- 
 --- -- Register the cleanup hook with firmo
---- firmo.after_each = mocking.register_cleanup_hook(firmo.after_each)
+--- firmo.after = mocking.register_cleanup_hook(firmo.after)
+
+--- Ensure that mocking-related assertions are available in firmo
+--- This function ensures that assertions needed for mocking tests are registered
+--- with the firmo assertion system. In newer versions, these assertions are built-in,
+--- so this function primarily serves as a compatibility layer for older versions.
+---
+--- @param firmo_module table The firmo module instance to modify
+--- @return boolean success Whether the assertions were successfully registered or already present
+--- @return table|nil error Error information if registration failed
+---
+--- @usage
+--- -- In your test setup code
+--- local firmo = require("firmo")
+--- local mocking = require("lib.mocking")
+--- 
+--- -- Make sure mocking assertions are available
+--- local success, err = mocking.ensure_assertions(firmo)
+--- if not success then
+---   print("Warning: Failed to register mocking assertions: " .. err.message)
+--- end
 function mocking.register_cleanup_hook(after_test_fn)
   logger.debug("Registering mock cleanup hook")
 

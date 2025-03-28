@@ -23,10 +23,6 @@ local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 ---@type fun(callback: function) Setup function that runs before each test
 ---@type fun(callback: function) Teardown function that runs after each test
 local before, after = firmo.before, firmo.after
----@diagnostic disable-next-line: unused-local
----@type fun(callback: function) Setup function that runs before each test
----@type fun(callback: function) Teardown function that runs after each test
-local before_each, after_each = firmo.before, firmo.after
 
 -- Import test_helper for improved error handling
 ---@type TestHelperModule
@@ -169,105 +165,113 @@ local function extract_html_part(html, marker_start, marker_end)
   return html:sub(start_pos, end_pos + #marker_end - 1)
 end
 
-describe("HTML Formatter", function()
-  -- Setup: Load modules before running tests
-  do
-    -- Load modules
-    reporting = require("lib.reporting")
+describe("HTML Formatter Tests", function()
+  local before, after = firmo.before, firmo.after
+  
+  before(function()
+    -- Setup: Load modules before running tests
+    do
+      -- Load modules
+      reporting = require("lib.reporting")
 
-    -- Attempt to load formatter module
-    local success, formatter_result
-    success, formatter_result = pcall(require, "lib.reporting.formatters.html")
-    if success and formatter_result then
-      html_formatter_fn = formatter_result
+      -- Attempt to load formatter module
+      local success, formatter_result
+      success, formatter_result = pcall(require, "lib.reporting.formatters.html")
+      if success and formatter_result then
+        html_formatter_fn = formatter_result
 
-      -- Initialize formatters table and register the HTML formatter
-      formatters = { coverage = {}, quality = {} }
-      html_formatter_fn(formatters)
+        -- Initialize formatters table and register the HTML formatter
+        formatters = { coverage = {}, quality = {} }
+        html_formatter_fn(formatters)
 
-      -- Store reference to the HTML formatter function
-      html_formatter_module = formatters.coverage.html
+        -- Store reference to the HTML formatter function
+        html_formatter_module = formatters.coverage.html
 
-      if logger then
-        logger.debug("HTML formatter loaded successfully", {
-          html_formatter_fn_type = type(html_formatter_fn),
-          html_formatter_module_type = type(html_formatter_module),
-          formatters_registered = formatters.coverage.html ~= nil,
+        if logger then
+          logger.debug("HTML formatter loaded successfully", {
+            html_formatter_fn_type = type(html_formatter_fn),
+            html_formatter_module_type = type(html_formatter_module),
+            formatters_registered = formatters.coverage.html ~= nil,
+          })
+        end
+      else
+        if logger then
+          logger.error("Failed to load HTML formatter", {
+            error = formatter_result,
+          })
+        end
+        html_formatter_fn = nil
+        html_formatter_module = nil
+      end
+
+      -- Attempt to load validation and central_config modules
+      local success
+      success, validation = pcall(require, "lib.reporting.validation")
+      if not success then
+        validation = nil
+      end
+
+      -- Load modern central_config module instead of deprecated config
+      success, central_config = pcall(require, "lib.core.central_config")
+      if not success then
+        central_config = nil
+      end
+
+      -- Reset formatter configuration to defaults
+      if reporting and reporting.configure_formatter then
+        reporting.configure_formatter("html", {
+          theme = "dark",
+          show_line_numbers = true,
+          collapsible_sections = true,
+          highlight_syntax = true,
+          asset_base_path = nil,
+          include_legend = true,
         })
       end
-    else
-      if logger then
-        logger.error("Failed to load HTML formatter", {
-          error = formatter_result,
+
+      if logger and logger.info then
+        logger.info("HTML formatter test modules loaded", {
+          reporting = reporting ~= nil,
+          ---@diagnostic disable-next-line: undefined-global
+          html_formatter = html_formatter ~= nil,
+          validation = validation ~= nil,
+          central_config = central_config ~= nil,
         })
       end
-      html_formatter_fn = nil
-      html_formatter_module = nil
     end
 
-    -- Attempt to load validation and central_config modules
-    local success
-    success, validation = pcall(require, "lib.reporting.validation")
-    if not success then
-      validation = nil
-    end
+    -- Helper to reset configuration between tests
+    ---@diagnostic disable-next-line: unused-local, unused-function
+    local function reset_config()
+      -- Reset formatter configuration to defaults
+      if reporting and reporting.configure_formatter then
+        reporting.configure_formatter("html", {
+          theme = "dark",
+          show_line_numbers = true,
+          collapsible_sections = true,
+          highlight_syntax = true,
+          asset_base_path = nil,
+          include_legend = true,
+        })
+      end
 
-    -- Load modern central_config module instead of deprecated config
-    success, central_config = pcall(require, "lib.core.central_config")
-    if not success then
-      central_config = nil
+      -- Reset any central config changes
+      if central_config and central_config.set then
+        central_config.set("reporting.formatters.html", {
+          theme = "dark",
+          show_line_numbers = true,
+          collapsible_sections = true,
+          highlight_syntax = true,
+          asset_base_path = nil,
+          include_legend = true,
+        })
+      end
     end
-
-    -- Reset formatter configuration to defaults
-    if reporting and reporting.configure_formatter then
-      reporting.configure_formatter("html", {
-        theme = "dark",
-        show_line_numbers = true,
-        collapsible_sections = true,
-        highlight_syntax = true,
-        asset_base_path = nil,
-        include_legend = true,
-      })
-    end
-
-    if logger and logger.info then
-      logger.info("HTML formatter test modules loaded", {
-        reporting = reporting ~= nil,
-        ---@diagnostic disable-next-line: undefined-global
-        html_formatter = html_formatter ~= nil,
-        validation = validation ~= nil,
-        central_config = central_config ~= nil,
-      })
-    end
-  end
-
-  -- Helper to reset configuration between tests
-  ---@diagnostic disable-next-line: unused-local, unused-function
-  local function reset_config()
-    -- Reset formatter configuration to defaults
-    if reporting and reporting.configure_formatter then
-      reporting.configure_formatter("html", {
-        theme = "dark",
-        show_line_numbers = true,
-        collapsible_sections = true,
-        highlight_syntax = true,
-        asset_base_path = nil,
-        include_legend = true,
-      })
-    end
-
-    -- Reset any central config changes
-    if central_config and central_config.set then
-      central_config.set("reporting.formatters.html", {
-        theme = "dark",
-        show_line_numbers = true,
-        collapsible_sections = true,
-        highlight_syntax = true,
-        asset_base_path = nil,
-        include_legend = true,
-      })
-    end
-  end
+  end)
+  
+  after(function()
+    -- Cleanup
+  end)
 
   it("should exist as a function", function()
     expect(html_formatter_module).to.be.a("function")

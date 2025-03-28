@@ -19,10 +19,6 @@
     - Runtime context tracking and validation
     - Support for testing timeout behavior
     
-    The module provides both low-level utilities for managing asynchronous
-    operations and high-level abstractions for creating async-aware tests
-    that maintain proper execution flow and error reporting.
-    
     @module async
     @author Firmo Team
     @license MIT
@@ -389,19 +385,18 @@ function async_module.async(fn)
       local prev_context = in_async_context
       in_async_context = true
       
-      -- Call the original function with the captured arguments
-      local results = {pcall(fn, unpack(args))}
+      -- Call the original function with the captured arguments and preserve async context
+      local success, results = pcall(function()
+        return {fn(unpack(args))}
+      end)
       
-      -- Restore previous context state
-      in_async_context = prev_context
-      
-      -- If the function call failed, propagate the error
-      if not results[1] then
-        error(results[2], 2)
+      -- If the function call failed, restore context and propagate the error
+      if not success then
+        in_async_context = prev_context
+        error(results, 2)
       end
       
-      -- Remove the success status and return the actual results
-      table.remove(results, 1)
+      -- Return the actual results while keeping async context
       return unpack(results)
     end
   end
@@ -714,6 +709,65 @@ function async_module.set_timeout(ms)
   })
   
   return async_module
+end
+
+-- Create an async-aware test case with proper timeout handling
+--- This is a convenience wrapper around it() and async() that makes it easier
+--- to write async tests. It automatically wraps the test function in async()
+--- and handles timeouts properly.
+---
+--- @param description string The test case description
+--- @param async_fn function The async test function
+--- @param timeout? number Optional timeout in milliseconds (defaults to default_timeout)
+--- @return function The test case function
+---
+--- @usage
+--- it_async("performs async operation", function()
+---   await(100)
+---   expect(true).to.be_truthy()
+--- end, 2000) -- 2 second timeout
+function async_module.it_async(description, async_fn, timeout)
+  if type(description) ~= "string" then
+    error("Description must be a string", 2)
+  end
+  if type(async_fn) ~= "function" then
+    error("Test function must be a function", 2)
+  end
+  if timeout ~= nil and type(timeout) ~= "number" then
+    error("Timeout must be a number or nil", 2)
+  end
+
+  -- Get test_definition module
+  local test_definition = require("lib.core.test_definition")
+
+  -- Create the async test function
+  local wrapped = async_module.async(async_fn)
+
+  -- Run the test with timeout
+  return test_definition.it(description, function()
+    -- Set that we're in an async context
+    local prev_context = in_async_context
+    in_async_context = true
+    
+    -- Call the wrapped function and capture any errors
+    local success, result = pcall(wrapped())
+    
+    -- Now that all async operations are done, restore context
+    in_async_context = prev_context
+    
+    -- Propagate any errors, but without the stack trace unless in debug mode
+    if not success then
+      if config.debug then
+        error(result, 0)  -- Keep stack trace in debug mode
+      else
+        -- Extract just the error message without the stack trace
+        local message = result:match("^.-:%d+: (.+)") or result
+        error(message, 2)
+      end
+    end
+    
+    return result
+  end)
 end
 
 -- Get the current async context state (for internal use)

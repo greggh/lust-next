@@ -180,7 +180,7 @@ local results = parallel.run_tests(test_files)
 For parallel testing to work correctly, your tests must be independent:
 
 1. Tests should not depend on the state from other test files
-2. Tests should clean up after themselves (use `after` and `after_each` hooks)
+2. Tests should clean up after themselves (use `after` hooks)
 3. Tests should not assume a specific execution order
 
 Example of good test isolation:

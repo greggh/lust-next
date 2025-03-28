@@ -748,10 +748,9 @@ describe("Logging System", function()
   end)
 end)
 
--- Clean up after tests (after_all is not available in firmo)
--- Set up cleanup to run at the end
-describe("Test Cleanup", function()
-  it("resets logging configuration", function()
+-- Clean up after tests (use after hook)
+describe("Logging Tests", function()
+  after(function()
     -- Reset logging configuration
     logging.configure({
       level = logging.LEVELS.INFO,

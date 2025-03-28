@@ -77,7 +77,7 @@ it("should throw error for invalid input", function()
   local err = test_helper.expect_error(function()
     validate_email("not-an-email")
   end, "Invalid email format")
-  
+
   -- You can make additional assertions about the error
   expect(err.category).to.equal("VALIDATION")
   expect(err.context.input).to.equal("not-an-email")
@@ -85,6 +85,7 @@ end)
 ```
 
 `expect_error` automatically fails the test if:
+
 1. The function doesn't throw an error
 2. The error message doesn't match the expected pattern (if provided)
 
@@ -97,7 +98,7 @@ it("should handle file not found gracefully", { expect_error = true }, function(
   local result, err = test_helper.with_error_capture(function()
     return fs.read_file("nonexistent-file.txt")
   end)()
-  
+
   expect(result).to_not.exist()
   expect(err).to.exist()
   expect(err.message).to.match("file not found")
@@ -116,7 +117,7 @@ it("should print error message", function()
   local result, stdout, stderr = test_helper.with_suppressed_output(function()
     return print_error_and_return("Something went wrong", 1)
   end)
-  
+
   expect(result).to.equal(1)
   expect(stdout).to.match("Something went wrong")
   expect(stderr).to.equal("")
@@ -139,20 +140,21 @@ it("should read JSON file correctly", function()
       "value": 42
     }
   ]]
-  
+
   local temp_file, err = test_helper.create_temp_file_with_content(content, "json")
   expect(err).to_not.exist("Failed to create temp file")
-  
+
   -- Test file operations
   local data = load_json_file(temp_file)
   expect(data.name).to.equal("test")
   expect(data.value).to.equal(42)
-  
+
   -- No need to clean up - happens automatically
 end)
 ```
 
 Benefits of using `test_helper` for temporary files:
+
 1. Files are automatically cleaned up after tests
 2. File paths are tracked to ensure nothing is left behind
 3. Error handling is built in
@@ -168,14 +170,14 @@ it("should handle files created by the system", function()
   local f = io.open(temp_path, "w")
   f:write("test content")
   f:close()
-  
+
   -- Register it for cleanup
   test_helper.register_temp_file(temp_path)
-  
+
   -- Test with the file
   local content = read_file(temp_path)
   expect(content).to.equal("test content")
-  
+
   -- No need to manually delete - happens automatically
 end)
 ```
@@ -190,20 +192,20 @@ For tests that need directory operations:
 it("should scan directory for configuration files", function()
   local temp_dir, err = test_helper.create_temp_directory("config_test_")
   expect(err).to_not.exist("Failed to create temp directory")
-  
+
   -- Create files in the directory
   local fs = require("lib.tools.filesystem")
   fs.write_file(temp_dir .. "/config.json", '{"enabled": true}')
   fs.write_file(temp_dir .. "/settings.ini", "[Settings]\nenabled=true")
-  
+
   -- Register files for cleanup
   test_helper.register_temp_file(temp_dir .. "/config.json")
   test_helper.register_temp_file(temp_dir .. "/settings.ini")
-  
+
   -- Test directory operations
   local configs = find_config_files(temp_dir)
   expect(#configs).to.equal(2)
-  
+
   -- Directory is cleaned up automatically
 end)
 ```
@@ -217,25 +219,26 @@ For more complex tests involving multiple files in a directory structure:
 ```lua
 it("should process project structure correctly", function()
   local test_dir = test_helper.create_temp_test_directory()
-  
+
   -- Create project structure
   test_dir.create_file("src/main.lua", "print('Hello')")
   test_dir.create_file("src/utils.lua", "return {trim = function(s) return s:match('^%s*(.-)%s*$') end}")
   test_dir.create_file("tests/main_test.lua", "-- Test file")
   test_dir.create_file(".firmo-config.lua", "return {watch_mode = true}")
-  
+
   -- Test project operations
   local files = find_project_files(test_dir.path)
   expect(#files).to.equal(4)
-  
+
   local config = load_project_config(test_dir.path)
   expect(config.watch_mode).to.equal(true)
-  
+
   -- Directory is cleaned up automatically
 end)
 ```
 
 The test directory object provides:
+
 1. A property `path` with the directory path
 2. A method `create_file` to create files with content
 3. A method `create_directory` to create subdirectories
@@ -258,14 +261,14 @@ it("should build project correctly", function()
     -- dir_path is the directory path
     -- files is a table of created file paths
     -- test_dir is the test directory object
-    
+
     -- Test build process
     local success = build_project(dir_path)
     expect(success).to.equal(true)
-    
+
     -- Check build results
     expect(fs.file_exists(dir_path .. "/build/main.lua")).to.equal(true)
-    
+
     -- Directory is cleaned up automatically when function returns
   end)
 end)
@@ -287,12 +290,12 @@ it("should use DEBUG level from environment", function()
   }, function()
     -- Initialize system that reads from environment
     local logger = init_logger()
-    
+
     -- Test with modified environment
     expect(logger.level).to.equal("trace")
     expect(logger.app_env).to.equal("test")
   end)
-  
+
   -- Environment is restored after function returns
 end)
 ```
@@ -324,7 +327,7 @@ it("should normalize paths correctly on Windows", function()
   test_helper.with_path_separator("\\", function()
     local result = normalize_path("dir\\subdir\\file.txt")
     expect(result).to.equal("dir\\subdir\\file.txt")
-    
+
     result = normalize_path("dir/subdir/file.txt")
     expect(result).to.equal("dir\\subdir\\file.txt")
   end)
@@ -334,7 +337,7 @@ it("should normalize paths correctly on Unix", function()
   test_helper.with_path_separator("/", function()
     local result = normalize_path("dir/subdir/file.txt")
     expect(result).to.equal("dir/subdir/file.txt")
-    
+
     result = normalize_path("dir\\subdir\\file.txt")
     expect(result).to.equal("dir/subdir/file.txt")
   end)
@@ -366,21 +369,21 @@ it("should handle different file scenarios", function()
       error = "Permission denied"
     }
   })
-  
+
   -- Test successful case
   local config = load_config("config.json")
   expect(config.setting).to.equal("value")
-  
+
   -- Test error handling for missing file
   local success, err = pcall(function() load_config("nonexistent.txt") end)
   expect(success).to.equal(false)
   expect(err).to.match("No such file or directory")
-  
+
   -- Test error handling for protected file
   success, err = pcall(function() load_config("protected.log") end)
   expect(success).to.equal(false)
   expect(err).to.match("Permission denied")
-  
+
   -- Restore original I/O functions
   restore()
 end)
@@ -394,26 +397,26 @@ For tracking function calls without changing behavior:
 it("should call correct functions with proper arguments", function()
   -- Create a spy for math.max
   local spy = test_helper.create_spy(math.max)
-  
+
   -- Replace the original function (in a module or global)
   local original_max = math.max
   math.max = spy.func
-  
+
   -- Call code that uses math.max
   local result = find_largest_value({5, 10, 3, 8})
-  
+
   -- Verify the result
   expect(result).to.equal(10)
-  
+
   -- Verify function was called correctly
   expect(spy.called).to.equal(true)
   expect(spy.call_count).to.equal(3) -- Called for each comparison
-  
+
   -- Check specific calls
   expect(spy.calls[1].args[1]).to.equal(5)
   expect(spy.calls[1].args[2]).to.equal(10)
   expect(spy.calls[1].result).to.equal(10)
-  
+
   -- Restore original function
   math.max = original_max
 end)
@@ -427,15 +430,15 @@ For tests that depend on time:
 it("should format timestamps correctly", function()
   -- Mock time to a specific date
   local restore = test_helper.mock_time("2025-03-15 14:30:00")
-  
+
   -- Test function that uses os.time() and os.date()
   local formatted = format_timestamp()
   expect(formatted).to.equal("2025-03-15 14:30:00")
-  
+
   -- Test time difference calculations
   local difference = calculate_time_difference("2025-03-15 13:30:00")
   expect(difference).to.equal(3600) -- 1 hour in seconds
-  
+
   -- Restore original time functions
   restore()
 end)
@@ -489,7 +492,7 @@ it("should handle invalid JSON", { expect_error = true }, function()
   local result, err = test_helper.with_error_capture(function()
     return parse_json('{not valid json}')
   end)()
-  
+
   expect(result).to_not.exist()
   expect(err.category).to.equal("PARSE")
 end)
@@ -561,10 +564,10 @@ Structure your tests for clarity and maintainability:
 local function setup_test_environment()
   local test_dir = test_helper.create_temp_test_directory()
   test_dir.create_file("config.json", '{"test": true}')
-  
+
   -- Initialize system with test directory
   local system = init_system(test_dir.path)
-  
+
   return {
     dir = test_dir,
     system = system
@@ -583,24 +586,24 @@ end)
 describe("Configuration system", function()
   local test_dir
   local system
-  
+
   before(function()
     test_dir = test_helper.create_temp_test_directory()
     test_dir.create_file("config.json", '{"test": true}')
     system = init_system(test_dir.path)
   end)
-  
+
   -- Tests can use test_dir and system
   it("should load configuration", function()
     expect(system.config.test).to.equal(true)
   end)
-  
+
   it("should detect configuration changes", function()
     test_dir.create_file("config.json", '{"test": false}')
     system.reload()
     expect(system.config.test).to.equal(false)
   end)
-  
+
   -- Cleanup happens automatically
 end)
 ```
@@ -659,9 +662,9 @@ local restore = test_helper.mock_io({
 -- Ensure you restore after tests
 local function test_with_mocks()
   local restore = test_helper.mock_io({...})
-  
+
   -- Test code
-  
+
   -- Don't forget to restore
   restore()
 end
@@ -696,6 +699,7 @@ For more details on test helper functions:
 If you encounter persistent issues:
 
 1. Enable debug logging to see more details:
+   
    ```lua
    local logging = require("lib.tools.logging")
    logging.configure_from_options("test_helper", {
@@ -705,6 +709,7 @@ If you encounter persistent issues:
    ```
 
 2. Use structured error handling to get more context:
+   
    ```lua
    local error_handler = require("lib.tools.error_handler")
    local success, result, err = error_handler.try(function()

@@ -291,19 +291,19 @@ lua test.lua --timeout=30000 tests/performance/
 
 ### Pattern: Test Setup and Teardown
 
-Use the test runner with beforeEach/afterEach hooks to ensure proper test isolation:
+Use the test runner with before/after hooks to ensure proper test isolation:
 
 ```lua
 describe("Database tests", function()
   local db
   
-  before_each(function()
+  before(function()
     -- Create a fresh database connection for each test
     db = firmo.reset_module("app.database")
     db.connect({in_memory = true})
   end)
   
-  after_each(function()
+  after(function()
     -- Clean up after each test
     db.disconnect()
   end)

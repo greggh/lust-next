@@ -58,7 +58,7 @@ Copy the `firmo.lua` file to your project and require it:
 local firmo = require('firmo')
 firmo.expose_globals() -- Makes all test functions available globally
 describe('my project', function()
-  before_each(function()
+  before(function()
     -- This gets run before every test.
   end)
   describe('module1', function() -- Can be nested
@@ -79,7 +79,7 @@ end)
 local firmo = require 'firmo'
 local describe, it, expect = firmo.describe, firmo.it, firmo.expect
 describe('my project', function()
-  firmo.before(function()
+  before(function()
     -- This gets run before every test.
   end)
   describe('module1', function() -- Can be nested

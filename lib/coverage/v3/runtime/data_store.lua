@@ -1,82 +1,107 @@
--- Data store for coverage information
-local error_handler = require("lib.tools.error_handler")
+-- V3 Coverage Data Store
+-- Stores coverage data during test execution
+
 local logging = require("lib.tools.logging")
-local central_config = require("lib.core.central_config")
 
 -- Initialize module logger
-local logger = logging.get_logger("coverage.v3.runtime.data_store")
+local logger = logging.get_logger("coverage.v3.data_store")
 
----@class coverage_v3_runtime_data_store
----@field record_execution fun(file: string, line: number): boolean Record line execution
----@field record_coverage fun(file: string, line: number): boolean Record line coverage
----@field get_line_state fun(file: string, line: number): string Get line state
----@field get_file_data fun(file: string): table Get file coverage data
----@field reset fun(): boolean Reset all data
----@field _VERSION string Module version
 local M = {
   _VERSION = "3.0.0"
 }
 
--- Coverage states
-local STATES = {
-  NOT_COVERED = "not_covered",
-  EXECUTED = "executed",
-  COVERED = "covered"
+-- Coverage data structure
+local coverage_data = {
+  files = {},
+  assertions = {},
+  current_assertion = nil,
+  current_lines = {}
 }
 
--- Store coverage data
-local coverage_data = {}
-
--- Helper to ensure file data exists
-local function ensure_file_data(file)
-  if not coverage_data[file] then
-    coverage_data[file] = {
-      executed_lines = {},
-      covered_lines = {}
-    }
-  end
-  return coverage_data[file]
-end
-
--- Record line execution
-function M.record_execution(file, line)
-  local data = ensure_file_data(file)
-  data.executed_lines[line] = true
-  return true
-end
-
--- Record line coverage
-function M.record_coverage(file, line)
-  local data = ensure_file_data(file)
-  data.covered_lines[line] = true
-  return true
-end
-
--- Get line state
-function M.get_line_state(file, line)
-  local data = coverage_data[file]
-  if not data then
-    return STATES.NOT_COVERED
+-- Track a line execution
+function M.track_line(filename, line)
+  coverage_data.files[filename] = coverage_data.files[filename] or {
+    executed_lines = {},
+    covered_lines = {}
+  }
+  
+  -- Record line execution
+  coverage_data.files[filename].executed_lines[line] = true
+  
+  -- If we're in an assertion context, mark as covered
+  if coverage_data.current_assertion then
+    coverage_data.files[filename].covered_lines[line] = true
+    coverage_data.current_lines[line] = true
   end
   
-  if data.covered_lines[line] then
-    return STATES.COVERED
-  elseif data.executed_lines[line] then
-    return STATES.EXECUTED
-  else
-    return STATES.NOT_COVERED
+  logger.debug("Tracked line execution", {
+    filename = filename,
+    line = line,
+    in_assertion = coverage_data.current_assertion ~= nil
+  })
+end
+
+-- Start tracking an assertion
+function M.start_assertion(filename, line)
+  coverage_data.current_assertion = {
+    file = filename,
+    line = line,
+    covered_lines = {}
+  }
+  coverage_data.current_lines = {}
+  table.insert(coverage_data.assertions, coverage_data.current_assertion)
+  
+  logger.debug("Started assertion tracking", {
+    filename = filename,
+    line = line
+  })
+end
+
+-- End tracking the current assertion
+function M.end_assertion()
+  if coverage_data.current_assertion then
+    -- Add covered lines to assertion
+    for line in pairs(coverage_data.current_lines) do
+      table.insert(coverage_data.current_assertion.covered_lines, {
+        line = line
+      })
+    end
+    
+    logger.debug("Ended assertion tracking", {
+      covered_lines = #coverage_data.current_assertion.covered_lines
+    })
   end
+  
+  coverage_data.current_assertion = nil
+  coverage_data.current_lines = {}
 end
 
--- Get file coverage data
-function M.get_file_data(file)
-  return coverage_data[file]
+-- Get assertion mappings for a file
+function M.get_assertion_mappings(filename)
+  local mappings = {}
+  for _, assertion in ipairs(coverage_data.assertions) do
+    if assertion.file == filename then
+      table.insert(mappings, assertion)
+    end
+  end
+  
+  logger.debug("Got assertion mappings", {
+    filename = filename,
+    count = #mappings
+  })
+  
+  return mappings
 end
 
--- Reset all data
+-- Reset all coverage data
 function M.reset()
-  coverage_data = {}
-  return true
+  coverage_data = {
+    files = {},
+    assertions = {},
+    current_assertion = nil,
+    current_lines = {}
+  }
+  logger.debug("Reset coverage data")
 end
 
 return M

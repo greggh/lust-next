@@ -7,9 +7,9 @@ local tracker = nil -- require("lib.coverage.runtime.tracker")
 local data_store = nil -- require("lib.coverage.runtime.data_store")
 
 describe("runtime tracker", function()
-  -- Reset state before each test
-  local before_each = firmo.before_each
-  before_each(function()
+  -- Reset state before this test
+  local before = firmo.before
+  before(function()
     -- When implemented, this will reset the tracker state
     -- tracker.reset()
     -- data_store.reset()

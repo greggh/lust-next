@@ -324,6 +324,7 @@ if async_module then
   firmo.await = async_module.await
   firmo.wait_until = async_module.wait_until
   firmo.parallel_async = async_module.parallel_async
+  firmo.it_async = async_module.it_async
   
   -- Configure the async module with our options
   if firmo.async_options and firmo.async_options.timeout then
@@ -341,6 +342,7 @@ else
   firmo.await = async_error
   firmo.wait_until = async_error
   firmo.parallel_async = async_error
+  firmo.it_async = async_error
 end
 
 -- Register codefix module if available
@@ -410,27 +412,22 @@ local module = setmetatable({
   async = firmo.async,
   await = firmo.await,
   wait_until = firmo.wait_until,
+  it_async = firmo.it_async,
   
   -- Export interactive mode
   interactive = interactive,
-  
-  --- Global exposure utility for easier test writing
+
+  -- Global exposure utility for easier test writing
   ---@return firmo The firmo module
   expose_globals = function()
     -- Test building blocks
     _G.describe = firmo.describe
-    _G.fdescribe = firmo.fdescribe
-    _G.xdescribe = firmo.xdescribe
     _G.it = firmo.it
-    _G.fit = firmo.fit
-    _G.xit = firmo.xit
+    _G.expect = firmo.expect
     _G.before = firmo.before
-    _G.before_each = firmo.before -- Alias for compatibility
     _G.after = firmo.after
-    _G.after_each = firmo.after -- Alias for compatibility
     
     -- Assertions
-    _G.expect = firmo.expect
     _G.pending = firmo.pending
     
     -- Expose firmo.assert namespace and global assert for convenience

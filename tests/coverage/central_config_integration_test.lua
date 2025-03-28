@@ -10,22 +10,6 @@ local coverage = nil -- require("lib.coverage")
 describe("coverage central_config integration", function()
   local original_config
   
-  -- Save original config before each test
-  local before_each = firmo.before_each
-  before_each(function()
-    original_config = central_config.get_config()
-    -- Reset coverage
-    -- coverage.reset()
-  end)
-  
-  -- Restore original config after each test
-  local after_each = firmo.after_each
-  after_each(function()
-    central_config.set_config(original_config)
-    -- Reset coverage
-    -- coverage.reset()
-  end)
-  
   describe("configuration loading", function()
     it("should load configuration from central_config", function()
       pending("Implement when v3 coverage system is complete")

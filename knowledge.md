@@ -1,5 +1,27 @@
 # Firmo Knowledge
 
+## Test Lifecycle Hooks
+
+ALWAYS use `before` and `after` for test lifecycle hooks:
+
+```lua
+describe("test group", function()
+  before(function()
+    -- Runs before each test in this group
+  end)
+  
+  after(function()
+    -- Runs after each test in this group
+  end)
+  
+  it("test case", function()
+    -- Test code here
+  end)
+end)
+```
+
+NEVER use `before_each` or `after_each` - these are deprecated compatibility aliases.
+
 ## CRITICAL: Project Organization Rules
 
 1. **Directory Structure**:
@@ -249,4 +271,40 @@ expect({name = "John"}).to.have_property("name", "John")
 
 - Tasks: `/home/gregg/Projects/lua-library/firmo/docs/firmo/plan.md`
 - Architecture: `/home/gregg/Projects/lua-library/firmo/docs/firmo/architecture.md`
--
+
+## V3 Coverage System
+
+### Source Code Instrumentation
+
+The v3 coverage system uses source code instrumentation instead of debug hooks. Key points:
+
+1. **Tracking Functions**:
+   ```lua
+   -- Track function entry
+   __firmo_v3_track_function_entry(filename, line)
+   
+   -- Track line execution
+   __firmo_v3_track_line(filename, line)
+   
+   -- Track assertion coverage
+   local cleanup = __firmo_v3_track_assertion(filename, line)
+   -- ... code being verified ...
+   cleanup()
+   ```
+
+2. **Async Coverage**:
+   - Track assertions in async functions
+   - Track assertions in callbacks
+   - Track assertions in parallel operations
+   - Always use cleanup functions to end assertion tracking
+
+3. **Three-State Coverage**:
+   - Not Covered (Red): Line never executed
+   - Executed (Orange): Line executed but not verified
+   - Covered (Green): Line executed and verified by assertions
+
+4. **No Debug Hooks**:
+   - NEVER use debug.sethook
+   - NEVER use debug.getinfo in coverage tracking
+   - ALWAYS use source instrumentation
+   - ALWAYS track line numbers from source
