@@ -354,7 +354,9 @@ print("\nPART 6: Error Handling in Filesystem Operations\n")
 -- Example 11: Proper Error Handling with Filesystem Operations
 print("Example 11: Proper Error Handling")
 
--- Function demonstrating proper error handling
+---@param file_path any The path to the configuration file
+---@return table|nil config The parsed configuration if successful, nil otherwise
+---@return table|nil error An error object if the operation failed
 function process_config_file(file_path)
     -- Validate input
     if type(file_path) ~= "string" then

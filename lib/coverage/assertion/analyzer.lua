@@ -47,9 +47,10 @@ function M.analyze_call_stack(call_stack)
   return locations
 end
 
--- Determine the main test file from call stack
----@param locations table List of source locations
----@return table|nil test_file The main test file location
+--- Determine the main test file from call stack
+---@private
+---@param locations table[] List of source locations
+---@return table|nil test_file The main test file location or nil if not found
 local function find_test_file(locations)
   -- Look for files with "_test.lua" in the name
   for _, location in ipairs(locations) do
@@ -69,10 +70,11 @@ local function find_test_file(locations)
   return locations[1]
 end
 
--- Find the subject file from call stack (the file being tested)
----@param locations table List of source locations
----@param test_file table The main test file location
----@return table|nil subject_file The subject file location
+--- Find the subject file from call stack (the file being tested)
+---@private
+---@param locations table[] List of source locations 
+---@param test_file {file_path: string, file_id: string, line_number: number} The main test file location
+---@return table|nil subject_file The subject file location or nil if not found
 local function find_subject_file(locations, test_file)
   -- Exclude the test file and any library/framework files
   local candidates = {}

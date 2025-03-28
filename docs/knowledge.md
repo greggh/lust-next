@@ -1,120 +1,55 @@
-# Documentation Knowledge
+# Firmo Knowledge Base
 
-## Purpose
-Documentation and guides for the Firmo testing framework.
+## Core Principles
 
-## Core Modules
-```lua
--- Test Structure
-describe("Group", function()
-  it("test case", function()
-    expect(value).to.exist()
-  end)
-end)
+1. NO DEBUG HOOKS - The v3 coverage system must never use debug hooks (debug.sethook). All coverage tracking must be done through source code instrumentation.
 
--- Async Testing
-it.async("async test", function(done)
-  async_operation(function(result)
-    expect(result).to.exist()
-    done()
-  end)
-end)
+2. Three-State Coverage - The system must properly distinguish between:
+   - Covered (green): Code verified by assertions
+   - Executed (orange): Code that ran but wasn't verified
+   - Not covered (red): Code that didn't run
 
--- Coverage Tracking
-firmo.coverage_options.enabled = true
-firmo.coverage_options.include = {"src/*.lua"}
-firmo.coverage_options.exclude = {"tests/*.lua"}
+3. No Special Cases - All solutions must be general purpose without special handling for specific files
 
--- Quality Validation
-firmo.quality_options.enabled = true
-firmo.quality_options.level = 3
+4. Clean Abstractions - Components must interact through well-defined interfaces
 
--- Module Reset
-local fresh_module = firmo.reset_module("app.module")
-```
+## Implementation Guidelines
 
-## Running Tests
-```bash
-# Run all tests
-lua test.lua tests/
+1. Use the parser in lib/tools/parser/grammar.lua for parsing Lua code
 
-# Run with coverage
-lua test.lua --coverage tests/
+2. Use source code instrumentation to track coverage:
+   - Parse source into AST
+   - Transform AST to add tracking
+   - Generate instrumented code
+   - Create source map
 
-# Run with tags
-lua test.lua --tags unit,fast tests/
+3. Use central_config for all configuration
 
-# Run with pattern
-lua test.lua --filter validation tests/
+4. Handle errors consistently using error_handler
 
-# Run with watching
-lua test.lua --watch tests/
-```
+5. Use structured logging with the logging module
 
-## Architectural Principles
-1. **Centralized Configuration**
-   - All settings through central_config
-   - No direct configuration
-   - Use .firmo-config.lua
+## Testing Requirements
 
-2. **No Special Cases**
-   - Solutions must be general
-   - No file-specific handling
-   - Avoid workarounds
+After every change:
+1. Run tests: `lua test.lua tests/`
+2. Check coverage: `lua test.lua --coverage tests/`
+3. Validate types: `lua test.lua --types`
 
-3. **Error Handling**
-   - Use structured errors
-   - Include context
-   - Follow patterns
+## Common Issues
 
-4. **Modularity**
-   - Clear boundaries
-   - Defined responsibilities
-   - Clean interfaces
+1. Debug hooks are unreliable and cannot properly track coverage - use instrumentation instead
 
-5. **Documentation**
-   - API references
-   - Practical guides
-   - Real examples
+2. The parser may need high stack size for complex code - use lpeg.setmaxstack(1000)
 
-## Latest Features
-- Enhanced Modular Reporting
-  - Multiple formats
-  - Fallback mechanisms
-  - Error handling
-  - Improved operations
+3. Source maps are critical for error reporting - always maintain accurate source maps
 
-- Module Reset Utilities
-  - reset_module()
-  - with_fresh_module()
-  - Clean test state
+## Architecture
 
-- Enhanced Async Testing
-  - parallel_async()
-  - Improved wait_until()
-  - Better performance
+See docs/firmo/architecture.md for detailed architecture documentation.
 
-## Critical Rules
-- Use central_config
-- No special cases
-- Handle errors properly
-- Document changes
-- Test thoroughly
-- Follow patterns
-- Clean up state
-- Monitor performance
+## Examples
 
-## Best Practices
-- Write clear tests
-- Handle errors
-- Clean up resources
-- Document behavior
-- Use helpers
-- Follow patterns
-- Monitor performance
-- Test edge cases
-
-## Version Info
-- Current: 0.7.4
-- Status: Alpha
-- Not for production
+See examples/ directory for example code, especially:
+- instrumentation_example.lua: Shows how to use instrumentation
+- coverage_example.lua: Shows three-state coverage tracking

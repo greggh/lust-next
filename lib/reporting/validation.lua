@@ -37,8 +37,9 @@ local DEFAULT_CONFIG = {
   warn_on_validation_failure = true
 }
 
+--- Get the validation configuration from central_config or fall back to defaults
 ---@private
----@return table config The validation configuration
+---@return table config The validation configuration with all necessary fields
 local function get_config()
   -- Try to load central_config module
   local success, central_config = pcall(require, "lib.core.central_config")
@@ -53,12 +54,13 @@ local function get_config()
   return DEFAULT_CONFIG
 end
 
+--- Register the validation configuration schema with central_config
 ---@private
----@return nil
+---@return boolean success Whether the schema was successfully registered
 local function register_config_schema()
   local success, central_config = pcall(require, "lib.core.central_config")
   if success then
-    central_config.register_module("reporting.validation", {
+    local register_success = central_config.register_module("reporting.validation", {
       validate_reports = { type = "boolean", default = true },
       validate_line_counts = { type = "boolean", default = true },
       validate_percentages = { type = "boolean", default = true },
@@ -69,7 +71,10 @@ local function register_config_schema()
       validation_threshold = { type = "number", default = 0.5 },
       warn_on_validation_failure = { type = "boolean", default = true }
     })
+    return register_success == true
   end
+  
+  return false
 end
 
 -- Try to register with central_config
@@ -78,11 +83,12 @@ register_config_schema()
 -- List of validation issues
 local validation_issues = {}
 
+--- Add a validation issue to the issues list and log it appropriately
 ---@private
----@param category string The issue category
----@param message string The issue message
----@param severity? string The issue severity (error or warning)
----@param details? table Additional details about the issue
+---@param category string The issue category (e.g., "schema_validation", "line_count")
+---@param message string The human-readable issue message
+---@param severity? string The issue severity ("error" or "warning", defaults to "warning")
+---@param details? table<string, any> Additional contextual details about the issue
 local function add_issue(category, message, severity, details)
   table.insert(validation_issues, {
     category = category,
@@ -99,9 +105,10 @@ local function add_issue(category, message, severity, details)
   end
 end
 
+--- Validate that line counts in the summary match the sum of file line counts
 ---@private
----@param coverage_data table The coverage data to validate
----@return boolean valid Whether the line counts are valid
+---@param coverage_data {summary: table, files: table<string, table>} The coverage data to validate
+---@return boolean valid Whether the line counts are valid and consistent
 local function validate_line_counts(coverage_data)
   local config = get_config()
   if not config.validate_line_counts then return true end

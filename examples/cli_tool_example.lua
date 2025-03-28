@@ -144,7 +144,8 @@ end
 -- Example 2: Parsing Command-Line Arguments
 print("\nExample 2: Parsing Command-Line Arguments")
 
--- Function to parse and process command arguments
+---@param args string[] Command-line arguments to parse and execute
+---@return number exit_code The exit code from the command execution
 function TestRunnerCLI.parse_and_run(args)
     -- Parse the arguments
     local parsed_args, parsed_options, err = cli.parse_args(test_runner, args)
@@ -363,7 +364,8 @@ end
 -- Example 4: Running Subcommands
 print("\nExample 4: Running Subcommands")
 
--- Function to parse and run command with subcommands
+---@param args string[] Command-line arguments to parse and execute
+---@return number exit_code The exit code from the command execution
 function ComplexCLI.parse_and_run(args)
     -- Parse the arguments
     local result = cli.execute_command(complex_cli, args)
@@ -392,7 +394,9 @@ print("\nPART 3: Help Text and Documentation\n")
 -- Example 5: Generating Help Text
 print("Example 5: Generating Help Text")
 
--- Function to generate help text for a command
+---@param command table The CLI command object to generate help text for
+---@param subcommand_name? string Optional name of a subcommand to generate help for
+---@return string The formatted help text
 function ComplexCLI.generate_help(command, subcommand_name)
     local cmd = command
     
@@ -491,7 +495,9 @@ print(ComplexCLI.generate_help(complex_cli, "run"))
 -- Example 6: Handling Help and Version Flags
 print("\nExample 6: Handling Help and Version Flags")
 
--- Function to handle help and version flags
+---@param command table The CLI command object
+---@param args string[] Command-line arguments to check for help or version flags
+---@return boolean handled True if help or version flag was detected and handled
 function ComplexCLI.handle_help_version(command, args)
     -- Check for --help flag
     if table.concat(args, " "):match("%-%-help") or table.concat(args, " "):match("%-h%s") then
@@ -541,7 +547,11 @@ print("\nPART 4: Error Handling\n")
 -- Example 7: Validation and Error Handling
 print("Example 7: Validation and Error Handling")
 
--- Function to validate command-line arguments
+---@param command table The CLI command object
+---@param args table Parsed command arguments
+---@param options table Parsed command options
+---@return boolean valid True if all arguments are valid
+---@return table|nil validation_errors Table of validation errors if not valid
 function ComplexCLI.validate_args(command, args, options)
     -- Create the error handler for validation errors
     local validation_errors = {}
@@ -592,7 +602,9 @@ function ComplexCLI.validate_args(command, args, options)
     return true
 end
 
--- Modified execution function with validation
+---@param command table The CLI command object
+---@param args string[] Command-line arguments to parse and execute
+---@return {exit_code: number, error?: table, errors?: table[]} Result of the command execution
 function ComplexCLI.execute_with_validation(command, args)
     -- Parse the arguments first
     local parsed_args, parsed_options, parse_err = cli.parse_args(command, args)
@@ -637,7 +649,9 @@ end
 -- Example 8: Exception Handling
 print("\nExample 8: Exception Handling")
 
--- Function to safely execute commands with error handling
+---@param command table The CLI command object
+---@param args string[] Command-line arguments to parse and execute
+---@return {exit_code: number, error?: string, error_type?: string, error_details?: table} Result of the command execution
 function ComplexCLI.safe_execute(command, args)
     -- Use error_handler.try to catch any errors
     local success, result, err = error_handler.try(function()
@@ -1015,7 +1029,9 @@ end
 -- Example 10: Exit Code Handling
 print("\nExample 10: Exit Code Handling")
 
--- Function to handle process exit codes
+---@param command table The CLI command object
+---@param args string[] Command-line arguments to parse and execute
+---@return number exit_code The final exit code of the command execution
 function RunnerCLI.execute_with_exit_code(command, args)
     -- In a real CLI tool, we would map exit codes to process.exit() values
     -- For this example, we'll just print them

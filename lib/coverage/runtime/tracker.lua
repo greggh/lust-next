@@ -25,11 +25,12 @@ local coverage_data = {}   -- Tracks lines covered by tests
 local file_map = {}        -- Maps file_id to file path and vice versa
 local sourcemaps = {}      -- Source maps for instrumented files
 
--- Start tracking coverage
+--- Start tracking coverage data
+---@return boolean success Whether tracking was successfully started
 function M.start()
   if tracking_active then
     logger.warn("Coverage tracking is already active")
-    return
+    return false
   end
   
   -- Reset data
@@ -40,19 +41,22 @@ function M.start()
   tracking_active = true
   
   logger.info("Started coverage tracking")
+  return true
 end
 
--- Stop tracking coverage
+--- Stop tracking coverage and finalize data collection
+---@return boolean success Whether tracking was successfully stopped
 function M.stop()
   if not tracking_active then
     logger.warn("Coverage tracking is not active")
-    return
+    return false
   end
   
   -- Mark as inactive
   tracking_active = false
   
   logger.info("Stopped coverage tracking")
+  return true
 end
 
 -- Check if tracking is active
@@ -61,7 +65,8 @@ function M.is_active()
   return tracking_active
 end
 
--- Reset tracking data
+--- Reset all tracking data and clear state
+---@return boolean success Whether data was successfully reset
 function M.reset()
   execution_data = {}
   coverage_data = {}
@@ -69,11 +74,13 @@ function M.reset()
   sourcemaps = {}
   
   logger.info("Reset coverage tracking data")
+  return true
 end
 
--- Register a file in the file map
+--- Register a file in the file map for tracking
 ---@param file_id string The unique identifier for the file
 ---@param file_path string The path to the file
+---@return boolean success Whether the file was successfully registered
 function M.register_file(file_id, file_path)
   -- Parameter validation
   error_handler.assert(type(file_id) == "string", "file_id must be a string", error_handler.CATEGORY.VALIDATION)
@@ -91,17 +98,21 @@ function M.register_file(file_id, file_path)
   if not coverage_data[file_id] then
     coverage_data[file_id] = {}
   end
+  
+  return true
 end
 
--- Register a source map for a file
+--- Register a source map for a file to enable line number mapping
 ---@param file_id string The unique identifier for the file
----@param sourcemap table The source map
+---@param sourcemap table The source map with mapping between original and instrumented lines
+---@return boolean success Whether the sourcemap was successfully registered
 function M.register_sourcemap(file_id, sourcemap)
   -- Parameter validation
   error_handler.assert(type(file_id) == "string", "file_id must be a string", error_handler.CATEGORY.VALIDATION)
   error_handler.assert(type(sourcemap) == "table", "sourcemap must be a table", error_handler.CATEGORY.VALIDATION)
   
   sourcemaps[file_id] = sourcemap
+  return true
 end
 
 -- Mark a line as executed

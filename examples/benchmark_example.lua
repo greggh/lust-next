@@ -136,13 +136,17 @@ print("\nPART 2: Advanced Benchmarking\n")
 -- Example 4: Memory Usage Benchmarking
 print("Example 4: Memory Usage Benchmarking")
 
--- Function to get memory usage
+---@private
+---@return number The amount of memory in use (in kilobytes)
 function get_memory_usage()
     collectgarbage("collect")
     return collectgarbage("count")
 end
 
--- Memory benchmark function
+---@private
+---@param func function The function to benchmark
+---@param config? {iterations?: number, warmup_iterations?: number} Optional configuration
+---@return {peak_memory: number, peak_increase: number, retained_memory: number, iterations: number} Benchmark results
 function benchmark_memory(func, config)
     config = config or {}
     local iterations = config.iterations or 100
@@ -204,7 +208,9 @@ end
 -- Example 5: Benchmarking with Warmup
 print("\nExample 5: Benchmarking with Warmup")
 
--- Functions to benchmark - sorting algorithms
+---@private
+---@param array number[] The array to sort
+---@return number[] The sorted array (copy of the original)
 function bubble_sort(array)
     local n = #array
     local arr = {}
@@ -220,6 +226,9 @@ function bubble_sort(array)
     return arr
 end
 
+---@private
+---@param array number[] The array to sort
+---@return number[] The sorted array (copy of the original)
 function insertion_sort(array)
     local n = #array
     local arr = {}
@@ -237,6 +246,9 @@ function insertion_sort(array)
     return arr
 end
 
+---@private
+---@param array number[] The array to sort
+---@return number[] The sorted array (copy of the original)
 function native_sort(array)
     local n = #array
     local arr = {}
@@ -246,7 +258,9 @@ function native_sort(array)
     return arr
 end
 
--- Generate test data - array of random numbers
+---@private
+---@param size number The size of the array to generate
+---@return number[] An array filled with random numbers
 function generate_random_array(size)
     local array = {}
     for i = 1, size do
@@ -344,7 +358,10 @@ print("\nPART 3: Statistical Analysis\n")
 -- Example 7: Analyzing Benchmark Distribution
 print("Example 7: Analyzing Benchmark Distribution")
 
--- Function to calculate percentiles
+---@private
+---@param times number[] Array of timing measurements in milliseconds
+---@param percentiles number[] Array of percentile values to calculate (0-100)
+---@return table<number, number> A table mapping each percentile to its value
 function calculate_percentiles(times, percentiles)
     -- Sort the times
     table.sort(times)
@@ -404,7 +421,13 @@ end
 -- Example 8: Outlier Detection
 print("\nExample 8: Outlier Detection")
 
--- Function to detect outliers (values outside 3 standard deviations)
+---@private
+---@param times number[] Array of timing measurements
+---@param mean number The mean value of the timing measurements
+---@param std_dev number The standard deviation of the timing measurements
+---@return {index: number, value: number}[] Array of outliers
+---@return number lower_bound The lower threshold for outlier detection
+---@return number upper_bound The upper threshold for outlier detection
 function detect_outliers(times, mean, std_dev)
     local outliers = {}
     local lower_bound = mean - 3 * std_dev

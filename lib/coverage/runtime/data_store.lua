@@ -244,6 +244,7 @@ function M.get_file_data(data, file_id)
   end
   
   -- Get file path from file map
+  ---@diagnostic disable-next-line: redundant-parameter
   local file_path = M.get_file_path(data, file_id) or file_id
   
   -- Get file content if available

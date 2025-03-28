@@ -116,6 +116,9 @@ print("\nPART 2: Error Propagation Patterns\n")
 -- Example 3: Basic error return pattern (nil, error)
 print("Example 3: Basic Error Return Pattern (nil, error)")
 
+---@param path any The path to the configuration file
+---@return table|nil config The configuration if successful, nil otherwise
+---@return table|nil error An error object if the operation failed
 function read_config_file(path)
     -- Validation
     if type(path) ~= "string" then
@@ -177,7 +180,10 @@ end
 -- Example 4: Error propagation chain
 print("\nExample 4: Error Propagation Chain")
 
--- Low-level function that may fail
+---@private
+---@param content string|nil The JSON content to parse
+---@return table|nil parsed The parsed JSON data if successful, nil otherwise
+---@return table|nil error An error object if parsing failed
 function parse_json(content)
     -- Simulating parsing failures for invalid JSON
     if not content or not content:match("{") then
@@ -191,7 +197,10 @@ function parse_json(content)
     return { parsed = true, content = content }
 end
 
--- Mid-level function that calls parse_json
+---@private
+---@param path any The path to the JSON configuration file
+---@return table|nil config The parsed configuration if successful, nil otherwise
+---@return table|nil error An error object if the operation failed
 function load_json_config(path)
     -- Validation
     if type(path) ~= "string" then
@@ -225,7 +234,9 @@ function load_json_config(path)
     return parsed_data
 end
 
--- High-level function that uses the config
+---@param config_path any The path to the configuration file
+---@return {initialized: boolean, config: table}|nil result Initialization result if successful, nil otherwise
+---@return table|nil error An error object if initialization failed
 function initialize_with_config(config_path)
     -- Load the configuration
     local config, load_err = load_json_config(config_path)
@@ -293,7 +304,9 @@ print("\nPART 3: Using try/catch Pattern\n")
 -- Example 5: Try/catch pattern with error_handler.try
 print("Example 5: Try/catch Pattern with error_handler.try")
 
--- Function that may throw an error
+---@param a number The numerator
+---@param b number The denominator
+---@return number The result of the division
 function divide(a, b)
     if b == 0 then
         error(error_handler.validation_error(
@@ -304,7 +317,10 @@ function divide(a, b)
     return a / b
 end
 
--- Using try to handle potential errors
+---@param a number The numerator
+---@param b number The denominator
+---@return number|nil result The result of the division if successful, nil otherwise
+---@return table|nil error An error object if division failed
 function safe_divide(a, b)
     local success, result, err = error_handler.try(function()
         return divide(a, b)
@@ -410,7 +426,9 @@ print("\nPART 5: Testing Error Handling\n")
 -- Example 7: Testing error conditions with expect_error
 print("Example 7: Testing Error Conditions")
 
--- Function to test
+---@param user any The user object to validate
+---@return table|nil user The validated user object if valid, nil otherwise
+---@return table|nil error An error object if validation failed
 function validate_user(user)
     if type(user) ~= "table" then
         return nil, error_handler.validation_error(

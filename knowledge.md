@@ -1,9 +1,65 @@
 # Firmo Knowledge
 
+## CRITICAL: Project Organization Rules
+
+1. **Directory Structure**:
+   - ALL implementation code goes in /lib
+   - ALL tests go in /tests root directory
+   - NEVER create test files in implementation directories
+   - Follow architecture.md structure exactly
+
+2. **Before Writing Code**:
+   - Study architecture.md thoroughly
+   - Review ALL existing code in target area
+   - Check lib/tools/vendor for dependencies
+   - Search for similar implementations
+
+3. **Version 3 Coverage System**:
+   - ALL v3 work MUST be in lib/coverage/v3/
+   - Keep completely separate from existing system
+   - Follow v3 structure in architecture.md
+   - No v3 code in base coverage directory
+
+4. **Code Quality Requirements**:
+   - NEVER simplify code just to make tests pass
+   - NEVER implement workarounds or hacks
+   - If tests fail, fix the underlying code properly
+   - Tests verify code works correctly, not the other way around
+   - Implementation must be robust and complete
+   - No shortcuts or temporary solutions
+
+## Error Handling in Tests
+
+CRITICAL: When writing tests that expect errors:
+
+1. ALWAYS use `{ expect_error = true }` flag in test definition:
+   ```lua
+   it("should fail gracefully", { expect_error = true }, function()
+     -- Test code here
+   end)
+   ```
+
+2. ALWAYS use `test_helper.with_error_capture()` to capture expected errors:
+   ```lua
+   local result, err = test_helper.with_error_capture(function()
+     return function_that_should_fail()
+   end)()
+
+   expect(result).to_not.exist()
+   expect(err).to.exist()
+   expect(err.message).to.match("expected error message")
+   ```
+
+3. NEVER create workarounds to handle expected errors. The framework provides proper error handling mechanisms.
+
+4. ALWAYS read error handling documentation and test files before implementing error handling.
+
+5. Look for similar error handling patterns in existing tests.
+
 ## Project Overview
 
 - Enhanced Lua testing framework with BDD-style nested test blocks
-- Provides comprehensive testing capabilities including assertions, mocking, coverage analysis
+- Provides comprehensive testing capabilities including assertions, mocking, coverage analysis, quality analysis, benchmarking, code fixing, and documentation fixing (markdown).
 - Currently in alpha state - not for production use unless helping with development
 
 ## Minimal Test Example
@@ -115,6 +171,7 @@ local value = table[key]
   ```lua
   local unpack_table = table.unpack or unpack
   ```
+
 - Use # operator for table length:
   
   ```lua
@@ -190,6 +247,6 @@ expect({name = "John"}).to.have_property("name", "John")
 
 ## Documentation Links
 
-- Tasks: `/home/gregg/Projects/docs-projects/neovim-ecosystem-docs/tasks/firmo-tasks.md`
-- Architecture: `/home/gregg/Projects/docs-projects/neovim-ecosystem-docs/plans/firmo-architecture.md`
-- Project Status: `/home/gregg/Projects/docs-projects/neovim-ecosystem-docs/project-status.md`
+- Tasks: `/home/gregg/Projects/lua-library/firmo/docs/firmo/plan.md`
+- Architecture: `/home/gregg/Projects/lua-library/firmo/docs/firmo/architecture.md`
+-

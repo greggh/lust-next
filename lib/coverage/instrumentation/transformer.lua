@@ -14,7 +14,10 @@ local central_config = require("lib.core.central_config")
 -- Version
 M._VERSION = "0.1.0"
 
--- Helper function to escape special characters in string for use in patterns
+--- Helper function to escape special characters in string for use in patterns
+---@private
+---@param text string Text to escape
+---@return string escaped_text The text with special characters escaped
 local function escape_pattern(text)
   return text:gsub("([%(%)%.%%%+%-%*%?%[%^%$%]])", "%%%1")
 end
@@ -37,10 +40,11 @@ function M.create_file_id(file_path)
   return "file_" .. id
 end
 
--- Generate tracking statement for a line
+--- Generate tracking statement for a line of code
+---@private
 ---@param file_id string The unique identifier for the file
 ---@param line_number number The line number to track
----@return string tracking_code The code that tracks execution of the line
+---@return string tracking_code The Lua code that tracks execution of the line
 local function generate_tracking_statement(file_id, line_number)
   return string.format("do require('lib.coverage.runtime.tracker').track(%q, %d) end;", file_id, line_number)
 end

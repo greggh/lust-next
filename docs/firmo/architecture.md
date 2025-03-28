@@ -23,17 +23,28 @@ firmo.lua                  # Main entry point and public API
 │   │
 │   ├── coverage/          # Code coverage system
 │   │   ├── init.lua       # Coverage API and lifecycle management
-│   │   ├── instrumentation/  # Code instrumentation system
-│   │   │   ├── init.lua   # Instrumentation setup
-│   │   │   ├── transformer.lua # Code transformation
-│   │   │   └── sourcemap.lua   # Source mapping
-│   │   ├── runtime/       # Runtime coverage tracking
-│   │   │   ├── data_store.lua  # Coverage data storage
-│   │   │   └── tracker.lua     # Execution tracking
-│   │   └── report/        # Report generation
-│   │       ├── html.lua   # HTML report formatter
-│   │       ├── json.lua   # JSON report formatter
-│   │       └── lcov.lua   # LCOV report formatter
+│   │   ├── v3/            # v3 instrumentation-based coverage
+│   │   │   ├── init.lua   # v3 API entry point
+│   │   │   ├── instrumentation/  # Code instrumentation
+│   │   │   │   ├── parser.lua    # Lua source parser
+│   │   │   │   ├── transformer.lua # Code transformer
+│   │   │   │   └── sourcemap.lua # Source mapping
+│   │   │   ├── loader/    # Module loading
+│   │   │   │   ├── hook.lua    # Module loader hook
+│   │   │   │   └── cache.lua   # Instrumented module cache
+│   │   │   ├── runtime/   # Runtime tracking
+│   │   │   │   ├── tracker.lua    # Execution tracker
+│   │   │   │   └── data_store.lua # Data storage
+│   │   │   ├── assertion/ # Assertion integration
+│   │   │   │   ├── hook.lua      # Assertion hook
+│   │   │   │   └── analyzer.lua  # Stack analyzer
+│   │   │   └── report/    # Reporting
+│   │   │       ├── html.lua      # HTML reporter
+│   │   │       └── json.lua      # JSON reporter
+│   │   ├── report/        # Report generation (legacy)
+│   │   │   ├── html.lua   # HTML report formatter
+│   │   │   ├── json.lua   # JSON report formatter
+│   │   │   └── lcov.lua   # LCOV report formatter
 │   │
 │   ├── tools/             # Utility tools
 │   │   ├── logging/       # Structured logging system
@@ -59,7 +70,11 @@ firmo.lua                  # Main entry point and public API
 │       └── formatters/    # Report formatters
 │           ├── html.lua   # HTML test reports
 │           ├── json.lua   # JSON test reports
-│           └── junit.lua  # JUnit XML reports
+│           ├── junit.lua  # JUnit XML reports
+│           ├── lcov.lua   # LCOV reports
+│           ├── cobertura.lua # Cobertura XML reports
+│           ├── tap.lua    # TAP format reports
+│           └── csv.lua    # CSV reports
 │
 ├── scripts/               # Utilities and runners
 │   ├── runner.lua         # Test runner
@@ -78,6 +93,7 @@ The central configuration system (`lib/core/central_config.lua`) is the backbone
 - Provides sensible defaults for all settings
 - Handles configuration merging from multiple sources
 - Exposes a consistent API for all modules to access configuration
+- Supports environment variable overrides
 
 The central_config module MUST be used by all other modules to retrieve configuration values, ensuring consistency across the framework.
 
@@ -87,12 +103,12 @@ local central_config = require("lib.core.central_config")
 local config = central_config.get_config()
 
 -- Access configuration values
-local track_all = config.coverage.track_all_executed
-local include_pattern = config.coverage.include
-local exclude_pattern = config.coverage.exclude
+local include = config.coverage.include
+local exclude = config.coverage.exclude
+local report_format = config.coverage.report.format
 ```
 
-### 2. Instrumentation-Based Coverage System
+### 2. Instrumentation-Based Coverage System (v3)
 
 The coverage system has been completely redesigned to use code instrumentation rather than debug hooks. This provides:
 
@@ -104,10 +120,26 @@ The coverage system has been completely redesigned to use code instrumentation r
 
 #### 2.1 Key Coverage Components
 
-- **Instrumentation Module** (`lib/coverage/instrumentation/`): Transforms Lua code to insert tracking statements
-- **Data Store** (`lib/coverage/runtime/data_store.lua`): Stores and manages coverage data
-- **Assertion Integration** (`lib/coverage/assertion/hook.lua`): Connects assertions to code they verify
-- **Report Generators** (`lib/coverage/report/`): Generate coverage reports in various formats
+- **Instrumentation Engine**: Transforms Lua code to insert tracking statements
+  - **Parser**: Parses Lua source code into an AST
+  - **Transformer**: Adds tracking calls to the code
+  - **Sourcemap**: Maps instrumented code back to original source
+
+- **Module Loading Integration**: Hooks into Lua's module loading system
+  - **Loader Hook**: Intercepts require calls
+  - **Cache**: Caches instrumented modules
+
+- **Runtime Tracking**: Tracks code execution at runtime
+  - **Tracker**: Records execution and coverage events
+  - **Data Store**: Stores and manages tracking data
+
+- **Assertion Integration**: Connects assertions to the code they verify
+  - **Assertion Hook**: Hooks into firmo's assertion system
+  - **Stack Analyzer**: Analyzes stack traces to identify covered lines
+
+- **Reporting System**: Generates coverage reports in various formats
+  - Supports HTML, JSON, LCOV, Cobertura, JUnit, TAP, and CSV formats
+  - Visualizes the three-state coverage model
 
 #### 2.2 Coverage Data Flow
 
@@ -116,6 +148,32 @@ The coverage system has been completely redesigned to use code instrumentation r
 3. **Coverage Tracking**: When assertions are made, coverage data is recorded
 4. **Data Processing**: At the end of the test run, data is processed and normalized
 5. **Report Generation**: Coverage reports are generated based on the processed data
+
+#### 2.3 Edge Case Handling
+
+The v3 system handles various edge cases:
+
+- **Dynamically Generated Code**: Tracks code generated via `load` and `loadstring`
+- **Metaprogramming Patterns**: Handles metatables and delegation patterns
+- **Multi-line Constructs**: Tracks complex, multi-line statements and expressions
+- **Asynchronous Code**: Works with coroutines and async execution patterns
+
+#### 2.4 Memory Management
+
+The v3 system includes memory optimization strategies:
+
+- **Minimal Code Injection**: Adds only essential tracking calls
+- **Lazy Instrumentation**: Only instruments modules when loaded
+- **Compact Data Structures**: Uses efficient data representations
+- **Periodic Cleanup**: Removes tracking for unused modules
+
+#### 2.5 Error Recovery
+
+The v3 system provides robust error handling:
+
+- **Parser Recovery**: Handles syntax errors gracefully
+- **Tracking Error Isolation**: Prevents tracking errors from affecting tests
+- **Graceful Degradation**: Falls back to partial coverage when needed
 
 ### 3. Assertion System
 
@@ -201,12 +259,21 @@ Several utility modules provide supporting functionality:
 
 ### In-Progress Components
 
-- 🔄 Instrumentation-based coverage system (final stages)
-- 🔄 Enhanced HTML report visualization
-- 🔄 Quality validation module (partially implemented)
-- 🔄 File watcher module (partially implemented)
-- 🔄 CodeFix module (partially implemented)
-- 🔄 Benchmark module (partially implemented)
+- 🔄 v3 Instrumentation-based coverage system (high priority)
+- 🔄 Enhanced HTML report visualization (high priority)
+- 🔄 Quality validation module (medium priority)
+- 🔄 File watcher module (medium priority)
+- 🔄 CodeFix module (medium priority)
+- 🔄 Benchmark module (medium priority)
+
+## Implementation Timeline (Spring 2025)
+
+### Current Work (3-Week Timeline)
+
+- **Days 1-15**: Complete v3 coverage system implementation
+- **Days 16-17**: Complete quality module
+- **Days 18-19**: Complete watcher module
+- **Day 20**: Complete HTML coverage report enhancements
 
 ### Interaction Between Components
 
@@ -240,6 +307,8 @@ Several utility modules provide supporting functionality:
 3. **Central Configuration**: All modules retrieve configuration from the central_config system
 4. **Clean Abstractions**: Components interact through well-defined interfaces
 5. **Extensive Documentation**: All components have comprehensive API documentation, guides, and examples
+6. **Memory Efficiency**: Components are designed to minimize memory usage and clean up resources
+7. **Error Recovery**: Systems handle errors gracefully and provide robust recovery mechanisms
 
 ## Module Dependencies
 

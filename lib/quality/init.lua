@@ -116,10 +116,11 @@ local function register_change_listener()
   end
 end
 
+--- Check if a string value contains the specified Lua pattern
 ---@private
----@param value any The value to check
----@param pattern string The pattern to search for
----@return boolean contains True if value contains pattern
+---@param value any The value to check for pattern matching (must be a string)
+---@param pattern string The Lua pattern to search for in the value
+---@return boolean contains True if value contains the pattern, false otherwise or if value is not a string
 local function contains_pattern(value, pattern)
   if type(value) ~= "string" then
     return false
@@ -127,10 +128,11 @@ local function contains_pattern(value, pattern)
   return string.find(value, pattern) ~= nil
 end
 
+--- Check if a string value contains any of the specified Lua patterns
 ---@private
----@param value any The value to check
----@param patterns string[] Array of patterns to search for
----@return boolean contains True if value contains any of the patterns
+---@param value any The value to check for pattern matching (must be a string)
+---@param patterns string[] Array of Lua patterns to search for in the value
+---@return boolean contains True if value contains any of the patterns, false otherwise
 local function contains_any_pattern(value, patterns)
   if type(value) ~= "string" or not patterns or #patterns == 0 then
     return false
@@ -436,7 +438,10 @@ M.config = {
 -- File cache for source code analysis
 local file_cache = {}
 
--- Read a file and return its contents as an array of lines
+--- Read a file and return its contents as an array of lines for analysis
+---@private
+---@param filename string The absolute path to the file to read
+---@return string[] lines Array of lines from the file, or empty array if file can't be read
 local function read_file(filename)
   if file_cache[filename] then
     return file_cache[filename]

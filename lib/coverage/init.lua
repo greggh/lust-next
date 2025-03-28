@@ -14,16 +14,33 @@ local logger = require("lib.tools.logging")
 local fs = require("lib.tools.filesystem")
 local central_config = require("lib.core.central_config")
 
--- Instrumentation components
-local loader_hook = require("lib.coverage.loader.hook")
-local tracker = require("lib.coverage.runtime.tracker")
-local data_store = require("lib.coverage.runtime.data_store")
-local assertion_hook = require("lib.coverage.assertion.hook")
+-- Lazy-loaded v3 module
+local v3 = nil
+
+-- Get v3 module implementation
+local function get_v3()
+  if not v3 then
+    local success, result = pcall(function()
+      return require("lib.coverage.v3.init")
+    end)
+    
+    if success and type(result) == "table" then
+      v3 = result
+      logger.info("Loaded v3 coverage module")
+    else
+      logger.warn("Failed to load v3 coverage module, using v2 fallback", {
+        error = tostring(result)
+      })
+    end
+  end
+  
+  return v3
+end
 
 -- Version
 M._VERSION = "3.0.0"
 
--- Module state
+-- Module state (for v2 fallback)
 local coverage_active = false
 local coverage_data = nil
 
@@ -45,9 +62,13 @@ local function get_config()
     -- Use default configuration
     config = {
       coverage = {
-        include = {"**/*.lua"},
-        exclude = {"**/vendor/**", "**/lib/coverage/**"},
-        report_dir = "./coverage-reports"
+        version = 3,  -- Default to v3
+        enabled = false,
+        include = function(path) return path:match("%.lua$") ~= nil end,
+        exclude = function(path) return path:match("/tests/") ~= nil or path:match("test%.lua$") ~= nil end,
+        report = {
+          dir = "./coverage-reports"
+        }
       }
     }
   end
@@ -55,28 +76,59 @@ local function get_config()
   return config
 end
 
+-- Check if we should use v3
+local function should_use_v3()
+  local config = get_config()
+  return config.coverage.version == 3
+end
+
 -- Start coverage tracking
 ---@return boolean success Whether tracking was successfully started
 function M.start()
+  -- Check if v3 is enabled
+  if should_use_v3() then
+    local v3_module = get_v3()
+    if v3_module then
+      local result = v3_module.start()
+      return result ~= nil
+    end
+  end
+  
+  -- v2 fallback implementation
   if coverage_active then
     logger.warn("Coverage tracking is already active")
     return false
   end
   
+  -- Load fallback components for v2
+  local components_success, components = pcall(function()
+    return {
+      loader_hook = require("lib.coverage.loader.hook"),
+      tracker = require("lib.coverage.runtime.tracker"),
+      data_store = require("lib.coverage.runtime.data_store"),
+      assertion_hook = require("lib.coverage.assertion.hook")
+    }
+  end)
+  
+  if not components_success then
+    logger.error("Failed to load coverage components", {
+      error = tostring(components)
+    })
+    return false
+  end
+  
   -- Create data store
-  coverage_data = data_store.create()
+  coverage_data = components.data_store.create()
   
-  -- Install loader hook
-  loader_hook.install()
-  
-  -- Install assertion hook
-  assertion_hook.install()
+  -- Install hooks
+  components.loader_hook.install()
+  components.assertion_hook.install()
   
   -- Start tracker
-  tracker.start()
+  components.tracker.start()
   
   coverage_active = true
-  logger.info("Started coverage tracking (v3)")
+  logger.info("Started coverage tracking (v2 fallback)")
   
   return true
 end
@@ -84,47 +136,73 @@ end
 -- Stop coverage tracking
 ---@return boolean success Whether tracking was successfully stopped
 function M.stop()
+  -- Check if v3 is enabled
+  if should_use_v3() then
+    local v3_module = get_v3()
+    if v3_module then
+      local result = v3_module.stop()
+      return result ~= nil
+    end
+  end
+  
+  -- v2 fallback implementation
   if not coverage_active then
     logger.warn("Coverage tracking is not active")
     return false
   end
   
+  -- Load fallback components for v2
+  local components_success, components = pcall(function()
+    return {
+      loader_hook = require("lib.coverage.loader.hook"),
+      tracker = require("lib.coverage.runtime.tracker"),
+      data_store = require("lib.coverage.runtime.data_store"),
+      assertion_hook = require("lib.coverage.assertion.hook")
+    }
+  end)
+  
+  if not components_success then
+    logger.error("Failed to load coverage components", {
+      error = tostring(components)
+    })
+    return false
+  end
+  
   -- Stop tracker
-  tracker.stop()
+  components.tracker.stop()
   
   -- Uninstall hooks
-  assertion_hook.uninstall()
-  loader_hook.uninstall()
+  components.assertion_hook.uninstall()
+  components.loader_hook.uninstall()
   
   -- Update coverage data
-  local tracker_data = tracker.get_data()
+  local tracker_data = components.tracker.get_data()
   
   -- Add tracked data to our data store
-  for file_id, lines in pairs(tracker_data.execution_data) do
+  for file_id, lines in pairs(tracker_data.execution_data or {}) do
     for line_number, count in pairs(lines) do
       for i = 1, count do
-        data_store.add_execution(coverage_data, file_id, line_number)
+        components.data_store.add_execution(coverage_data, file_id, line_number)
       end
     end
   end
   
-  for file_id, lines in pairs(tracker_data.coverage_data) do
+  for file_id, lines in pairs(tracker_data.coverage_data or {}) do
     for line_number, _ in pairs(lines) do
-      data_store.add_coverage(coverage_data, file_id, line_number)
+      components.data_store.add_coverage(coverage_data, file_id, line_number)
     end
   end
   
   -- Copy file mappings
-  for file_id, file_path in pairs(tracker_data.file_map) do
+  for file_id, file_path in pairs(tracker_data.file_map or {}) do
     if type(file_path) == "string" then  -- Only copy string->string mappings
-      data_store.register_file(coverage_data, file_id, file_path)
+      components.data_store.register_file(coverage_data, file_id, file_path)
     end
   end
   
-  -- We no longer need to artificially add coverage data
-  -- The assertion hooks now properly mark covered lines
   -- Log coverage data for diagnostic purposes
   local file_ids = {}
+  
   -- Count execution data
   if coverage_data.execution_data then
     for file_id, _ in pairs(coverage_data.execution_data) do
@@ -151,10 +229,10 @@ function M.stop()
   end
   
   -- Calculate summary
-  data_store.calculate_summary(coverage_data)
+  components.data_store.calculate_summary(coverage_data)
   
   coverage_active = false
-  logger.info("Stopped coverage tracking")
+  logger.info("Stopped coverage tracking (v2 fallback)")
   
   return true
 end
@@ -162,77 +240,83 @@ end
 -- Reset coverage data
 ---@return boolean success Whether data was successfully reset
 function M.reset()
+  -- Check if v3 is enabled
+  if should_use_v3() then
+    local v3_module = get_v3()
+    if v3_module then
+      local result = v3_module.reset()
+      return result ~= nil
+    end
+  end
+  
+  -- v2 fallback implementation
   if coverage_active then
     logger.warn("Cannot reset while coverage tracking is active")
     return false
   end
   
-  coverage_data = data_store.create()
-  tracker.reset()
+  -- Load data store component for v2
+  local data_store_success, data_store = pcall(function()
+    return require("lib.coverage.runtime.data_store")
+  end)
   
-  logger.info("Reset coverage data")
+  if not data_store_success then
+    logger.error("Failed to load data store component", {
+      error = tostring(data_store)
+    })
+    return false
+  end
+  
+  coverage_data = data_store.create()
+  
+  logger.info("Reset coverage data (v2 fallback)")
   return true
 end
 
 -- Check if coverage tracking is active
 ---@return boolean is_active Whether coverage tracking is active
 function M.is_active()
+  -- Check if v3 is enabled
+  if should_use_v3() then
+    local v3_module = get_v3()
+    if v3_module then
+      return v3_module.is_active()
+    end
+  end
+  
+  -- v2 fallback implementation
   return coverage_active
 end
 
 -- Get the current coverage data
 ---@return table data The current coverage data
 function M.get_data()
+  -- Check if v3 is enabled
+  if should_use_v3() then
+    local v3_module = get_v3()
+    if v3_module then
+      return v3_module.get_data()
+    end
+  end
+  
+  -- v2 fallback implementation
   if not coverage_data then
-    coverage_data = data_store.create()
-  end
-  
-  -- Debug log the coverage data
-  local file_count = 0
-  if coverage_data and coverage_data.execution_data then
-    for file_id, _ in pairs(coverage_data.execution_data) do
-      file_count = file_count + 1
-      logger.debug("Coverage data contains file", {
-        file_id = file_id,
-        file_path = data_store.get_file_path(coverage_data, file_id),
-        execution_count = (next(coverage_data.execution_data[file_id]) ~= nil) and "has executions" or "no executions"
+    -- Load data store component for v2
+    local data_store_success, data_store = pcall(function()
+      return require("lib.coverage.runtime.data_store")
+    end)
+    
+    if data_store_success then
+      coverage_data = data_store.create()
+    else
+      logger.error("Failed to load data store component", {
+        error = tostring(data_store)
       })
+      return {}
     end
   end
-  
-  -- Count entries in the file map
-  local file_map_entries = 0
-  if coverage_data.file_map then
-    for _, _ in pairs(coverage_data.file_map) do
-      file_map_entries = file_map_entries + 1
-    end
-  end
-  
-  logger.info("Returning coverage data", {
-    files_count = file_count,
-    has_file_map = coverage_data.file_map ~= nil,
-    file_map_entries = file_map_entries
-  })
   
   return coverage_data
-end
-
--- Load a report generator
----@param format string The report format (html, json, lcov)
----@return table|nil generator The report generator or nil if not found
-local function load_report_generator(format)
-  local generator_path = string.format("lib.coverage.report.%s", format:lower())
-  
-  local success, generator = pcall(require, generator_path)
-  if not success then
-    logger.error("Failed to load report generator", {
-      format = format,
-      error = tostring(generator)
-    })
-    return nil
-  end
-  
-  return generator
 end
 
 -- Generate a coverage report
@@ -242,6 +326,19 @@ end
 function M.generate_report(format, output_path)
   -- Parameter validation
   error_handler.assert(type(format) == "string", "format must be a string", error_handler.CATEGORY.VALIDATION)
+  
+  -- Check if v3 is enabled
+  if should_use_v3() then
+    local v3_module = get_v3()
+    if v3_module then
+      local result = v3_module.report(format, {
+        output_dir = output_path
+      })
+      return result or false
+    end
+  end
+  
+  -- v2 fallback implementation
   error_handler.assert(type(output_path) == "string", "output_path must be a string", error_handler.CATEGORY.VALIDATION)
   
   -- Get configuration
@@ -249,7 +346,7 @@ function M.generate_report(format, output_path)
   
   -- Use default output path if not specified
   if not output_path or output_path == "" then
-    output_path = config.coverage.report_dir or "./coverage-reports"
+    output_path = config.coverage.report.dir or "./coverage-reports"
   end
   
   -- Ensure the output directory exists
@@ -264,17 +361,20 @@ function M.generate_report(format, output_path)
   end
   
   -- Load the report generator
-  local generator = load_report_generator(format)
-  if not generator then
-    logger.error("Unsupported report format", {
-      format = format
+  local generator_path = string.format("lib.coverage.report.%s", format:lower())
+  local success, generator = pcall(require, generator_path)
+  
+  if not success then
+    logger.error("Failed to load report generator", {
+      format = format,
+      error = tostring(generator)
     })
     return false
   end
   
   -- Generate the report
-  local success, err = generator.generate(coverage_data, output_path)
-  if not success then
+  local gen_success, err = generator.generate(coverage_data, output_path)
+  if not gen_success then
     logger.error("Failed to generate report", {
       format = format,
       output_path = output_path,
@@ -283,7 +383,7 @@ function M.generate_report(format, output_path)
     return false
   end
   
-  logger.info("Generated coverage report", {
+  logger.info("Generated coverage report (v2 fallback)", {
     format = format,
     output_path = output_path
   })

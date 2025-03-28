@@ -35,11 +35,13 @@ expect("hello world").to.end_with("world")
 expect({name = "John"}).to.have_property("name")
 expect({name = "John"}).to.have_property("name", "John")
 expect({1, 2, 3}).to.have_items({2, 3})
-
--- Function assertions
-expect(function() error("test") end).to.fail()
-expect(function() return true end).to_not.fail()
 ```
+
+## Standard Assertion Guidelines
+- Use `.to.be_truthy()` instead of `.to.be(true)` for boolean checks
+- Use `.to_not.be_truthy()` instead of `.to.be(false)` for boolean checks
+- Use `.to.exist()` instead of `.to_not.be(nil)` for existence checks
+- Use `.to_not.exist()` instead of `.to.be(nil)` for non-existence checks
 
 ## Error Testing Pattern
 ```lua
@@ -64,31 +66,6 @@ it("provides error context", { expect_error = true }, function()
   expect(err.context).to.be.a("table")
   expect(err.context.provided_data).to.exist()
 end)
-```
-
-## Custom Assertions
-```lua
--- Define custom assertion
-firmo.paths.empty = {
-  test = function(value)
-    return #value == 0,
-      'expected ' .. tostring(value) .. ' to be empty',
-      'expected ' .. tostring(value) .. ' to not be empty'
-  end
-}
-table.insert(firmo.paths.be, 'empty')
-
--- Use custom assertion
-expect({}).to.be.empty()
-
--- Custom type assertion
-firmo.paths.positive_number = {
-  test = function(value)
-    return type(value) == "number" and value > 0,
-      'expected ' .. tostring(value) .. ' to be positive number',
-      'expected ' .. tostring(value) .. ' to not be positive number'
-  end
-}
 ```
 
 ## Critical Rules

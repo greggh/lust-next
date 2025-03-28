@@ -58,7 +58,9 @@ local logger = logging.get_logger("temp_file")
 -- Using weak keys so test contexts can be garbage collected
 local _temp_file_registry = setmetatable({}, {__mode = "k"})
 
--- Get current test context - simplified to use hardcoded context
+--- Get current test context - simplified to use hardcoded context
+---@private
+---@return string context The hardcoded test context identifier
 local function get_current_test_context()
     -- For simplicity, we've moved to using a single hardcoded context
     -- This avoids complexity and potential issues with different context types
@@ -66,9 +68,10 @@ local function get_current_test_context()
     return "_SIMPLE_STRING_CONTEXT_"
 end
 
+--- Register a file with the current test context for automatic cleanup
 ---@param file_path string Path to the file to register for cleanup
----@return boolean success Whether the file was successfully registered
--- Register a file with the current test context
+---@return string registered_path The registered file path (for chaining)
+---@return table|nil error Error information if registration failed
 function M.register_file(file_path)
     logger.debug("Registering file", { path = file_path })
     
@@ -88,9 +91,10 @@ function M.register_file(file_path)
     return file_path
 end
 
+--- Register a directory with the current test context for automatic cleanup
 ---@param dir_path string Path to the directory to register for cleanup
----@return boolean success Whether the directory was successfully registered
--- Register a directory with the current test context
+---@return string registered_path The registered directory path (for chaining)
+---@return table|nil error Error information if registration failed
 function M.register_directory(dir_path)
     logger.debug("Registering directory", { path = dir_path })
     

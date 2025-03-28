@@ -5,45 +5,66 @@ return {
   -- Coverage Configuration
   coverage = {
     enabled = false,                     -- Only enable with --coverage flag
-    use_default_patterns = false,        -- Use only our explicit patterns
-    discover_uncovered = true,           -- Find uncovered files
+    version = 3,                         -- Use v3 instrumentation-based coverage
     debug = false,                       -- Disable debug mode to avoid excessive logging
     
-    -- Include patterns for our project
-    include = {
-      "**/*.lua",                        -- Include all Lua files by default
-      "lib/**/*.lua",                    -- Specifically include library code
-      "lib/samples/**/*.lua",            -- Explicitly include samples directory
-      "firmo.lua"                        -- Include main module
+    -- Include/exclude function patterns for v3
+    include = function(path)
+      -- Include all Lua files by default
+      if path:match("%.lua$") then
+        return true
+      end
+      return false
+    end,
+    
+    exclude = function(path)
+      -- Exclude test files to avoid inflating coverage numbers
+      if path:match("tests/") or path:match("test%.lua$") then
+        return true
+      end
+      return false
+    end,
+    
+    -- Cache settings for instrumented modules
+    cache = {
+      enabled = true,                    -- Enable caching for better performance
+      dir = "./.firmo-cache"             -- Cache directory
     },
     
-    -- Exclude patterns for our specific project
-    exclude = {
-      -- When working on coverage itself, we NEED to track coverage module files!
-      -- So we don't exclude them here
-      
-      -- But we do exclude test files to avoid inflating coverage numbers
-      "tests/**/*.lua"                   -- Our test directory
+    -- Instrumentation options
+    instrumentation = {
+      preserve_comments = true,          -- Keep comments in instrumented code
+      preserve_whitespace = true,        -- Preserve whitespace
+      track_branches = true,             -- Track branches for detailed coverage
+      track_functions = true             -- Track function coverage
     },
-    
-    -- Special flag to include all executed files to help find coverage gaps
-    track_all_executed = true,
-    
-    -- Advanced coverage features we're developing
-    track_blocks = true,                 -- Track blocks for detailed coverage
-    use_static_analysis = true,          -- Use static analysis for accuracy
-    auto_fix_block_relationships = true, -- Auto-fix block relationship issues
     
     -- Report settings
-    threshold = 80,                      -- Standard coverage threshold
-    format = "html"                      -- Preferred format for our team
+    report = {
+      format = "html",                   -- Default report format
+      dir = "./coverage-reports",        -- Report output directory
+      title = "Firmo Coverage Report",   -- Report title
+      colors = {
+        covered = "#00FF00",             -- Green for covered lines
+        executed = "#FFA500",            -- Orange for executed lines
+        not_covered = "#FF0000"          -- Red for not covered lines
+      },
+      show_file_navigator = true,        -- Show file navigation
+      include_line_content = true,       -- Include line content in reports
+      show_execution_count = true        -- Show execution count heatmap
+    },
+    
+    -- Validation settings
+    validation = {
+      threshold = 80,                    -- Standard coverage threshold
+      validate_reports = true            -- Validate report data
+    }
   },
   
   -- Reporting configuration
   reporting = {
     validation = {
       validate_reports = true,           -- Enable basic validations
-      validate_line_counts = false,      -- Disable line count validation due to calculator.lua special case
       validate_percentages = true,       -- Keep percentage validations
       validate_file_paths = true,        -- Validate file paths
       validation_threshold = 1.0         -- 1% tolerance for percentage mismatches
@@ -57,18 +78,12 @@ return {
         show_file_navigator = true,      -- Show file navigation panel
         collapsible_sections = true,     -- Make report sections collapsible
         
-        -- Debug settings for fixing calculator.lua coverage issue
-        debug_mode = false,              -- Disable debug mode for better performance
-        
-        -- Processing enhancements to fix calculator.lua coverage issue
-        mark_executed_as_covered = false, -- Do NOT mark executed lines as covered automatically
-        check_all_execution_sources = true, -- Check all sources for execution data
-        force_three_state_visualization = true, -- Force three-state visualization
+        -- Processing for v3 coverage system
+        force_three_state_visualization = true, -- Use three-state visualization
         
         -- Enhanced features
         enhanced_navigation = true,      -- Enable enhanced navigation
-        show_execution_heatmap = true,   -- Show execution count heatmap
-        enable_block_relationship_highlighting = true -- Show block relationships
+        show_execution_heatmap = true    -- Show execution count heatmap
       }
     }
   },
@@ -90,7 +105,6 @@ return {
     -- Module-specific log levels
     modules = {
       coverage = 2,                     -- WARN level for coverage module to reduce logging
-      debug_hook = 2,                   -- WARN level for debug hook to reduce logging
       runner = 3,                       -- INFO level for runner
     }
   }

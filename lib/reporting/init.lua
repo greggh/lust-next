@@ -216,10 +216,10 @@ else
   }
 end
 
----@param str string|any String to escape or value to convert to string
----@return string escaped_string String with XML special characters escaped
+--- Helper function to escape XML special characters for use in XML output formats
 ---@private
--- Helper function to escape XML special characters
+---@param str string|any String to escape or any value to convert to string and escape
+---@return string escaped_string String with XML special characters escaped (&, <, >, ", ')
 ---@diagnostic disable-next-line: unused-local, unused-function
 local function escape_xml(str)
   if type(str) ~= "string" then

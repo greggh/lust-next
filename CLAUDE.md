@@ -1175,78 +1175,84 @@ Complete error handling has been implemented across:
 - Mocking system (init, spy, mock)
 - Core framework modules (config, coverage components)
 
-## Current Work: Coverage System V3 Implementation
+## Critical Priority: Complete Coverage System Implementation
 
-THIS IS THE HIGHEST PRIORITY TASK. The current coverage system (V2) does not correctly distinguish between executed and covered code. A complete rewrite (V3) is required.
+The coverage system is undergoing a critical transformation from a debug-hook based approach to an instrumentation-based implementation. This work is IN PROGRESS and is the **HIGHEST PRIORITY TASK**. The system is currently in early development stages (less than 10% complete) and requires significant additional work to be functional.
 
-### Critical Differentiation: Three Coverage States
+### Three-State Coverage Model (Target Architecture)
 
-Our coverage system MUST properly distinguish between three states:
+When completed, the system must properly distinguish between three states:
 
 1. **Covered Lines** (Green): Code that is both executed AND verified by assertions
 2. **Executed Lines** (Orange): Code that executes during tests but is NOT verified by assertions
 3. **Not Covered Lines** (Red): Code that does not execute at all
 
-Current implementation incorrectly marks lines as "covered" when they are merely "executed."
+### Implementation Requirements
 
-### V3 Implementation Requirements
+1. **Complete Instrumentation Engine Development**:
+   - Finish the Lua code parser for accurate code analysis
+   - Build an AST transformer that inserts tracking calls
+   - Create a robust source mapper for error reporting
 
-1. **Follow the V3 Architecture Plan** - Located at `docs/coverage-v3-plan.md`
+2. **Module Loading Integration**:
+   - Hook the require system to intercept module loading
+   - Instrument modules on-demand during loading
+   - Build a caching system for instrumented modules
 
-2. **Complete Rewrite Required** - Do not patch V2; build V3 from scratch in a separate directory
+3. **Runtime Tracking System**:
+   - Develop the execution tracking system
+   - Create a data store for coverage information
+   - Ensure performance with large codebases
 
-3. **MANDATORY Component Overhaul**:
-   - **Assertion Integration**: Must trace what code an assertion verifies
-   - **Stack Tracer**: Must identify precise lines covered by each assertion
-   - **Coverage Data Structure**: Must maintain clear separation between executed/covered states
-   - **HTML Reporter**: Must show the three states with proper color differentiation
+4. **Assertion Tracing (Most Critical)**:
+   - Build stack-tracing mechanism to connect assertions to code
+   - Identify which lines each assertion verifies
+   - Differentiate between "executed" and "covered" states
 
-4. **Implementation Order** (strictly follow this sequence):
-   - First: Build core data model for tracking the 3 states
-   - Second: Create stack tracer to connect assertions to tested code
-   - Third: Implement debug hook with simplified tracking
-   - Fourth: Build HTML reporter with accurate visualization
-
-5. **Testing Methodology**:
-   - Use `tests/coverage/minimal_coverage_test.lua` for initial verification
-   - Verify results against `lib/samples/calculator.lua`
-   - Expected results:
-     - Function definitions (lines 6, 11, 16, 21) should be EXECUTED (orange)
-     - Function bodies verified by assertions (7-8, 12-13, 17-18, 25-26) should be COVERED (green)
-     - Error case (line 23) should be either COVERED or EXECUTED depending on assertion specifics
-     - No line in calculator.lua should incorrectly show as COVERED
-
-6. **SUCCESS CRITERIA** - The implementation is ONLY successful when:
-   - HTML report shows THREE distinct states with clear visual separation
-   - ZERO lines are marked "covered" when they are merely "executed"
-   - Calculator.lua lines match the expected covered/executed states described above
-   - No test timeouts or performance issues occur during report generation
-
-7. **NO PROGRESS REPORTS OR SUMMARIES** until the complete V3 system is working with 100% accuracy
-
-8. **Verification Process**:
-   - Run test: `lua test.lua --coverage --format=html tests/coverage/minimal_coverage_test.lua`
-   - Verify coverage-reports/coverage-report.html shows correct three-state data
-   - Confirm calculator.lua shows correct states for each line
+5. **Reporting System Enhancements**:
+   - Update HTML reporter to show three distinct states
+   - Create a clear visual distinction in reports
+   - Ensure accurate representation of coverage data
 
 ### Technical Requirements
 
-1. **Stack-based Verification**: Must track which lines are invoked directly by test code
-2. **Assertion Context**: Store which assertions verified which lines
-3. **Normalized Data Structure**: Use consistent data formats throughout
-4. **Central Configuration**: All settings through central_config
-5. **Zero Special Cases**: No special handling for any file or line
-6. **Visual Documentation**: Add clear legend explaining the three states
-7. **Performance Optimization**: Report must generate in under 30 seconds
+1. **Test Suite Development**:
+   - Create comprehensive tests for the instrumentation engine
+   - Build tests for each component of the coverage system
+   - Develop integration tests for the complete system
 
-### Documentation and Integration
+2. **Performance Optimization**:
+   - Profile and optimize the instrumentation process
+   - Minimize runtime overhead during test execution
+   - Ensure report generation is efficient for large codebases
 
-After V3 implementation is complete and verified:
-1. Update all documentation to use V3 terminology and API
-2. Migrate all existing tests to use V3 coverage
-3. Prepare full test suite with V3 coverage
+3. **Data Consistency**:
+   - Implement uniform data structures throughout
+   - Create a single source of truth for coverage state
+   - Ensure proper normalization at system boundaries
 
-IMPORTANT: This task supersedes ALL other tasks. Do not work on anything else until the V3 coverage system is complete and generating 100% accurate reports. 
+4. **Central Configuration Integration**:
+   - Use central_config for all settings
+   - No hardcoded values or file patterns
+   - Allow configuration of all coverage behaviors
+
+### Current Status: Early Development
+
+The initial work has begun but is still in very early stages:
+- Basic architecture defined but not implemented
+- Initial file deletion of old debug hook system
+- Framework for instrumentation approach established
+- Significant implementation work still needed
+
+### Verification Process
+
+When the implementation approaches completion:
+1. Run: `lua test.lua --coverage --format=html tests/coverage/minimal_coverage_test.lua`
+2. Validate the three distinct states in the HTML report
+3. Verify that no lines are incorrectly marked as "covered"
+4. Check that report generation completes in a reasonable time
+
+IMPORTANT: This task supersedes ALL other tasks. The coverage system overhaul must be completed before moving on to other enhancements.
 
 ## Documentation Links
 

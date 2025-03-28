@@ -19,11 +19,12 @@ M._VERSION = "0.1.0"
 local hooks_installed = false
 local original_assertion_functions = {}
 
--- Install assertion hooks
+--- Install assertion hooks to track which assertions verify which lines of code
+---@return boolean success Whether hooks were successfully installed
 function M.install()
   if hooks_installed then
     logger.warn("Assertion hooks are already installed")
-    return
+    return false
   end
   
   local firmo = require("firmo")
@@ -31,7 +32,7 @@ function M.install()
   -- Check if the assertion module is available
   if not firmo or not firmo.expect then
     logger.warn("Cannot install assertion hooks: firmo.expect not found")
-    return
+    return false
   end
   
   -- Save original expect function
@@ -80,13 +81,15 @@ function M.install()
   
   hooks_installed = true
   logger.info("Installed assertion hooks")
+  return true
 end
 
--- Uninstall assertion hooks
+--- Uninstall assertion hooks and restore original behavior
+---@return boolean success Whether hooks were successfully uninstalled
 function M.uninstall()
   if not hooks_installed then
     logger.warn("Assertion hooks are not installed")
-    return
+    return false
   end
   
   local firmo = require("firmo")
@@ -102,6 +105,7 @@ function M.uninstall()
   
   hooks_installed = false
   logger.info("Uninstalled assertion hooks")
+  return true
 end
 
 -- Check if hooks are installed

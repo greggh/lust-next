@@ -1,243 +1,202 @@
-# Coverage Module API
-The coverage module in firmo provides comprehensive code coverage tracking and reporting capabilities.
+# Coverage Module
+
+The Coverage module provides comprehensive code coverage tracking and reporting for Lua code. It uses an instrumentation-based approach to track which lines of code are executed and which lines are verified by assertions during test execution.
 
 ## Overview
-The coverage module uses Lua's debug hooks to track line execution and function calls, providing detailed information about which parts of your code are being executed during tests. It supports multiple output formats and can be configured to focus on specific files or exclude certain patterns.
 
-## Basic Usage
+The v3 coverage system is a complete overhaul of the previous debug hook-based system. It uses source code instrumentation to provide more accurate and detailed coverage information, including the critical distinction between code that is merely executed versus code that is actually verified by assertions.
 
-```lua
--- Enable coverage tracking in a test file
-local firmo = require('firmo')
-firmo.coverage_options.enabled = true
--- Run tests with coverage tracking
-firmo.run_discovered('./tests')
--- Generate a coverage report
-local report = firmo.generate_coverage_report('html', './coverage-report.html')
+### Three-State Coverage Model
 
-```
-From the command line:
+The coverage system tracks three distinct states for each line of code:
 
-```bash
+1. **Covered** (Green): Lines that are both executed AND verified by assertions
+2. **Executed** (Orange): Lines that are executed during tests but NOT verified by assertions
+3. **Not Covered** (Red): Lines that are not executed at all
 
-# Run tests with coverage enabled
-lua firmo.lua --coverage tests/
+This distinction helps identify code that is running but not actually being tested properly.
 
-```
+## Architecture
 
-## Configuration Options
-The coverage module can be configured through the `firmo.coverage_options` table:
+The v3 coverage system is composed of several components:
 
-```lua
-firmo.coverage_options = {
-  enabled = true,                         -- Enable coverage tracking (default: false)
-  source_dirs = {".", "src", "lib"},      -- Directories to scan for source files
-  use_default_patterns = true,            -- Whether to use default include/exclude patterns
-  discover_uncovered = true,              -- Discover files not executed by tests
-  format = "html",                        -- Default format for reports (html, json, lcov, summary)
-  threshold = 80,                         -- Minimum coverage percentage required (default: 80)
-  output = "./coverage",                  -- Default output location for reports
-  include = {"src/**/*.lua", "lib/**/*.lua"}, -- Patterns of files to include in coverage
-  exclude = {"tests/**/*.lua"},           -- Patterns of files to exclude from coverage
-  debug = false                           -- Enable debug output (default: false)
-}
+1. **Instrumentation Engine**:
+   - **Parser**: Parses Lua source code into an Abstract Syntax Tree (AST)
+   - **Transformer**: Inserts tracking calls into the source code
+   - **Sourcemap**: Maps instrumented line numbers to original source lines
 
-```
+2. **Module Loading Integration**:
+   - **Loader Hook**: Intercepts module loading to instrument code on-the-fly
+   - **Cache**: Caches instrumented modules for performance
+
+3. **Runtime Tracking**:
+   - **Tracker**: Records execution of code during tests
+   - **Data Store**: Stores and manages coverage information
+
+4. **Assertion Integration**:
+   - **Assertion Hook**: Hooks into the assertion system
+   - **Stack Analyzer**: Associates assertions with the code they verify
+
+5. **Reporting System**:
+   - **HTML Reporter**: Generates visual HTML reports with three-state visualization
+   - **JSON Reporter**: Outputs machine-readable coverage data
 
 ## API Reference
 
-### `firmo.coverage_options`
-Configuration table for coverage options:
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable coverage tracking |
-| `source_dirs` | table | `{".", "src", "lib"}` | Directories to scan for source files |
-| `use_default_patterns` | boolean | `true` | Whether to use default include/exclude patterns |
-| `discover_uncovered` | boolean | `true` | Discover files not executed by tests |
-| `format` | string | `"summary"` | Default format for reports (html, json, lcov, summary) |
-| `threshold` | number | `90` | Minimum coverage percentage required (0-100) |
-| `output` | string | `nil` | Default output location for reports |
-| `include` | table | `{"*.lua", "**/*.lua", "src/**/*.lua", "lib/**/*.lua"}` | Patterns of files to include |
-| `exclude` | table | `{"*_test.lua", "test_*.lua", "tests/**/*.lua", etc.}` | Patterns to exclude |
-| `debug` | boolean | `false` | Enable debug output |
-| `track_blocks` | boolean | `false` | Enable tracking of code blocks (if/else, loops) |
-| `use_static_analysis` | boolean | `false` | Use static analysis for improved accuracy |
-| `control_flow_keywords_executable` | boolean | `true` | Treat control flow keywords (`end`, `else`, etc.) as executable lines |
-
-### `firmo.with_coverage(options, fn)`
-Run a function with coverage tracking:
+### Coverage Module
 
 ```lua
-firmo.with_coverage({
-  include = {"src/*.lua"},
-  exclude = {"src/vendor/*.lua"}
-}, function()
-  -- Run tests here
-  firmo.run_discovered('./tests')
-end)
-
+local coverage = require("lib.coverage")
 ```
 
-### `firmo.start_coverage(options)`
-Start coverage tracking with the given options:
+#### Public Functions
+
+- `coverage.start()`: Starts coverage tracking
+- `coverage.stop()`: Stops coverage tracking and collects data
+- `coverage.reset()`: Resets coverage data
+- `coverage.is_active()`: Checks if coverage is active
+- `coverage.get_data()`: Gets the current coverage data
+- `coverage.generate_report(format, output_path)`: Generates a coverage report
+
+### Configuration
+
+Coverage settings are controlled via the central configuration system:
 
 ```lua
-firmo.start_coverage({
-  include = {"src/*.lua"},
-  exclude = {"tests/*.lua"}
-})
+-- .firmo-config.lua
+return {
+  coverage = {
+    enabled = true,                     -- Enable coverage tracking
+    version = 3,                       -- Use v3 coverage system
+    
+    -- Include/exclude functions
+    include = function(path)
+      return path:match("%.lua$") ~= nil
+    end,
+    
+    exclude = function(path)
+      return path:match("/tests/") ~= nil or path:match("test%.lua$") ~= nil
+    end,
+    
+    -- Cache settings
+    cache = {
+      enabled = true,                  -- Enable caching for performance
+      dir = "./.firmo-cache"           -- Cache directory
+    },
+    
+    -- Instrumentation options
+    instrumentation = {
+      preserve_comments = true,        -- Keep comments in instrumented code
+      preserve_whitespace = true,      -- Preserve whitespace
+      track_branches = true,           -- Track branches for detailed coverage
+      track_functions = true           -- Track function coverage
+    },
+    
+    -- Report settings
+    report = {
+      format = "html",                 -- Default report format
+      dir = "./coverage-reports",      -- Report output directory
+      title = "Coverage Report",       -- Report title
+      colors = {
+        covered = "#00FF00",           -- Green for covered lines
+        executed = "#FFA500",          -- Orange for executed lines
+        not_covered = "#FF0000"        -- Red for not covered lines
+      }
+    }
+  }
+}
+```
+
+## Usage Examples
+
+### Basic Usage
+
+```lua
+-- Start coverage tracking
+coverage.start()
+
 -- Run tests
-firmo.run_discovered('./tests')
--- Stop coverage
-firmo.stop_coverage()
+-- ...
 
+-- Stop coverage tracking
+coverage.stop()
+
+-- Generate HTML report
+coverage.generate_report("html", "./coverage-reports")
 ```
 
-### `firmo.stop_coverage()`
-Stop coverage tracking and finalize data collection.
-
-### `firmo.get_coverage_data()`
-Get the collected coverage data as a structured table:
+### Integration with Test Runner
 
 ```lua
-local coverage_data = firmo.get_coverage_data()
+-- In runner.lua
+local coverage = require("lib.coverage")
 
-```
-
-### `firmo.generate_coverage_report(format, output_path)`
-Generate a coverage report:
-
-```lua
--- Generate an HTML report
-firmo.generate_coverage_report("html", "./coverage-report.html")
--- Generate a JSON report
-firmo.generate_coverage_report("json", "./coverage-report.json")
--- Generate an LCOV report
-firmo.generate_coverage_report("lcov", "./coverage-report.lcov")
--- Generate a summary report (returns text, doesn't write to file)
-local summary = firmo.generate_coverage_report("summary")
-
-```
-Parameters:
-
-- `format` (string): Output format (html, json, lcov, summary)
-- `output_path` (string): Path to save the report (optional for summary format)
-
-### `firmo.coverage_meets_threshold(threshold)`
-Check if coverage meets the specified threshold:
-
-```lua
-if firmo.coverage_meets_threshold(80) then
-  print("Coverage is good!")
-else
-  print("Coverage is below threshold!")
+local function run_tests_with_coverage(test_path)
+  -- Start coverage
+  coverage.start()
+  
+  -- Run tests
+  local success = run_tests(test_path)
+  
+  -- Stop coverage
+  coverage.stop()
+  
+  -- Generate report
+  coverage.generate_report("html", "./coverage-reports")
+  
+  return success
 end
-
-```
-Parameters:
-
-- `threshold` (number): Coverage percentage threshold (0-100)
-
-## Robust Fallback Mechanisms
-The coverage module includes several fallback mechanisms to ensure reliable operation:
-
-1. **Source Tracking Fallbacks**:
-   - Multiple file detection mechanisms
-   - Pattern-based source file detection
-   - Automatic path normalization for consistent matching
-1. **Data Collection Fallbacks**:
-   - Manual dataset creation when debug hooks fail
-   - Comprehensive debugging output for troubleshooting
-   - Automatic resolution of relative paths to absolute paths
-1. **Module Loading Fallbacks**:
-   - Multiple search paths for finding modules
-   - Direct file loading when module resolution fails
-   - Graceful degradation with partial functionality
-
-## Pattern Matching
-The coverage module supports glob-style patterns for include and exclude options:
-
-- `*` - Matches any sequence of characters in a single path segment
-- `**` - Matches any sequence of characters across multiple path segments
-- `?` - Matches any single character
-Examples:
-
-- `src/*.lua` - All Lua files in the src directory
-- `src/**/*.lua` - All Lua files in the src directory and subdirectories
-- `src/module?.lua` - Matches module1.lua, module2.lua, etc.
-
-## Examples
-
-### Basic Coverage Tracking
-
-```lua
-local firmo = require('firmo')
--- Enable coverage
-firmo.coverage_options.enabled = true
-firmo.coverage_options.include = {"src/*.lua"}
-firmo.coverage_options.exclude = {"tests/*.lua", "vendor/*.lua"}
--- Run tests
-firmo.run_discovered('./tests')
--- Generate report
-firmo.generate_coverage_report("html", "./coverage-report.html")
-
 ```
 
-### Custom Coverage Configuration
+## Report Formats
 
-```lua
-local firmo = require('firmo')
--- Start coverage with custom configuration
-firmo.start_coverage({
-  include = {
-    "src/core/*.lua",
-    "src/utils/*.lua"
+The coverage system supports multiple report formats:
+
+### HTML Report
+
+The HTML report provides a visual representation of coverage with syntax highlighting and three-state visualization:
+
+- Green lines: Covered (executed and verified by assertions)
+- Orange lines: Executed but not verified
+- Red lines: Not executed
+
+Features:
+- File navigation panel
+- Coverage summary statistics
+- Line-by-line coverage information
+- Syntax highlighting
+
+### JSON Report
+
+The JSON report provides machine-readable coverage data for integration with other tools:
+
+```json
+{
+  "summary": {
+    "total_files": 10,
+    "total_lines": 1500,
+    "covered_lines": 850,
+    "executed_lines": 300,
+    "not_covered_lines": 350,
+    "coverage_percent": 56.67,
+    "execution_percent": 76.67
   },
-  exclude = {
-    "src/core/vendor/*.lua",
-    "src/core/legacy/*.lua"
-  },
-  threshold = 90,
-  debug = true
-})
--- Run specific tests
-firmo.run_file("tests/core_tests.lua")
--- Stop coverage
-firmo.stop_coverage()
--- Check if coverage meets threshold
-if firmo.coverage_meets_threshold(90) then
-  print("Meets threshold!")
-else
-  print("Below threshold!")
-end
--- Generate reports in different formats
-firmo.generate_coverage_report("html", "./coverage/report.html")
-firmo.generate_coverage_report("json", "./coverage/report.json")
-firmo.generate_coverage_report("lcov", "./coverage/report.lcov")
-
+  "files": {
+    "lib/module.lua": {
+      "summary": {
+        "total_lines": 150,
+        "covered_lines": 85,
+        "executed_lines": 30,
+        "not_covered_lines": 35,
+        "coverage_percent": 56.67,
+        "execution_percent": 76.67
+      },
+      "lines": {
+        "1": {"line_number": 1, "executed": true, "covered": true, "execution_count": 10},
+        "2": {"line_number": 2, "executed": true, "covered": false, "execution_count": 5},
+        "3": {"line_number": 3, "executed": false, "covered": false, "execution_count": 0}
+      }
+    }
+  }
+}
 ```
-
-### Command Line Usage
-
-```bash
-
-# Run tests with basic coverage
-lua firmo.lua --coverage tests/
-
-# Specify report format
-lua firmo.lua --coverage --coverage-format html tests/
-
-# Set custom threshold
-lua firmo.lua --coverage --coverage-threshold 90 tests/
-
-# Specify include/exclude patterns
-lua firmo.lua --coverage --coverage-include "src/*.lua,lib/*.lua" --coverage-exclude "vendor/*" tests/
-
-# Set custom output file
-lua firmo.lua --coverage --coverage-format html --coverage-output ./reports/coverage.html tests/
-
-# Enable debug mode
-lua firmo.lua --coverage --debug tests/
-
-```
-

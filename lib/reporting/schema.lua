@@ -222,11 +222,12 @@ M.CSV_RESULTS_SCHEMA = {
 }
 
 -- Utility functions for schema validation
+--- Validate that a value matches the required type and constraints in a schema
 ---@private
----@param value any The value to validate
----@param schema table The schema to validate against
----@return boolean success
----@return string? error_message
+---@param value any The value to validate against the schema
+---@param schema {type: string, optional?: boolean, pattern?: string, enum?: string[], minimum?: number, maximum?: number} The schema definition with type and constraints
+---@return boolean success Whether the value matches the schema type and constraints
+---@return string? error_message Error message if validation failed, nil otherwise
 local function validate_type(value, schema)
   -- Check for nil values
   if value == nil then
@@ -281,12 +282,13 @@ local function validate_type(value, schema)
   end
 end
 
+--- Recursively validate a value against a schema, including nested properties
 ---@private
----@param value any The value to validate
----@param schema table The schema to validate against
----@param path? string The current path in the validation (for error messages)
----@return boolean success
----@return string? error_message
+---@param value any The value to validate against the schema
+---@param schema {type: string, optional?: boolean, required?: string[], properties?: table<string, table>, array_of?: table, dynamic_properties?: table} The schema definition with type and structure requirements
+---@param path? string The current path in the validation tree (for error messages)
+---@return boolean success Whether the value conforms to the schema structure
+---@return string? error_message Error message if validation failed, including the path to the failure point
 local function validate_schema(value, schema, path)
   path = path or ""
   

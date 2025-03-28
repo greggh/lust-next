@@ -282,6 +282,7 @@ print("\nPART 6: Using Configuration in Modules\n")
 -- Example of a module that properly uses central_config
 local ExampleModule = {}
 
+---@return boolean success Returns true if initialization was successful
 function ExampleModule.init()
     -- Always get fresh configuration from central_config
     local config = central_config.get_config()
@@ -294,7 +295,8 @@ function ExampleModule.init()
     print("- Log level:", log_level)
     print("- Report format:", report_format)
     
-    -- CORRECT: Proper filtering using config patterns
+    ---@param file_path string Path to the file to check
+    ---@return boolean should_process Whether the file should be processed based on configuration
     function ExampleModule.should_process_file(file_path)
         local config = central_config.get_config()
         return config.coverage.include(file_path) and 

@@ -12,9 +12,10 @@
 
 local M = {}
 
+--- Convert a Lua value to its JSON string representation
 ---@private
----@param val any The value to encode
----@return string encoded_value The JSON-encoded value
+---@param val any The Lua value to encode (string, number, boolean, nil, or table)
+---@return string encoded_value The JSON-encoded value as a string
 local function encode_value(val)
   local val_type = type(val)
   
@@ -41,9 +42,10 @@ local function encode_value(val)
   end
 end
 
+--- Determine if a table should be encoded as a JSON array or object
 ---@private
----@param tbl table The table to check
----@return boolean is_array Whether the table should be encoded as an array
+---@param tbl table The table to analyze
+---@return boolean is_array Whether the table should be encoded as a JSON array (true) or object (false)
 local function is_array(tbl)
   local max_index = 0
   local count = 0
@@ -60,8 +62,9 @@ local function is_array(tbl)
   return max_index <= 2 * count
 end
 
----@param tbl any Value to encode (can be a table or any Lua value)
----@return string json_string The JSON-encoded string
+--- Encode a Lua value as a JSON string
+---@param tbl any Value to encode (table, string, number, boolean, or nil)
+---@return string json_string The JSON-encoded string representation
 function M.encode(tbl)
   if type(tbl) ~= "table" then
     return encode_value(tbl)

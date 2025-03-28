@@ -3,6 +3,16 @@
 ## Purpose
 Test report generation system and output formatting.
 
+## Supported Formats
+- **HTML** - Interactive reports with syntax highlighting
+- **JSON** - Machine-readable data for integration
+- **XML** - Standard JUnit/Cobertura XML for CI systems
+- **TAP** - Test Anything Protocol for broader integration
+- **CSV** - Spreadsheet-compatible test results
+- **LCOV** - Standard coverage format for tools integration
+- **Summary** - Concise console summary
+- **Custom** - User-defined formatter support
+
 ## Report Generation
 ```lua
 -- HTML coverage report
@@ -57,11 +67,6 @@ end
 
 -- Register formatter
 firmo.register_formatter("custom", MyFormatter)
-
--- Use custom formatter
-firmo.generate_report("custom", {
-  output = "custom-report.txt"
-})
 
 -- Complex formatter example
 local HTMLFormatter = {
@@ -152,6 +157,9 @@ local valid = validator.validate_schema(report_data, schema)
 - Clean up old reports
 - Use streaming
 - Handle timeouts
+- Follow specs
+- Document formats
+- Test thoroughly
 
 ## Best Practices
 - Use appropriate format

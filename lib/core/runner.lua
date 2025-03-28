@@ -851,6 +851,15 @@ function M.run_tests(files, options)
     print("Passes: " .. total_passes .. ", Failures: " .. total_errors .. ", Skipped: " .. total_skipped)
   end
 
+  if total_errors > 0 then
+    logger.error("Test failures detected in file", {
+      success = false,
+      errors = total_errors,
+      path = file,
+      test_errors = total_errors
+    })
+  end
+
   return all_success
 end
 
